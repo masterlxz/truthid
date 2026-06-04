@@ -2,7 +2,21 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-06-03 (Sessão 1)
+> Última atualização: 2026-06-04 (Sessão 3)
+
+---
+
+## Diretriz de ensino (IMPORTANTE — ler antes de cada sessão)
+
+O usuário é iniciante em blockchain e Solidity. O objetivo do projeto é aprender enquanto constrói.
+
+**Regras para o Claude:**
+- Explicar o conceito ANTES de escrever o código
+- Introduzir um conceito novo de cada vez — nunca vários ao mesmo tempo
+- Usar analogias do mundo real antes de termos técnicos
+- Perguntar se o usuário entendeu antes de avançar
+- Não assumir conhecimento prévio de blockchain, Solidity, criptografia, Foundry ou qualquer ferramenta
+- Ritmo lento e deliberado é melhor que velocidade
 
 ---
 
@@ -24,7 +38,7 @@ Stack principal:
 ## Status Geral
 
 ```
-Fase 1 — Smart Contracts        [~] Em andamento (2/7 etapas)
+Fase 1 — Smart Contracts        [~] Em andamento (3/7 etapas)
 Fase 2 — Relay Service          [ ] Não iniciada
 Fase 3 — Desktop App            [ ] Não iniciada
 Fase 4 — Mobile App             [ ] Não iniciada
@@ -52,7 +66,7 @@ Fase 7 — Mainnet & Lançamento   [ ] Não iniciada
 **Etapas**:
 - [x] 1.1 — Setup do ambiente (Foundry v1.7.1, pasta `contracts/`)
 - [x] 1.2 — `IdentityRegistry`: criar identidade, resolver username → identity (16 testes passando)
-- [ ] 1.3 — `DeviceRegistry`: registrar device, revogar device, checar status
+- [x] 1.3 — `DeviceRegistry`: registrar device, revogar device, checar status (25 testes passando)
 - [ ] 1.4 — `RecoveryManager`: propor recovery, coletar aprovações, executar com timelock (7 dias)
 - [ ] 1.5 — Testes unitários completos
 - [ ] 1.6 — Deploy em testnet (Base Sepolia)
@@ -208,6 +222,17 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-03 — Sessão 2
+- `DeviceRegistry` implementado e testado — 25 testes passando
+  - Chave pública do device armazenada como `address` (Ethereum, secp256k1) — facilita `ecrecover` nos SDKs
+  - Registrar device (só o controller da identidade)
+  - Revogar device (só o controller; revogação não remove da lista, apenas marca)
+  - `isDeviceActive`: função principal para verificação nos SDKs
+  - `getDevicesByIdentity`: lista todos os devices (inclui revogados para auditoria)
+  - Controller identificado pelo wallet — não precisa passar username nos parâmetros
+- Total geral: 41 testes passando (16 IdentityRegistry + 25 DeviceRegistry)
+- Próximo passo: `RecoveryManager` (etapa 1.4)
 
 ### 2026-06-03 — Sessão 1
 - Projeto iniciado, CONTEXT.md (PRD) lido e analisado
