@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-06-04 (Sessão 3)
+> Última atualização: 2026-06-04 (Sessão 4)
 
 ---
 
@@ -77,26 +77,35 @@ Fase 7 — Mainnet & Lançamento   [ ] Não iniciada
 
 ---
 
-### Fase 2 — Relay Service
+### Fase 2 — Camada de Comunicação (WebRTC)
 
-**Objetivo de aprendizado**: Construir um serviço stateless e substituível que conecta website ↔ mobile sem guardar dados sensíveis.
+**Objetivo de aprendizado**: Conectar website ↔ mobile diretamente, sem servidor no meio dos dados de autenticação.
+
+**Decisão**: WebRTC em vez de relay tradicional — website e celular se conectam P2P. Nenhum servidor vê o challenge ou a assinatura. O relay foi descartado por ser um ponto de centralização (mesmo sem comprometer segurança, compromete disponibilidade e vai contra o princípio descentralizado do projeto.
 
 **Responsabilidades**:
-- Relay de challenges de autenticação
-- Entrega de respostas assinadas
-- NÃO armazena identidades, NÃO autentica, NÃO guarda chaves
+- Conexão P2P direta entre website e celular
+- Challenge vai direto do website para o celular
+- Resposta assinada volta direto do celular para o website
+- Sinalização: troca de informações de conexão antes do P2P (canal ainda a decidir)
+
+**Componentes**:
+- **STUN**: múltiplos servidores públicos (Google, Cloudflare) — grátis, failover automático, não veem dados
+- **TURN**: fallback para ~10% dos casos onde P2P direto falha — self-hostável (coturn)
+- **Sinalização**: canal para os dois lados se acharem antes de conectar — decisão pendente
 
 **Etapas**:
-- [ ] 2.1 — Definir protocolo de mensagens (formato JSON dos challenges)
-- [ ] 2.2 — Servidor WebSocket (Go ou Node.js, decidir)
-- [ ] 2.3 — Canal de challenge: website cria → mobile recebe
-- [ ] 2.4 — Canal de resposta: mobile assina → website verifica
-- [ ] 2.5 — TTL de challenges (expiração, não-replay)
-- [ ] 2.6 — Docker + deploy (self-hostável)
-- [ ] 2.7 — Testes de integração
+- [ ] 2.1 — Decidir canal de sinalização
+- [ ] 2.2 — Implementar sinalização
+- [ ] 2.3 — Conexão WebRTC: website cria oferta → celular responde
+- [ ] 2.4 — Challenge trafega P2P: website → celular
+- [ ] 2.5 — Resposta assinada trafega P2P: celular → website
+- [ ] 2.6 — TTL de challenges (expiração, não-replay)
+- [ ] 2.7 — TURN self-hostável (coturn) como fallback
+- [ ] 2.8 — Testes de integração
 
 **Decisões pendentes**:
-- Stack do relay: Go (performance) ou Node.js (familiaridade)?
+- Canal de sinalização: on-chain via eventos, DHT/P2P efêmero, ou servidor leve?
 
 ---
 
@@ -193,7 +202,8 @@ check_revocation(identity_id) → RevocationInfo
 | Decisão | Opções | Status |
 |---|---|---|
 | Framework de contratos | Foundry vs Hardhat | **Foundry** ✓ |
-| Stack do relay | Go vs Node.js | Pendente |
+| Camada de comunicação | Relay tradicional vs WebRTC | **WebRTC** ✓ |
+| Canal de sinalização WebRTC | On-chain / DHT / servidor leve | Pendente |
 | Padrão de upgrade dos contratos | Proxy (upgradeable) vs Imutável | Pendente |
 | Formato do challenge de autenticação | JWT vs custom JSON | Pendente |
 
@@ -222,6 +232,17 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-04 — Sessão 3
+- Sessão de entendimento — sem código escrito
+- Revisão do quadro geral: blockchain, relay, fluxo de login, contratos
+- Decisão de arquitetura: WebRTC em vez de relay tradicional para a camada de comunicação
+  - Motivo: relay é ponto de centralização de disponibilidade, contra o princípio descentralizado
+  - Website e celular se conectam P2P — nenhum servidor vê challenge ou assinatura
+  - STUN: múltiplos servidores públicos com failover automático
+  - TURN: self-hostável (coturn) como fallback para ~10% dos casos
+  - Sinalização: decisão pendente para próxima sessão
+- Próximo passo: decidir canal de sinalização (etapa 2.1)
 
 ### 2026-06-03 — Sessão 2
 - `DeviceRegistry` implementado e testado — 25 testes passando
