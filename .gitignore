@@ -1,0 +1,13 @@
+# Foundry
+contracts/out/
+contracts/cache/
+contracts/.env
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# OS
+.DS_Store
+Thumbs.db
