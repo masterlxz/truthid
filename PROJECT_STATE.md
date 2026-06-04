@@ -2,21 +2,26 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-06-04 (Sessão 4)
+> Última atualização: 2026-06-04 (Sessão 5)
 
 ---
 
 ## Diretriz de ensino (IMPORTANTE — ler antes de cada sessão)
 
 O usuário é iniciante em blockchain e Solidity. O objetivo do projeto é aprender enquanto constrói.
+Conhecimento prévio: **Python** (bom) e **Ruby** (básico). Usar Python como referência principal para analogias.
 
 **Regras para o Claude:**
 - Explicar o conceito ANTES de escrever o código
 - Introduzir um conceito novo de cada vez — nunca vários ao mesmo tempo
 - Usar analogias do mundo real antes de termos técnicos
-- Perguntar se o usuário entendeu antes de avançar
+- Comparar Solidity com Python sempre que possível (`mapping` = `dict`, `struct` = `dataclass`, `contract` = `class`)
+- Perguntar se o usuário entendeu antes de avançar — esperar confirmação
 - Não assumir conhecimento prévio de blockchain, Solidity, criptografia, Foundry ou qualquer ferramenta
 - Ritmo lento e deliberado é melhor que velocidade
+- **Nunca escrever um bloco grande de código sem explicar depois linha por linha**
+- Quando escrever código novo, percorrer cada trecho explicando o que faz e por quê
+- Quando explicar código já escrito, dividir em partes (estado → eventos/erros → funções uma a uma) e pedir confirmação antes de avançar para a próxima parte
 
 ---
 
@@ -38,7 +43,7 @@ Stack principal:
 ## Status Geral
 
 ```
-Fase 1 — Smart Contracts        [~] Em andamento (3/7 etapas)
+Fase 1 — Smart Contracts        [~] Em andamento (4/7 etapas)
 Fase 2 — Relay Service          [ ] Não iniciada
 Fase 3 — Desktop App            [ ] Não iniciada
 Fase 4 — Mobile App             [ ] Não iniciada
@@ -67,7 +72,7 @@ Fase 7 — Mainnet & Lançamento   [ ] Não iniciada
 - [x] 1.1 — Setup do ambiente (Foundry v1.7.1, pasta `contracts/`)
 - [x] 1.2 — `IdentityRegistry`: criar identidade, resolver username → identity (16 testes passando)
 - [x] 1.3 — `DeviceRegistry`: registrar device, revogar device, checar status (25 testes passando)
-- [ ] 1.4 — `RecoveryManager`: propor recovery, coletar aprovações, executar com timelock (7 dias)
+- [x] 1.4 — `RecoveryManager`: propor recovery, coletar aprovações, executar com timelock (7 dias) — 34 testes passando
 - [ ] 1.5 — Testes unitários completos
 - [ ] 1.6 — Deploy em testnet (Base Sepolia)
 - [ ] 1.7 — Verificar contratos no Basescan
@@ -232,6 +237,18 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-04 — Sessão 5
+- `RecoveryManager` implementado e testado — 34 testes passando
+  - Guardians configuráveis por identidade com threshold M-de-N
+  - `configureGuardians`: só controller, bloqueia com proposta ativa
+  - `proposeRecovery`: só guardian, uma proposta ativa por vez
+  - `approveRecovery`: cada guardian vota uma vez, contador de aprovações
+  - `executeRecovery`: qualquer um executa após threshold + 7 dias de timelock
+  - `cancelRecovery`: controller cancela dentro da janela de 7 dias
+  - `IdentityRegistry` modificado: `setRecoveryManager` (one-time) + `recoverController` (só RecoveryManager)
+- Total geral: 75 testes passando (16 IdentityRegistry + 25 DeviceRegistry + 34 RecoveryManager)
+- Próximo passo: etapa 1.5 — revisar se os testes unitários estão completos, ou partir para 1.6 (deploy em Base Sepolia)
 
 ### 2026-06-04 — Sessão 3
 - Sessão de entendimento — sem código escrito
