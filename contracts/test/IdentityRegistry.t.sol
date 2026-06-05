@@ -141,6 +141,16 @@ contract IdentityRegistryTest is Test {
         assertEq(registry.getUsernameByController(alice), ""); // alice não tem mais username
     }
 
+    function test_TransferController_EmitsEvent() public {
+        vm.prank(alice);
+        registry.createIdentity("alice.id");
+
+        vm.prank(alice);
+        vm.expectEmit(false, true, true, true);
+        emit IdentityRegistry.ControllerTransferred("alice.id", alice, bob);
+        registry.transferController("alice.id", bob);
+    }
+
     function test_Revert_TransferController_NotController() public {
         vm.prank(alice);
         registry.createIdentity("alice.id");

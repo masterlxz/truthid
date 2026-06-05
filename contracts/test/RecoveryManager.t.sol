@@ -503,4 +503,74 @@ contract RecoveryManagerTest is Test {
         vm.expectRevert(RecoveryManager.ProposalAlreadyExecuted.selector);
         recoveryManager.cancelRecovery("alice.id");
     }
+
+    // -----------------------------------------------------------------
+    // configureGuardians — remoção de guardians antigos
+    // -----------------------------------------------------------------
+
+    function test_Revert_OldGuardian_CannotProposeAfterReconfiguration() public {
+        _configureAliceGuardians(); // guardian1..5 são guardians
+
+        // Alice reconfigura: agora só guardian1 é guardian
+        address[] memory newGuardians = new address[](1);
+        newGuardians[0] = guardian1;
+
+        vm.prank(alice);
+        recoveryManager.configureGuardians("alice.id", newGuardians, 1);
+
+        // guardian2 era guardian antes, mas agora foi removido
+        vm.prank(guardian2);
+        vm.expectRevert(RecoveryManager.NotGuardian.selector);
+        recoveryManager.proposeRecovery("alice.id", aliceNewWallet);
+    }
+
+    // -----------------------------------------------------------------
+    // approveRecovery / cancelRecovery — proposta cancelada
+    // -----------------------------------------------------------------
+
+    function test_Revert_ApproveRecovery_ProposalAlreadyCancelled() public {
+        _configureAliceGuardians();
+        _propose();
+
+        vm.prank(alice);
+        recoveryManager.cancelRecovery("alice.id");
+
+        vm.prank(guardian1);
+        vm.expectRevert(RecoveryManager.ProposalAlreadyCancelled.selector);
+        recoveryManager.approveRecovery("alice.id");
+    }
+
+    function test_Revert_CancelRecovery_AlreadyCancelled() public {
+        _configureAliceGuardians();
+        _propose();
+
+        vm.prank(alice);
+        recoveryManager.cancelRecovery("alice.id");
+
+        vm.prank(alice);
+        vm.expectRevert(RecoveryManager.ProposalAlreadyCancelled.selector);
+        recoveryManager.cancelRecovery("alice.id");
+    }
+
+    // -----------------------------------------------------------------
+    // configureGuardians — pode reconfigurar após cancelamento
+    // -----------------------------------------------------------------
+
+    function test_ConfigureGuardians_CanReconfigureAfterCancellation() public {
+        _configureAliceGuardians();
+        _propose();
+
+        vm.prank(alice);
+        recoveryManager.cancelRecovery("alice.id");
+
+        // Proposta cancelada — alice pode reconfigurar guardians
+        address[] memory newGuardians = new address[](1);
+        newGuardians[0] = guardian1;
+
+        vm.prank(alice);
+        recoveryManager.configureGuardians("alice.id", newGuardians, 1);
+
+        (, uint256 threshold) = recoveryManager.getGuardianConfig("alice.id");
+        assertEq(threshold, 1);
+    }
 }
