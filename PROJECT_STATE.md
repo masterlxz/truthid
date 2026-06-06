@@ -100,11 +100,11 @@ Fase 7 — Mainnet & Lançamento   [ ] Não iniciada
 **Componentes**:
 - **STUN**: múltiplos servidores públicos (Google, Cloudflare) — grátis, failover automático, não veem dados
 - **TURN**: fallback para ~10% dos casos onde P2P direto falha — self-hostável (coturn)
-- **Sinalização**: canal para os dois lados se acharem antes de conectar — decisão pendente
+- **Sinalização**: servidor leve de sinalização WebSocket — stateless, open source, self-hostável
 
 **Etapas**:
-- [ ] 2.1 — Decidir canal de sinalização
-- [ ] 2.2 — Implementar sinalização
+- [x] 2.1 — Decidir canal de sinalização → servidor leve (WebSocket, stateless, self-hostável)
+- [x] 2.2 — Implementar sinalização (FastAPI + WebSocket, stateless, self-hostável via Docker)
 - [ ] 2.3 — Conexão WebRTC: website cria oferta → celular responde
 - [ ] 2.4 — Challenge trafega P2P: website → celular
 - [ ] 2.5 — Resposta assinada trafega P2P: celular → website
@@ -113,7 +113,7 @@ Fase 7 — Mainnet & Lançamento   [ ] Não iniciada
 - [ ] 2.8 — Testes de integração
 
 **Decisões pendentes**:
-- Canal de sinalização: on-chain via eventos, DHT/P2P efêmero, ou servidor leve?
+- Stack do servidor de sinalização: Go vs Node.js
 
 ---
 
@@ -211,7 +211,7 @@ check_revocation(identity_id) → RevocationInfo
 |---|---|---|
 | Framework de contratos | Foundry vs Hardhat | **Foundry** ✓ |
 | Camada de comunicação | Relay tradicional vs WebRTC | **WebRTC** ✓ |
-| Canal de sinalização WebRTC | On-chain / DHT / servidor leve | Pendente |
+| Canal de sinalização WebRTC | On-chain / DHT / servidor leve | **Servidor leve (WebSocket)** ✓ |
 | Padrão de upgrade dos contratos | Proxy (upgradeable) vs Imutável | Pendente |
 | Formato do challenge de autenticação | JWT vs custom JSON | Pendente |
 
@@ -240,6 +240,16 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-06 — Sessão 9
+- Etapas 2.1 e 2.2 concluídas — servidor de sinalização WebRTC implementado
+  - Decisão: servidor leve WebSocket (stateless, open source, self-hostável) — descartados on-chain (lento, caro) e DHT (complexo, experimental)
+  - Stack: Python + FastAPI + uvicorn — escolha baseada no conhecimento do usuário (vs Go/Node.js)
+  - Implementação: `signaling/main.py` (~35 linhas) com 3 endpoints: `GET /health`, `POST /rooms`, `WS /rooms/{id}`
+  - Lógica: sala criada pelo website (UUID), celular entra com o mesmo ID, mensagens retransmitidas entre os dois, sala deletada quando vazia
+  - Self-hosting: `signaling/Dockerfile` (python:3.12-slim, ~10MB) — `docker build` + `docker run` testados e funcionando
+  - Conceitos ensinados: WebSocket vs HTTP, async/await, venv no Arch Linux, Docker básico
+- Próximo passo: etapa 2.3 — conexão WebRTC real no browser (website cria oferta → celular responde via sinalização)
 
 ### 2026-06-05 — Sessão 8
 - Etapa 1.7 concluída — 3 contratos verificados no Basescan
