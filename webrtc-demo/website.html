@@ -33,7 +33,11 @@
       { urls: 'stun:stun.cloudflare.com:3478' },
     ];
 
+    const CHALLENGE_TTL_MS = 30_000; // 30 segundos
+    const usedNonces = new Set();
+
     let pc, ws, dataChannel;
+    let lastChallenge = null;
 
     function log(msg) {
       const el = document.getElementById('log');
@@ -89,7 +93,7 @@
       // 4. Cria data channel (canal de dados P2P)
       dataChannel = pc.createDataChannel('auth');
       dataChannel.onopen = () => log('Data channel aberto');
-      dataChannel.onmessage = (evt) => log(`Mensagem recebida (P2P): ${evt.data}`);
+      dataChannel.onmessage = (evt) => handleMessage(JSON.parse(evt.data));
 
       log('Aguardando o mobile entrar na sala...');
     });
@@ -120,12 +124,74 @@
         origin: location.host,
       };
 
+      lastChallenge = challenge;
       dataChannel.send(JSON.stringify(challenge));
       log(`Challenge enviado (P2P):`);
       log(`  nonce:     ${challenge.nonce}`);
       log(`  issuedAt:  ${new Date(challenge.issuedAt).toLocaleTimeString()}`);
       log(`  origin:    ${challenge.origin}`);
     });
+
+    window.handleMessage = async function handleMessage(msg) {
+      if (msg.type !== 'auth-response') return;
+
+      if (!msg.approved) {
+        log('*** LOGIN RECUSADO pelo dispositivo ***');
+        return;
+      }
+
+      log('Resposta recebida (P2P) — verificando...');
+
+      // Camada 1: TTL
+      const age = Date.now() - lastChallenge.issuedAt;
+      if (age > CHALLENGE_TTL_MS) {
+        log(`*** REJEITADO: challenge expirado (${(age / 1000).toFixed(1)}s > 30s) ***`);
+        return;
+      }
+      log(`  TTL ok (${(age / 1000).toFixed(1)}s)`);
+
+      // Camada 2: nonce único
+      if (usedNonces.has(msg.nonce)) {
+        log('*** REJEITADO: nonce já utilizado (replay attack) ***');
+        return;
+      }
+      usedNonces.add(msg.nonce);
+      log('  Nonce ok (nunca usado antes)');
+
+      log('Verificando assinatura...');
+
+      // Reconstrói a chave pública a partir do base64 recebido
+      const pubKeyBytes = Uint8Array.from(atob(msg.publicKey), c => c.charCodeAt(0));
+      const publicKey = await crypto.subtle.importKey(
+        'raw',
+        pubKeyBytes,
+        { name: 'ECDSA', namedCurve: 'P-256' },
+        false,
+        ['verify']
+      );
+
+      // Reconstrói os bytes que o mobile assinou (o challenge original)
+      const encoder = new TextEncoder();
+      const data = encoder.encode(JSON.stringify(lastChallenge));
+
+      // Reconstrói a assinatura a partir do base64
+      const signatureBytes = Uint8Array.from(atob(msg.signature), c => c.charCodeAt(0));
+
+      // Verifica: essa assinatura foi feita com a chave privada correspondente?
+      const valid = await crypto.subtle.verify(
+        { name: 'ECDSA', hash: 'SHA-256' },
+        publicKey,
+        signatureBytes,
+        data
+      );
+
+      if (valid) {
+        log('*** ASSINATURA VÁLIDA — LOGIN APROVADO! ***');
+        log(`  nonce confirmado: ${msg.nonce}`);
+      } else {
+        log('*** ASSINATURA INVÁLIDA — LOGIN REJEITADO ***');
+      }
+    }
   </script>
 </body>
 </html>
