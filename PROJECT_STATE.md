@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-06-04 (Sessão 5)
+> Última atualização: 2026-06-06 (Sessão 10)
 
 ---
 
@@ -105,8 +105,8 @@ Fase 7 — Mainnet & Lançamento   [ ] Não iniciada
 **Etapas**:
 - [x] 2.1 — Decidir canal de sinalização → servidor leve (WebSocket, stateless, self-hostável)
 - [x] 2.2 — Implementar sinalização (FastAPI + WebSocket, stateless, self-hostável via Docker)
-- [ ] 2.3 — Conexão WebRTC: website cria oferta → celular responde
-- [ ] 2.4 — Challenge trafega P2P: website → celular
+- [x] 2.3 — Conexão WebRTC: website cria oferta → celular responde
+- [x] 2.4 — Challenge trafega P2P: website → celular
 - [ ] 2.5 — Resposta assinada trafega P2P: celular → website
 - [ ] 2.6 — TTL de challenges (expiração, não-replay)
 - [ ] 2.7 — TURN self-hostável (coturn) como fallback
@@ -240,6 +240,18 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-06 — Sessão 10
+- Etapas 2.3 e 2.4 concluídas
+  - 2.3: conexão WebRTC P2P funcionando entre website e mobile (browser)
+    - Fix race condition: mobile envia "ready" antes do website criar oferta
+    - Fix CORS: adicionado CORSMiddleware no FastAPI
+    - Fix link do mobile: URL relativa em vez de absoluta com /webrtc-demo/
+  - 2.4: challenge trafega P2P do website para o mobile
+    - Formato: `{type, nonce, issuedAt, origin}` — nonce via `crypto.randomUUID()`
+    - Mobile exibe pedido de login formatado ao receber o challenge
+  - Conceitos ensinados: fetch vs requests, WebSocket, RTCPeerConnection, ICE candidates, STUN, SDP offer/answer, data channel
+- Próximo passo: etapa 2.5 — resposta assinada trafega P2P do mobile para o website
 
 ### 2026-06-06 — Sessão 9
 - Etapas 2.1 e 2.2 concluídas — servidor de sinalização WebRTC implementado
