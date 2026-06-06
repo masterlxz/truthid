@@ -17,8 +17,12 @@
 
   <div id="message-area">
     <hr>
-    <input id="msg-input" placeholder="Mensagem para o website..." />
-    <button id="btn-send">Enviar via P2P</button>
+    <div id="challenge-box" style="background:#1a1a2e;color:#e0e0ff;padding:16px;border-radius:8px;display:none">
+      <b>Pedido de login recebido</b><br><br>
+      <span id="c-origin"></span><br>
+      <span id="c-time"></span><br>
+      <span id="c-nonce" style="font-size:11px;color:#888"></span>
+    </div>
   </div>
 
   <hr>
@@ -83,7 +87,7 @@
         dataChannel = evt.channel;
         log('Data channel recebido');
         dataChannel.onopen = () => log('Data channel aberto');
-        dataChannel.onmessage = (e) => log(`Mensagem recebida (P2P): ${e.data}`);
+        dataChannel.onmessage = (e) => handleMessage(e.data);
       };
     }
 
@@ -103,14 +107,22 @@
       }
     }
 
-    document.getElementById('btn-send').addEventListener('click', () => {
-      const input = document.getElementById('msg-input');
-      if (dataChannel && dataChannel.readyState === 'open') {
-        dataChannel.send(input.value);
-        log(`Mensagem enviada (P2P): ${input.value}`);
-        input.value = '';
+    function handleMessage(raw) {
+      const msg = JSON.parse(raw);
+
+      if (msg.type === 'challenge') {
+        log('Challenge recebido (P2P):');
+        log(`  nonce:     ${msg.nonce}`);
+        log(`  issuedAt:  ${new Date(msg.issuedAt).toLocaleTimeString()}`);
+        log(`  origin:    ${msg.origin}`);
+
+        document.getElementById('c-origin').textContent = `Site: ${msg.origin}`;
+        document.getElementById('c-time').textContent   = `Hora: ${new Date(msg.issuedAt).toLocaleTimeString()}`;
+        document.getElementById('c-nonce').textContent  = `Nonce: ${msg.nonce}`;
+        document.getElementById('challenge-box').style.display = 'block';
+        document.getElementById('message-area').style.display = 'block';
       }
-    });
+    }
   </script>
 </body>
 </html>
