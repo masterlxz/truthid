@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-06-06 (Sessão 10)
+> Última atualização: 2026-06-07 (Sessão 12)
 
 ---
 
@@ -44,7 +44,7 @@ Stack principal:
 
 ```
 Fase 1 — Smart Contracts        [x] Concluída
-Fase 2 — Relay Service          [ ] Não iniciada
+Fase 2 — Relay Service          [x] Concluída
 Fase 3 — Desktop App            [ ] Não iniciada
 Fase 4 — Mobile App             [ ] Não iniciada
 Fase 5 — SDKs                   [ ] Não iniciada
@@ -109,8 +109,8 @@ Fase 7 — Mainnet & Lançamento   [ ] Não iniciada
 - [x] 2.4 — Challenge trafega P2P: website → celular
 - [x] 2.5 — Resposta assinada trafega P2P: celular → website
 - [x] 2.6 — TTL de challenges (expiração, não-replay)
-- [ ] 2.7 — TURN self-hostável (coturn) como fallback
-- [ ] 2.8 — Testes de integração
+- [x] 2.7 — TURN self-hostável (coturn) como fallback
+- [x] 2.8 — Testes de integração
 
 **Decisões pendentes**:
 - Stack do servidor de sinalização: Go vs Node.js
@@ -240,6 +240,20 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-07 — Sessão 12
+- Etapas 2.7 e 2.8 concluídas — **Fase 2 completa**
+  - 2.7: TURN self-hostável (coturn) como fallback WebRTC
+    - `turn/turnserver.conf`: porta 3478, realm `truthid.local`, `lt-cred-mech` explícito
+    - `turn/Dockerfile`: imagem `coturn/coturn`, expõe TCP+UDP 3478
+    - ICE_SERVERS atualizado nos dois HTMLs (STUN + TURN com credenciais)
+    - Discussão: TURN centraliza disponibilidade, não segurança (dados DTLS-cifrados)
+  - 2.8: testes manuais de integração — todos passaram
+    - Happy path: P2P → challenge → aprovação → assinatura válida ✅
+    - Login recusado: mobile recusa → website exibe mensagem correta ✅
+    - TTL expirado: 31s de espera → website rejeita por expiração ✅
+  - Conceitos ensinados: STUN vs TURN, NAT simétrico, relay vs P2P, lt-cred-mech
+- Próximo passo: Fase 3 — Desktop App (Tauri + React + TypeScript)
 
 ### 2026-06-06 — Sessão 11
 - Etapas 2.5 e 2.6 concluídas

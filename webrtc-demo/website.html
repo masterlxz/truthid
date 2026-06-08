@@ -28,9 +28,14 @@
   <script>
     const SIGNALING = 'ws://localhost:8000';
     const API = 'http://localhost:8000';
-    const STUN_SERVERS = [
+    const ICE_SERVERS = [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun.cloudflare.com:3478' },
+      {
+        urls: 'turn:localhost:3478',
+        username: 'truthid',
+        credential: 'secret123',
+      },
     ];
 
     const CHALLENGE_TTL_MS = 30_000; // 30 segundos
@@ -72,7 +77,7 @@
       ws.onmessage = (evt) => handleSignal(JSON.parse(evt.data));
 
       // 3. Cria RTCPeerConnection com servidores STUN
-      pc = new RTCPeerConnection({ iceServers: STUN_SERVERS });
+      pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
       // Quando o ICE encontrar um candidato, envia pela sinalização
       pc.onicecandidate = ({ candidate }) => {
