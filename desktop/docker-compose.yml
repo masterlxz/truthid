@@ -1,0 +1,22 @@
+services:
+  desktop:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app                                  # seu código fonte
+      - /tmp/.X11-unix:/tmp/.X11-unix           # display do Linux (para a janela aparecer)
+      - cargo-registry:/root/.cargo/registry    # cache de pacotes Rust
+      - cargo-git:/root/.cargo/git              # cache de pacotes Rust (git)
+      - cargo-target:/app/src-tauri/target      # cache de compilação Rust (o mais pesado)
+    environment:
+      - DISPLAY=${DISPLAY}                      # qual tela usar (herdado do host)
+    network_mode: host                          # container usa a rede do host (Tauri dev server precisa disso)
+    stdin_open: true
+    tty: true
+    command: npm run tauri dev
+
+volumes:
+  cargo-registry:
+  cargo-git:
+  cargo-target:

@@ -121,6 +121,9 @@ Fase 7 — Mainnet & Lançamento   [ ] Não iniciada
 
 **Objetivo de aprendizado**: Construir uma aplicação desktop com Rust no backend e React no frontend, integrando wallet e blockchain.
 
+**Ambiente de desenvolvimento**: Docker — rode `./dev.sh` dentro de `desktop/` para subir o container.
+Antes de rodar pela primeira vez na sessão (ou após reiniciar o computador), o X11 precisa estar liberado para Docker. O script `dev.sh` já faz isso automaticamente — basta lembrar de usar `./dev.sh` em vez de `docker compose up` diretamente.
+
 **Responsabilidades**:
 - Criar e gerenciar identidade
 - Gerenciar dispositivos (adicionar/revogar)
@@ -128,7 +131,7 @@ Fase 7 — Mainnet & Lançamento   [ ] Não iniciada
 - Conectar wallet (MetaMask, Rabby, Ledger, Trezor, WalletConnect)
 
 **Etapas**:
-- [ ] 3.1 — Setup Tauri + React + TypeScript
+- [x] 3.1 — Setup Tauri + React + TypeScript
 - [ ] 3.2 — Integração com wallet (wagmi + viem)
 - [ ] 3.3 — Tela: Criar identidade (conectar wallet → escolher username → registrar)
 - [ ] 3.4 — Tela: Gerenciar dispositivos (adicionar via QR, revogar)
@@ -240,6 +243,16 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-08 — Sessão 13
+- Etapa 3.1 concluída — Setup Tauri + React + TypeScript
+  - Ambiente de desenvolvimento em Docker: `desktop/Dockerfile`, `desktop/docker-compose.yml`, `desktop/dev.sh`
+  - Imagem Docker: Node 20 + Rust 1.96 + Tauri CLI 2.11.2 + dependências GTK/WebKit
+  - Projeto scaffoldado com `create-tauri-app` (template react-ts, npm)
+  - Primeira compilação: 3m 19s (488 crates); subsequentes instantâneas via volume `cargo-target`
+  - App abriu com sucesso via `./dev.sh` (X11 forwarding, WebKit em software rendering)
+  - Conceitos ensinados: TypeScript vs Python, React componentes, Tauri arquitetura (WebView + Rust), mecanismo invoke (React → Rust)
+- Próximo passo: etapa 3.2 — integração com wallet (wagmi + viem)
 
 ### 2026-06-07 — Sessão 12
 - Etapas 2.7 e 2.8 concluídas — **Fase 2 completa**
