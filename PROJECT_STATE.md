@@ -78,6 +78,7 @@ Fase 7 — Mainnet & Lançamento   [ ] Não iniciada
   - IdentityRegistry : 0xd4484aDD6DCd0919568B6365882cDB207fE27D9c
   - DeviceRegistry   : 0xe87633b148cf7a7F6c60DdA84AD7f4D3a9eC187F
   - RecoveryManager  : 0x66be956D14b9383aE9a58f70edD6Cae406Eb960f
+  - SessionRegistry  : 0x93B56d40B304269Ee23f84A1cF3BD7B338514b42
 - [x] 1.7 — Verificar contratos no Basescan
 
 **Decisões pendentes**:
@@ -135,7 +136,14 @@ Antes de rodar pela primeira vez na sessão (ou após reiniciar o computador), o
 - [x] 3.2 — Integração com wallet (wagmi + viem)
 - [x] 3.3 — Tela: Criar identidade (conectar wallet → escolher username → registrar)
 - [x] 3.4 — Tela: Gerenciar dispositivos (adicionar via QR, revogar)
-- [ ] 3.5 — Tela: Sessões ativas (listar, revogar selecionadas, revogar todas)
+- [x] 3.5 — Tela: Sessões ativas (listar, revogar sessão individual ou todas)
+  - Sessões NÃO ficam num servidor central — armazenadas como hash on-chain
+  - Hash: `keccak256(identityId + devicePubkey + origin + timestamp + nonce)` → gravado na blockchain
+  - Dados originais ficam localmente no dispositivo do usuário (para provar ownership)
+  - Para revogar: usuário fornece dados originais → contrato recalcula hash → marca como revogado
+  - SDK dos sites consulta "esse hash está revogado?" sem saber o que o hash representa
+  - Privacidade: público que existe um registro, privado o que representa (site, device, horário)
+  - Custo estimado por login: ~$0,0002 (Base Mainnet, gas ~0.001 gwei)
 - [ ] 3.6 — Geração de QR code para pareamento de novo dispositivo
 - [ ] 3.7 — Armazenamento seguro de chaves (Windows TPM / Linux Keyring)
 - [ ] 3.8 — Build para Linux, Windows, macOS
@@ -217,6 +225,8 @@ check_revocation(identity_id) → RevocationInfo
 | Canal de sinalização WebRTC | On-chain / DHT / servidor leve | **Servidor leve (WebSocket)** ✓ |
 | Padrão de upgrade dos contratos | Proxy (upgradeable) vs Imutável | Pendente |
 | Formato do challenge de autenticação | JWT vs custom JSON | Pendente |
+| Armazenamento de sessões | Servidor central vs on-chain hash | **Hash keccak256 on-chain** ✓ — dados originais locais, só o hash vai pra chain; privado mas auditável; revogação granular por sessão |
+| Sinalização WebRTC (futuro) | Servidor fixo vs plugável | **SignalingAdapter** ✓ — interface abstrata com implementações trocáveis (WebSocketSignaling hoje, OnChainSignaling quando latência de L2 permitir); contratos de identidade ficam na Base, sinalização pode migrar de chain sem afetar o resto |
 
 ---
 
@@ -243,6 +253,32 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-13 — Sessão 15
+- Sessão de arquitetura + etapa 3.5 concluída
+- Decisão: sessões armazenadas como hash keccak256 on-chain
+  - Dados originais (site, device, timestamp, nonce) ficam locais no dispositivo do usuário
+  - Blockchain guarda só o hash → privado (ninguém sabe o que representa) mas auditável
+  - Revogação granular: usuário fornece dados originais → contrato verifica hash → marca como revogado
+  - SDK dos sites consulta "hash está revogado?" sem ver os dados reais
+  - Custo estimado: ~R$ 0,002 por login na Base. Latência aceitável: ~2s para gravação
+- Decisão: SignalingAdapter — sinalização WebRTC abstraída atrás de interface plugável
+  - Hoje: WebSocketSignaling (servidor FastAPI já implementado na Fase 2)
+  - Futuro: OnChainSignaling (eventos na blockchain, ~R$ 0,002/login, latência ~7-10s hoje tendendo a cair)
+  - Motivação: sinalização é stateless — pode migrar de implementação sem afetar contratos de identidade
+  - Contratos de identidade ficam na Base; sinalização pode usar qualquer chain ou protocolo
+- `SessionRegistry.sol`: novo contrato — createSession, revokeSession, revokeAllSessions (truque O(1) via timestamp), isSessionRevoked
+  - 23 testes novos, total geral: 103 testes passando
+  - Deployado e verificado na Base Sepolia: 0x93B56d40B304269Ee23f84A1cF3BD7B338514b42
+- `DeploySessionRegistry.s.sol`: script de deploy isolado (reutiliza contratos já deployados)
+- `contracts.ts`: adicionado SESSION_REGISTRY_ADDRESS + SESSION_REGISTRY_ABI (funções + eventos)
+- `ActiveSessions.tsx`: tela de sessões ativas
+  - 4 leituras encadeadas: getIdentity → getSessionsByIdentity → getSession (paralelo) → getDevice (paralelo)
+  - Revogação individual e revogação em massa
+  - Mostra label do device em vez do endereço bruto
+- `App.tsx`: navegação por abas entre Dispositivos e Sessões ativas
+- Conceito consolidado: contratos Solidity = PostgreSQL (estrutura + regras), TypeScript = ORM (lê e escreve via wagmi)
+- Próximo passo: etapa 3.6 — geração de QR code para pareamento de novo dispositivo
 
 ### 2026-06-09 — Sessão 14
 - Etapa 3.4 concluída — tela gerenciar dispositivos
