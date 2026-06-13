@@ -232,6 +232,17 @@ Stores:
 * Guardian approvals
 * Recovery operations
 
+SessionRegistry
+
+Stores:
+
+* Session hashes (keccak256 of session data — content stays private)
+* Revocation status per session
+* Bulk revocation timestamp per identity (O(1) revoke-all)
+
+Session data (site, device, timestamp, nonce) stays local on the user's device.
+Only the hash goes on-chain. The SDK queries isSessionRevoked(hash) to validate sessions.
+
 ---
 
 # Off-Chain Components
@@ -269,29 +280,34 @@ Responsibilities:
 
 ---
 
-## Relay Service
+## Communication Layer (WebRTC)
 
 Purpose:
 
-Enable communication between:
+Enable direct P2P communication between website and mobile app.
 
-* Website
-* Mobile App
+Architecture:
+
+* STUN: multiple public servers (Google, Cloudflare) for P2P discovery
+* TURN: self-hostable fallback (coturn) for ~10% of cases where direct P2P fails
+* Signaling Server: lightweight stateless WebSocket server for initial connection setup only
 
 Responsibilities:
 
-* Relay authentication requests
-* Deliver signed responses
+* Exchange WebRTC connection info (SDP offer/answer, ICE candidates)
+* Establish direct P2P channel between website and mobile
 
-Relay does NOT:
+The signaling server does NOT see:
 
-* Store identities
-* Authenticate users
-* Hold private keys
+* Authentication challenges
+* Signed responses
+* Private keys
 
-Relay is replaceable.
+All authentication data travels P2P encrypted via WebRTC data channels.
 
-Any organization can self-host it.
+The signaling server is abstracted behind a SignalingAdapter interface.
+
+Future implementations can use on-chain signaling or other protocols without changing the rest of the system.
 
 ---
 
