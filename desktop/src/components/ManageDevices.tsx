@@ -12,6 +12,7 @@ import {
   DEVICE_REGISTRY_ADDRESS,
   DEVICE_REGISTRY_ABI,
 } from "../config/contracts";
+import { DesktopDevice } from "./DesktopDevice";
 
 // URL do servidor de sinalização (o mesmo da Fase 2)
 const SIGNALING_URL = "http://localhost:8000";
@@ -115,6 +116,15 @@ export function ManageDevices({ username }: { username: string }) {
       <PairDevice
         signalingUrl={SIGNALING_URL}
         onDeviceRegistered={() => {
+          refetchDevices();
+          refetchDeviceDetails();
+        }}
+      />
+
+      <hr />
+
+      <DesktopDevice
+        onRegistered={() => {
           refetchDevices();
           refetchDeviceDetails();
         }}

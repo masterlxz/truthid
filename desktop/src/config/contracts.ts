@@ -68,6 +68,13 @@ export const DEVICE_REGISTRY_ABI = [
   },
   {
     type: "function",
+    name: "isDeviceActive",
+    inputs: [{ name: "devicePubKey", type: "address" }],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
     name: "getDevicesByIdentity",
     inputs: [{ name: "identityId", type: "uint256" }],
     outputs: [{ name: "", type: "address[]" }],
