@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-06-08 (Sessão 13)
+> Última atualização: 2026-06-13 (Sessão 16)
 
 ---
 
@@ -150,7 +150,7 @@ Antes de rodar pela primeira vez na sessão (ou após reiniciar o computador), o
   - Algoritmo secp256k1 + endereço Ethereum derivado via keccak256 — compatível com DeviceRegistry
   - `DesktopDevice.tsx`: componente que registra o próprio desktop como device na blockchain
   - Desktop pode autenticar sem celular após registro
-- [ ] 3.8 — Build para Linux, Windows, macOS
+- [ ] 3.8 — Build para Linux, Windows, macOS (em andamento — workflow criado, pendente commit + teste)
 
 ---
 
@@ -257,6 +257,25 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-13 — Sessão 16
+
+- Etapa 3.8 em andamento — GitHub Actions para build multiplataforma
+- Conceitos ensinados:
+  - GitHub Actions: runners são VMs na nuvem (ubuntu/windows/macos-latest) que o GitHub sobe automaticamente
+  - `strategy.matrix`: gera múltiplos jobs a partir de uma lista — evita repetir o workflow 3x
+  - `fail-fast: false`: se um SO falhar, os outros continuam
+  - Cache Rust (`Swatinem/rust-cache`): primeira execução ~15min, seguintes ~3min
+  - `tauri-apps/tauri-action`: action oficial que compila e já cria GitHub Release com instaladores anexados
+  - `releaseDraft: true`: release fica como rascunho para revisão antes de publicar
+  - `GITHUB_TOKEN`: token gerado automaticamente pelo GitHub por execução, sem configuração manual
+  - Trigger em tags (`v*`): build só dispara ao criar tag de versão (ex: `git tag v0.1.0 && git push origin v0.1.0`)
+  - Fluxo de git workflows: hoje push direto na main (dev solo); quando tiver usuários → branches + PRs + branch protection
+- Arquivo criado: `.github/workflows/build.yml`
+  - Linux: ubuntu-22.04, gera `.deb`, instala libwebkit2gtk/libdbus/libsecret (keyring)
+  - Windows: windows-latest, gera `.msi`
+  - macOS: macos-latest, gera `.dmg`
+- **Próximo passo ao retomar**: fazer commit do `.github/workflows/build.yml`, criar tag `v0.1.0` e acompanhar a primeira execução no GitHub Actions
 
 ### 2026-06-13 — Sessão 15
 - Sessão de arquitetura + etapa 3.5 concluída
