@@ -57,7 +57,7 @@ jobs:
 
       - name: npm install
         working-directory: desktop
-        run: npm ci
+        run: npm ci --legacy-peer-deps
 
       - name: Build
         uses: tauri-apps/tauri-action@v0
