@@ -17,7 +17,13 @@ function App() {
   const isWrongNetwork = isConnected && chainId !== base.id;
   const { switchChain, isPending: isSwitching } = useSwitchChain();
 
-  const { data: username, isLoading: isLoadingUsername } = useReadContract({
+  const {
+    data: username,
+    isLoading: isLoadingUsername,
+    isError: isIdentityError,
+    error: identityError,
+    refetch: refetchIdentity,
+  } = useReadContract({
     address: IDENTITY_REGISTRY_ADDRESS,
     abi: IDENTITY_REGISTRY_ABI,
     functionName: "getUsernameByController",
@@ -47,11 +53,20 @@ function App() {
 
       {isLoadingIdentity && <p className="muted">Carregando...</p>}
 
-      {isConnected && !isWrongNetwork && !isLoadingIdentity && !hasIdentity && (
+      {isConnected && !isWrongNetwork && !isLoadingIdentity && isIdentityError && (
+        <div className="card">
+          <p className="error-text">
+            Falha ao consultar identidade: {identityError?.message?.split("\n")[0]}
+          </p>
+          <button onClick={() => refetchIdentity()}>Tentar novamente</button>
+        </div>
+      )}
+
+      {isConnected && !isWrongNetwork && !isLoadingIdentity && !isIdentityError && !hasIdentity && (
         <CreateIdentity />
       )}
 
-      {isConnected && !isWrongNetwork && !isLoadingIdentity && hasIdentity && (
+      {isConnected && !isWrongNetwork && !isLoadingIdentity && !isIdentityError && hasIdentity && (
         <>
           <nav className="tabs">
             <button

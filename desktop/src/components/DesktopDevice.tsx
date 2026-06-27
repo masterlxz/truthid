@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import {
   useAccount,
@@ -18,6 +19,7 @@ export function DesktopDevice({ onRegistered }: { onRegistered: () => void }) {
   const [address, setAddress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { address: controllerAddress } = useAccount();
+  const queryClient = useQueryClient();
 
   // Na primeira renderização, pede ao Rust para gerar/recuperar a chave do keyring
   useEffect(() => {
@@ -42,29 +44,42 @@ export function DesktopDevice({ onRegistered }: { onRegistered: () => void }) {
   const [phase, setPhase] = useState<"idle" | "committing" | "registering">("idle");
   const [salt, setSalt] = useState<`0x${string}` | null>(null);
 
-  const { writeContract: sendTx, data: txHash, isPending } = useWriteContract();
+  const { writeContract: sendCommit, data: commitHash, isPending: isCommitPending, isError: isCommitError, error: commitError } = useWriteContract();
+  const { writeContract: sendRegister, data: registerHash, isPending: isRegisterPending, isError: isRegisterError, error: registerError } = useWriteContract();
 
-  const { isLoading: isConfirming, isSuccess } =
-    useWaitForTransactionReceipt({ hash: txHash });
+  const { isLoading: isCommitConfirming, isSuccess: isCommitSuccess } =
+    useWaitForTransactionReceipt({ hash: commitHash });
+  const { isLoading: isRegisterConfirming, isSuccess: isRegisterSuccess } =
+    useWaitForTransactionReceipt({ hash: registerHash });
+
+  const isPending = isCommitPending || isRegisterPending;
+  const isConfirming = isCommitConfirming || isRegisterConfirming;
+  const writeError = commitError ?? registerError;
+  const isWriteError = isCommitError || isRegisterError;
 
   useEffect(() => {
-    if (!isSuccess) return;
-
-    if (phase === "committing" && address && salt) {
-      // Commit confirmado — passo 2: revelar devicePubKey + salt
-      setPhase("registering");
-      sendTx({
+    if (!isCommitSuccess || phase !== "committing" || !address || !salt) return;
+    setPhase("registering");
+    // O contrato exige block.number > commitBlock (RevealTooEarly).
+    // Base mina a cada ~2s, então 4s garante que estamos no próximo bloco.
+    const timer = setTimeout(() => {
+      sendRegister({
         address: DEVICE_REGISTRY_ADDRESS,
         abi: DEVICE_REGISTRY_ABI,
         functionName: "registerDevice",
         args: [address as `0x${string}`, "Este Desktop", salt],
       });
-    } else if (phase === "registering") {
-      setPhase("idle");
-      refetch();
-      onRegistered();
-    }
-  }, [isSuccess]);
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [isCommitSuccess]);
+
+  useEffect(() => {
+    if (!isRegisterSuccess || phase !== "registering") return;
+    setPhase("idle");
+    queryClient.invalidateQueries();
+    refetch();
+    onRegistered();
+  }, [isRegisterSuccess]);
 
   function handleRegister() {
     if (!address || !controllerAddress) return;
@@ -83,7 +98,7 @@ export function DesktopDevice({ onRegistered }: { onRegistered: () => void }) {
     );
 
     setPhase("committing");
-    sendTx({
+    sendCommit({
       address: DEVICE_REGISTRY_ADDRESS,
       abi: DEVICE_REGISTRY_ABI,
       functionName: "commitDevice",
@@ -117,14 +132,21 @@ export function DesktopDevice({ onRegistered }: { onRegistered: () => void }) {
         ) : (
           <>
             <span className="status-badge status-badge--revoked">Não registrado</span>
+            {isWriteError && (
+              <p className="error-text">
+                {writeError?.message?.includes("rejected_by_user")
+                  ? "Transação rejeitada na Ledger."
+                  : `Erro: ${writeError?.message?.split("\n")[0]}`}
+              </p>
+            )}
             <div className="actions-row">
               <button onClick={handleRegister} disabled={isBusy}>
                 {phase === "committing" && isPending
-                  ? "Confirme no MetaMask (1/2)..."
+                  ? "Confirme na carteira (1/2)..."
                   : phase === "committing" && isConfirming
-                  ? "Preparando registro (1/2)..."
+                  ? "Aguardando rede (1/2)..."
                   : phase === "registering" && isPending
-                  ? "Confirme no MetaMask (2/2)..."
+                  ? "Confirme na carteira (2/2)..."
                   : phase === "registering" && isConfirming
                   ? "Aguardando rede (2/2)..."
                   : "Registrar este desktop"}

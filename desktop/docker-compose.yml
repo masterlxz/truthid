@@ -6,11 +6,15 @@ services:
     volumes:
       - .:/app                                  # seu código fonte
       - /tmp/.X11-unix:/tmp/.X11-unix           # display do Linux (para a janela aparecer)
+      - ${HOME}/.truthid:/root/.truthid         # chave do dispositivo (fallback quando não há keyring)
       - cargo-registry:/root/.cargo/registry    # cache de pacotes Rust
       - cargo-git:/root/.cargo/git              # cache de pacotes Rust (git)
       - cargo-target:/app/src-tauri/target      # cache de compilação Rust (o mais pesado)
     environment:
       - DISPLAY=${DISPLAY}                      # qual tela usar (herdado do host)
+      - WEBKIT_DISABLE_DMABUF_RENDERER=1        # evita GPU hang no i915 com XWayland
+      - WEBKIT_DISABLE_COMPOSITING_MODE=1       # fallback: desativa compositing de GPU no WebKit
+    privileged: true                            # acesso ao USB da Ledger (HID); em produção substituído pelas udev rules da etapa 10.6
     network_mode: host                          # container usa a rede do host (Tauri dev server precisa disso)
     stdin_open: true
     tty: true

@@ -144,24 +144,20 @@ const INS_GET_ADDRESS: u8 = 0x02;
 const NO_DISPLAY_CONFIRMATION: u8 = 0x00; // P1: não pede confirmação na tela da Ledger (necessário pro polling)
 const NO_CHAIN_CODE: u8 = 0x00; // P2: não inclui chain code na resposta, não precisamos dele
 
-/// Caminho de derivação padrão Ethereum `m/44'/60'/0'/0/0` (conta 0). Os 3
-/// primeiros componentes são "hardened" (bit mais alto ligado, `0x80000000`).
-const DEFAULT_DERIVATION_PATH: [u32; 5] = [0x8000_002c, 0x8000_003c, 0x8000_0000, 0, 0];
-
-/// Codifica o caminho de derivação no formato esperado pelas APDUs do app
-/// Ethereum: 1 byte com a profundidade + 4 bytes big-endian por componente.
-fn encode_derivation_path() -> Vec<u8> {
-    let mut data = vec![DEFAULT_DERIVATION_PATH.len() as u8];
-    for component in DEFAULT_DERIVATION_PATH {
+/// Codifica o caminho de derivação `m/44'/60'/account_index'/0/0` no formato
+/// esperado pelas APDUs do app Ethereum: 1 byte de profundidade + 4 bytes
+/// big-endian por componente. Os 3 primeiros componentes são "hardened".
+fn encode_derivation_path(account_index: u32) -> Vec<u8> {
+    let path = [0x8000_002c, 0x8000_003c, 0x8000_0000 | account_index, 0, 0];
+    let mut data = vec![path.len() as u8];
+    for component in path {
         data.extend_from_slice(&component.to_be_bytes());
     }
     data
 }
 
-/// Monta o APDU de GET_ADDRESS: CLA|INS|P1|P2|LC|DATA, onde DATA é o
-/// caminho de derivação (1 byte de profundidade + 4 bytes por componente).
-fn build_get_address_apdu() -> Vec<u8> {
-    let data = encode_derivation_path();
+fn build_get_address_apdu(account_index: u32) -> Vec<u8> {
+    let data = encode_derivation_path(account_index);
 
     let mut apdu = vec![
         ETH_CLA,
@@ -207,11 +203,11 @@ fn classify_error(status_word: u16) -> String {
 /// como uma destas strings: "not_connected", "locked", "wrong_app", ou uma
 /// mensagem genérica pra qualquer outra falha inesperada.
 #[tauri::command]
-pub fn get_ledger_address() -> Result<String, String> {
+pub fn get_ledger_address(account_index: u32) -> Result<String, String> {
     let api = HidApi::new().map_err(|e| e.to_string())?;
     let device = open_ledger_device(&api).map_err(|_| "not_connected".to_string())?;
 
-    let apdu = build_get_address_apdu();
+    let apdu = build_get_address_apdu(account_index);
     let response = send_apdu(&device, &apdu)?;
     let data = check_status(response).map_err(classify_error)?;
 
@@ -236,8 +232,8 @@ const SIGN_CHUNK_SIZE: usize = 150;
 /// (RLP, com o byte de tipo na frente para EIP-1559/2930). O 1º APDU leva
 /// o caminho de derivação + o início da transação; os seguintes (P1 =
 /// "continuação") só levam o restante dos bytes.
-fn build_sign_tx_apdus(unsigned_tx: &[u8]) -> Vec<Vec<u8>> {
-    let path = encode_derivation_path();
+fn build_sign_tx_apdus(unsigned_tx: &[u8], account_index: u32) -> Vec<Vec<u8>> {
+    let path = encode_derivation_path(account_index);
     let mut apdus = Vec::new();
     let mut offset = 0;
     let mut first = true;
@@ -290,7 +286,7 @@ fn parse_sign_tx_response(data: &[u8]) -> Result<String, String> {
 /// "0x" — aqui só tratamos como bytes opacos, não decodificamos o RLP.
 /// Erro vem nos mesmos rótulos do `get_ledger_address`.
 #[tauri::command]
-pub fn sign_ledger_transaction(unsigned_tx_hex: String) -> Result<String, String> {
+pub fn sign_ledger_transaction(unsigned_tx_hex: String, account_index: u32) -> Result<String, String> {
     let unsigned_tx = hex::decode(unsigned_tx_hex.trim_start_matches("0x"))
         .map_err(|e| e.to_string())?;
 
@@ -298,9 +294,14 @@ pub fn sign_ledger_transaction(unsigned_tx_hex: String) -> Result<String, String
     let device = open_ledger_device(&api).map_err(|_| "not_connected".to_string())?;
 
     let mut last_response = Vec::new();
-    for apdu in build_sign_tx_apdus(&unsigned_tx) {
+    for apdu in build_sign_tx_apdus(&unsigned_tx, account_index) {
         let response = send_apdu(&device, &apdu)?;
-        last_response = check_status(response).map_err(classify_error)?;
+        last_response = check_status(response).map_err(|sw| match sw {
+            // 0x6985 = "Conditions of use not satisfied" — durante assinatura
+            // significa que o usuário rejeitou na tela da Ledger.
+            0x6985 | 0x6750 => "rejected_by_user".to_string(),
+            _ => classify_error(sw),
+        })?;
     }
 
     parse_sign_tx_response(&last_response)

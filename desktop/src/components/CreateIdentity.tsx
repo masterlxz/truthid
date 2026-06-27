@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useAccount,
   useReadContract,
@@ -33,13 +34,23 @@ export function CreateIdentity() {
     query: { enabled: username.length > 0 },
   });
 
+  const queryClient = useQueryClient();
+
   // Escrita: chamar createIdentity no contrato
-  const { writeContract, data: txHash, isPending } = useWriteContract();
+  const { writeContract, data: txHash, isPending, isError: isWriteError, error: writeError } = useWriteContract();
 
   // Aguarda confirmação da transação na rede
-  const { isLoading: isConfirming, isSuccess, isError, error } = useWaitForTransactionReceipt({
+  const { isLoading: isConfirming, isSuccess, isError: isReceiptError, error: receiptError } = useWaitForTransactionReceipt({
     hash: txHash,
   });
+
+  // Força o App.tsx a reler getUsernameByController após confirmação
+  useEffect(() => {
+    if (isSuccess) queryClient.invalidateQueries();
+  }, [isSuccess, queryClient]);
+
+  const isError = isWriteError || isReceiptError;
+  const error = writeError ?? receiptError;
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -97,13 +108,15 @@ export function CreateIdentity() {
 
       {isError && (
         <p className="error-text">
-          Erro: {error?.message?.split("\n")[0] ?? "transação falhou"}
+          {error?.message?.includes("rejected_by_user")
+            ? "Transação rejeitada na Ledger."
+            : `Erro: ${error?.message?.split("\n")[0] ?? "transação falhou"}`}
         </p>
       )}
 
       <button type="submit" disabled={!canSubmit}>
         {isPending
-          ? "Confirme no MetaMask..."
+          ? "Confirme na carteira..."
           : isConfirming
           ? "Aguardando confirmação da rede..."
           : "Registrar identidade"}

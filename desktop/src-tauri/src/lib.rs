@@ -8,24 +8,55 @@ mod ledger;
 const SERVICE: &str = "truthid";
 const ACCOUNT: &str = "device-private-key";
 
+/// Caminho de fallback quando o keyring do SO não está disponível (ex: Docker).
+/// Usa $HOME/.truthid/device.key — montado como volume no compose para persistir.
+fn fallback_key_path() -> Result<std::path::PathBuf, String> {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let dir = std::path::Path::new(&home).join(".truthid");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join("device.key"))
+}
+
+/// Lê a chave privada do keyring ou do arquivo de fallback.
+/// Gera e salva uma nova chave se nenhuma existir.
+fn get_device_key_hex() -> Result<String, String> {
+    // 1. Tenta keyring do SO
+    if let Ok(entry) = Entry::new(SERVICE, ACCOUNT) {
+        if let Ok(hex) = entry.get_password() {
+            return Ok(hex);
+        }
+    }
+
+    // 2. Fallback: arquivo ($HOME/.truthid/device.key)
+    let path = fallback_key_path()?;
+    if path.exists() {
+        return std::fs::read_to_string(&path)
+            .map(|s| s.trim().to_string())
+            .map_err(|e| e.to_string());
+    }
+
+    // 3. Gera nova chave secp256k1
+    let signing_key = SigningKey::random(&mut OsRng);
+    let hex = hex::encode(signing_key.to_bytes());
+
+    // Salva no keyring; se falhar, salva no arquivo
+    let saved = Entry::new(SERVICE, ACCOUNT)
+        .and_then(|e| e.set_password(&hex))
+        .is_ok();
+
+    if !saved {
+        std::fs::write(&path, &hex).map_err(|e| e.to_string())?;
+    }
+
+    Ok(hex)
+}
+
 /// Retorna o endereço Ethereum da chave pública deste desktop.
-/// Se ainda não existe uma chave, gera e salva no keyring do SO.
+/// Gera e persiste a chave se ainda não existir.
 #[tauri::command]
 fn get_or_create_device_key() -> Result<String, String> {
-    let entry = Entry::new(SERVICE, ACCOUNT).map_err(|e| e.to_string())?;
+    let priv_hex = get_device_key_hex()?;
 
-    let priv_hex = match entry.get_password() {
-        Ok(hex) => hex,
-        Err(_) => {
-            // Primeira vez: gera chave secp256k1 (mesmo algoritmo do Ethereum)
-            let signing_key = SigningKey::random(&mut OsRng);
-            let hex = hex::encode(signing_key.to_bytes());
-            entry.set_password(&hex).map_err(|e| e.to_string())?;
-            hex
-        }
-    };
-
-    // Deriva o endereço Ethereum a partir da chave privada
     let priv_bytes = hex::decode(&priv_hex).map_err(|e| e.to_string())?;
     let signing_key = SigningKey::from_bytes(priv_bytes.as_slice().into())
         .map_err(|e| e.to_string())?;
@@ -45,11 +76,7 @@ fn get_or_create_device_key() -> Result<String, String> {
 /// Retorna a assinatura em formato Ethereum: 0x + r (32 bytes) + s (32 bytes) + v (1 byte).
 #[tauri::command]
 fn sign_challenge(challenge: String) -> Result<String, String> {
-    let entry = Entry::new(SERVICE, ACCOUNT).map_err(|e| e.to_string())?;
-
-    let priv_hex = entry
-        .get_password()
-        .map_err(|_| "Chave não encontrada. Chame get_or_create_device_key primeiro.".to_string())?;
+    let priv_hex = get_device_key_hex()?;
 
     let priv_bytes = hex::decode(&priv_hex).map_err(|e| e.to_string())?;
     let signing_key = SigningKey::from_bytes(priv_bytes.as_slice().into())

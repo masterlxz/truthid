@@ -183,7 +183,7 @@ function DeviceList({
                   disabled={isRevokePending || isRevokeConfirming}
                 >
                   {isBeingRevoked && isRevokePending
-                    ? "Confirme no MetaMask..."
+                    ? "Confirme na carteira..."
                     : isBeingRevoked && isRevokeConfirming
                     ? "Aguardando rede..."
                     : "Revogar"}
@@ -225,31 +225,50 @@ function PairDevice({ onDeviceRegistered }: {
   const [salt, setSalt] = useState<`0x${string}` | null>(null);
 
   const {
+    writeContract: sendCommit,
+    data: commitTxHash,
+    isPending: isCommitPending,
+    isError: isCommitError,
+    error: commitError,
+  } = useWriteContract();
+
+  const {
     writeContract: sendRegister,
     data: registerTxHash,
     isPending: isRegisterPending,
+    isError: isRegisterError,
+    error: registerError,
   } = useWriteContract();
 
+  const { isLoading: isCommitConfirming, isSuccess: isCommitSuccess } =
+    useWaitForTransactionReceipt({ hash: commitTxHash });
   const { isLoading: isRegisterConfirming, isSuccess: isRegisterSuccess } =
     useWaitForTransactionReceipt({ hash: registerTxHash });
 
-  useEffect(() => {
-    if (!isRegisterSuccess) return;
+  const isRegisterPendingAny = isCommitPending || isRegisterPending;
+  const isRegisterConfirmingAny = isCommitConfirming || isRegisterConfirming;
+  const pairError = commitError ?? registerError;
+  const isPairError = isCommitError || isRegisterError;
 
-    if (registerPhase === "committing" && salt && isAddress(addressInput)) {
-      // Commit confirmado — passo 2: revelar devicePubKey + salt
-      setRegisterPhase("registering");
+  useEffect(() => {
+    if (!isCommitSuccess || registerPhase !== "committing" || !salt || !isAddress(addressInput)) return;
+    setRegisterPhase("registering");
+    const timer = setTimeout(() => {
       sendRegister({
         address: DEVICE_REGISTRY_ADDRESS,
         abi: DEVICE_REGISTRY_ABI,
         functionName: "registerDevice",
         args: [addressInput as `0x${string}`, labelInput, salt],
       });
-    } else if (registerPhase === "registering") {
-      setRegisterPhase("idle");
-      closePairing();
-      onDeviceRegistered();
-    }
+    }, 4000);
+    return () => clearTimeout(timer);
+  }, [isCommitSuccess]);
+
+  useEffect(() => {
+    if (!isRegisterSuccess || registerPhase !== "registering") return;
+    setRegisterPhase("idle");
+    closePairing();
+    onDeviceRegistered();
   }, [isRegisterSuccess]);
 
   function closePairing() {
@@ -277,7 +296,7 @@ function PairDevice({ onDeviceRegistered }: {
     );
 
     setRegisterPhase("committing");
-    sendRegister({
+    sendCommit({
       address: DEVICE_REGISTRY_ADDRESS,
       abi: DEVICE_REGISTRY_ABI,
       functionName: "commitDevice",
@@ -324,18 +343,25 @@ function PairDevice({ onDeviceRegistered }: {
         />
       </div>
 
+      {isPairError && (
+        <p className="error-text">
+          {pairError?.message?.includes("rejected_by_user")
+            ? "Transação rejeitada na Ledger."
+            : `Erro: ${pairError?.message?.split("\n")[0]}`}
+        </p>
+      )}
       <div className="actions-row">
         <button
           onClick={handleRegister}
           disabled={!isAddress(addressInput) || !labelInput || registerPhase !== "idle"}
         >
-          {registerPhase === "committing" && isRegisterPending
-            ? "Confirme no MetaMask (1/2)..."
-            : registerPhase === "committing" && isRegisterConfirming
-            ? "Preparando registro (1/2)..."
-            : registerPhase === "registering" && isRegisterPending
-            ? "Confirme no MetaMask (2/2)..."
-            : registerPhase === "registering" && isRegisterConfirming
+          {registerPhase === "committing" && isRegisterPendingAny
+            ? "Confirme na carteira (1/2)..."
+            : registerPhase === "committing" && isRegisterConfirmingAny
+            ? "Aguardando rede (1/2)..."
+            : registerPhase === "registering" && isRegisterPendingAny
+            ? "Confirme na carteira (2/2)..."
+            : registerPhase === "registering" && isRegisterConfirmingAny
             ? "Aguardando rede (2/2)..."
             : "Registrar dispositivo"}
         </button>
