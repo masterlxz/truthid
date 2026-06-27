@@ -48,6 +48,19 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
 
+  flutter_launcher_icons: ^0.14.4
+
+# Configuração do flutter_launcher_icons — gera o ícone do launcher
+# (Android/iOS) a partir de uma única imagem-fonte. Mesma marca preenchida
+# usada no ícone da janela do desktop (etapa 9.4): escudo ciano sólido +
+# check vazado, fundo navy full-bleed — o logo de linha fina não funciona
+# em fundo de tela arbitrário.
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icon/app_icon.png"
+  min_sdk_android: 21
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 
