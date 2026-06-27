@@ -107,8 +107,8 @@ Fase 7 — Mainnet & Lançamento   [ ] Não iniciada
 - [x] 2.2 — Implementar sinalização (FastAPI + WebSocket, stateless, self-hostável via Docker)
 - [x] 2.3 — Conexão WebRTC: website cria oferta → celular responde
 - [x] 2.4 — Challenge trafega P2P: website → celular
-- [ ] 2.5 — Resposta assinada trafega P2P: celular → website
-- [ ] 2.6 — TTL de challenges (expiração, não-replay)
+- [x] 2.5 — Resposta assinada trafega P2P: celular → website
+- [x] 2.6 — TTL de challenges (expiração, não-replay)
 - [ ] 2.7 — TURN self-hostável (coturn) como fallback
 - [ ] 2.8 — Testes de integração
 
@@ -240,6 +240,20 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-06 — Sessão 11
+- Etapas 2.5 e 2.6 concluídas
+  - 2.5: resposta assinada trafega P2P do mobile para o website
+    - Mobile gera key pair ECDSA P-256 na inicialização (Web Crypto API)
+    - Botões Aprovar/Recusar aparecem ao receber o challenge
+    - Aprovação assina o challenge com chave privada e envia `{type, approved, nonce, signature, publicKey}` pelo data channel
+    - Website verifica assinatura com a chave pública recebida
+  - 2.6: proteção anti-replay com TTL + nonce tracking
+    - TTL de 30s: `Date.now() - issuedAt > 30_000` → rejeita antes da verificação
+    - `usedNonces` (Set): mesmo nonce não pode ser aceito duas vezes
+    - As duas camadas juntas bloqueiam replay attacks mesmo de bots rápidos
+  - Conceitos ensinados: ECDSA, par de chaves, assinatura digital, replay attack, TTL, nonce
+- Próximo passo: etapa 2.7 — TURN self-hostável (coturn) como fallback
 
 ### 2026-06-06 — Sessão 10
 - Etapas 2.3 e 2.4 concluídas
