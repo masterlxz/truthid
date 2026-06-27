@@ -1,0 +1,17 @@
+# Regras udev para dispositivos Ledger (Nano S, Nano S Plus, Nano X, Stax, Flex)
+#
+# TAG+="uaccess" dá acesso ao usuário logado na sessão atual sem precisar de root
+# ou de adicionar o usuário a um grupo (forma recomendada em sistemas com systemd-logind).
+#
+# Instalação:
+#   sudo cp 99-ledger.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules && sudo udevadm trigger
+#
+# Depois disso, desplugue e replugue a Ledger — não precisa reiniciar.
+
+# Todos os modelos Ledger — regra por vendor_id (USB)
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="2c97", TAG+="uaccess", SYMLINK+="ledger"
+
+# Mesmo device pelo interface HID raw — necessário porque o hidapi no Linux
+# acessa por /dev/hidrawX, não diretamente pelo USB.
+KERNEL=="hidraw*", ATTRS{idVendor}=="2c97", TAG+="uaccess"

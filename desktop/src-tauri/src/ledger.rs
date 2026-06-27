@@ -32,13 +32,25 @@ const CHANNEL: u16 = 0x0101;
 const TAG_APDU: u8 = 0x05;
 
 /// Abre o primeiro dispositivo HID encontrado com o vendor_id da Ledger.
+/// Distingue "não encontrada" (device não aparece na lista) de "não conseguiu
+/// abrir" (device existe mas outro processo — ex. Ledger Live — está com acesso
+/// exclusivo, mais comum no Windows).
 fn open_ledger_device(api: &HidApi) -> Result<HidDevice, String> {
     let device_info = api
         .device_list()
         .find(|d| d.vendor_id() == LEDGER_VENDOR_ID)
-        .ok_or_else(|| "Ledger não encontrada".to_string())?;
+        .ok_or_else(|| "not_connected".to_string())?;
 
-    api.open_path(device_info.path()).map_err(|e| e.to_string())
+    api.open_path(device_info.path()).map_err(|e| {
+        let msg = e.to_string().to_lowercase();
+        // No Windows, acesso exclusivo recusado quando outro app (ex. Ledger Live)
+        // já tem o device aberto. No Linux pode indicar falta de regra udev.
+        if msg.contains("access") || msg.contains("permission") || msg.contains("denied") {
+            "access_denied".to_string()
+        } else {
+            e.to_string()
+        }
+    })
 }
 
 /// Envia um APDU completo (fatiado em pacotes HID) e devolve a resposta

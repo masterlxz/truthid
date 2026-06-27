@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-06-21 (Sessão 32)
+> Última atualização: 2026-06-25 (Sessão 36)
 
 ---
 
@@ -52,7 +52,8 @@ Fase 6 — Integração & Testes    [x] Concluída
 Fase 7 — Mainnet & Lançamento   [x] Concluída
 Fase 8 — Documentação Web       [x] Concluída
 Fase 9 — Identidade Visual: Mobile & Desktop  [x] Concluída
-Fase 10 — Ledger via USB (Rust/hidapi)         [~] Em andamento (5/8)
+Fase 10 — Ledger via USB (Rust/hidapi)         [~] Em andamento (7/8)
+Fase 11 — Teste E2E Prático (login, sessão, revogação) [ ] Planejada
 ```
 
 ---
@@ -398,9 +399,55 @@ masterlxz.github.io/truthid
   - **Frontend — connector customizado** (`desktop/src/connectors/ledger.ts`, novo arquivo): em vez de só mostrar o endereço achado, virou um `Connector` de verdade da `wagmi` (`createConnector`), no mesmo "formato" dos conectores prontos (`injected`/`walletConnect`) — é isso que dá paridade real. `connect()`/`getAccounts()`/`getChainId()` chamam `get_ledger_address` (já existia). A parte nova é `getProvider()`: devolve um provider EIP-1193 customizado que trata `eth_chainId`/`eth_accounts` direto e, pra `eth_sendTransaction`, monta um `walletClient` interno da `viem` com uma conta local (`toAccount`) cujo `signTransaction` serializa a transação, manda pro Rust assinar (`sign_ledger_transaction`) e reserializa com a assinatura — reaproveita toda a lógica de preenchimento de nonce/gas/taxas da própria `viem` em vez de reimplementar isso à mão. `signMessage`/`signTypedData` lançam erro (nada no app usa hoje). O transporte RPC é o mesmo já configurado em `wagmi.ts` (`config.transports`), sem duplicar lista de RPC.
   - **Frontend — encaixe na UI existente**: `ledger` registrado no array `connectors` de `wagmi.ts` (pra entrar no `useAccount()`/`useWriteContract()` global, igual aos outros). `ConnectWallet.tsx` filtra esse connector do loop genérico de botões (pra não duplicar com o botão dedicado). `ConnectLedger.tsx` manteve o polling com mensagens de instrução (10.4), mas agora, ao achar o dispositivo, chama `connectAsync({connector: ledger})` da própria `wagmi` em vez de só guardar o endereço num estado local — isso é o que faz o resto do app (`CreateIdentity`, `ManageDevices`, `ActiveSessions`, `DesktopDevice`, todos via `useWriteContract`) passar a "ver" a Ledger como qualquer outra wallet conectada, sem precisar saber que é uma Ledger.
   - Validado por `cargo check` (limpo) e `npx tsc --noEmit` (limpo, depois de alguns ajustes de tipagem — a assinatura genérica `connect<withCapabilities>` da `wagmi`, pensada pra ERC-5792/batch de chamadas, não é inferida automaticamente a partir de um `if/else` em tempo de execução; precisou de um cast explícito documentado no código, já que nada no app usa `withCapabilities`). Visual com Playwright contra o `vite` dev server (mesmo workaround de `cacheDir` das etapas anteriores): só 1 botão "Conectar Ledger" aparece (sem duplicata), e o estado de polling/cancelamento se comporta igual à 10.4. **Não testado**: o fluxo de assinatura de verdade (`sign_ledger_transaction` end-to-end) exige hardware real — os status words de erro do SIGN_TX e o formato exato da resposta (byte de `v`) ainda não foram confirmados contra uma Ledger física, mesma ressalva já registrada pras etapas 10.1-10.4. Fica pra etapa 10.8, junto com o resto.
-- [ ] 10.6 — Multiplataforma: regra udev (Linux), entitlement USB/HID (macOS), checar conflito com Ledger Live aberto (Windows)
-- [ ] 10.7 — Confirmar que `build.yml` compila a parte nativa do `hidapi` nos 3 SOs (CI)
+- [x] 10.6 — Multiplataforma: regra udev (Linux), entitlement USB/HID (macOS), checar conflito com Ledger Live aberto (Windows). Implementado na Sessão 37: **Linux** — arquivo `desktop/linux/99-ledger.rules` criado com `TAG+="uaccess"` pra `SUBSYSTEMS=="usb"` e `KERNEL=="hidraw*"` com `ATTRS{idVendor}=="2c97"` — cobre todos os modelos Ledger; instrução de instalação (`sudo cp` + `udevadm reload`) incluída como comentário no arquivo. **Windows** — erro `access_denied` adicionado ao `classify_error` do Rust para quando `HidApi::open_path` retorna "access denied/permission" (conflito com Ledger Live, que toma acesso exclusivo); mensagem correspondente adicionada ao dicionário de instruções do `ConnectLedger.tsx`. **macOS** — `tauri.conf.json` sem sandbox configurado (App Sandbox é opt-in, não ativado); `hidapi` no macOS usa `IOHidManager` via IOKit, framework público disponível pra qualquer processo sem entitlement específico — nenhuma alteração necessária.
+- [x] 10.7 — Confirmar que `build.yml` compila a parte nativa do `hidapi` nos 3 SOs (CI). Implementado na Sessão 37: Linux — `libudev-dev` e `pkg-config` adicionados ao passo "Linux deps" do `build.yml` (são as dependências de sistema que o `hidapi` precisa pra linkar no Linux). macOS — `hidapi` usa `IOHidManager` (IOKit), framework embutido no SDK do macOS, sem dependência adicional a instalar. Windows — `hidapi` usa a API HID nativa do Windows (não precisa de pacote extra via Chocolatey/vcpkg). Ou seja: a única mudança necessária era o Linux; os outros dois SOs já compilam sem alteração.
 - [ ] 10.8 — Validação manual em máquina real de cada SO (Linux primeiro — ambiente atual; macOS/Windows quando disponível)
+
+---
+
+### Fase 11 — Teste E2E Prático: Login, Revogação de Sessão e Device
+
+**Objetivo**: Validar de ponta a ponta o fluxo de autenticação real — não só o registro on-chain (já feito na Sessão 36), mas efetivamente criar uma sessão autenticada com o device registrado, revogar essa sessão, e revogar o device em seguida. Nenhuma dessas três operações foi testada ao vivo ainda; as etapas anteriores só validaram o registro.
+
+**Contexto de partida (pós-Sessão 36)**:
+- Identidade `@masterlxz` (id=1, controller `0xB54fe9909D76d98e87a9fD76bDB5C69fABe10265`) criada em Base Mainnet
+- Desktop device (`0x1073e02eB26b371Dd1f04BcC0b5fd76e7ae7fFDD`) registrado sob a identidade 1
+- Chave privada do desktop em `$HOME/.truthid/device.key` (fallback do keyring)
+- Servidor de exemplo TypeScript em `sdk/typescript/example/server.js` — já tem as rotas `GET /auth/challenge` e `POST /auth/verify` usando o SDK; é a base mais natural para esse teste
+
+**Fluxo de login esperado (referência)**:
+```
+Desktop app                    Servidor exemplo (Express local)         Blockchain
+     |                                    |                                 |
+     |--- GET /auth/challenge ----------->|                                 |
+     |<-- { challenge, nonce, ... } ------|                                 |
+     |                                    |                                 |
+     | assina challenge com sign_challenge|                                 |
+     | (chave do device, Rust)            |                                 |
+     |                                    |                                 |
+     |--- POST /auth/verify ------------->|                                 |
+     |   { challenge, signature,          |--- verifyAuthResponse() ------->|
+     |     deviceAddress, identityId }    |   (SDK lê DeviceRegistry,       |
+     |                                    |    SessionRegistry on-chain)    |
+     |<-- { ok: true, sessionId } --------|                                 |
+     |                                    |                                 |
+     | SessionRegistry.createSession()    |                                 |
+     |-----------------------------------------> on-chain                  |
+     |                                                                      |
+     SESSION CRIADA
+```
+
+**Etapas**:
+- [ ] 11.1 — Subir o servidor de exemplo local (`sdk/typescript/example/server.js`) e confirmar que `GET /auth/challenge` retorna um challenge válido. Pré-requisito: `npm install` dentro de `sdk/typescript/`, variáveis de rede apontando para Base Mainnet (já é o default), identidade + device registrados (já estão). Valida que o SDK consegue ler o estado on-chain atual.
+- [ ] 11.2 — Login real com o desktop: o desktop assina o challenge via `invoke("sign_challenge", ...)` com a chave do device registrado, envia `POST /auth/verify`. Confirmar que o servidor retorna sucesso (assinatura válida + device ativo na blockchain). Olhar a resposta do servidor; idealmente também verificar via `cast call` ou `curl` direto no RPC que a sessão apareceu no `SessionRegistry`.
+- [ ] 11.3 — Revogar a sessão criada: abrir o desktop app, navegar para "Sessões ativas" (`ActiveSessions.tsx`), localizar a sessão do passo anterior e revogar. Confirmar on-chain que `isSessionRevoked` retorna verdadeiro para aquele `sessionId`. Verificar que chamar `POST /auth/verify` com a mesma sessão agora falha (ou que o SDK responde com "revogada" ao consultar `verifySession`).
+- [ ] 11.4 — Revogar o device desktop: navegar para "Dispositivos" (`ManageDevices.tsx`), localizar o device desktop e revogar. Confirmar que `isDeviceActive` retorna falso na blockchain. Tentar criar outro login com o mesmo device — deve falhar na etapa de verificação (`verifyAuthResponse()` checa o status do device no `DeviceRegistry`).
+
+**Pontos de atenção**:
+- `sign_challenge` e `get_or_create_device_key` são comandos Tauri — só funcionam dentro do app Tauri empacotado (não no `vite` dev server puro). O teste de fato exige rodar com `npm run tauri dev` dentro do Docker (`./dev.sh`).
+- `createSession` no `SessionRegistry` exige assinatura ECDSA do próprio device (auditoria, achado #2, corrigido na Sessão 24) — confirmar que o fluxo de login do desktop já monta essa assinatura ou implementar o que faltar.
+- A revogação de sessão retorna `sessionId` apenas se o TruthID SDK foi configurado pra gravar isso localmente (os dados originais ficam no dispositivo — só o hash vai on-chain). Verificar onde o desktop guarda esses dados antes da etapa 11.3.
+- Após revogar o device (11.4), o app vai mostrar "Não registrado" na tela de `DesktopDevice` — comportamento correto; documentar como ponto de validação visual.
 
 ---
 
@@ -436,6 +483,7 @@ Problemas identificados na revisão de arquitetura da Sessão 36 (2026-06-25). N
 | 5 | Desktop (React geral) | Nenhum `ErrorBoundary` no app. Se um componente lançar uma exceção não tratada em runtime, a UI quebra em branco sem mensagem útil para o usuário. | Adicionar um `ErrorBoundary` simples na raiz do `App.tsx`. |
 | 6 | Desktop (React geral) | Estado todo local via `useState`. Funciona bem agora, mas se precisar compartilhar estado entre componentes não-relacionados (ex: `ActiveSessions` saber que um device foi revogado em `ManageDevices`), vai exigir prop drilling ou refatoração maior. | Sem ação imediata — só avaliar quando surgir a necessidade real. Opções: Zustand (leve) ou React Context. |
 | 7 | Desktop + Mobile (geral) | Zero testes de UI/frontend. Os 120 testes Foundry cobrem os contratos; os 4 scripts E2E cobrem o fluxo de rede. Mas nenhum teste cobre o comportamento dos componentes React ou das telas Flutter. | Adicionar pelo menos testes dos fluxos mais críticos: `PairDevice` (commit-reveal em 2 passos) e `ApprovalScreen` (aprovar/rejeitar login). Framework: Vitest + React Testing Library no desktop, flutter_test no mobile. |
+| 8 | Desktop (UX/layout) | Posição dos botões, organização das telas e fluxos de navegação nunca foram revisados com olhar de produto — a UI atual é funcional mas foi montada para funcionar, não para ser usada com conforto. Usuário quer revisar o layout inteiro: onde cada botão fica, quais informações aparecem em cada tela, ordem de ações. | Sessão dedicada de redesign de UX: usuário descreve como quer cada tela, Claude implementa iterativamente com validação visual real (screenshots, app rodando de verdade). Fazer depois que o fluxo funcional estiver validado (Fase 11). |
 
 ---
 
@@ -503,6 +551,29 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-27 — Sessão 37
+
+- **Contexto**: retomada após crash do PC no meio da sessão anterior. Estado recuperado via `git diff HEAD` e revisão dos arquivos não commitados. Nenhum trabalho foi perdido.
+- **Etapas concluídas**: 10.6 (multiplataforma udev/macOS/Windows) e 10.7 (CI hidapi nos 3 SOs) — trabalho estava completo mas não commitado antes do crash.
+- **Fase 10 agora em 7/8**: só resta a etapa 10.8 (validação manual com Ledger física em cada SO).
+- **Próximo passo**: iniciar Fase 11 (teste E2E prático: login, revogação de sessão, revogação de device) — ou continuar com 10.8 se quiser fechar a Fase 10 primeiro.
+
+### 2026-06-25 — Sessão 36
+
+- **Contexto**: retomada com o objetivo de fazer um teste prático real de ponta a ponta com o app desktop — conectar a Ledger, criar identidade, registrar o device, e observar o resultado na blockchain. Sessão também foi oportunidade de revisão de arquitetura (débitos técnicos registrados antes de iniciar).
+- **Revisão de débitos técnicos de arquitetura**: antes de testar, lista de débitos registrada na seção "Débitos Técnicos de Arquitetura" (7 itens numerados, ordenados por impacto). Nenhum foi corrigido nesta sessão — registrados pra não perder.
+- **Correções feitas durante o teste real**:
+  - `encode_derivation_path(account_index: u32)` parametrizado no Rust — usuário precisava da conta 1 da Ledger (não a conta 0 padrão); campo `account_index` propagado para `get_ledger_address` e `sign_ledger_transaction`
+  - Seletor de conta (Conta 0–4) adicionado ao `ConnectLedger.tsx`; `setLedgerAccountIndex` exportado do connector
+  - `sign_ledger_transaction`: status words `0x6985`/`0x6750` mapeados para `"rejected_by_user"` (antes era `"locked"`, causando mensagem errada na UI)
+  - Keyring do SO não disponível dentro do Docker → fallback para arquivo `$HOME/.truthid/device.key`; volume `${HOME}/.truthid:/root/.truthid` adicionado ao `docker-compose.yml` para persistência entre sessões
+  - `JSC crash "err2 is not an Object"` (WebKit não suporta `"data" in primitiveValue`): corrigido com `toError()` em todos os caminhos de erro do connector Ledger e forwarding direto via `fetch()` para chamadas RPC que não eram `eth_sendTransaction`
+  - `RevealTooEarly` revert no `registerDevice`: contrato exige `block.number > commitBlock`; corrigido com `setTimeout(sendRegister, 4000)` após `isCommitSuccess` no `DesktopDevice.tsx` e `ManageDevices.tsx`
+  - Cache da wagmi não invalidado após registro → UI não atualizava; corrigido com `queryClient.invalidateQueries()` nos effects de sucesso
+- **Resultado do teste**: identidade `@masterlxz` (id=1, controller `0xB54fe9909D76d98e87a9fD76bDB5C69fABe10265`, conta 1 da Ledger, HD path `m/44'/60'/1'/0/0`) criada em Base Mainnet. Device desktop (`0x1073e02eB26b371Dd1f04BcC0b5fd76e7ae7fFDD`) registrado sob essa identidade. Device foi registrado 3 vezes por equívoco (falha de feedback de UI antes da correção do `invalidateQueries`) — as 2 primeiras transações `commitDevice` foram cobradas sem completar o `registerDevice`.
+- **Fase 11 criada**: nova fase de teste E2E prático registrada — próximo passo natural depois de ter identidade + device on-chain reais; cobre login real com o device, revogação de sessão e revogação do device (ver Fase 11 neste documento).
+- **Próximo passo ao retomar**: iniciar a Fase 11 (etapa 11.1 — subir o servidor de exemplo e confirmar leitura de estado on-chain) ou continuar com Fase 10 (etapas 10.6-10.8 ainda pendentes).
 
 ### 2026-06-24 — Sessão 35
 

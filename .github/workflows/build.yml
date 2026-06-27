@@ -56,7 +56,9 @@ jobs:
             libssl-dev \
             libdbus-1-dev \
             libsecret-1-dev \
-            patchelf
+            patchelf \
+            libudev-dev \
+            pkg-config
 
       - name: npm install
         working-directory: desktop

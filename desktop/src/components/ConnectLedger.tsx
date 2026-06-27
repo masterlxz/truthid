@@ -9,6 +9,9 @@ const INSTRUCTIONS: Record<string, string> = {
   not_connected: "Conecte sua Ledger por USB.",
   locked: "Desbloqueie a Ledger digitando o PIN nos botões físicos do dispositivo.",
   wrong_app: "Abra o app Ethereum na Ledger.",
+  // access_denied: device visível mas não conseguiu abrir — no Windows pode ser
+  // conflito com o Ledger Live; no Linux, falta de regra udev.
+  access_denied: "Não foi possível acessar a Ledger. Feche o Ledger Live se estiver aberto, ou verifique as permissões USB (Linux: regra udev).",
 };
 
 export function ConnectLedger() {
