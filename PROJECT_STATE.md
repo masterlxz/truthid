@@ -134,7 +134,7 @@ Antes de rodar pela primeira vez na sessão (ou após reiniciar o computador), o
 - [x] 3.1 — Setup Tauri + React + TypeScript
 - [x] 3.2 — Integração com wallet (wagmi + viem)
 - [x] 3.3 — Tela: Criar identidade (conectar wallet → escolher username → registrar)
-- [ ] 3.4 — Tela: Gerenciar dispositivos (adicionar via QR, revogar)
+- [x] 3.4 — Tela: Gerenciar dispositivos (adicionar via QR, revogar)
 - [ ] 3.5 — Tela: Sessões ativas (listar, revogar selecionadas, revogar todas)
 - [ ] 3.6 — Geração de QR code para pareamento de novo dispositivo
 - [ ] 3.7 — Armazenamento seguro de chaves (Windows TPM / Linux Keyring)
@@ -243,6 +243,26 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-09 — Sessão 14
+- Etapa 3.4 concluída — tela gerenciar dispositivos
+  - `contracts.ts`: adicionado `getIdentity` ao IdentityRegistry ABI; adicionado DeviceRegistry (endereço + ABI com `registerDevice`, `revokeDevice`, `getDevicesByIdentity`, `getDevice`)
+  - `ManageDevices.tsx`: componente com 3 partes — lista de devices, revogação, pareamento via QR
+    - Leituras encadeadas: `getUsernameByController` → `getIdentity` → `getDevicesByIdentity` → `getDevice` por device
+    - `useReadContracts` (plural) para buscar detalhes de múltiplos devices em paralelo
+    - Revogação: padrão `writeContract` + `useWaitForTransactionReceipt` (mesmo da 3.3)
+    - Pareamento: `POST /rooms` no signaling server → gera QR com `{ action, signalingUrl, roomId }` → WebSocket aguarda mobile
+    - `useEffect` + `useRef` para ciclo de vida do WebSocket
+  - `App.tsx`: verificação de rede com `useSwitchChain` (Base Sepolia chain 84532); estado de carregamento enquanto lê username; roteamento CreateIdentity vs ManageDevices
+  - `wagmi.ts`: transport com `fallback` em 3 RPCs públicos da Base Sepolia; corrigido mapeamento de porta do signaling server (8000→8080)
+  - Bugs encontrados e corrigidos:
+    - Carteira na rede errada (Sepolia vs Base Sepolia) → adicionado `useSwitchChain`
+    - `useWaitForTransactionReceipt` travado → RPC sem URL explícita; corrigido com `fallback` de RPCs
+    - Conflito MetaMask + Rabby sobre `window.ethereum` (cosmético, não bloqueante)
+    - Signaling server mapeamento de porta errado (container 8080, host 8000)
+    - `useReadContracts` retorna `.result` não `.data`
+  - Conceitos ensinados: hooks React (useState, useEffect, useRef), useReadContracts plural, wagmi transport fallback, network switching, EIP-6963
+- Próximo passo: etapa 3.5 — tela sessões ativas (listar, revogar selecionadas, revogar todas)
 
 ### 2026-06-08 — Sessão 13
 - Etapas 3.2 e 3.3 concluídas

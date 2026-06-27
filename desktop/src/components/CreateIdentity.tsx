@@ -37,7 +37,7 @@ export function CreateIdentity() {
   const { writeContract, data: txHash, isPending } = useWriteContract();
 
   // Aguarda confirmação da transação na rede
-  const { isLoading: isConfirming, isSuccess } = useWaitForTransactionReceipt({
+  const { isLoading: isConfirming, isSuccess, isError, error } = useWaitForTransactionReceipt({
     hash: txHash,
   });
 
@@ -91,6 +91,12 @@ export function CreateIdentity() {
 
       {isValidFormat && isTaken && (
         <p>Username já está em uso</p>
+      )}
+
+      {isError && (
+        <p style={{ color: "red" }}>
+          Erro: {error?.message?.split("\n")[0] ?? "transação falhou"}
+        </p>
       )}
 
       <button type="submit" disabled={!canSubmit}>
