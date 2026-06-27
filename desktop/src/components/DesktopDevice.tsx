@@ -95,46 +95,44 @@ export function DesktopDevice({ onRegistered }: { onRegistered: () => void }) {
 
   if (error) {
     return (
-      <p style={{ color: "red" }}>
+      <p className="error-text">
         Erro ao acessar o keyring do SO: {error}
       </p>
     );
   }
 
   if (!address) {
-    return <p>Inicializando chave do desktop...</p>;
+    return <p className="muted">Inicializando chave do desktop...</p>;
   }
 
   return (
-    <div style={{ marginTop: "1rem" }}>
-      <h3>Este desktop</h3>
-      <small style={{ fontFamily: "monospace" }}>
+    <div className="card">
+      <h3 style={{ marginTop: 0 }}>Este desktop</h3>
+      <code className="address">
         {address.slice(0, 10)}…{address.slice(-6)}
-      </small>
-      <br />
-      {isActive ? (
-        <span>✅ Registrado como device</span>
-      ) : (
-        <>
-          <span>⬜ Não registrado</span>
-          <br />
-          <button
-            onClick={handleRegister}
-            disabled={isBusy}
-            style={{ marginTop: "0.5rem" }}
-          >
-            {phase === "committing" && isPending
-              ? "Confirme no MetaMask (1/2)..."
-              : phase === "committing" && isConfirming
-              ? "Preparando registro (1/2)..."
-              : phase === "registering" && isPending
-              ? "Confirme no MetaMask (2/2)..."
-              : phase === "registering" && isConfirming
-              ? "Aguardando rede (2/2)..."
-              : "Registrar este desktop"}
-          </button>
-        </>
-      )}
+      </code>
+      <div style={{ marginTop: "0.75rem" }}>
+        {isActive ? (
+          <span className="status-badge status-badge--active">✓ Registrado como device</span>
+        ) : (
+          <>
+            <span className="status-badge status-badge--revoked">Não registrado</span>
+            <div className="actions-row">
+              <button onClick={handleRegister} disabled={isBusy}>
+                {phase === "committing" && isPending
+                  ? "Confirme no MetaMask (1/2)..."
+                  : phase === "committing" && isConfirming
+                  ? "Preparando registro (1/2)..."
+                  : phase === "registering" && isPending
+                  ? "Confirme no MetaMask (2/2)..."
+                  : phase === "registering" && isConfirming
+                  ? "Aguardando rede (2/2)..."
+                  : "Registrar este desktop"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

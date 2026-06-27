@@ -7,9 +7,9 @@ export function ConnectWallet() {
 
   if (isConnected) {
     return (
-      <div>
-        <p>
-          Conectado: <code>{address}</code>
+      <div className="card actions-row" style={{ alignItems: "center", justifyContent: "space-between" }}>
+        <p style={{ margin: 0 }}>
+          Conectado: <code className="address">{address}</code>
         </p>
         <button onClick={() => disconnect()}>Desconectar</button>
       </div>
@@ -17,7 +17,7 @@ export function ConnectWallet() {
   }
 
   return (
-    <div>
+    <div className="card actions-row">
       {connectors.map((connector) => (
         <button key={connector.id} onClick={() => connect({ connector })}>
           Conectar com {connector.name}

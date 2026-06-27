@@ -57,8 +57,8 @@ export function CreateIdentity() {
   // Wallet já tem identidade
   if (existingUsername) {
     return (
-      <div>
-        <p>Identidade já registrada:</p>
+      <div className="card">
+        <p className="muted" style={{ marginBottom: "0.25rem" }}>Identidade já registrada:</p>
         <strong>@{existingUsername}</strong>
       </div>
     );
@@ -67,34 +67,36 @@ export function CreateIdentity() {
   // Transação confirmada na rede
   if (isSuccess) {
     return (
-      <div>
-        <p>Identidade criada com sucesso!</p>
+      <div className="card">
+        <p className="muted" style={{ marginBottom: "0.25rem" }}>Identidade criada com sucesso!</p>
         <strong>@{username}</strong>
       </div>
     );
   }
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit} className="card">
       <h2>Criar identidade</h2>
 
-      <input
-        value={username}
-        onChange={(e) => setUsername(e.target.value.toLowerCase())}
-        placeholder="escolha um username"
-        disabled={isPending || isConfirming}
-      />
+      <div className="field">
+        <input
+          value={username}
+          onChange={(e) => setUsername(e.target.value.toLowerCase())}
+          placeholder="escolha um username"
+          disabled={isPending || isConfirming}
+        />
+      </div>
 
       {username.length > 0 && !isValidFormat && (
-        <p>Apenas letras minúsculas, números, ponto e hífen (máx. 64 caracteres)</p>
+        <p className="muted">Apenas letras minúsculas, números, ponto e hífen (máx. 64 caracteres)</p>
       )}
 
       {isValidFormat && isTaken && (
-        <p>Username já está em uso</p>
+        <p className="muted">Username já está em uso</p>
       )}
 
       {isError && (
-        <p style={{ color: "red" }}>
+        <p className="error-text">
           Erro: {error?.message?.split("\n")[0] ?? "transação falhou"}
         </p>
       )}

@@ -118,8 +118,6 @@ export function ManageDevices({ username }: { username: string }) {
         }}
       />
 
-      <hr />
-
       <DesktopDevice
         onRegistered={() => {
           refetchDevices();
@@ -155,7 +153,7 @@ function DeviceList({
   onRevoke: (pubKey: string) => void;
 }) {
   if (devices.length === 0) {
-    return <p>Nenhum device registrado ainda.</p>;
+    return <p className="muted">Nenhum device registrado ainda.</p>;
   }
 
   return (
@@ -167,26 +165,30 @@ function DeviceList({
         const addedDate = new Date(Number(device.addedAt) * 1000).toLocaleDateString("pt-BR");
 
         return (
-          <div key={device.pubKey} style={{ marginBottom: "1rem" }}>
-            <strong>{device.label}</strong>
-            <span> — {device.revoked ? "❌ Revogado" : "✅ Ativo"}</span>
-            <br />
-            <small style={{ fontFamily: "monospace" }}>
+          <div key={device.pubKey} className={`card${device.revoked ? " is-revoked" : ""}`}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "0.4rem" }}>
+              <strong>{device.label}</strong>
+              <span className={`status-badge ${device.revoked ? "status-badge--revoked" : "status-badge--active"}`}>
+                {device.revoked ? "Revogado" : "✓ Ativo"}
+              </span>
+            </div>
+            <code className="address">
               {device.pubKey.slice(0, 10)}…{device.pubKey.slice(-6)}
-            </small>
-            <small> · Adicionado em {addedDate}</small>
-            <br />
+            </code>
+            <span className="muted"> · Adicionado em {addedDate}</span>
             {!device.revoked && (
-              <button
-                onClick={() => onRevoke(device.pubKey)}
-                disabled={isRevokePending || isRevokeConfirming}
-              >
-                {isBeingRevoked && isRevokePending
-                  ? "Confirme no MetaMask..."
-                  : isBeingRevoked && isRevokeConfirming
-                  ? "Aguardando rede..."
-                  : "Revogar"}
-              </button>
+              <div className="actions-row">
+                <button
+                  onClick={() => onRevoke(device.pubKey)}
+                  disabled={isRevokePending || isRevokeConfirming}
+                >
+                  {isBeingRevoked && isRevokePending
+                    ? "Confirme no MetaMask..."
+                    : isBeingRevoked && isRevokeConfirming
+                    ? "Aguardando rede..."
+                    : "Revogar"}
+                </button>
+              </div>
             )}
           </div>
         );
@@ -292,56 +294,53 @@ function PairDevice({ onDeviceRegistered }: {
   const addressIsValid = addressInput.length === 0 || isAddress(addressInput);
 
   return (
-    <div>
-      <h3>Adicionar dispositivo</h3>
+    <div className="card">
+      <h3 style={{ marginTop: 0 }}>Adicionar dispositivo</h3>
 
-      <p>
+      <p className="muted">
         No celular, abra <strong>Dispositivos → Mostrar QR para parear</strong> e
         cole aqui o endereço exibido:
       </p>
 
-      <label>
-        Endereço do dispositivo:
-        <br />
+      <div className="field">
+        <label>Endereço do dispositivo</label>
         <input
           value={addressInput}
           onChange={(e) => setAddressInput(e.target.value.trim())}
           placeholder="0x..."
           disabled={registerPhase !== "idle"}
-          style={{ fontFamily: "monospace", width: "100%" }}
+          style={{ fontFamily: "monospace" }}
         />
-      </label>
-      {!addressIsValid && <p style={{ color: "red" }}>Endereço inválido.</p>}
+        {!addressIsValid && <p className="error-text">Endereço inválido.</p>}
+      </div>
 
-      <br />
-      <label>
-        Nome do dispositivo:
-        <br />
+      <div className="field">
+        <label>Nome do dispositivo</label>
         <input
           value={labelInput}
           onChange={(e) => setLabelInput(e.target.value)}
           placeholder="ex: iPhone 15 Pro"
           disabled={registerPhase !== "idle"}
         />
-      </label>
-      <br />
-      <button
-        onClick={handleRegister}
-        disabled={!isAddress(addressInput) || !labelInput || registerPhase !== "idle"}
-      >
-        {registerPhase === "committing" && isRegisterPending
-          ? "Confirme no MetaMask (1/2)..."
-          : registerPhase === "committing" && isRegisterConfirming
-          ? "Preparando registro (1/2)..."
-          : registerPhase === "registering" && isRegisterPending
-          ? "Confirme no MetaMask (2/2)..."
-          : registerPhase === "registering" && isRegisterConfirming
-          ? "Aguardando rede (2/2)..."
-          : "Registrar dispositivo"}
-      </button>
+      </div>
 
-      <br />
-      <button onClick={closePairing}>Cancelar</button>
+      <div className="actions-row">
+        <button
+          onClick={handleRegister}
+          disabled={!isAddress(addressInput) || !labelInput || registerPhase !== "idle"}
+        >
+          {registerPhase === "committing" && isRegisterPending
+            ? "Confirme no MetaMask (1/2)..."
+            : registerPhase === "committing" && isRegisterConfirming
+            ? "Preparando registro (1/2)..."
+            : registerPhase === "registering" && isRegisterPending
+            ? "Confirme no MetaMask (2/2)..."
+            : registerPhase === "registering" && isRegisterConfirming
+            ? "Aguardando rede (2/2)..."
+            : "Registrar dispositivo"}
+        </button>
+        <button onClick={closePairing}>Cancelar</button>
+      </div>
     </div>
   );
 }

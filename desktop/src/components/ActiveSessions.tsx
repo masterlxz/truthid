@@ -139,7 +139,7 @@ export function ActiveSessions({ username }: { username: string }) {
       <h3>Sessões ativas</h3>
 
       {sessions.length === 0 && (
-        <p>Nenhuma sessão registrada. As sessões aparecem aqui quando você faz login em sites usando TruthID.</p>
+        <p className="muted">Nenhuma sessão registrada. As sessões aparecem aqui quando você faz login em sites usando TruthID.</p>
       )}
 
       {sessions.map((session) => {
@@ -156,40 +156,37 @@ export function ActiveSessions({ username }: { username: string }) {
         const hashShort = `${session.hash.slice(0, 10)}…${session.hash.slice(-6)}`;
 
         return (
-          <div
-            key={session.hash}
-            style={{
-              marginBottom: "1rem",
-              opacity: isRevoked ? 0.5 : 1,
-            }}
-          >
-            <strong style={{ fontFamily: "monospace" }}>{hashShort}</strong>
-            <span> — {isRevoked ? "❌ Revogada" : "✅ Ativa"}</span>
-            <br />
-            <small>Dispositivo: {deviceLabel}</small>
-            <small> · Criada em {createdAt}</small>
-            <br />
+          <div key={session.hash} className={`card${isRevoked ? " is-revoked" : ""}`}>
+            <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "0.4rem" }}>
+              <code className="address">{hashShort}</code>
+              <span className={`status-badge ${isRevoked ? "status-badge--revoked" : "status-badge--active"}`}>
+                {isRevoked ? "Revogada" : "✓ Ativa"}
+              </span>
+            </div>
+            <span className="muted">Dispositivo: {deviceLabel}</span>
+            <span className="muted"> · Criada em {createdAt}</span>
             {!isRevoked && (
-              <button
-                onClick={() => handleRevokeOne(session.hash as `0x${string}`)}
-                disabled={
-                  isRevokeOnePending || isRevokeOneConfirming || isBusy
-                }
-              >
-                {isBeingRevoked && isRevokeOnePending
-                  ? "Confirme no MetaMask..."
-                  : isBeingRevoked && isRevokeOneConfirming
-                  ? "Aguardando rede..."
-                  : "Revogar"}
-              </button>
+              <div className="actions-row">
+                <button
+                  onClick={() => handleRevokeOne(session.hash as `0x${string}`)}
+                  disabled={
+                    isRevokeOnePending || isRevokeOneConfirming || isBusy
+                  }
+                >
+                  {isBeingRevoked && isRevokeOnePending
+                    ? "Confirme no MetaMask..."
+                    : isBeingRevoked && isRevokeOneConfirming
+                    ? "Aguardando rede..."
+                    : "Revogar"}
+                </button>
+              </div>
             )}
           </div>
         );
       })}
 
       {activeSessions.length > 0 && (
-        <>
-          <hr />
+        <div className="actions-row">
           <button onClick={handleRevokeAll} disabled={isBusy}>
             {isRevokeAllPending
               ? "Confirme no MetaMask..."
@@ -197,7 +194,7 @@ export function ActiveSessions({ username }: { username: string }) {
               ? "Aguardando rede..."
               : `Revogar todas (${activeSessions.length})`}
           </button>
-        </>
+        </div>
       )}
     </div>
   );

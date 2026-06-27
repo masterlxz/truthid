@@ -34,7 +34,7 @@ function App() {
       <ConnectWallet />
 
       {isWrongNetwork && (
-        <div>
+        <div className="card">
           <p>Rede incorreta. TruthID usa a Base Mainnet.</p>
           <button
             onClick={() => switchChain({ chainId: base.id })}
@@ -45,7 +45,7 @@ function App() {
         </div>
       )}
 
-      {isLoadingIdentity && <p>Carregando...</p>}
+      {isLoadingIdentity && <p className="muted">Carregando...</p>}
 
       {isConnected && !isWrongNetwork && !isLoadingIdentity && !hasIdentity && (
         <CreateIdentity />
@@ -53,11 +53,10 @@ function App() {
 
       {isConnected && !isWrongNetwork && !isLoadingIdentity && hasIdentity && (
         <>
-          <nav style={{ marginBottom: "1.5rem" }}>
+          <nav className="tabs">
             <button
               onClick={() => setActiveTab("devices")}
               disabled={activeTab === "devices"}
-              style={{ marginRight: "0.5rem" }}
             >
               Dispositivos
             </button>
