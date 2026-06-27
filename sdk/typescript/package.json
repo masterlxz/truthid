@@ -1,12 +1,40 @@
 {
   "name": "truthid-sdk",
   "version": "0.1.0",
-  "description": "TruthID authentication SDK for Node.js",
+  "description": "TruthID passwordless, decentralized authentication SDK for Node.js",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
-    "dev": "tsc --watch"
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "authentication",
+    "passwordless",
+    "decentralized",
+    "blockchain",
+    "web3",
+    "auth"
+  ],
+  "author": "masterlxz",
+  "license": "MIT",
+  "homepage": "https://github.com/masterlxz/truthid/tree/main/sdk/typescript#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/masterlxz/truthid.git",
+    "directory": "sdk/typescript"
+  },
+  "bugs": {
+    "url": "https://github.com/masterlxz/truthid/issues"
+  },
+  "engines": {
+    "node": ">=16"
   },
   "dependencies": {
     "viem": "^1.21.4"

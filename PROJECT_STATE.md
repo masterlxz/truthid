@@ -282,7 +282,7 @@ check_revocation(identity_id) → RevocationInfo
   - Sanity check: `owner()` do IdentityRegistry retorna a carteira deployer ✓; `totalIdentities()` retorna 0 ✓
   - **Endereços propagados (Sessão 26)** — desktop, mobile e os 3 SDKs agora apontam para Base Mainnet. Ver detalhes na Sessão 26 do Log de Sessões.
 - [x] 7.2 — Eliminar o servidor de sinalização (substitui "Relay Service em produção" — não fazia sentido hospedar algo que ia ser removido). Implementado na Sessão 26 (continuação): pareamento via QR mostrado pelo mobile + polling on-chain; login via challenge embutido no QR + POST HTTPS direto pro backend do site. `signaling/`, `turn/` e `webrtc-demo/` removidos. Ver "Roadmap de Evoluções Planejadas → Sinalização sem servidor"
-- [ ] 7.3 — Publicar SDKs (npm, pip, rubygems)
+- [x] 7.3 — Publicar SDKs (npm, pip, rubygems). Implementado na Sessão 29: `truthid-sdk@0.1.0` publicado nos três registros — npm (https://www.npmjs.com/package/truthid-sdk), PyPI (https://pypi.org/project/truthid-sdk/0.1.0/) e RubyGems. Ver Sessão 29 no Log de Sessões para detalhes.
 - [ ] 7.4 — Documentação pública
 - [ ] 7.5 — Open source (GitHub)
 
@@ -412,6 +412,29 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-20 — Sessão 29
+
+- **Etapa 7.3 (publicar SDKs) concluída** — os três pacotes `truthid-sdk@0.1.0` publicados:
+  - npm: https://www.npmjs.com/package/truthid-sdk
+  - PyPI: https://pypi.org/project/truthid-sdk/0.1.0/
+  - RubyGems: `truthid-sdk` (gem push concluído pelo usuário)
+- **Trabalho de preparação antes da publicação** (nenhum dos 3 manifests tinha metadata suficiente pra um publish de qualidade):
+  - Licença decidida com o usuário: **MIT**. Criado `LICENSE` na raiz + cópia em `sdk/typescript/`, `sdk/python/`, `sdk/ruby/` (cada gerenciador de pacote só inclui arquivos dentro da própria pasta do pacote, não da raiz do monorepo)
+  - `sdk/typescript/package.json`: adicionado `license`, `author`, `repository` (com campo `directory` pra apontar pro subdiretório no monorepo), `homepage`, `bugs`, `keywords`, `engines`, e principalmente `files: ["dist", "README.md", "LICENSE"]` — sem isso o tarball publicaria `src/` e o `example/` também. Script `prepublishOnly` adicionado pra garantir build antes de publicar
+  - `sdk/python/pyproject.toml`: adicionado `authors`, `license = "MIT"` (formato SPDX, moderno), `readme`, `classifiers`, `[project.urls]`. Testado com `python -m build` + `twine check` (PASSED nos dois artefatos) antes de publicar
+  - `sdk/ruby/truthid-sdk.gemspec`: adicionado `authors`, `license`, `homepage`, `metadata` (homepage/source/bug tracker), `description` maior, e `README.md`/`LICENSE` em `spec.files` (antes só pegava `lib/**/*`)
+  - Criado um `README.md` curto em cada pasta de SDK (resumo + link pro `sdk/README.md` completo) — necessário porque os 3 registros (npm, PyPI, RubyGems) só pegam o README de dentro da própria pasta do pacote, não de um nível acima
+  - Antes de tocar em qualquer arquivo, confirmado via `registry.npmjs.org`/`pypi.org`/`rubygems.org` (HTTP 404 nos três) que o nome `truthid-sdk` estava livre nos três registros
+  - Cada pacote foi empacotado localmente antes do publish real (`npm pack --dry-run`, `python -m build` + `twine check`, `gem build`) pra confirmar que só os arquivos certos entravam no pacote — pegou erros de configuração sem gastar uma tentativa de publish de verdade
+- **Obstáculo no npm**: primeira tentativa de `npm publish` falhou com `403 Forbidden — Two-factor authentication or granular access token with bypass 2fa enabled is required`. O usuário não tinha 2FA ativado na conta npm. Resolvido ativando 2FA — o `npm publish` subsequente abriu um fluxo de autenticação via navegador (`Authenticate your account at: https://www.npmjs.com/auth/cli/...`) em vez de pedir OTP no terminal (fluxo mais novo do npm CLI)
+- **Obstáculo no PyPI**: primeira tentativa de `twine upload` teve um aviso de "password empty" e falhou com 403 — aparentemente o token não foi colado corretamente no prompt interativo (`Enter your API token:`). Repetir o comando e colar de novo funcionou
+- **Achado de segurança, fora do escopo da 7.3**: o `git remote -v` revelou um Personal Access Token do GitHub em texto puro na URL do `origin` (`https://ghp_...@github.com/...`). Reportado ao usuário — recomendação de revogar esse token e trocar pra SSH ou credential helper antes da etapa 7.5 (abrir o repositório)
+- Conceitos ensinados:
+  - Por que cada gerenciador de pacote (npm/pip/gem) só empacota arquivos dentro da pasta do próprio manifest — README/LICENSE de um nível acima (compartilhados entre os 3 SDKs do monorepo) não entram automaticamente, por isso a cópia/duplicação
+  - Diferença entre testar o empacotamento (`--dry-run`, `build`, `gem build`) e o publish real — o primeiro é local e repetível, o segundo é público e praticamente irreversível (não dá pra "despublicar" de verdade em nenhum dos 3 registros)
+  - Por que 2FA é hoje obrigatório (ou efetivamente exigido) pra publicar em registros públicos de pacotes — mitiga o cenário de uma conta comprometida injetar uma versão maliciosa numa dependência usada por terceiros (ataque de supply chain)
+- **Próximo passo ao retomar**: etapa 7.4 (documentação pública) ou 7.5 (abrir o repositório no GitHub — não esquecer de revogar o token exposto antes)
 
 ### 2026-06-18 — Sessão 26
 
