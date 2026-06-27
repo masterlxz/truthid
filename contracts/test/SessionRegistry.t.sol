@@ -3,33 +3,73 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {IdentityRegistry} from "../src/IdentityRegistry.sol";
+import {DeviceRegistry} from "../src/DeviceRegistry.sol";
 import {SessionRegistry} from "../src/SessionRegistry.sol";
 
 contract SessionRegistryTest is Test {
     IdentityRegistry public identityRegistry;
+    DeviceRegistry public deviceRegistry;
     SessionRegistry public sessionRegistry;
 
     address public alice = makeAddr("alice");
     address public bob = makeAddr("bob");
     address public charlie = makeAddr("charlie"); // nunca cria identidade
 
-    address public aliceDevice = makeAddr("alice-device");
-    address public bobDevice = makeAddr("bob-device");
+    // Precisamos da chave PRIVADA dos devices (não só do endereço) para
+    // assinar os hashes de sessão nos testes — makeAddrAndKey devolve os dois.
+    address public aliceDevice;
+    uint256 public aliceDeviceKey;
+    address public bobDevice;
+    uint256 public bobDeviceKey;
 
     // Hashes simulando sessões reais (keccak256 de dados de autenticação)
     bytes32 public sessionA = keccak256(abi.encodePacked("alice", "loja.com", uint256(1)));
     bytes32 public sessionB = keccak256(abi.encodePacked("alice", "banco.com", uint256(2)));
     bytes32 public sessionC = keccak256(abi.encodePacked("bob", "loja.com", uint256(3)));
 
+    bytes32 constant SALT = keccak256("test-salt");
+
     function setUp() public {
         identityRegistry = new IdentityRegistry();
-        sessionRegistry = new SessionRegistry(address(identityRegistry));
+        deviceRegistry = new DeviceRegistry(address(identityRegistry));
+        sessionRegistry = new SessionRegistry(address(identityRegistry), address(deviceRegistry));
 
         vm.prank(alice);
         identityRegistry.createIdentity("alice.id"); // identityId = 1
 
         vm.prank(bob);
         identityRegistry.createIdentity("bob.id"); // identityId = 2
+
+        (aliceDevice, aliceDeviceKey) = makeAddrAndKey("alice-device");
+        (bobDevice, bobDeviceKey) = makeAddrAndKey("bob-device");
+
+        _registerDevice(alice, aliceDevice, "Alice's phone");
+        _registerDevice(bob, bobDevice, "Bob's phone");
+    }
+
+    // Atalho: registra um device via commit-reveal (igual DeviceRegistry.t.sol)
+    function _registerDevice(address controller, address devicePubKey, string memory label) internal {
+        bytes32 commitment = keccak256(abi.encodePacked(devicePubKey, SALT, controller));
+
+        vm.prank(controller);
+        deviceRegistry.commitDevice(commitment);
+
+        vm.roll(block.number + 1);
+
+        vm.prank(controller);
+        deviceRegistry.registerDevice(devicePubKey, label, SALT);
+    }
+
+    // Atalho: assina `hash` com a chave do device (mesmo formato que o
+    // contrato espera — prefixo "\x19Ethereum Signed Message:\n32") e chama
+    // createSession. Quem efetivamente SUBMETE a transação é quem estiver
+    // sob `vm.prank` no momento da chamada — fica a critério de cada teste.
+    function _createSession(uint256 devicePrivateKey, bytes32 hash, uint256 identityId, address devicePubKey)
+        internal
+    {
+        bytes32 ethSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", hash));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(devicePrivateKey, ethSignedHash);
+        sessionRegistry.createSession(hash, identityId, devicePubKey, r, s, v);
     }
 
     // -------------------------------------------------------------------------
@@ -37,7 +77,7 @@ contract SessionRegistryTest is Test {
     // -------------------------------------------------------------------------
 
     function test_CreateSession_Success() public {
-        sessionRegistry.createSession(sessionA, 1, aliceDevice);
+        _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
 
         SessionRegistry.Session memory s = sessionRegistry.getSession(sessionA);
         assertEq(s.identityId, 1);
@@ -47,10 +87,12 @@ contract SessionRegistryTest is Test {
         assertTrue(s.exists);
     }
 
-    function test_CreateSession_QualquerUmPodeCriar() public {
-        // O SDK do website (não o usuário) chama createSession
+    function test_CreateSession_QualquerUmPodeSubmeter() public {
+        // O SDK do website (aqui simulado por "charlie") é quem costuma
+        // enviar a transação — mas só funciona se ele tiver a assinatura
+        // real do device, que ele não tem como forjar sem a chave privada.
         vm.prank(charlie);
-        sessionRegistry.createSession(sessionA, 1, aliceDevice);
+        _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
 
         assertFalse(sessionRegistry.isSessionRevoked(sessionA));
     }
@@ -59,7 +101,7 @@ contract SessionRegistryTest is Test {
         vm.expectEmit(true, true, true, false);
         emit SessionRegistry.SessionCreated(1, sessionA, aliceDevice);
 
-        sessionRegistry.createSession(sessionA, 1, aliceDevice);
+        _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
     }
 
     // -------------------------------------------------------------------------
@@ -67,10 +109,45 @@ contract SessionRegistryTest is Test {
     // -------------------------------------------------------------------------
 
     function test_CreateSession_HashDuplicado_Reverte() public {
-        sessionRegistry.createSession(sessionA, 1, aliceDevice);
+        _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
 
         vm.expectRevert(abi.encodeWithSelector(SessionRegistry.SessionAlreadyExists.selector, sessionA));
-        sessionRegistry.createSession(sessionA, 1, aliceDevice);
+        _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
+    }
+
+    function test_Revert_CreateSession_InvalidSignature() public {
+        // Assinado pela chave do BOB, mas alegando ser o device da alice —
+        // sem a chave privada certa, ecrecover nunca devolve aliceDevice.
+        bytes32 ethSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", sessionA));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(bobDeviceKey, ethSignedHash);
+
+        vm.expectRevert(SessionRegistry.InvalidSessionSignature.selector);
+        sessionRegistry.createSession(sessionA, 1, aliceDevice, r, s, v);
+    }
+
+    function test_Revert_CreateSession_DeviceClaimingWrongIdentity() public {
+        // aliceDevice assina de verdade (prova de posse ok), mas a sessão
+        // alega pertencer à identidade do bob (2) — aliceDevice não é device
+        // do bob no DeviceRegistry, então deve reverter.
+        vm.expectRevert(SessionRegistry.DeviceNotOwnedByIdentity.selector);
+        _createSession(aliceDeviceKey, sessionA, 2, aliceDevice);
+    }
+
+    function test_Revert_CreateSession_RevokedDevice() public {
+        vm.prank(alice);
+        deviceRegistry.revokeDevice(aliceDevice);
+
+        vm.expectRevert(SessionRegistry.DeviceNotOwnedByIdentity.selector);
+        _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
+    }
+
+    function test_Revert_CreateSession_UnknownDevice() public {
+        (address ghostDevice, uint256 ghostKey) = makeAddrAndKey("ghost-device");
+
+        vm.expectRevert(
+            abi.encodeWithSelector(DeviceRegistry.DeviceNotFound.selector, ghostDevice)
+        );
+        _createSession(ghostKey, sessionA, 1, ghostDevice);
     }
 
     // -------------------------------------------------------------------------
@@ -83,7 +160,7 @@ contract SessionRegistryTest is Test {
     }
 
     function test_IsSessionRevoked_SessaoAtiva_RetornaFalse() public {
-        sessionRegistry.createSession(sessionA, 1, aliceDevice);
+        _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
         assertFalse(sessionRegistry.isSessionRevoked(sessionA));
     }
 
@@ -92,7 +169,7 @@ contract SessionRegistryTest is Test {
     // -------------------------------------------------------------------------
 
     function test_RevokeSession_Success() public {
-        sessionRegistry.createSession(sessionA, 1, aliceDevice);
+        _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
 
         vm.prank(alice);
         sessionRegistry.revokeSession(sessionA);
@@ -101,7 +178,7 @@ contract SessionRegistryTest is Test {
     }
 
     function test_RevokeSession_EmiteEvento() public {
-        sessionRegistry.createSession(sessionA, 1, aliceDevice);
+        _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
 
         vm.expectEmit(true, true, false, false);
         emit SessionRegistry.SessionRevoked(1, sessionA);
@@ -111,8 +188,8 @@ contract SessionRegistryTest is Test {
     }
 
     function test_RevokeSession_NaoAfetaOutrasSessoes() public {
-        sessionRegistry.createSession(sessionA, 1, aliceDevice);
-        sessionRegistry.createSession(sessionB, 1, aliceDevice);
+        _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
+        _createSession(aliceDeviceKey, sessionB, 1, aliceDevice);
 
         vm.prank(alice);
         sessionRegistry.revokeSession(sessionA);
@@ -132,7 +209,7 @@ contract SessionRegistryTest is Test {
     }
 
     function test_RevokeSession_JaRevogada_Reverte() public {
-        sessionRegistry.createSession(sessionA, 1, aliceDevice);
+        _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
 
         vm.prank(alice);
         sessionRegistry.revokeSession(sessionA);
@@ -144,7 +221,7 @@ contract SessionRegistryTest is Test {
 
     function test_RevokeSession_ControllerErrado_Reverte() public {
         // sessionA pertence à identidade 1 (alice), bob não pode revogar
-        sessionRegistry.createSession(sessionA, 1, aliceDevice);
+        _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
 
         vm.prank(bob);
         vm.expectRevert(SessionRegistry.NotIdentityController.selector);
@@ -152,7 +229,7 @@ contract SessionRegistryTest is Test {
     }
 
     function test_RevokeSession_SemIdentidade_Reverte() public {
-        sessionRegistry.createSession(sessionA, 1, aliceDevice);
+        _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
 
         vm.prank(charlie);
         vm.expectRevert(SessionRegistry.NotIdentityController.selector);
@@ -160,7 +237,7 @@ contract SessionRegistryTest is Test {
     }
 
     function test_RevokeSession_JaRevogadaPorRevokeAll_Reverte() public {
-        sessionRegistry.createSession(sessionA, 1, aliceDevice);
+        _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
 
         vm.prank(alice);
         sessionRegistry.revokeAllSessions();
@@ -176,8 +253,8 @@ contract SessionRegistryTest is Test {
     // -------------------------------------------------------------------------
 
     function test_RevokeAllSessions_RevogaSessoesExistentes() public {
-        sessionRegistry.createSession(sessionA, 1, aliceDevice);
-        sessionRegistry.createSession(sessionB, 1, aliceDevice);
+        _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
+        _createSession(aliceDeviceKey, sessionB, 1, aliceDevice);
 
         vm.prank(alice);
         sessionRegistry.revokeAllSessions();
@@ -187,8 +264,8 @@ contract SessionRegistryTest is Test {
     }
 
     function test_RevokeAllSessions_NaoAfetaOutrasIdentidades() public {
-        sessionRegistry.createSession(sessionA, 1, aliceDevice);
-        sessionRegistry.createSession(sessionC, 2, bobDevice);
+        _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
+        _createSession(bobDeviceKey, sessionC, 2, bobDevice);
 
         vm.prank(alice);
         sessionRegistry.revokeAllSessions();
@@ -198,7 +275,7 @@ contract SessionRegistryTest is Test {
     }
 
     function test_RevokeAllSessions_SessoesNovasDepoisFicamAtivas() public {
-        sessionRegistry.createSession(sessionA, 1, aliceDevice);
+        _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
 
         vm.prank(alice);
         sessionRegistry.revokeAllSessions();
@@ -206,7 +283,7 @@ contract SessionRegistryTest is Test {
         // sessionB criada DEPOIS do revokeAllSessions → deve ficar ativa
         bytes32 sessionNova = keccak256(abi.encodePacked("alice", "novo.com", uint256(99)));
         vm.warp(block.timestamp + 1); // avança o tempo 1 segundo
-        sessionRegistry.createSession(sessionNova, 1, aliceDevice);
+        _createSession(aliceDeviceKey, sessionNova, 1, aliceDevice);
 
         assertTrue(sessionRegistry.isSessionRevoked(sessionA));
         assertFalse(sessionRegistry.isSessionRevoked(sessionNova));
@@ -231,9 +308,9 @@ contract SessionRegistryTest is Test {
     // -------------------------------------------------------------------------
 
     function test_GetSessionsByIdentity_RetornaHashsCorretos() public {
-        sessionRegistry.createSession(sessionA, 1, aliceDevice);
-        sessionRegistry.createSession(sessionB, 1, aliceDevice);
-        sessionRegistry.createSession(sessionC, 2, bobDevice);
+        _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
+        _createSession(aliceDeviceKey, sessionB, 1, aliceDevice);
+        _createSession(bobDeviceKey, sessionC, 2, bobDevice);
 
         bytes32[] memory aliceSessions = sessionRegistry.getSessionsByIdentity(1);
         assertEq(aliceSessions.length, 2);
@@ -246,7 +323,7 @@ contract SessionRegistryTest is Test {
     }
 
     function test_GetSessionsByIdentity_IncluiRevogadas() public {
-        sessionRegistry.createSession(sessionA, 1, aliceDevice);
+        _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
 
         vm.prank(alice);
         sessionRegistry.revokeSession(sessionA);

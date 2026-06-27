@@ -172,6 +172,38 @@ contract IdentityRegistryTest is Test {
         registry.transferController("alice.id", bob);
     }
 
+    function test_Revert_TransferController_ToZeroAddress() public {
+        vm.prank(alice);
+        registry.createIdentity("alice.id");
+
+        vm.prank(alice);
+        vm.expectRevert(IdentityRegistry.InvalidNewController.selector);
+        registry.transferController("alice.id", address(0));
+    }
+
+    // -----------------------------------------------------------------
+    // setRecoveryManager — controle de acesso (achado crítico da auditoria)
+    // -----------------------------------------------------------------
+
+    function test_Revert_SetRecoveryManager_NotOwner() public {
+        // registry foi deployado pelo contrato de teste (setUp) — owner é address(this)
+        vm.prank(alice); // alice não é quem fez o deploy
+        vm.expectRevert(IdentityRegistry.NotOwner.selector);
+        registry.setRecoveryManager(bob);
+    }
+
+    function test_SetRecoveryManager_OwnerCanCall() public {
+        // address(this) é o owner, pois foi quem chamou `new IdentityRegistry()` no setUp
+        registry.setRecoveryManager(bob);
+        // segunda chamada (mesmo pelo owner) deve reverter — já foi setado
+        vm.expectRevert(IdentityRegistry.RecoveryManagerAlreadySet.selector);
+        registry.setRecoveryManager(bob);
+    }
+
+    function test_Owner_IsDeployer() public view {
+        assertEq(registry.owner(), address(this));
+    }
+
     // -----------------------------------------------------------------
     // isUsernameTaken
     // -----------------------------------------------------------------

@@ -34,6 +34,12 @@ contract IdentityRegistry {
     // Definido uma única vez após o deploy. Veja setRecoveryManager().
     address private _recoveryManager;
 
+    // Quem fez o deploy deste contrato. Único endereço autorizado a chamar
+    // setRecoveryManager — sem isso, qualquer um poderia chamá-la primeiro
+    // na janela entre o deploy e a configuração oficial (front-running de
+    // inicialização, o mesmo padrão do hack do Parity Multisig em 2017).
+    address public immutable owner;
+
     // -------------------------------------------------------------------------
     // Eventos (notificações para o mundo externo)
     // -------------------------------------------------------------------------
@@ -53,6 +59,16 @@ contract IdentityRegistry {
     error InvalidUsername();
     error RecoveryManagerAlreadySet();
     error NotRecoveryManager();
+    error NotOwner();
+    error InvalidNewController();
+
+    // -------------------------------------------------------------------------
+    // Constructor
+    // -------------------------------------------------------------------------
+
+    constructor() {
+        owner = msg.sender;
+    }
 
     // -------------------------------------------------------------------------
     // Funções de escrita (modificam o estado → custam gas)
@@ -90,6 +106,7 @@ contract IdentityRegistry {
 
         if (!identity.exists) revert IdentityNotFound(username);
         if (identity.controller != msg.sender) revert NotController(msg.sender, username);
+        if (newController == address(0)) revert InvalidNewController();
         if (bytes(_usernameByController[newController]).length > 0) {
             revert AddressAlreadyHasIdentity(newController);
         }
@@ -110,6 +127,7 @@ contract IdentityRegistry {
     /// Define o endereço do RecoveryManager. Só pode ser chamado uma vez.
     /// Ordem de deploy: (1) IdentityRegistry, (2) RecoveryManager, (3) esta função.
     function setRecoveryManager(address rm) external {
+        if (msg.sender != owner) revert NotOwner();
         if (_recoveryManager != address(0)) revert RecoveryManagerAlreadySet();
         _recoveryManager = rm;
         emit RecoveryManagerSet(rm);
@@ -122,6 +140,7 @@ contract IdentityRegistry {
 
         Identity storage identity = _identityByUsername[username];
         if (!identity.exists) revert IdentityNotFound(username);
+        if (newController == address(0)) revert InvalidNewController();
         if (bytes(_usernameByController[newController]).length > 0) {
             revert AddressAlreadyHasIdentity(newController);
         }

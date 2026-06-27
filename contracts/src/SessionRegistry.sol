@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IdentityRegistry} from "./IdentityRegistry.sol";
+import {DeviceRegistry} from "./DeviceRegistry.sol";
 
 contract SessionRegistry {
     // -------------------------------------------------------------------------
@@ -21,6 +22,7 @@ contract SessionRegistry {
     // -------------------------------------------------------------------------
 
     IdentityRegistry private immutable _identityRegistry;
+    DeviceRegistry private immutable _deviceRegistry;
 
     // hash → Session
     mapping(bytes32 => Session) private _sessions;
@@ -48,13 +50,16 @@ contract SessionRegistry {
     error SessionNotFound(bytes32 hash);
     error SessionAlreadyRevoked(bytes32 hash);
     error NotIdentityController();
+    error InvalidSessionSignature();
+    error DeviceNotOwnedByIdentity();
 
     // -------------------------------------------------------------------------
     // Constructor
     // -------------------------------------------------------------------------
 
-    constructor(address identityRegistry) {
+    constructor(address identityRegistry, address deviceRegistry) {
         _identityRegistry = IdentityRegistry(identityRegistry);
+        _deviceRegistry = DeviceRegistry(deviceRegistry);
     }
 
     // -------------------------------------------------------------------------
@@ -62,9 +67,40 @@ contract SessionRegistry {
     // -------------------------------------------------------------------------
 
     /// Registra uma sessão. Chamado pelo SDK do website após autenticação bem-sucedida.
-    /// Qualquer um pode criar — o hash é um compromisso cego (conteúdo permanece privado).
-    function createSession(bytes32 hash, uint256 identityId, address devicePubKey) external {
+    ///
+    /// Qualquer endereço pode SUBMETER a transação (o hash em si é um
+    /// compromisso cego — o conteúdo permanece privado), mas a sessão só é
+    /// aceita se o próprio device assinou esse hash (prova de posse da chave
+    /// privada) E se esse device realmente pertence à identidade informada,
+    /// segundo o DeviceRegistry. Sem essas duas checagens, qualquer um
+    /// poderia registrar uma sessão falsa em nome de qualquer identidade —
+    /// ver auditoria de segurança, achado #2.
+    ///
+    /// `verifySession()` continua sendo apenas uma checagem de revogação —
+    /// nunca deve ser usado como prova isolada de "este request está
+    /// autenticado". A prova de login real acontece em `verifyAuthResponse`
+    /// (fora da chain); esta função só registra/audita um login já aprovado.
+    function createSession(
+        bytes32 hash,
+        uint256 identityId,
+        address devicePubKey,
+        bytes32 r,
+        bytes32 s,
+        uint8 v
+    ) external {
         if (_sessions[hash].exists) revert SessionAlreadyExists(hash);
+
+        // Prova de posse: só quem tem a chave privada de devicePubKey
+        // consegue produzir essa assinatura sobre o hash exato da sessão.
+        bytes32 ethSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", hash));
+        if (ecrecover(ethSignedHash, v, r, s) != devicePubKey) revert InvalidSessionSignature();
+
+        // Confirma que esse device de fato pertence à identidade alegada
+        // (e está ativo) — sem isso, um atacante poderia usar seu PRÓPRIO
+        // device (que ele realmente controla) para criar sessões falsas
+        // atribuídas à identidade de uma vítima.
+        DeviceRegistry.Device memory device = _deviceRegistry.getDevice(devicePubKey);
+        if (device.identityId != identityId || device.revoked) revert DeviceNotOwnedByIdentity();
 
         _sessions[hash] = Session({
             identityId: identityId,

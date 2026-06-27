@@ -86,6 +86,14 @@ contract RecoveryManagerTest is Test {
         identityRegistry.recoverController("alice.id", aliceNewWallet);
     }
 
+    function test_Revert_RecoverController_ToZeroAddress() public {
+        // Defesa em profundidade: mesmo o RecoveryManager (único autorizado) não
+        // consegue setar o controller para address(0) — checagem dentro do IdentityRegistry
+        vm.prank(address(recoveryManager));
+        vm.expectRevert(IdentityRegistry.InvalidNewController.selector);
+        identityRegistry.recoverController("alice.id", address(0));
+    }
+
     // -----------------------------------------------------------------
     // configureGuardians — caminho feliz
     // -----------------------------------------------------------------
@@ -158,6 +166,32 @@ contract RecoveryManagerTest is Test {
         vm.prank(alice);
         vm.expectRevert(RecoveryManager.InvalidThreshold.selector);
         recoveryManager.configureGuardians("alice.id", guardians, 0);
+    }
+
+    function test_Revert_ConfigureGuardians_TooManyGuardians() public {
+        address[] memory guardians = new address[](21); // MAX_GUARDIANS = 20
+        for (uint256 i = 0; i < guardians.length; i++) {
+            guardians[i] = address(uint160(i + 1));
+        }
+
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(RecoveryManager.TooManyGuardians.selector, 21, 20)
+        );
+        recoveryManager.configureGuardians("alice.id", guardians, 1);
+    }
+
+    function test_ConfigureGuardians_ExactlyMaxGuardians() public {
+        address[] memory guardians = new address[](20); // exatamente o limite
+        for (uint256 i = 0; i < guardians.length; i++) {
+            guardians[i] = address(uint160(i + 1));
+        }
+
+        vm.prank(alice);
+        recoveryManager.configureGuardians("alice.id", guardians, 1);
+
+        (address[] memory stored,) = recoveryManager.getGuardianConfig("alice.id");
+        assertEq(stored.length, 20);
     }
 
     function test_Revert_ConfigureGuardians_EmptyGuardians() public {
@@ -253,6 +287,14 @@ contract RecoveryManagerTest is Test {
             abi.encodeWithSelector(RecoveryManager.ProposalAlreadyExists.selector, 1)
         );
         recoveryManager.proposeRecovery("alice.id", aliceNewWallet);
+    }
+
+    function test_Revert_ProposeRecovery_NewControllerIsZeroAddress() public {
+        _configureAliceGuardians();
+
+        vm.prank(guardian1);
+        vm.expectRevert(RecoveryManager.InvalidNewController.selector);
+        recoveryManager.proposeRecovery("alice.id", address(0));
     }
 
     // -----------------------------------------------------------------
@@ -374,6 +416,29 @@ contract RecoveryManagerTest is Test {
 
         RecoveryManager.RecoveryProposal memory proposal = recoveryManager.getProposal("alice.id");
         assertTrue(proposal.executed);
+    }
+
+    function test_ExecuteRecovery_ClearsOldGuardianConfig() public {
+        // Achado da auditoria: guardians antigos não devem reter poder sobre o
+        // novo controller após a recovery ser executada.
+        _configureAliceGuardians();
+        _propose();
+        _collectThreeApprovals();
+        vm.warp(block.timestamp + 7 days + 1);
+        recoveryManager.executeRecovery("alice.id");
+
+        // A configuração de guardians foi zerada
+        (address[] memory guardians, uint256 threshold) = recoveryManager.getGuardianConfig("alice.id");
+        assertEq(guardians.length, 0);
+        assertEq(threshold, 0);
+
+        // guardian1 (que era guardian da alice) não consegue mais propor —
+        // identidade agora não tem guardians configurados
+        vm.prank(guardian1);
+        vm.expectRevert(
+            abi.encodeWithSelector(RecoveryManager.GuardiansNotConfigured.selector, 1)
+        );
+        recoveryManager.proposeRecovery("alice.id", stranger);
     }
 
     // -----------------------------------------------------------------

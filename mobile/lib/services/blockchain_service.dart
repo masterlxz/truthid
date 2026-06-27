@@ -25,7 +25,7 @@ class SessionInfo {
 class BlockchainService {
   static const _rpcUrl = 'https://sepolia.base.org';
   static const _sessionRegistryAddress =
-      '0x93B56d40B304269Ee23f84A1cF3BD7B338514b42';
+      '0xdeD2Ad865069CA6546172926540D3A3Aa73C1CA6';
 
   // ABI: apenas as funções que vamos usar (não precisa do ABI completo)
   static final _contract = DeployedContract(

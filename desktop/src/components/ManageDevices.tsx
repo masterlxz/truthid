@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  useAccount,
   useReadContract,
   useReadContracts,
   useWriteContract,
   useWaitForTransactionReceipt,
 } from "wagmi";
+import { keccak256, encodePacked } from "viem";
 import { QRCodeSVG } from "qrcode.react";
 import {
   IDENTITY_REGISTRY_ADDRESS,
@@ -210,6 +212,8 @@ function PairDevice({ signalingUrl, onDeviceRegistered }: {
   signalingUrl: string;
   onDeviceRegistered: () => void;
 }) {
+  const { address: controllerAddress } = useAccount();
+
   const [isOpen, setIsOpen] = useState(false);
   const [roomId, setRoomId] = useState<string | null>(null);
   const [pairRequest, setPairRequest] = useState<{ pubKey: string; label: string } | null>(null);
@@ -221,6 +225,11 @@ function PairDevice({ signalingUrl, onDeviceRegistered }: {
   // mas alterá-la não redesenha a tela.
   const wsRef = useRef<WebSocket | null>(null);
 
+  // Registro em 2 passos (commit-reveal) — esconde o devicePubKey do mobile
+  // até a confirmação, impedindo front-running (ver auditoria, achado #7).
+  const [registerPhase, setRegisterPhase] = useState<"idle" | "committing" | "registering">("idle");
+  const [salt, setSalt] = useState<`0x${string}` | null>(null);
+
   const {
     writeContract: sendRegister,
     data: registerTxHash,
@@ -230,9 +239,20 @@ function PairDevice({ signalingUrl, onDeviceRegistered }: {
   const { isLoading: isRegisterConfirming, isSuccess: isRegisterSuccess } =
     useWaitForTransactionReceipt({ hash: registerTxHash });
 
-  // Quando o registro confirmar, avisa o pai e fecha o painel
   useEffect(() => {
-    if (isRegisterSuccess) {
+    if (!isRegisterSuccess) return;
+
+    if (registerPhase === "committing" && pairRequest && salt) {
+      // Commit confirmado — passo 2: revelar devicePubKey + salt
+      setRegisterPhase("registering");
+      sendRegister({
+        address: DEVICE_REGISTRY_ADDRESS,
+        abi: DEVICE_REGISTRY_ABI,
+        functionName: "registerDevice",
+        args: [pairRequest.pubKey as `0x${string}`, labelInput, salt],
+      });
+    } else if (registerPhase === "registering") {
+      setRegisterPhase("idle");
       closePairing();
       onDeviceRegistered();
     }
@@ -290,6 +310,8 @@ function PairDevice({ signalingUrl, onDeviceRegistered }: {
     setPairRequest(null);
     setLabelInput("");
     setError(null);
+    setRegisterPhase("idle");
+    setSalt(null);
   }
 
   // Fechar WebSocket quando o componente for desmontado da tela
@@ -299,12 +321,27 @@ function PairDevice({ signalingUrl, onDeviceRegistered }: {
   }, []);
 
   function handleRegister() {
-    if (!pairRequest) return;
+    if (!pairRequest || !controllerAddress) return;
+
+    const saltBytes = crypto.getRandomValues(new Uint8Array(32));
+    const newSalt = `0x${Array.from(saltBytes)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("")}` as `0x${string}`;
+    setSalt(newSalt);
+
+    const commitment = keccak256(
+      encodePacked(
+        ["address", "bytes32", "address"],
+        [pairRequest.pubKey as `0x${string}`, newSalt, controllerAddress]
+      )
+    );
+
+    setRegisterPhase("committing");
     sendRegister({
       address: DEVICE_REGISTRY_ADDRESS,
       abi: DEVICE_REGISTRY_ABI,
-      functionName: "registerDevice",
-      args: [pairRequest.pubKey as `0x${string}`, labelInput],
+      functionName: "commitDevice",
+      args: [commitment],
     });
   }
 
@@ -352,18 +389,22 @@ function PairDevice({ signalingUrl, onDeviceRegistered }: {
               value={labelInput}
               onChange={(e) => setLabelInput(e.target.value)}
               placeholder="ex: iPhone 15 Pro"
-              disabled={isRegisterPending || isRegisterConfirming}
+              disabled={registerPhase !== "idle"}
             />
           </label>
           <br />
           <button
             onClick={handleRegister}
-            disabled={!labelInput || isRegisterPending || isRegisterConfirming}
+            disabled={!labelInput || registerPhase !== "idle"}
           >
-            {isRegisterPending
-              ? "Confirme no MetaMask..."
-              : isRegisterConfirming
-              ? "Aguardando rede..."
+            {registerPhase === "committing" && isRegisterPending
+              ? "Confirme no MetaMask (1/2)..."
+              : registerPhase === "committing" && isRegisterConfirming
+              ? "Preparando registro (1/2)..."
+              : registerPhase === "registering" && isRegisterPending
+              ? "Confirme no MetaMask (2/2)..."
+              : registerPhase === "registering" && isRegisterConfirming
+              ? "Aguardando rede (2/2)..."
               : "Registrar dispositivo"}
           </button>
         </div>

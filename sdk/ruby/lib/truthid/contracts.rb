@@ -1,6 +1,6 @@
 module TruthID
   module Contracts
-    DEVICE_REGISTRY_ADDRESS = "0xe87633b148cf7a7F6c60DdA84AD7f4D3a9eC187F"
+    DEVICE_REGISTRY_ADDRESS = "0x225c67a98c9D675fE595ae05a2F9249C34d9C60a"
     DEVICE_REGISTRY_ABI = [
       {
         "type" => "function",
@@ -31,7 +31,7 @@ module TruthID
       }
     ].freeze
 
-    SESSION_REGISTRY_ADDRESS = "0x93B56d40B304269Ee23f84A1cF3BD7B338514b42"
+    SESSION_REGISTRY_ADDRESS = "0xdeD2Ad865069CA6546172926540D3A3Aa73C1CA6"
     SESSION_REGISTRY_ABI = [
       {
         "type" => "function",

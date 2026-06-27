@@ -44,6 +44,10 @@ contract DeviceRegistry {
     // identityId → lista de pubKeys registradas para essa identidade (inclui revogados)
     mapping(uint256 => address[]) private _devicesByIdentity;
 
+    // commitment (hash) → número do bloco em que foi commitado (0 = não existe)
+    // Usado pelo esquema commit-reveal de registerDevice — ver nota abaixo.
+    mapping(bytes32 => uint256) private _commitBlocks;
+
     // -------------------------------------------------------------------------
     // Eventos
     // -------------------------------------------------------------------------
@@ -60,6 +64,8 @@ contract DeviceRegistry {
     error DeviceAlreadyRevoked(address pubKey);
     error NotIdentityController();
     error InvalidPubKey();
+    error NoCommitmentFound();
+    error RevealTooEarly();
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -73,11 +79,33 @@ contract DeviceRegistry {
     // Funções de escrita
     // -------------------------------------------------------------------------
 
-    /// Registra um novo device para a identidade do chamador.
-    /// O chamador precisa ter uma identidade no IdentityRegistry.
-    function registerDevice(address devicePubKey, string calldata label) external {
+    /// Passo 1 de 2 do registro: compromete um hash do devicePubKey sem
+    /// revelá-lo. Protege contra front-running — sem isso, qualquer um
+    /// observando a mempool poderia ver o devicePubKey de uma transação
+    /// pendente e registrá-lo primeiro para a PRÓPRIA identidade, fazendo a
+    /// transação legítima reverter (ver auditoria de segurança, achado #7).
+    ///
+    /// `commitment` deve ser `keccak256(abi.encodePacked(devicePubKey, salt, msg.sender))`.
+    /// Incluir `msg.sender` no hash é essencial: impede que outra pessoa
+    /// "roube" esse commitment copiando devicePubKey+salt quando eles forem
+    /// revelados no passo 2 (só o endereço que commitou pode revelar).
+    function commitDevice(bytes32 commitment) external {
+        _commitBlocks[commitment] = block.number;
+    }
+
+    /// Passo 2 de 2: revela devicePubKey + salt, registra o device.
+    /// Só funciona se `commitDevice` foi chamado antes (em um bloco anterior)
+    /// com o commitment correspondente.
+    function registerDevice(address devicePubKey, string calldata label, bytes32 salt) external {
         if (devicePubKey == address(0)) revert InvalidPubKey();
         if (_devices[devicePubKey].exists) revert DeviceAlreadyRegistered(devicePubKey);
+
+        bytes32 commitment = keccak256(abi.encodePacked(devicePubKey, salt, msg.sender));
+        uint256 commitBlock = _commitBlocks[commitment];
+        if (commitBlock == 0) revert NoCommitmentFound();
+        if (block.number <= commitBlock) revert RevealTooEarly();
+
+        delete _commitBlocks[commitment];
 
         uint256 identityId = _getCallerIdentityId();
 

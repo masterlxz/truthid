@@ -27,6 +27,11 @@ contract RecoveryManager {
 
     uint256 public constant TIMELOCK = 7 days;
 
+    // Limite de guardians por identidade — sem isso, um controller hostil
+    // poderia inflar o array a ponto de `proposeRecovery`/`configureGuardians`
+    // custarem gas demais para qualquer guardian conseguir pagar (DoS).
+    uint256 public constant MAX_GUARDIANS = 20;
+
     // -------------------------------------------------------------------------
     // Tipos de dados
     // -------------------------------------------------------------------------
@@ -91,6 +96,8 @@ contract RecoveryManager {
     error ThresholdNotReached(uint256 current, uint256 required);
     error TimelockNotExpired(uint256 proposedAt, uint256 executeAfter);
     error ActiveProposalExists();
+    error InvalidNewController();
+    error TooManyGuardians(uint256 count, uint256 max);
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -116,6 +123,9 @@ contract RecoveryManager {
         if (guardians.length == 0 || threshold == 0 || threshold > guardians.length) {
             revert InvalidThreshold();
         }
+        if (guardians.length > MAX_GUARDIANS) {
+            revert TooManyGuardians(guardians.length, MAX_GUARDIANS);
+        }
 
         // Bloqueia reconfiguração com proposta em andamento — evita invalidar votos já coletados
         RecoveryProposal storage proposal = _proposals[identityId];
@@ -125,9 +135,7 @@ contract RecoveryManager {
 
         // Remove guardians antigos do mapa de lookup antes de sobrescrever
         GuardianConfig storage config = _guardianConfigs[identityId];
-        for (uint256 i = 0; i < config.guardians.length; i++) {
-            _isGuardian[identityId][config.guardians[i]] = false;
-        }
+        _clearGuardianFlags(identityId, config.guardians);
 
         config.guardians = guardians;
         config.threshold = threshold;
@@ -147,6 +155,8 @@ contract RecoveryManager {
     /// Propõe a troca de controller. Só um guardian pode iniciar.
     /// Substitui qualquer proposta anterior (executada ou cancelada).
     function proposeRecovery(string calldata username, address newController) external {
+        if (newController == address(0)) revert InvalidNewController();
+
         IdentityRegistry.Identity memory identity = _identityRegistry.getIdentity(username);
         uint256 identityId = identity.id;
 
@@ -213,6 +223,14 @@ contract RecoveryManager {
         proposal.executed = true;
 
         _identityRegistry.recoverController(username, proposal.newController);
+
+        // Os guardians antigos não devem manter poder sobre o novo controller —
+        // sem isso, um guardian cúmplice de um golpe contra o dono anterior
+        // continuaria podendo propor recovery contra a vítima já recuperada.
+        // O novo controller precisa chamar configureGuardians() para reativar
+        // a recovery social com guardians de sua própria confiança.
+        _clearGuardianFlags(identityId, config.guardians);
+        delete _guardianConfigs[identityId];
 
         emit RecoveryExecuted(identityId, proposal.newController);
     }
@@ -290,6 +308,14 @@ contract RecoveryManager {
     function _clearApprovals(uint256 identityId, address[] storage guardians) internal {
         for (uint256 i = 0; i < guardians.length; i++) {
             _approvals[identityId][guardians[i]] = false;
+        }
+    }
+
+    // Zera o flag _isGuardian para uma lista de endereços (usado ao reconfigurar
+    // guardians e ao limpar o conjunto antigo após uma recovery executada)
+    function _clearGuardianFlags(uint256 identityId, address[] storage guardians) internal {
+        for (uint256 i = 0; i < guardians.length; i++) {
+            _isGuardian[identityId][guardians[i]] = false;
         }
     }
 }
