@@ -235,6 +235,40 @@ check_revocation(identity_id) → RevocationInfo
 | Formato do challenge de autenticação | JWT vs custom JSON | Pendente |
 | Armazenamento de sessões | Servidor central vs on-chain hash | **Hash keccak256 on-chain** ✓ — dados originais locais, só o hash vai pra chain; privado mas auditável; revogação granular por sessão |
 | Sinalização WebRTC (futuro) | Servidor fixo vs plugável | **SignalingAdapter** ✓ — interface abstrata com implementações trocáveis (WebSocketSignaling hoje, OnChainSignaling quando latência de L2 permitir); contratos de identidade ficam na Base, sinalização pode migrar de chain sem afetar o resto |
+| Migração da sinalização para on-chain | WebSocket server vs eventos on-chain | **Pendente** — previsto para Fase 7 ou quando latência Base < 1s; custo estimado ~$0,002/login; bloqueado pelo SignalingAdapter já implementado, então a troca não afeta contratos nem SDKs |
+| Interface e experiência do usuário | UI funcional vs identidade visual própria | **Pendente** — app e desktop têm UI funcional (Material Design padrão) mas sem logo, cores, tipografia ou fluxos polidos; previsto para uma fase dedicada após Fase 4 ou como Fase 8 pós-lançamento |
+
+---
+
+## Roadmap de Evoluções Planejadas
+
+### Sinalização on-chain (remover o servidor)
+
+**Quando**: Fase 7 (Mainnet & Lançamento) ou antes, a critério do dono do projeto.
+
+**O que muda**: substituir o servidor FastAPI/WebSocket por eventos emitidos na blockchain. O website publica o `roomId` como evento on-chain; o mobile escuta e responde via transação.
+
+**O que NÃO muda**: contratos de identidade, DeviceRegistry, SDKs, fluxo de autenticação — tudo isso é independente da sinalização graças ao `SignalingAdapter`.
+
+**Pré-requisito técnico**: latência de L2 aceitável para UX de login. Hoje Base leva ~2s por bloco — aceitável. Custo estimado: ~$0,002 por login.
+
+**Como está preparado hoje**: o `SignalingAdapter` (interface abstrata) já existe no desktop e será replicado nos SDKs. Trocar a implementação não requer refatoração nos outros componentes.
+
+---
+
+### Interface e identidade visual (UI/UX)
+
+**Quando**: após Fase 4 (Mobile App completo) — pode ser uma Fase 5.5 intercalada com SDKs, ou uma Fase 8 dedicada pós-lançamento. A definir pelo dono do projeto.
+
+**O que precisa ser feito**:
+- Definir identidade visual: logo, paleta de cores, tipografia
+- Aplicar no app mobile (Flutter): temas, ícones, animações, onboarding
+- Aplicar no desktop (Tauri/React): mesma linguagem visual
+- Revisar todos os fluxos (criar identidade, adicionar device, aprovar login, recovery) pensando em UX
+- Telas de erro e estados vazios com mensagens amigáveis
+- Possivelmente: dark mode
+
+**Estado atual**: toda a UI é funcional mas usa Material Design padrão (indigo genérico, sem personalidade). Nenhuma tela tem polish de produto final.
 
 ---
 
