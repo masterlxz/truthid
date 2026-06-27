@@ -282,7 +282,7 @@ Website          Relay           Mobile App        Blockchain
   - Mostra label do device em vez do endereço bruto
 - `App.tsx`: navegação por abas entre Dispositivos e Sessões ativas
 - Conceito consolidado: contratos Solidity = PostgreSQL (estrutura + regras), TypeScript = ORM (lê e escreve via wagmi)
-- Próximo passo: etapa 3.6 — geração de QR code para pareamento de novo dispositivo
+- Próximo passo: etapa 3.8 — build para Linux, Windows, macOS
 
 ### 2026-06-09 — Sessão 14
 - Etapa 3.4 concluída — tela gerenciar dispositivos
