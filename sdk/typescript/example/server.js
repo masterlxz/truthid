@@ -7,25 +7,25 @@ app.use(express.json());
 
 const truthid = new TruthIDClient({ network: "base-mainnet" });
 
-// Armazenamento em memória (use Redis em produção)
+// In-memory storage (use Redis in production)
 // Map: nonce → AuthChallenge
 const pendingChallenges = new Map();
 // Map: sessionToken → { identityId, deviceAddress }
 const sessions = new Map();
 
-// ─── Passo 1: website pede um challenge para montar o QR code ─────────────────
-// O QR precisa ter { action, challenge, callbackUrl } — o app mobile lê isso
-// direto, sem nenhum servidor de sinalização no meio. callbackUrl precisa
-// ser https:// e alcançável pelo celular (não "localhost" — pra testar de
-// verdade com um celular real, exponha esse servidor via ngrok ou deploy).
+// ─── Step 1: website requests a challenge to build the QR code ───────────────
+// The QR must contain { action, challenge, callbackUrl } — the mobile app reads
+// this directly, with no signaling server in between. callbackUrl must be
+// https:// and reachable by the phone (not "localhost" — to test with a real
+// phone, expose this server via ngrok or deploy it).
 app.get("/auth/challenge", (req, res) => {
   const origin = req.headers.host ?? "localhost";
   const challenge = truthid.createChallenge(origin);
 
-  // Guarda o challenge pelo nonce para recuperar na verificação
+  // Store the challenge by nonce to retrieve it during verification
   pendingChallenges.set(challenge.nonce, challenge);
 
-  // Remove automaticamente após 35s (um pouco além do TTL de 30s do SDK)
+  // Auto-remove after 35s (slightly beyond the SDK's 30s TTL)
   setTimeout(() => pendingChallenges.delete(challenge.nonce), 35_000);
 
   res.json({
@@ -35,27 +35,27 @@ app.get("/auth/challenge", (req, res) => {
   });
 });
 
-// ─── Passo 2: mobile assinou → website manda a resposta aqui ─────────────────
+// ─── Step 2: mobile signed → website posts the response here ─────────────────
 app.post("/auth/verify", async (req, res) => {
   const response = req.body; // { approved, nonce, signature, deviceAddress }
 
-  // Recupera o challenge original pelo nonce
+  // Retrieve the original challenge by nonce
   const challenge = pendingChallenges.get(response.nonce);
   if (!challenge) {
     return res.status(400).json({ error: "Challenge not found or already used" });
   }
 
-  // Remove o challenge para impedir replay: o mesmo nonce não pode ser usado duas vezes
+  // Remove the challenge to prevent replay: the same nonce cannot be used twice
   pendingChallenges.delete(response.nonce);
 
-  // Chama o SDK para verificar tudo: assinatura, TTL, device ativo na blockchain
+  // Call the SDK to verify everything: signature, TTL, device active on-chain
   const result = await truthid.verifyAuthResponse({ challenge, response });
 
   if (!result.valid) {
     return res.status(401).json({ error: result.reason });
   }
 
-  // Cria um token de sessão simples (use JWT em produção)
+  // Create a simple session token (use JWT in production)
   const sessionToken = randomUUID();
   sessions.set(sessionToken, {
     identityId: result.identityId.toString(),
@@ -68,7 +68,7 @@ app.post("/auth/verify", async (req, res) => {
   });
 });
 
-// ─── Rota protegida ───────────────────────────────────────────────────────────
+// ─── Protected route ──────────────────────────────────────────────────────────
 app.get("/api/profile", requireAuth, (req, res) => {
   res.json({
     message: "Authenticated!",
@@ -77,7 +77,7 @@ app.get("/api/profile", requireAuth, (req, res) => {
   });
 });
 
-// ─── Middleware de autenticação ───────────────────────────────────────────────
+// ─── Authentication middleware ────────────────────────────────────────────────
 function requireAuth(req, res, next) {
   const authHeader = req.headers.authorization; // "Bearer <token>"
   const token = authHeader?.split(" ")[1];
@@ -95,7 +95,7 @@ app.listen(3000, () => {
   console.log("Server running on http://localhost:3000");
   console.log("");
   console.log("Endpoints:");
-  console.log("  GET  /auth/challenge  → gera o challenge para o QR code");
-  console.log("  POST /auth/verify     → verifica a resposta do mobile");
-  console.log("  GET  /api/profile     → rota protegida (exige Bearer token)");
+  console.log("  GET  /auth/challenge  → generates the challenge for the QR code");
+  console.log("  POST /auth/verify     → verifies the mobile response");
+  console.log("  GET  /api/profile     → protected route (requires Bearer token)");
 });

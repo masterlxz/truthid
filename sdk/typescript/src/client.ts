@@ -39,7 +39,7 @@ export class TruthIDClient {
     this.sessionRegistryAddress = SESSION_REGISTRY_ADDRESSES[config.network];
   }
 
-  // Cria um challenge no formato exato que o mobile espera e assina
+  // Creates a challenge in the exact format the mobile expects and signs
   createChallenge(origin: string): AuthChallenge {
     return {
       type: "challenge",
@@ -49,30 +49,30 @@ export class TruthIDClient {
     };
   }
 
-  // Verifica a resposta de login que chegou do mobile
+  // Verifies the login response received from the mobile
   async verifyAuthResponse({
     challenge,
     response,
     ttlMs = 30_000,
   }: VerifyAuthParams): Promise<VerifyAuthResult> {
-    // 1. Usuário recusou explicitamente
+    // 1. User explicitly rejected
     if (!response.approved) {
       return { valid: false, reason: "User rejected the login request" };
     }
 
-    // 2. Challenge expirou (proteção anti-replay por tempo)
+    // 2. Challenge expired (time-based replay protection)
     if (Date.now() - challenge.issuedAt > ttlMs) {
       return { valid: false, reason: "Challenge expired" };
     }
 
-    // 3. Nonce da resposta precisa bater com o do challenge (proteção anti-replay por conteúdo)
+    // 3. Response nonce must match the challenge nonce (content-based replay protection)
     if (challenge.nonce !== response.nonce) {
       return { valid: false, reason: "Nonce mismatch" };
     }
 
-    // 4. Verificar a assinatura criptográfica
-    // O mobile assinou JSON.stringify(challenge) com prefixo Ethereum personal_sign
-    // recoverMessageAddress() aplica o mesmo prefixo antes de verificar
+    // 4. Verify the cryptographic signature
+    // The mobile signed JSON.stringify(challenge) with the Ethereum personal_sign prefix
+    // recoverMessageAddress() applies the same prefix before verifying
     const message = JSON.stringify({
       type: challenge.type,
       nonce: challenge.nonce,
@@ -94,7 +94,7 @@ export class TruthIDClient {
       return { valid: false, reason: "Signature does not match device address" };
     }
 
-    // 5. Verificar na blockchain se o device ainda está ativo (não foi revogado)
+    // 5. Check on-chain whether the device is still active (not revoked)
     const isActive = await this.publicClient.readContract({
       address: this.deviceRegistryAddress,
       abi: DEVICE_REGISTRY_ABI,
@@ -106,7 +106,7 @@ export class TruthIDClient {
       return { valid: false, reason: "Device is not active or has been revoked" };
     }
 
-    // 6. Buscar o identityId associado a este device
+    // 6. Fetch the identityId associated with this device
     const device = await this.publicClient.readContract({
       address: this.deviceRegistryAddress,
       abi: DEVICE_REGISTRY_ABI,
@@ -121,7 +121,7 @@ export class TruthIDClient {
     };
   }
 
-  // Verifica se uma sessão existe e não foi revogada
+  // Checks whether a session exists and has not been revoked
   async verifySession(hash: string): Promise<SessionInfo> {
     const [session, revoked] = await Promise.all([
       this.publicClient.readContract({
@@ -151,7 +151,7 @@ export class TruthIDClient {
     };
   }
 
-  // Verifica o status de um device na blockchain
+  // Checks the status of a device on-chain
   async checkDeviceStatus(devicePubKey: string): Promise<DeviceStatus> {
     const device = await this.publicClient.readContract({
       address: this.deviceRegistryAddress,

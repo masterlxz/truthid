@@ -3,12 +3,12 @@ from datetime import datetime
 from typing import Optional
 
 
-# Campos em camelCase: mapeiam diretamente para o protocolo JSON do mobile
+# camelCase fields: map directly to the mobile's JSON protocol
 @dataclass
 class AuthChallenge:
     type: str
     nonce: str
-    issuedAt: int  # timestamp Unix em ms
+    issuedAt: int  # Unix timestamp in ms
     origin: str
 
 
@@ -16,8 +16,8 @@ class AuthChallenge:
 class AuthResponse:
     approved: bool
     nonce: str
-    signature: str      # assinatura secp256k1 em hex ("0x...")
-    deviceAddress: str  # endereço Ethereum da chave do device
+    signature: str      # secp256k1 signature in hex ("0x...")
+    deviceAddress: str  # Ethereum address derived from the device key
 
 
 @dataclass

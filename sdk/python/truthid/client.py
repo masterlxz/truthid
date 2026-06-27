@@ -50,23 +50,23 @@ class TruthIDClient:
         response: AuthResponse,
         ttl_ms: int = 30_000,
     ) -> VerifyAuthResult:
-        # 1. Usuário recusou
+        # 1. User rejected
         if not response.approved:
             return VerifyAuthResult(valid=False, reason="User rejected the login request")
 
-        # 2. TTL expirado
+        # 2. TTL expired
         now_ms = int(time.time() * 1000)
         if now_ms - challenge.issuedAt > ttl_ms:
             return VerifyAuthResult(valid=False, reason="Challenge expired")
 
-        # 3. Nonce bate com o challenge original
+        # 3. Nonce must match the original challenge
         if challenge.nonce != response.nonce:
             return VerifyAuthResult(valid=False, reason="Nonce mismatch")
 
-        # 4. Verificar assinatura
-        # separators=(',', ':') → JSON compacto, igual ao jsonEncode() do Dart e JSON.stringify() do JS
+        # 4. Verify signature
+        # separators=(',', ':') → compact JSON, matching jsonEncode() in Dart and JSON.stringify() in JS
         message = json.dumps(asdict(challenge), separators=(",", ":"))
-        msg = encode_defunct(text=message)  # adiciona o prefixo Ethereum personal_sign
+        msg = encode_defunct(text=message)  # adds the Ethereum personal_sign prefix
         try:
             signer = Account.recover_message(msg, signature=response.signature)
         except Exception:
@@ -75,13 +75,13 @@ class TruthIDClient:
         if signer.lower() != response.deviceAddress.lower():
             return VerifyAuthResult(valid=False, reason="Signature does not match device address")
 
-        # 5. Device ativo na blockchain
+        # 5. Device active on-chain
         checksum_addr = Web3.to_checksum_address(response.deviceAddress)
         is_active = self._devices.functions.isDeviceActive(checksum_addr).call()
         if not is_active:
             return VerifyAuthResult(valid=False, reason="Device is not active or has been revoked")
 
-        # 6. Buscar identityId do device
+        # 6. Fetch the identityId associated with this device
         device = self._devices.functions.getDevice(checksum_addr).call()
 
         return VerifyAuthResult(
@@ -98,7 +98,7 @@ class TruthIDClient:
             return SessionInfo(exists=False, revoked=False)
 
         revoked = self._sessions.functions.isSessionRevoked(hash_bytes).call()
-        created_at = datetime.fromtimestamp(session[2], tz=timezone.utc)  # createdAt (uint256 segundos)
+        created_at = datetime.fromtimestamp(session[2], tz=timezone.utc)  # createdAt (uint256 seconds)
 
         return SessionInfo(
             exists=True,
@@ -119,7 +119,7 @@ class TruthIDClient:
 
         return DeviceStatus(
             exists=True,
-            active=not device[4],  # revoked → active é o inverso
+            active=not device[4],  # revoked → active is the inverse
             label=device[2],
             identity_id=device[0],
             added_at=added_at,

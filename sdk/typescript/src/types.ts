@@ -5,26 +5,26 @@ export interface TruthIDClientConfig {
   rpcUrl?: string;
 }
 
-// Formato exato que o mobile recebe e assina via WebSocket
+// Exact format the mobile receives and signs
 export interface AuthChallenge {
   type: "challenge";
   nonce: string;
-  issuedAt: number; // timestamp Unix em ms
+  issuedAt: number; // Unix timestamp in ms
   origin: string;
 }
 
-// Resposta enviada pelo mobile após o usuário aprovar
+// Response sent by the mobile after the user approves
 export interface AuthResponse {
   approved: boolean;
   nonce: string;
-  signature: string;     // assinatura secp256k1 em hex ("0x...")
-  deviceAddress: string; // endereço Ethereum da chave do device
+  signature: string;     // secp256k1 signature in hex ("0x...")
+  deviceAddress: string; // Ethereum address derived from the device key
 }
 
 export interface VerifyAuthParams {
   challenge: AuthChallenge;
   response: AuthResponse;
-  ttlMs?: number; // tempo máximo de validade do challenge (padrão: 30s)
+  ttlMs?: number; // maximum challenge validity window (default: 30s)
 }
 
 export interface VerifyAuthResult {
