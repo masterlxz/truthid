@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useConnect } from "wagmi";
+import { ledger } from "../connectors/ledger";
 
 // Mensagem mostrada conforme o rótulo de erro que o comando Rust devolve
 // (ver classify_error em desktop/src-tauri/src/ledger.rs).
@@ -10,8 +12,8 @@ const INSTRUCTIONS: Record<string, string> = {
 };
 
 export function ConnectLedger() {
+  const { connectAsync } = useConnect();
   const [polling, setPolling] = useState(false);
-  const [address, setAddress] = useState<string | null>(null);
   const [status, setStatus] = useState("not_connected");
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -22,15 +24,17 @@ export function ConnectLedger() {
   }, []);
 
   function startPolling() {
-    setAddress(null);
     setStatus("not_connected");
     setPolling(true);
 
     intervalRef.current = setInterval(async () => {
       try {
-        const found = await invoke<string>("get_ledger_address");
+        // Só confirma que o dispositivo já responde — o connector da
+        // wagmi (chamado abaixo) pede o endereço de novo, dessa vez
+        // atualizando o estado global (useAccount) do app inteiro.
+        await invoke<string>("get_ledger_address");
         if (intervalRef.current) clearInterval(intervalRef.current);
-        setAddress(found);
+        await connectAsync({ connector: ledger });
         setPolling(false);
       } catch (e) {
         setStatus(String(e));
@@ -41,14 +45,6 @@ export function ConnectLedger() {
   function cancelPolling() {
     if (intervalRef.current) clearInterval(intervalRef.current);
     setPolling(false);
-  }
-
-  if (address) {
-    return (
-      <p className="muted">
-        Ledger conectada: <code className="address">{address}</code>
-      </p>
-    );
   }
 
   if (polling) {

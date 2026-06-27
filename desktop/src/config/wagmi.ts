@@ -1,6 +1,7 @@
 import { createConfig, http, fallback } from "wagmi";
 import { base } from "wagmi/chains";
 import { injected, walletConnect } from "wagmi/connectors";
+import { ledger } from "../connectors/ledger";
 
 // Project ID público do Reown/WalletConnect Cloud — identifica o app, não dá
 // acesso a nada (não é segredo). Necessário pro fluxo de QR code, já que o
@@ -14,6 +15,7 @@ export const config = createConfig({
   connectors: [
     injected(),
     walletConnect({ projectId: WALLETCONNECT_PROJECT_ID, showQrModal: true }),
+    ledger,
   ],
   transports: {
     // fallback: tenta o primeiro RPC, se falhar vai pro próximo

@@ -148,13 +148,20 @@ const NO_CHAIN_CODE: u8 = 0x00; // P2: não inclui chain code na resposta, não 
 /// primeiros componentes são "hardened" (bit mais alto ligado, `0x80000000`).
 const DEFAULT_DERIVATION_PATH: [u32; 5] = [0x8000_002c, 0x8000_003c, 0x8000_0000, 0, 0];
 
-/// Monta o APDU de GET_ADDRESS: CLA|INS|P1|P2|LC|DATA, onde DATA é o
-/// caminho de derivação (1 byte de profundidade + 4 bytes por componente).
-fn build_get_address_apdu() -> Vec<u8> {
+/// Codifica o caminho de derivação no formato esperado pelas APDUs do app
+/// Ethereum: 1 byte com a profundidade + 4 bytes big-endian por componente.
+fn encode_derivation_path() -> Vec<u8> {
     let mut data = vec![DEFAULT_DERIVATION_PATH.len() as u8];
     for component in DEFAULT_DERIVATION_PATH {
         data.extend_from_slice(&component.to_be_bytes());
     }
+    data
+}
+
+/// Monta o APDU de GET_ADDRESS: CLA|INS|P1|P2|LC|DATA, onde DATA é o
+/// caminho de derivação (1 byte de profundidade + 4 bytes por componente).
+fn build_get_address_apdu() -> Vec<u8> {
+    let data = encode_derivation_path();
 
     let mut apdu = vec![
         ETH_CLA,
@@ -209,4 +216,92 @@ pub fn get_ledger_address() -> Result<String, String> {
     let data = check_status(response).map_err(classify_error)?;
 
     parse_get_address_response(&data)
+}
+
+// --- Comando "assinar transação" do app Ethereum da Ledger ---
+
+const INS_SIGN: u8 = 0x04;
+const P1_FIRST_CHUNK: u8 = 0x00;
+const P1_FOLLOWING_CHUNK: u8 = 0x80;
+const NO_P2: u8 = 0x00;
+
+/// Tamanho máximo de dados por APDU de assinatura (mesmo limite usado
+/// publicamente pelo `@ledgerhq/hw-app-eth`) — diferente do tamanho do
+/// pacote HID (etapa 10.2): aqui é o protocolo do app Ethereum que decide
+/// fatiar uma transação grande em várias trocas de APDU, cada uma já
+/// fatiada de novo em pacotes HID por `write_apdu`/`read_apdu_response`.
+const SIGN_CHUNK_SIZE: usize = 150;
+
+/// Monta a sequência de APDUs SIGN_TX para uma transação já serializada
+/// (RLP, com o byte de tipo na frente para EIP-1559/2930). O 1º APDU leva
+/// o caminho de derivação + o início da transação; os seguintes (P1 =
+/// "continuação") só levam o restante dos bytes.
+fn build_sign_tx_apdus(unsigned_tx: &[u8]) -> Vec<Vec<u8>> {
+    let path = encode_derivation_path();
+    let mut apdus = Vec::new();
+    let mut offset = 0;
+    let mut first = true;
+
+    while first || offset < unsigned_tx.len() {
+        let header_len = if first { path.len() } else { 0 };
+        let chunk_len = (SIGN_CHUNK_SIZE - header_len).min(unsigned_tx.len() - offset);
+
+        let mut data = Vec::with_capacity(header_len + chunk_len);
+        if first {
+            data.extend_from_slice(&path);
+        }
+        data.extend_from_slice(&unsigned_tx[offset..offset + chunk_len]);
+
+        let p1 = if first { P1_FIRST_CHUNK } else { P1_FOLLOWING_CHUNK };
+        let mut apdu = vec![ETH_CLA, INS_SIGN, p1, NO_P2, data.len() as u8];
+        apdu.extend_from_slice(&data);
+        apdus.push(apdu);
+
+        offset += chunk_len;
+        first = false;
+    }
+
+    apdus
+}
+
+/// Resposta do SIGN_TX (só o último chunk importa): 1 byte de `v`
+/// (recovery id) + 32 bytes de `r` + 32 bytes de `s`. Devolve no mesmo
+/// formato que `sign_challenge` já usa (0x + r + s + v, v na convenção
+/// 27/28) pra quem chamar não precisar tratar dois formatos de assinatura
+/// diferentes no resto do app.
+fn parse_sign_tx_response(data: &[u8]) -> Result<String, String> {
+    if data.len() < 65 {
+        return Err("resposta de assinatura incompleta da Ledger".to_string());
+    }
+
+    let mut v = data[0];
+    if v < 27 {
+        v += 27;
+    }
+    let r = &data[1..33];
+    let s = &data[33..65];
+
+    Ok(format!("0x{}{}{:02x}", hex::encode(r), hex::encode(s), v))
+}
+
+/// Assina uma transação Ethereum já serializada (RLP) com a chave da
+/// Ledger (mesma conta/caminho do `get_ledger_address`). `unsigned_tx_hex`
+/// vem do lado TypeScript (serializado com `viem`), com ou sem prefixo
+/// "0x" — aqui só tratamos como bytes opacos, não decodificamos o RLP.
+/// Erro vem nos mesmos rótulos do `get_ledger_address`.
+#[tauri::command]
+pub fn sign_ledger_transaction(unsigned_tx_hex: String) -> Result<String, String> {
+    let unsigned_tx = hex::decode(unsigned_tx_hex.trim_start_matches("0x"))
+        .map_err(|e| e.to_string())?;
+
+    let api = HidApi::new().map_err(|e| e.to_string())?;
+    let device = open_ledger_device(&api).map_err(|_| "not_connected".to_string())?;
+
+    let mut last_response = Vec::new();
+    for apdu in build_sign_tx_apdus(&unsigned_tx) {
+        let response = send_apdu(&device, &apdu)?;
+        last_response = check_status(response).map_err(classify_error)?;
+    }
+
+    parse_sign_tx_response(&last_response)
 }

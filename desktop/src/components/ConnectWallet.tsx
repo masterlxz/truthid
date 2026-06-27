@@ -1,4 +1,5 @@
 import { useAccount, useConnect, useDisconnect } from "wagmi";
+import { LEDGER_CONNECTOR_ID } from "../connectors/ledger";
 import { ConnectLedger } from "./ConnectLedger";
 
 export function ConnectWallet() {
@@ -20,7 +21,7 @@ export function ConnectWallet() {
   return (
     <div className="card">
       <div className="actions-row">
-        {connectors.map((connector) => (
+        {connectors.filter((connector) => connector.id !== LEDGER_CONNECTOR_ID).map((connector) => (
           <button key={connector.id} onClick={() => connect({ connector })}>
             Conectar com {connector.name}
           </button>

@@ -77,7 +77,8 @@ pub fn run() {
             get_or_create_device_key,
             sign_challenge,
             ledger::is_ledger_connected,
-            ledger::get_ledger_address
+            ledger::get_ledger_address,
+            ledger::sign_ledger_transaction
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
