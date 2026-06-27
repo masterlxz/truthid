@@ -174,7 +174,7 @@ Antes de rodar pela primeira vez na sessão (ou após reiniciar o computador), o
 - [x] 4.3 — Scanner de QR code
 - [x] 4.4 — Tela: Aprovar login (exibir quem está pedindo, aprovar/recusar)
 - [x] 4.5 — Assinatura do challenge + envio via WebSocket relay
-- [ ] 4.6 — Tela: Meus dispositivos
+- [x] 4.6 — Tela: Meus dispositivos
 - [ ] 4.7 — Tela: Sessões ativas
 
 ---
@@ -295,6 +295,47 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-14 — Sessão 21
+
+- **Etapa 4.6 concluída** — Tela: Meus dispositivos
+  - `lib/services/local_storage_service.dart`: novo serviço para persistir identidade pareada
+    - `savePairedIdentity(identityId, username)`: grava no `flutter_secure_storage`
+    - `getPairedIdentity()`: retorna record `({String identityId, String username})?` ou null
+    - `clearPairedIdentity()`: apaga os dados salvos
+  - `lib/screens/devices_screen.dart`: nova tela "Dispositivos"
+    - `DevicesScreenState` (público, sem `_`): necessário para `GlobalKey` funcionar de fora do arquivo
+    - `reload()`: método público chamado pelo `RootScreen` via `GlobalKey` após pareamento
+    - Mostra card com endereço do device (copiável), chip de status (pareado / não registrado)
+    - Se pareado: exibe `@username` e botão "Remover pareamento"
+    - Se não pareado: exibe dica informativa em azul
+    - `RefreshIndicator` + `ListView`: habilita gesto "puxar para atualizar"
+    - Botão "Parear com identidade" chama `onScanPairing` (callback do pai)
+  - `lib/screens/pairing_screen.dart`: nova tela do fluxo de pareamento
+    - Estados: `connecting → sent → confirmed / error`
+    - Conecta ao relay WebSocket com `signalingUrl` e `roomId` do QR
+    - Envia `{ type: "pair-request", pubKey, label: "TruthID Mobile" }`
+    - Aguarda `{ type: "pair-confirmed", username, identityId }` do desktop
+    - `Navigator.pop(context, true/false)`: avisa o pai se o pareamento foi bem-sucedido
+    - Desktop atual não manda `pair-confirmed` ainda — mobile fica em estado `sent`
+  - `lib/main.dart`: refatorado para estrutura com abas
+    - `DeviceInfoScreen` substituído por `RootScreen`
+    - `IndexedStack`: mantém todas as abas na memória (não destrói ao trocar de aba)
+    - `BottomNavigationBar`: abas "Dispositivos" e "Sessões"
+    - `GlobalKey<DevicesScreenState>`: referência ao State do DevicesScreen para chamar `reload()`
+    - Botão de scan movido para o `AppBar` (ícone no canto superior direito)
+    - `push<bool>` para `PairingScreen`: recebe `true/false` como resultado da navegação
+    - Aba "Sessões" é um placeholder (`_SessionsPlaceholder`) para a etapa 4.7
+  - APK debug gerado com sucesso
+- Conceitos ensinados:
+  - `BottomNavigationBar`: barra de abas no rodapé — padrão de navegação de apps mobile
+  - `IndexedStack`: empilha todas as telas, mostra apenas a do índice ativo — preserva estado entre trocas de aba
+  - `GlobalKey<T>`: referência direta ao `State` de um widget — permite chamar métodos de fora do widget
+  - State público (sem `_`): necessário quando o `GlobalKey` é usado em outro arquivo
+  - `push<T>` + `pop(context, value)`: retornar valores entre telas — o filho avisa o pai do resultado
+  - `RefreshIndicator`: gesto "puxar para atualizar" — requer filho scrollável (`ListView`)
+  - Record Dart `({String a, String b})`: retornar múltiplos valores nomeados sem criar uma classe — equivalente a `namedtuple` do Python
+- **Próximo passo ao retomar**: Etapa 4.7 — Tela: Sessões ativas
 
 ### 2026-06-14 — Sessão 20
 

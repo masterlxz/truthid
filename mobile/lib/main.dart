@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'screens/approval_screen.dart';
+import 'screens/devices_screen.dart';
+import 'screens/pairing_screen.dart';
 import 'screens/scan_screen.dart';
-import 'services/device_key_service.dart';
 
 void main() {
   runApp(const TruthIDApp());
@@ -17,32 +18,24 @@ class TruthIDApp extends StatelessWidget {
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
       ),
-      home: const DeviceInfoScreen(),
+      home: const RootScreen(),
     );
   }
 }
 
-class DeviceInfoScreen extends StatefulWidget {
-  const DeviceInfoScreen({super.key});
+class RootScreen extends StatefulWidget {
+  const RootScreen({super.key});
 
   @override
-  State<DeviceInfoScreen> createState() => _DeviceInfoScreenState();
+  State<RootScreen> createState() => _RootScreenState();
 }
 
-class _DeviceInfoScreenState extends State<DeviceInfoScreen> {
-  final _keyService = DeviceKeyService();
-  String? _deviceAddress;
+class _RootScreenState extends State<RootScreen> {
+  int _currentIndex = 0;
 
-  @override
-  void initState() {
-    super.initState();
-    _loadDeviceAddress();
-  }
-
-  Future<void> _loadDeviceAddress() async {
-    final address = await _keyService.getDeviceAddress();
-    setState(() => _deviceAddress = address);
-  }
+  // GlobalKey: referência direta ao State do DevicesScreen.
+  // Permite chamar devicesKey.currentState?.reload() de qualquer lugar aqui.
+  final _devicesKey = GlobalKey<DevicesScreenState>();
 
   Future<void> _openScanner() async {
     final payload = await Navigator.of(context).push<Map<String, dynamic>>(
@@ -53,14 +46,21 @@ class _DeviceInfoScreenState extends State<DeviceInfoScreen> {
     final action = payload['action'] as String?;
 
     if (action == 'truthid-auth') {
-      // Pedido de login — abre a tela de aprovação
+      // QR de login — abre a tela de aprovação
       Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => ApprovalScreen(payload: payload),
-        ),
+        MaterialPageRoute(builder: (_) => ApprovalScreen(payload: payload)),
       );
+    } else if (action == 'truthid-pair') {
+      // QR de pareamento — abre PairingScreen e aguarda o resultado
+      // push<bool> porque PairingScreen faz Navigator.pop(context, true/false)
+      final success = await Navigator.of(context).push<bool>(
+        MaterialPageRoute(builder: (_) => PairingScreen(payload: payload)),
+      );
+      // Se o pareamento foi confirmado, recarrega o DevicesScreen via GlobalKey
+      if (success == true) {
+        _devicesKey.currentState?.reload();
+      }
     } else {
-      // QR desconhecido ou de outra ação (ex: truthid-pair)
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('QR não reconhecido: ${action ?? "sem action"}')),
       );
@@ -73,34 +73,69 @@ class _DeviceInfoScreenState extends State<DeviceInfoScreen> {
       appBar: AppBar(
         title: const Text('TruthID'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        actions: [
+          // Botão de scan no AppBar — acessível de qualquer aba
+          IconButton(
+            icon: const Icon(Icons.qr_code_scanner),
+            onPressed: _openScanner,
+            tooltip: 'Escanear QR',
+          ),
+        ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Endereço deste device:', style: TextStyle(fontSize: 16)),
-            const SizedBox(height: 12),
-            _deviceAddress == null
-                ? const CircularProgressIndicator()
-                : SelectableText(
-                    _deviceAddress!,
-                    style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
-                  ),
-            const SizedBox(height: 40),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton.icon(
-                onPressed: _openScanner,
-                icon: const Icon(Icons.qr_code_scanner),
-                label: const Text('Escanear QR'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                ),
-              ),
-            ),
-          ],
-        ),
+
+      // IndexedStack: mantém todas as telas na memória, mostra apenas a ativa.
+      // Diferente de trocar o body, que destruiria e recriaria as telas.
+      body: IndexedStack(
+        index: _currentIndex,
+        children: [
+          DevicesScreen(
+            key: _devicesKey,
+            onScanPairing: _openScanner,
+          ),
+          const _SessionsPlaceholder(),
+        ],
+      ),
+
+      bottomNavigationBar: BottomNavigationBar(
+        currentIndex: _currentIndex,
+        onTap: (i) => setState(() => _currentIndex = i),
+        items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.phone_android),
+            label: 'Dispositivos',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.history),
+            label: 'Sessões',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Placeholder para a aba de Sessões — será implementada na etapa 4.7
+class _SessionsPlaceholder extends StatelessWidget {
+  const _SessionsPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.history, size: 64, color: Colors.grey.shade300),
+          const SizedBox(height: 16),
+          Text(
+            'Sessões ativas',
+            style: TextStyle(fontSize: 18, color: Colors.grey.shade500),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Em breve...',
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+          ),
+        ],
       ),
     );
   }
