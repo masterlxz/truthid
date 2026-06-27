@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>TruthID — Website (Offerer)</title>
+  <style>
+    body { font-family: monospace; max-width: 600px; margin: 40px auto; padding: 0 20px; }
+    button { padding: 8px 16px; margin: 4px; cursor: pointer; }
+    #log { background: #111; color: #0f0; padding: 16px; height: 300px; overflow-y: auto; white-space: pre-wrap; }
+    #room-link { word-break: break-all; background: #f5f5f5; padding: 8px; margin: 8px 0; }
+    #message-area { display: none; }
+    input { padding: 6px; width: 300px; }
+  </style>
+</head>
+<body>
+  <h2>TruthID — Website (Offerer)</h2>
+  <button id="btn-start">1. Criar sala e iniciar conexão</button>
+  <div id="room-link"></div>
+
+  <div id="message-area">
+    <hr>
+    <input id="msg-input" placeholder="Mensagem para o mobile..." />
+    <button id="btn-send">Enviar via P2P</button>
+  </div>
+
+  <hr>
+  <div id="log"></div>
+
+  <script>
+    const SIGNALING = 'ws://localhost:8000';
+    const API = 'http://localhost:8000';
+    const STUN_SERVERS = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun.cloudflare.com:3478' },
+    ];
+
+    let pc, ws, dataChannel;
+
+    function log(msg) {
+      const el = document.getElementById('log');
+      el.textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+      el.scrollTop = el.scrollHeight;
+    }
+
+    document.getElementById('btn-start').addEventListener('click', async () => {
+      document.getElementById('btn-start').disabled = true;
+
+      // 1. Cria sala no servidor de sinalização
+      let res, room_id;
+      try {
+        res = await fetch(`${API}/rooms`, { method: 'POST' });
+        ({ room_id } = await res.json());
+      } catch (err) {
+        log(`ERRO ao criar sala: ${err.message}`);
+        log('O servidor de sinalização está rodando em localhost:8000?');
+        document.getElementById('btn-start').disabled = false;
+        return;
+      }
+      log(`Sala criada: ${room_id}`);
+
+      // Exibe link para o mobile entrar (simula QR code)
+      const mobileUrl = `${location.origin}/mobile.html?room=${room_id}`;
+      document.getElementById('room-link').innerHTML =
+        `<b>Link para o mobile (simula QR):</b><br><a href="${mobileUrl}" target="_blank">${mobileUrl}</a>`;
+
+      // 2. Conecta ao WebSocket de sinalização
+      ws = new WebSocket(`${SIGNALING}/rooms/${room_id}`);
+      ws.onopen = () => log('Conectado à sinalização');
+      ws.onmessage = (evt) => handleSignal(JSON.parse(evt.data));
+
+      // 3. Cria RTCPeerConnection com servidores STUN
+      pc = new RTCPeerConnection({ iceServers: STUN_SERVERS });
+
+      // Quando o ICE encontrar um candidato, envia pela sinalização
+      pc.onicecandidate = ({ candidate }) => {
+        if (candidate) {
+          log(`ICE candidate encontrado: ${candidate.type}`);
+          ws.send(JSON.stringify({ type: 'ice', candidate }));
+        }
+      };
+
+      pc.onconnectionstatechange = () => {
+        log(`Estado da conexão: ${pc.connectionState}`);
+        if (pc.connectionState === 'connected') {
+          log('*** CONEXÃO P2P ESTABELECIDA! ***');
+          document.getElementById('message-area').style.display = 'block';
+        }
+      };
+
+      // 4. Cria data channel (canal de dados P2P)
+      dataChannel = pc.createDataChannel('auth');
+      dataChannel.onopen = () => log('Data channel aberto');
+      dataChannel.onmessage = (evt) => log(`Mensagem recebida (P2P): ${evt.data}`);
+
+      log('Aguardando o mobile entrar na sala...');
+    });
+
+    async function handleSignal(msg) {
+      if (msg.type === 'ready') {
+        log('Mobile entrou na sala — criando oferta SDP...');
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        log('Oferta SDP criada — enviando pela sinalização...');
+        ws.send(JSON.stringify({ type: 'offer', sdp: offer.sdp }));
+      } else if (msg.type === 'answer') {
+        log('Resposta SDP recebida do mobile');
+        await pc.setRemoteDescription({ type: 'answer', sdp: msg.sdp });
+      } else if (msg.type === 'ice') {
+        log(`ICE candidate recebido do mobile: ${msg.candidate.type}`);
+        await pc.addIceCandidate(msg.candidate);
+      }
+    }
+
+    document.getElementById('btn-send').addEventListener('click', () => {
+      const input = document.getElementById('msg-input');
+      if (dataChannel && dataChannel.readyState === 'open') {
+        dataChannel.send(input.value);
+        log(`Mensagem enviada (P2P): ${input.value}`);
+        input.value = '';
+      }
+    });
+  </script>
+</body>
+</html>
