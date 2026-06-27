@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   useAccount,
   useReadContract,
@@ -6,8 +6,7 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
 } from "wagmi";
-import { keccak256, encodePacked } from "viem";
-import { QRCodeSVG } from "qrcode.react";
+import { keccak256, encodePacked, isAddress } from "viem";
 import {
   IDENTITY_REGISTRY_ADDRESS,
   IDENTITY_REGISTRY_ABI,
@@ -15,9 +14,6 @@ import {
   DEVICE_REGISTRY_ABI,
 } from "../config/contracts";
 import { DesktopDevice } from "./DesktopDevice";
-
-// URL do servidor de sinalização (o mesmo da Fase 2)
-const SIGNALING_URL = "http://localhost:8000";
 
 // ─── Componente principal ─────────────────────────────────────────────────────
 
@@ -116,7 +112,6 @@ export function ManageDevices({ username }: { username: string }) {
       <hr />
 
       <PairDevice
-        signalingUrl={SIGNALING_URL}
         onDeviceRegistered={() => {
           refetchDevices();
           refetchDeviceDetails();
@@ -200,33 +195,30 @@ function DeviceList({
   );
 }
 
-// ─── Pareamento via QR ────────────────────────────────────────────────────────
+// ─── Pareamento ──────────────────────────────────────────────────────────────
 
 // Este componente:
-// 1. Cria uma sala no servidor de sinalização (POST /rooms)
-// 2. Gera um QR code com as informações de conexão
-// 3. Abre um WebSocket na sala e aguarda o mobile se conectar
-// 4. Quando o mobile envia sua chave pública, registra o device na blockchain
+// 1. Mostra um campo pra colar o endereço que o celular exibe (tela "Mostrar
+//    QR para parear" do app mobile — hoje sem leitura de câmera no desktop,
+//    só colar; câmera pode ser adicionada depois como melhoria de UX)
+// 2. Registra esse endereço na blockchain via commit-reveal (2 transações)
+//
+// Não existe troca de mensagem ao vivo com o celular — o celular já mostrou
+// o endereço dele (não precisa de rede pra isso), e aqui só confirmamos a
+// transação. O próprio celular detecta quando terminou fazendo polling
+// on-chain (ver ShowDeviceQrScreen no mobile).
 
-function PairDevice({ signalingUrl, onDeviceRegistered }: {
-  signalingUrl: string;
+function PairDevice({ onDeviceRegistered }: {
   onDeviceRegistered: () => void;
 }) {
   const { address: controllerAddress } = useAccount();
 
   const [isOpen, setIsOpen] = useState(false);
-  const [roomId, setRoomId] = useState<string | null>(null);
-  const [pairRequest, setPairRequest] = useState<{ pubKey: string; label: string } | null>(null);
+  const [addressInput, setAddressInput] = useState("");
   const [labelInput, setLabelInput] = useState("");
-  const [error, setError] = useState<string | null>(null);
 
-  // useRef: guarda a conexão WebSocket sem causar re-render quando muda.
-  // É como uma variável de instância — existe na "memória" do componente,
-  // mas alterá-la não redesenha a tela.
-  const wsRef = useRef<WebSocket | null>(null);
-
-  // Registro em 2 passos (commit-reveal) — esconde o devicePubKey do mobile
-  // até a confirmação, impedindo front-running (ver auditoria, achado #7).
+  // Registro em 2 passos (commit-reveal) — esconde o devicePubKey até a
+  // confirmação, impedindo front-running (ver auditoria, achado #7).
   const [registerPhase, setRegisterPhase] = useState<"idle" | "committing" | "registering">("idle");
   const [salt, setSalt] = useState<`0x${string}` | null>(null);
 
@@ -242,14 +234,14 @@ function PairDevice({ signalingUrl, onDeviceRegistered }: {
   useEffect(() => {
     if (!isRegisterSuccess) return;
 
-    if (registerPhase === "committing" && pairRequest && salt) {
+    if (registerPhase === "committing" && salt && isAddress(addressInput)) {
       // Commit confirmado — passo 2: revelar devicePubKey + salt
       setRegisterPhase("registering");
       sendRegister({
         address: DEVICE_REGISTRY_ADDRESS,
         abi: DEVICE_REGISTRY_ABI,
         functionName: "registerDevice",
-        args: [pairRequest.pubKey as `0x${string}`, labelInput, salt],
+        args: [addressInput as `0x${string}`, labelInput, salt],
       });
     } else if (registerPhase === "registering") {
       setRegisterPhase("idle");
@@ -258,70 +250,16 @@ function PairDevice({ signalingUrl, onDeviceRegistered }: {
     }
   }, [isRegisterSuccess]);
 
-  // ── Abrir o painel de pareamento ──────────────────────────────────────────
-  async function startPairing() {
-    setError(null);
-    setPairRequest(null);
-    setLabelInput("");
-
-    // 1. Criar sala no servidor de sinalização
-    let id: string;
-    try {
-      const res = await fetch(`${signalingUrl}/rooms`, { method: "POST" });
-      const json = await res.json();
-      id = json.room_id;
-    } catch {
-      setError("Servidor de sinalização indisponível. Rode o signaling server primeiro.");
-      return;
-    }
-
-    setRoomId(id);
-    setIsOpen(true);
-
-    // 2. Abrir WebSocket na sala e esperar o mobile se conectar
-    // `new WebSocket(url)` abre uma conexão persistente com o servidor.
-    // Diferente de fetch (que faz uma requisição e fecha), WebSocket fica
-    // aberto e recebe mensagens a qualquer momento.
-    const ws = new WebSocket(`ws://localhost:8000/rooms/${id}`);
-
-    ws.onmessage = (event) => {
-      // O mobile vai enviar: { type: "pair-request", pubKey: "0x...", label: "iPhone 15" }
-      try {
-        const msg = JSON.parse(event.data);
-        if (msg.type === "pair-request" && msg.pubKey && msg.label) {
-          setPairRequest({ pubKey: msg.pubKey, label: msg.label });
-          setLabelInput(msg.label);
-        }
-      } catch {
-        // ignora mensagens malformadas
-      }
-    };
-
-    ws.onerror = () => setError("Erro na conexão WebSocket com o servidor de sinalização.");
-
-    wsRef.current = ws;
-  }
-
   function closePairing() {
-    wsRef.current?.close();
-    wsRef.current = null;
     setIsOpen(false);
-    setRoomId(null);
-    setPairRequest(null);
+    setAddressInput("");
     setLabelInput("");
-    setError(null);
     setRegisterPhase("idle");
     setSalt(null);
   }
 
-  // Fechar WebSocket quando o componente for desmontado da tela
-  // (useEffect com array vazio + return = "roda na desmontagem")
-  useEffect(() => {
-    return () => wsRef.current?.close();
-  }, []);
-
   function handleRegister() {
-    if (!pairRequest || !controllerAddress) return;
+    if (!controllerAddress || !isAddress(addressInput) || !labelInput) return;
 
     const saltBytes = crypto.getRandomValues(new Uint8Array(32));
     const newSalt = `0x${Array.from(saltBytes)
@@ -332,7 +270,7 @@ function PairDevice({ signalingUrl, onDeviceRegistered }: {
     const commitment = keccak256(
       encodePacked(
         ["address", "bytes32", "address"],
-        [pairRequest.pubKey as `0x${string}`, newSalt, controllerAddress]
+        [addressInput as `0x${string}`, newSalt, controllerAddress]
       )
     );
 
@@ -347,68 +285,60 @@ function PairDevice({ signalingUrl, onDeviceRegistered }: {
 
   if (!isOpen) {
     return (
-      <button onClick={startPairing}>+ Adicionar device via QR</button>
+      <button onClick={() => setIsOpen(true)}>+ Adicionar dispositivo</button>
     );
   }
 
-  // O QR code contém um JSON com:
-  //   - action: identifica que é um pedido de pareamento TruthID
-  //   - signalingUrl: onde o mobile deve se conectar
-  //   - roomId: qual sala entrar
-  const qrPayload = JSON.stringify({
-    action: "truthid-pair",
-    signalingUrl: "ws://localhost:8000",
-    roomId,
-  });
+  const addressIsValid = addressInput.length === 0 || isAddress(addressInput);
 
   return (
     <div>
       <h3>Adicionar dispositivo</h3>
 
-      {error && <p style={{ color: "red" }}>{error}</p>}
+      <p>
+        No celular, abra <strong>Dispositivos → Mostrar QR para parear</strong> e
+        cole aqui o endereço exibido:
+      </p>
 
-      {!pairRequest && (
-        <>
-          <p>Escaneie o QR code com o app TruthID no seu celular:</p>
-          <QRCodeSVG value={qrPayload} size={200} />
-          <br />
-          <small style={{ fontFamily: "monospace", wordBreak: "break-all" }}>
-            Sala: {roomId}
-          </small>
-          <p><em>Aguardando o celular se conectar...</em></p>
-        </>
-      )}
+      <label>
+        Endereço do dispositivo:
+        <br />
+        <input
+          value={addressInput}
+          onChange={(e) => setAddressInput(e.target.value.trim())}
+          placeholder="0x..."
+          disabled={registerPhase !== "idle"}
+          style={{ fontFamily: "monospace", width: "100%" }}
+        />
+      </label>
+      {!addressIsValid && <p style={{ color: "red" }}>Endereço inválido.</p>}
 
-      {pairRequest && (
-        <div>
-          <p>Dispositivo encontrado: <strong>{pairRequest.pubKey.slice(0, 10)}…</strong></p>
-          <label>
-            Nome do dispositivo:
-            <br />
-            <input
-              value={labelInput}
-              onChange={(e) => setLabelInput(e.target.value)}
-              placeholder="ex: iPhone 15 Pro"
-              disabled={registerPhase !== "idle"}
-            />
-          </label>
-          <br />
-          <button
-            onClick={handleRegister}
-            disabled={!labelInput || registerPhase !== "idle"}
-          >
-            {registerPhase === "committing" && isRegisterPending
-              ? "Confirme no MetaMask (1/2)..."
-              : registerPhase === "committing" && isRegisterConfirming
-              ? "Preparando registro (1/2)..."
-              : registerPhase === "registering" && isRegisterPending
-              ? "Confirme no MetaMask (2/2)..."
-              : registerPhase === "registering" && isRegisterConfirming
-              ? "Aguardando rede (2/2)..."
-              : "Registrar dispositivo"}
-          </button>
-        </div>
-      )}
+      <br />
+      <label>
+        Nome do dispositivo:
+        <br />
+        <input
+          value={labelInput}
+          onChange={(e) => setLabelInput(e.target.value)}
+          placeholder="ex: iPhone 15 Pro"
+          disabled={registerPhase !== "idle"}
+        />
+      </label>
+      <br />
+      <button
+        onClick={handleRegister}
+        disabled={!isAddress(addressInput) || !labelInput || registerPhase !== "idle"}
+      >
+        {registerPhase === "committing" && isRegisterPending
+          ? "Confirme no MetaMask (1/2)..."
+          : registerPhase === "committing" && isRegisterConfirming
+          ? "Preparando registro (1/2)..."
+          : registerPhase === "registering" && isRegisterPending
+          ? "Confirme no MetaMask (2/2)..."
+          : registerPhase === "registering" && isRegisterConfirming
+          ? "Aguardando rede (2/2)..."
+          : "Registrar dispositivo"}
+      </button>
 
       <br />
       <button onClick={closePairing}>Cancelar</button>

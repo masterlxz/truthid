@@ -139,23 +139,23 @@ New root wallet becomes controller.
 
 ## Add Device
 
-1. Existing trusted device creates pairing QR code.
-2. New device scans QR code.
-3. New device generates key pair.
-4. Root wallet signs approval transaction.
-5. Device becomes trusted.
+1. New device generates its key pair locally.
+2. New device displays a QR code containing its own address (it already has the only piece of information missing — no network round-trip needed to deliver it).
+3. Existing trusted device (Desktop, holding the root wallet) reads that QR (camera or manual paste).
+4. Root wallet signs the approval transaction (commit-reveal, on-chain).
+5. Device becomes trusted. The new device confirms this by polling the blockchain directly — no live connection between the two devices at any point.
 
 ---
 
 ## Authentication Flow
 
-1. Website displays QR code.
-2. User scans QR code using trusted mobile device.
+1. Website backend creates a challenge and embeds it directly in the QR code, along with an HTTPS callback URL (typically the website's own `/auth/verify` endpoint).
+2. User scans QR code using trusted mobile device — the challenge is already in hand, no network call needed to receive it.
 3. Mobile app displays login request.
 4. User approves.
-5. Device signs authentication challenge.
-6. Website verifies signature.
-7. User is logged in.
+5. Device signs the challenge and POSTs the signed response directly to the callback URL — no TruthID-operated server in this path.
+6. Website verifies signature (SDK).
+7. User is logged in. The website's own frontend learns this however the website already notifies its frontend of backend events (polling, SSE, etc.) — outside TruthID's scope.
 
 No password required.
 
@@ -280,34 +280,24 @@ Responsibilities:
 
 ---
 
-## Communication Layer (WebRTC)
+## Communication Layer
 
 Purpose:
 
-Enable direct P2P communication between website and mobile app.
+Move the challenge and the signed response between website and mobile app without any TruthID-operated server in the path.
 
-Architecture:
+Architecture (no WebRTC, no relay — superseded a real-time WebRTC P2P design that was planned but never shipped; the actual implementation uses two simpler, server-free mechanisms):
 
-* STUN: multiple public servers (Google, Cloudflare) for P2P discovery
-* TURN: self-hostable fallback (coturn) for ~10% of cases where direct P2P fails
-* Signaling Server: lightweight stateless WebSocket server for initial connection setup only
+* Login: the challenge travels inside the QR code itself (no network call needed to deliver it). The signed response travels via a direct HTTPS POST from the mobile device to a callback URL chosen by the website — typically the website's own backend, which it already runs.
+* Device pairing: the new device's address travels inside a QR code it generates itself (it's the only side that already has this data). The existing trusted device (Desktop) reads it — camera scan or manual paste — and submits the on-chain registration transaction. Confirmation happens by polling the blockchain directly, no live channel between the two devices.
 
-Responsibilities:
+Neither flow requires:
 
-* Exchange WebRTC connection info (SDP offer/answer, ICE candidates)
-* Establish direct P2P channel between website and mobile
+* A signaling server
+* STUN/TURN
+* Any server operated by TruthID
 
-The signaling server does NOT see:
-
-* Authentication challenges
-* Signed responses
-* Private keys
-
-All authentication data travels P2P encrypted via WebRTC data channels.
-
-The signaling server is abstracted behind a SignalingAdapter interface.
-
-Future implementations can use on-chain signaling or other protocols without changing the rest of the system.
+Each website is responsible for its own backend (which it needs anyway to decide what an authenticated user can do) — this is the same trust boundary as any OAuth-style callback URL.
 
 ---
 
@@ -401,7 +391,6 @@ Core protocol remains open source.
 
 Possible monetization:
 
-* Hosted relay service
 * Enterprise support
 * Managed infrastructure
 * Premium analytics

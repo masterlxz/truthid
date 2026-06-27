@@ -17,7 +17,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
 
   bool _isLoading = true;
   bool _isPaired = false;
-  String? _username;
+  String? _pairedIdentityId;
   String? _deviceAddress;
   List<SessionInfo>? _sessions;
   String? _error;
@@ -34,11 +34,11 @@ class _SessionsScreenState extends State<SessionsScreen> {
       _error = null;
     });
 
-    final identity = await _storage.getPairedIdentity();
+    final identityId = await _storage.getPairedIdentityId();
     final address = await _keyService.getDeviceAddress();
 
     // Sem identidade pareada: só mostra a tela de "não pareado"
-    if (identity == null) {
+    if (identityId == null) {
       if (mounted) {
         setState(() {
           _isPaired = false;
@@ -51,13 +51,12 @@ class _SessionsScreenState extends State<SessionsScreen> {
 
     try {
       // identityId foi salvo como String no storage — precisa converter para BigInt
-      final identityId = BigInt.parse(identity.identityId);
-      final sessions = await _blockchain.getSessionsForIdentity(identityId);
+      final sessions = await _blockchain.getSessionsForIdentity(BigInt.parse(identityId));
 
       if (mounted) {
         setState(() {
           _isPaired = true;
-          _username = identity.username;
+          _pairedIdentityId = identityId;
           _deviceAddress = address;
           _sessions = sessions;
           _isLoading = false;
@@ -67,7 +66,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
       if (mounted) {
         setState(() {
           _isPaired = true;
-          _username = identity.username;
+          _pairedIdentityId = identityId;
           _isLoading = false;
           _error = e.toString();
         });
@@ -118,7 +117,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
           Row(
             children: [
               Text(
-                '@$_username',
+                'Identidade #$_pairedIdentityId',
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const Spacer(),

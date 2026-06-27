@@ -22,13 +22,30 @@ class SessionInfo {
       '0x${hash.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
 }
 
+// Dados de um device retornados pelo DeviceRegistry — usado pelo polling
+// da tela de pareamento (ShowDeviceQrScreen) pra saber quando o desktop
+// terminou de registrar este device.
+class DeviceInfo {
+  final BigInt identityId;
+  final bool revoked;
+  final bool exists;
+
+  const DeviceInfo({
+    required this.identityId,
+    required this.revoked,
+    required this.exists,
+  });
+}
+
 class BlockchainService {
   static const _rpcUrl = 'https://mainnet.base.org';
   static const _sessionRegistryAddress =
       '0x24074587a2aFB3aa5491361BB0a5eBee90797D1B';
+  static const _deviceRegistryAddress =
+      '0x4A7a307cb6872bde24BAf3E9de2BeC3Ddd03e144';
 
   // ABI: apenas as funções que vamos usar (não precisa do ABI completo)
-  static final _contract = DeployedContract(
+  static final _sessionContract = DeployedContract(
     ContractAbi.fromJson('''[
       {
         "type": "function",
@@ -66,10 +83,37 @@ class BlockchainService {
     EthereumAddress.fromHex(_sessionRegistryAddress),
   );
 
+  static final _deviceContract = DeployedContract(
+    ContractAbi.fromJson('''[
+      {
+        "type": "function",
+        "name": "getDevice",
+        "inputs": [{"name": "devicePubKey", "type": "address"}],
+        "outputs": [{
+          "name": "",
+          "type": "tuple",
+          "components": [
+            {"name": "identityId", "type": "uint256"},
+            {"name": "pubKey", "type": "address"},
+            {"name": "label", "type": "string"},
+            {"name": "addedAt", "type": "uint256"},
+            {"name": "revoked", "type": "bool"},
+            {"name": "exists", "type": "bool"}
+          ]
+        }],
+        "stateMutability": "view"
+      }
+    ]''',
+        'DeviceRegistry'),
+    EthereumAddress.fromHex(_deviceRegistryAddress),
+  );
+
   // Faz uma leitura (eth_call) no contrato e retorna os valores decodificados.
   // eth_call é como um GET: não gasta gas, não precisa de wallet.
+  // contractAddress é parâmetro porque agora lemos de mais de um contrato
+  // (SessionRegistry e DeviceRegistry) com a mesma função.
   Future<List<dynamic>> _ethCall(
-      ContractFunction fn, List<dynamic> params) async {
+      String contractAddress, ContractFunction fn, List<dynamic> params) async {
     // 1. Codifica a chamada (nome da função + parâmetros) em binário ABI
     final callData = fn.encodeCall(params);
     final callDataHex =
@@ -84,7 +128,7 @@ class BlockchainService {
         'jsonrpc': '2.0',
         'method': 'eth_call',
         'params': [
-          {'to': _sessionRegistryAddress, 'data': callDataHex},
+          {'to': contractAddress, 'data': callDataHex},
           'latest',
         ],
         'id': 1,
@@ -109,8 +153,8 @@ class BlockchainService {
 
   Future<List<SessionInfo>> getSessionsForIdentity(BigInt identityId) async {
     // Passo 1: busca a lista de hashes de sessão da identidade
-    final fn = _contract.function('getSessionsByIdentity');
-    final result = await _ethCall(fn, [identityId]);
+    final fn = _sessionContract.function('getSessionsByIdentity');
+    final result = await _ethCall(_sessionRegistryAddress, fn, [identityId]);
     final hashes = (result[0] as List<dynamic>).cast<Uint8List>();
 
     if (hashes.isEmpty) return [];
@@ -121,13 +165,13 @@ class BlockchainService {
     final sessions = await Future.wait(
       hashes.map((hash) async {
         try {
-          final getSessionFn = _contract.function('getSession');
-          final isRevokedFn = _contract.function('isSessionRevoked');
+          final getSessionFn = _sessionContract.function('getSession');
+          final isRevokedFn = _sessionContract.function('isSessionRevoked');
 
           // Busca metadados e status de revogação em paralelo
           final results = await Future.wait([
-            _ethCall(getSessionFn, [hash]),
-            _ethCall(isRevokedFn, [hash]),
+            _ethCall(_sessionRegistryAddress, getSessionFn, [hash]),
+            _ethCall(_sessionRegistryAddress, isRevokedFn, [hash]),
           ]);
 
           final tuple = results[0][0] as List<dynamic>;
@@ -151,5 +195,31 @@ class BlockchainService {
     // whereType<T>() filtra nulls e faz o cast — equivale a
     // [s for s in sessions if s is not None] em Python
     return sessions.whereType<SessionInfo>().toList();
+  }
+
+  // Leitura usada no polling do pareamento: confirma se este device já foi
+  // registrado pelo desktop. Retorna null se ainda não existe ou se a
+  // chamada falhar (rede instável) — quem chama trata os dois casos igual:
+  // "ainda não, tenta de novo na próxima rodada".
+  Future<DeviceInfo?> getDevice(String address) async {
+    try {
+      final fn = _deviceContract.function('getDevice');
+      final result = await _ethCall(
+        _deviceRegistryAddress,
+        fn,
+        [EthereumAddress.fromHex(address)],
+      );
+      final tuple = result[0] as List<dynamic>;
+      final exists = tuple[5] as bool;
+      if (!exists) return null;
+
+      return DeviceInfo(
+        identityId: tuple[0] as BigInt,
+        revoked: tuple[4] as bool,
+        exists: true,
+      );
+    } catch (_) {
+      return null;
+    }
   }
 }

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'screens/approval_screen.dart';
 import 'screens/devices_screen.dart';
-import 'screens/pairing_screen.dart';
 import 'screens/scan_screen.dart';
 import 'screens/sessions_screen.dart';
 
@@ -34,10 +33,8 @@ class RootScreen extends StatefulWidget {
 class _RootScreenState extends State<RootScreen> {
   int _currentIndex = 0;
 
-  // GlobalKey: referência direta ao State do DevicesScreen.
-  // Permite chamar devicesKey.currentState?.reload() de qualquer lugar aqui.
-  final _devicesKey = GlobalKey<DevicesScreenState>();
-
+  // Único uso restante do scanner: ler o QR de login de um site (truthid-auth).
+  // Pareamento de device não escaneia mais nada — ver ShowDeviceQrScreen.
   Future<void> _openScanner() async {
     final payload = await Navigator.of(context).push<Map<String, dynamic>>(
       MaterialPageRoute(builder: (_) => const ScanScreen()),
@@ -51,16 +48,6 @@ class _RootScreenState extends State<RootScreen> {
       Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => ApprovalScreen(payload: payload)),
       );
-    } else if (action == 'truthid-pair') {
-      // QR de pareamento — abre PairingScreen e aguarda o resultado
-      // push<bool> porque PairingScreen faz Navigator.pop(context, true/false)
-      final success = await Navigator.of(context).push<bool>(
-        MaterialPageRoute(builder: (_) => PairingScreen(payload: payload)),
-      );
-      // Se o pareamento foi confirmado, recarrega o DevicesScreen via GlobalKey
-      if (success == true) {
-        _devicesKey.currentState?.reload();
-      }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('QR não reconhecido: ${action ?? "sem action"}')),
@@ -88,12 +75,9 @@ class _RootScreenState extends State<RootScreen> {
       // Diferente de trocar o body, que destruiria e recriaria as telas.
       body: IndexedStack(
         index: _currentIndex,
-        children: [
-          DevicesScreen(
-            key: _devicesKey,
-            onScanPairing: _openScanner,
-          ),
-          const SessionsScreen(),
+        children: const [
+          DevicesScreen(),
+          SessionsScreen(),
         ],
       ),
 

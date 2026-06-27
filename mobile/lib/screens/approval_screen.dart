@@ -7,15 +7,16 @@ import '../services/device_key_service.dart';
 
 // Estados possíveis da tela — do início ao fim do fluxo de login
 enum _Status {
-  connecting,  // abrindo WebSocket com o servidor de sinalização
-  waiting,     // aguardando o challenge chegar
-  challenge,   // challenge recebido — mostrando UI de aprovar/recusar
+  challenge,   // challenge lido do QR — mostrando UI de aprovar/recusar
   done,        // usuário respondeu — resposta enviada
   error,       // algo deu errado
 }
 
 class ApprovalScreen extends StatefulWidget {
-  // payload vindo do QR: { action, signalingUrl, roomId }
+  // payload vindo do QR: { action, challenge: {...}, callbackUrl }
+  // O challenge já vem completo no QR — não precisamos de nenhuma rede pra
+  // recebê-lo. Só a resposta assinada precisa viajar, direto pro callbackUrl
+  // do próprio site (sem nenhum servidor do TruthID no meio).
   final Map<String, dynamic> payload;
 
   const ApprovalScreen({super.key, required this.payload});
@@ -25,126 +26,108 @@ class ApprovalScreen extends StatefulWidget {
 }
 
 class _ApprovalScreenState extends State<ApprovalScreen> {
-  _Status _status = _Status.connecting;
-  String _statusMsg = 'Conectando ao servidor...';
+  late _Status _status;
+  String _statusMsg = '';
   Map<String, dynamic>? _challenge;
+  String? _callbackUrl;
   bool _responded = false; // impede enviar duas respostas
 
-  WebSocket? _ws;
   final _keyService = DeviceKeyService();
 
   @override
   void initState() {
     super.initState();
-    _connect();
-  }
 
-  @override
-  void dispose() {
-    _ws?.close();
-    super.dispose();
-  }
+    final callbackUrl = widget.payload['callbackUrl'] as String?;
+    final challenge = widget.payload['challenge'] as Map<String, dynamic>?;
 
-  // ── Passo 1: conectar ao servidor de sinalização ─────────────────────────────
-
-  Future<void> _connect() async {
-    final signalingUrl = widget.payload['signalingUrl'] as String;
-    final roomId = widget.payload['roomId'] as String;
-
-    // dart:io WebSocket — conexão persistente bidirecional.
-    // Diferente de http.get (dispara e esquece), o WebSocket fica aberto
-    // e recebe mensagens a qualquer momento — como um chat em tempo real.
-    try {
-      _ws = await WebSocket.connect('$signalingUrl/rooms/$roomId');
-    } catch (_) {
-      _setError('Não foi possível conectar ao servidor de sinalização.\n'
-          'Verifique se ele está rodando e acessível na rede.');
+    // https obrigatório: o mobile vai discar essa URL diretamente, então
+    // ela precisa ser confiável — sem isso, um QR malicioso poderia apontar
+    // pra um endpoint que intercepta a resposta assinada em texto claro.
+    if (challenge == null || callbackUrl == null || !callbackUrl.startsWith('https://')) {
+      _status = _Status.error;
+      _statusMsg = 'QR inválido: challenge ausente ou callbackUrl não é https://.';
       return;
     }
 
-    // .listen() registra callbacks para mensagens, erros e fechamento.
-    // É assíncrono — não bloqueia a UI, apenas "avisa" quando algo chegar.
-    _ws!.listen(
-      (data) => _handleMessage(jsonDecode(data as String) as Map<String, dynamic>),
-      onError: (_) => _setError('Erro na conexão com o servidor.'),
-      onDone: () {
-        if (_status != _Status.done && _status != _Status.error) {
-          _setError('O servidor fechou a conexão antes de finalizar.');
-        }
-      },
-    );
-
-    // Avisa o website que o mobile entrou na sala — ele vai enviar o challenge
-    _wsSend({'type': 'ready'});
-    _setStatus(_Status.waiting, 'Aguardando o site enviar o pedido de login...');
+    _challenge = challenge;
+    _callbackUrl = callbackUrl;
+    _status = _Status.challenge;
   }
 
-  // ── Passo 2: receber o challenge pelo servidor de sinalização ────────────────
-
-  void _handleMessage(Map<String, dynamic> msg) {
-    if (msg['type'] == 'challenge') {
-      setState(() {
-        _challenge = msg;
-        _status = _Status.challenge;
-      });
+  // ── Envia a resposta direto pro backend do site, via HTTPS ──────────────
+  // Antes isso ia por um WebSocket com um servidor de sinalização do TruthID
+  // no meio. Agora vai direto pro callbackUrl que o próprio site escolheu —
+  // exatamente o endpoint /auth/verify que os exemplos do SDK já documentam.
+  Future<void> _postResponse(Map<String, dynamic> response) async {
+    final client = HttpClient();
+    try {
+      final request = await client.postUrl(Uri.parse(_callbackUrl!));
+      request.headers.set('content-type', 'application/json');
+      request.write(jsonEncode(response));
+      await request.close();
+    } finally {
+      client.close();
     }
   }
 
-  // ── Passo 3a: usuário aprova — assina com secp256k1 e envia de volta ─────────
+  // ── Usuário aprova — assina com secp256k1 e envia pro site ───────────────
 
   Future<void> _approve() async {
     if (_challenge == null || _responded) return;
     _responded = true;
 
     // Serializa o challenge exatamente como recebido.
-    // O website vai verificar que: hash(conteúdo) bate com o challenge que ele enviou.
+    // O site vai verificar que: hash(conteúdo) bate com o challenge que ele criou.
     final challengeJson = jsonEncode(_challenge);
     final signature = await _keyService.signChallenge(challengeJson);
     final deviceAddress = await _keyService.getDeviceAddress();
 
-    _wsSend({
-      'type': 'auth-response',
-      'approved': true,
-      'nonce': _challenge!['nonce'],
-      'signature': signature,       // assinatura secp256k1 com prefixo Ethereum personal_sign
-      'deviceAddress': deviceAddress, // endereço Ethereum — website verifica no DeviceRegistry
-    });
+    try {
+      await _postResponse({
+        'approved': true,
+        'nonce': _challenge!['nonce'],
+        'signature': signature,       // assinatura secp256k1 com prefixo Ethereum personal_sign
+        'deviceAddress': deviceAddress, // endereço Ethereum — site verifica no DeviceRegistry
+      });
+    } catch (_) {
+      _setError('Não foi possível enviar a resposta ao site. Verifique sua conexão.');
+      return;
+    }
 
     setState(() => _status = _Status.done);
     await Future.delayed(const Duration(milliseconds: 800));
     if (mounted) Navigator.of(context).pop(true);
   }
 
-  // ── Passo 3b: usuário recusa — envia rejeição sem assinar ────────────────────
+  // ── Usuário recusa — envia rejeição sem assinar ───────────────────────────
 
   Future<void> _reject() async {
     if (_challenge == null || _responded) return;
     _responded = true;
 
-    _wsSend({
-      'type': 'auth-response',
-      'approved': false,
-      'nonce': _challenge!['nonce'],
-    });
+    try {
+      await _postResponse({
+        'approved': false,
+        'nonce': _challenge!['nonce'],
+      });
+    } catch (_) {
+      // Recusa é best-effort: se o POST falhar, o challenge expira pelo TTL
+      // no backend do site mesmo assim. Não vale travar o usuário aqui.
+    }
 
     setState(() => _status = _Status.done);
     await Future.delayed(const Duration(milliseconds: 800));
     if (mounted) Navigator.of(context).pop(false);
   }
 
-  // ── Helpers ──────────────────────────────────────────────────────────────────
-
-  void _wsSend(Map<String, dynamic> msg) => _ws?.add(jsonEncode(msg));
-
-  void _setStatus(_Status s, String msg) {
-    if (mounted) setState(() { _status = s; _statusMsg = msg; });
-  }
+  // ── Helpers ──────────────────────────────────────────────────────────────
 
   void _setError(String msg) {
     if (mounted) setState(() { _status = _Status.error; _statusMsg = msg; });
   }
 
-  // ── UI ───────────────────────────────────────────────────────────────────────
+  // ── UI ───────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -157,28 +140,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
         _Status.challenge => _buildChallengeUI(),
         _Status.done      => _buildDoneUI(),
         _Status.error     => _buildErrorUI(),
-        _                 => _buildLoadingUI(),
       },
-    );
-  }
-
-  Widget _buildLoadingUI() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const CircularProgressIndicator(),
-          const SizedBox(height: 24),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: Text(
-              _statusMsg,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 16),
-            ),
-          ),
-        ],
-      ),
     );
   }
 

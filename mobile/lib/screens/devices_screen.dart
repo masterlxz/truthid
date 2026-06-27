@@ -2,46 +2,52 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/device_key_service.dart';
 import '../services/local_storage_service.dart';
+import 'show_device_qr_screen.dart';
 
 class DevicesScreen extends StatefulWidget {
-  // Callback: chamado quando o usuário quer parear (abre o scanner no pai)
-  final VoidCallback onScanPairing;
-
-  const DevicesScreen({super.key, required this.onScanPairing});
+  const DevicesScreen({super.key});
 
   @override
-  State<DevicesScreen> createState() => DevicesScreenState();
-  //                                    ^ sem _ : precisa ser público para o GlobalKey funcionar
+  State<DevicesScreen> createState() => _DevicesScreenState();
 }
 
-// Público (sem _) para que o RootScreen possa usar GlobalKey<DevicesScreenState>
-class DevicesScreenState extends State<DevicesScreen> {
+class _DevicesScreenState extends State<DevicesScreen> {
   final _keyService = DeviceKeyService();
   final _storage = LocalStorageService();
 
   String? _deviceAddress;
-  ({String identityId, String username})? _pairedIdentity;
+  String? _pairedIdentityId;
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    reload();
+    _reload();
   }
 
-  // Público: chamado pelo RootScreen via GlobalKey após um pareamento bem-sucedido
-  Future<void> reload() async {
+  Future<void> _reload() async {
     setState(() => _isLoading = true);
 
     final address = await _keyService.getDeviceAddress();
-    final identity = await _storage.getPairedIdentity();
+    final identityId = await _storage.getPairedIdentityId();
 
     if (!mounted) return;
     setState(() {
       _deviceAddress = address;
-      _pairedIdentity = identity;
+      _pairedIdentityId = identityId;
       _isLoading = false;
     });
+  }
+
+  // Abre a tela que mostra o QR deste device. Quando ela fecha com
+  // sucesso (o desktop terminou de registrar), recarrega esta tela pra
+  // refletir o novo status — não precisa de GlobalKey: é a própria
+  // DevicesScreen que inicia a navegação, então ela mesma recebe o resultado.
+  Future<void> _openPairing() async {
+    final success = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const ShowDeviceQrScreen()),
+    );
+    if (success == true) _reload();
   }
 
   void _copyAddress() {
@@ -61,7 +67,7 @@ class DevicesScreenState extends State<DevicesScreen> {
     // RefreshIndicator: habilita o gesto "puxar pra baixo para atualizar"
     // Precisa de um filho que seja scrollável — usamos ListView
     return RefreshIndicator(
-      onRefresh: reload,
+      onRefresh: _reload,
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -82,10 +88,10 @@ class DevicesScreenState extends State<DevicesScreen> {
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                       ),
                       const Spacer(),
-                      _pairedIdentity != null
+                      _pairedIdentityId != null
                           ? Chip(
                               avatar: const Icon(Icons.verified, size: 14),
-                              label: Text('@${_pairedIdentity!.username}'),
+                              label: Text('Identidade #$_pairedIdentityId'),
                               backgroundColor: Colors.green.shade100,
                               padding: EdgeInsets.zero,
                             )
@@ -121,7 +127,7 @@ class DevicesScreenState extends State<DevicesScreen> {
                   ),
 
                   // Seção de identidade — só aparece se estiver pareado
-                  if (_pairedIdentity != null) ...[
+                  if (_pairedIdentityId != null) ...[
                     const Divider(height: 24),
                     const Text(
                       'Identidade',
@@ -129,14 +135,14 @@ class DevicesScreenState extends State<DevicesScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '@${_pairedIdentity!.username}',
+                      '#$_pairedIdentityId',
                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(height: 12),
                     TextButton.icon(
                       onPressed: () async {
                         await _storage.clearPairedIdentity();
-                        reload();
+                        _reload();
                       },
                       icon: const Icon(Icons.link_off, size: 18, color: Colors.red),
                       label: const Text(
@@ -151,7 +157,7 @@ class DevicesScreenState extends State<DevicesScreen> {
           ),
 
           // ── Dica — só aparece se ainda não pareado ──────────────────────
-          if (_pairedIdentity == null) ...[
+          if (_pairedIdentityId == null) ...[
             const SizedBox(height: 8),
             Card(
               color: Colors.blue.shade50,
@@ -163,8 +169,9 @@ class DevicesScreenState extends State<DevicesScreen> {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Para registrar este dispositivo, gere um QR de pareamento '
-                        'no app desktop e escaneie-o.',
+                        'Toque no botão abaixo pra mostrar um QR com o '
+                        'endereço deste device. Leia esse QR (ou cole o '
+                        'endereço) no app desktop pra registrá-lo.',
                         style: TextStyle(fontSize: 13, color: Colors.blue),
                       ),
                     ),
@@ -179,9 +186,9 @@ class DevicesScreenState extends State<DevicesScreen> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: widget.onScanPairing,
-              icon: const Icon(Icons.qr_code_scanner),
-              label: const Text('Parear com identidade'),
+              onPressed: _openPairing,
+              icon: const Icon(Icons.qr_code),
+              label: const Text('Mostrar QR para parear'),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),

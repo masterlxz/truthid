@@ -8,27 +8,30 @@ TruthID replaces passwords and social login with cryptographic device keys. User
 
 ## How It Works
 
+There is no TruthID-operated server anywhere in this flow — not for signaling, not for relaying messages. Your backend talks directly to your own frontend (QR code) and your own `/auth/verify` endpoint receives a direct HTTPS request from the user's phone.
+
 ```
-Your Website              TruthID Relay         User's Phone
-     |                         |                     |
-     |── GET /auth/challenge ──>|                     |
-     |<── { nonce, origin } ───|                     |
-     |                         |                     |
-     |── (show QR code) ──────────────────────────>  |
-     |                         |<── scan QR ─────────|
-     |                         |<── { approved,       |
-     |                         |     signature,       |
-     |                         |     deviceAddress }  |
-     |<── POST /auth/verify ───|                     |
-     |    (SDK verifies:)      |                     |
-     |    1. signature valid   |                     |
-     |    2. device active on blockchain             |
-     |    3. challenge not expired                   |
-     |                                               |
-     LOGIN OK
+Your Backend          QR code (your frontend)        User's Phone
+     |                         |                          |
+     |── createChallenge() ────>|                          |
+     |   (SDK, no network)     |                          |
+     |   embeds challenge +    |                          |
+     |   callbackUrl in QR     |                          |
+     |                         |───── scan QR ───────────>|
+     |                         |                          |── user approves
+     |                         |                          |   and signs locally
+     |<──────────── POST {callbackUrl} (HTTPS, direct) ────|
+     |    (your /auth/verify)                              |
+     |    verifyAuthResponse() [SDK]:                       |
+     |    1. signature valid                                |
+     |    2. device active on blockchain                    |
+     |    3. challenge not expired                           |
+     |                                                       |
+     LOGIN OK — your frontend learns this however you already
+     notify it of backend events (polling, SSE, your own WebSocket)
 ```
 
-The SDK handles steps that require blockchain reads — verifying the signature, checking device status, and reading session state. No wallet, no gas, no private key needed on your server.
+The SDK only does the parts that need cryptography or a blockchain read — building the challenge, verifying the signature, checking device status. It never makes a network call to deliver the challenge or receive the response; that travels directly between the QR code and the phone, and from the phone to your own backend.
 
 ---
 
@@ -158,6 +161,20 @@ const challenge = truthid.createChallenge("yoursite.com");
 
 > **Important:** Store the challenge server-side by `nonce`. Delete it immediately after use to prevent replay attacks.
 
+**Building the QR code**
+
+The TruthID mobile app expects the QR code to contain this exact JSON shape — the challenge itself, plus the HTTPS URL where it should POST the signed response (typically your own `/auth/verify` endpoint):
+
+```json
+{
+  "action": "truthid-auth",
+  "challenge": { "type": "challenge", "nonce": "...", "issuedAt": 1718000000000, "origin": "yoursite.com" },
+  "callbackUrl": "https://yoursite.com/auth/verify"
+}
+```
+
+`callbackUrl` **must** use `https://` — the mobile app refuses to send the signed response to a plain `http://` URL.
+
 ---
 
 ### `verifyAuthResponse` / `verify_auth_response`
@@ -275,12 +292,18 @@ const truthid = new TruthIDClient({ network: "base-mainnet" });
 const pendingChallenges = new Map<string, AuthChallenge>();
 const sessions = new Map<string, { identityId: string; deviceAddress: string }>();
 
-// Step 1: client requests a challenge to embed in the QR code
+// Step 1: client requests a challenge to embed in the QR code.
+// The frontend builds the QR from { action, challenge, callbackUrl } —
+// callbackUrl must be https:// and reachable by the phone, not localhost.
 app.get("/auth/challenge", (req, res) => {
   const challenge = truthid.createChallenge(req.hostname);
   pendingChallenges.set(challenge.nonce, challenge);
   setTimeout(() => pendingChallenges.delete(challenge.nonce), 35_000);
-  res.json(challenge);
+  res.json({
+    action: "truthid-auth",
+    challenge,
+    callbackUrl: `https://${req.hostname}/auth/verify`,
+  });
 });
 
 // Step 2: client sends the phone's response here
@@ -339,8 +362,12 @@ sessions = {}            # token → { identity_id, device_address }
 def get_challenge():
     challenge = truthid.create_challenge(request.host)
     pending_challenges[challenge.nonce] = challenge
-    return jsonify({"type": challenge.type, "nonce": challenge.nonce,
-                    "issuedAt": challenge.issuedAt, "origin": challenge.origin})
+    return jsonify({
+        "action": "truthid-auth",
+        "challenge": {"type": challenge.type, "nonce": challenge.nonce,
+                       "issuedAt": challenge.issuedAt, "origin": challenge.origin},
+        "callbackUrl": f"https://{request.host}/auth/verify",
+    })
 
 @app.post("/auth/verify")
 def verify():
@@ -389,7 +416,11 @@ get "/auth/challenge" do
   content_type :json
   challenge = truthid.create_challenge(request.host)
   pending_challenges[challenge.nonce] = challenge
-  challenge.to_json
+  {
+    action: "truthid-auth",
+    challenge: challenge.to_h,
+    callbackUrl: "https://#{request.host}/auth/verify"
+  }.to_json
 end
 
 post "/auth/verify" do
@@ -441,7 +472,7 @@ The examples above use random UUIDs as session tokens. In production, use signed
 
 ### HTTPS only
 
-Always serve your `/auth/*` endpoints over HTTPS. The challenge and response travel through your relay — TLS prevents interception.
+Always serve your `/auth/*` endpoints over HTTPS. The phone POSTs the signed response directly to your `callbackUrl` — the TruthID mobile app refuses non-`https://` callback URLs, but your endpoint still needs a valid TLS cert for that to work.
 
 ---
 

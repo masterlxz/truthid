@@ -14,6 +14,10 @@ const pendingChallenges = new Map();
 const sessions = new Map();
 
 // ─── Passo 1: website pede um challenge para montar o QR code ─────────────────
+// O QR precisa ter { action, challenge, callbackUrl } — o app mobile lê isso
+// direto, sem nenhum servidor de sinalização no meio. callbackUrl precisa
+// ser https:// e alcançável pelo celular (não "localhost" — pra testar de
+// verdade com um celular real, exponha esse servidor via ngrok ou deploy).
 app.get("/auth/challenge", (req, res) => {
   const origin = req.headers.host ?? "localhost";
   const challenge = truthid.createChallenge(origin);
@@ -24,7 +28,11 @@ app.get("/auth/challenge", (req, res) => {
   // Remove automaticamente após 35s (um pouco além do TTL de 30s do SDK)
   setTimeout(() => pendingChallenges.delete(challenge.nonce), 35_000);
 
-  res.json(challenge);
+  res.json({
+    action: "truthid-auth",
+    challenge,
+    callbackUrl: `https://${origin}/auth/verify`,
+  });
 });
 
 // ─── Passo 2: mobile assinou → website manda a resposta aqui ─────────────────
