@@ -69,7 +69,7 @@ export function CreateIdentity() {
   if (existingUsername) {
     return (
       <div className="card">
-        <p className="muted" style={{ marginBottom: "0.25rem" }}>Identidade já registrada:</p>
+        <p className="muted" style={{ marginBottom: "0.25rem" }}>Identity already registered:</p>
         <strong>@{existingUsername}</strong>
       </div>
     );
@@ -79,7 +79,7 @@ export function CreateIdentity() {
   if (isSuccess) {
     return (
       <div className="card">
-        <p className="muted" style={{ marginBottom: "0.25rem" }}>Identidade criada com sucesso!</p>
+        <p className="muted" style={{ marginBottom: "0.25rem" }}>Identity created successfully!</p>
         <strong>@{username}</strong>
       </div>
     );
@@ -87,39 +87,39 @@ export function CreateIdentity() {
 
   return (
     <form onSubmit={handleSubmit} className="card">
-      <h2>Criar identidade</h2>
+      <h2>Create identity</h2>
 
       <div className="field">
         <input
           value={username}
           onChange={(e) => setUsername(e.target.value.toLowerCase())}
-          placeholder="escolha um username"
+          placeholder="choose a username"
           disabled={isPending || isConfirming}
         />
       </div>
 
       {username.length > 0 && !isValidFormat && (
-        <p className="muted">Apenas letras minúsculas, números, ponto e hífen (máx. 64 caracteres)</p>
+        <p className="muted">Lowercase letters, numbers, dots and hyphens only (max. 64 characters)</p>
       )}
 
       {isValidFormat && isTaken && (
-        <p className="muted">Username já está em uso</p>
+        <p className="muted">Username already taken</p>
       )}
 
       {isError && (
         <p className="error-text">
           {error?.message?.includes("rejected_by_user")
-            ? "Transação rejeitada na Ledger."
-            : `Erro: ${error?.message?.split("\n")[0] ?? "transação falhou"}`}
+            ? "Transaction rejected on Ledger."
+            : `Error: ${error?.message?.split("\n")[0] ?? "transaction failed"}`}
         </p>
       )}
 
       <button type="submit" disabled={!canSubmit}>
         {isPending
-          ? "Confirme na carteira..."
+          ? "Confirm in wallet..."
           : isConfirming
-          ? "Aguardando confirmação da rede..."
-          : "Registrar identidade"}
+          ? "Waiting for network confirmation..."
+          : "Register identity"}
       </button>
     </form>
   );

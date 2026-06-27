@@ -136,10 +136,10 @@ export function ActiveSessions({ username }: { username: string }) {
   return (
     <div>
       <h2>@{username}</h2>
-      <h3>Sessões ativas</h3>
+      <h3>Active sessions</h3>
 
       {sessions.length === 0 && (
-        <p className="muted">Nenhuma sessão registrada. As sessões aparecem aqui quando você faz login em sites usando TruthID.</p>
+        <p className="muted">No sessions yet. Sessions appear here when you log in to websites using TruthID.</p>
       )}
 
       {sessions.map((session) => {
@@ -149,7 +149,7 @@ export function ActiveSessions({ username }: { username: string }) {
           (isRevokeAllSuccess && !session.revoked);
         const createdAt = new Date(
           Number(session.createdAt) * 1000
-        ).toLocaleString("pt-BR");
+        ).toLocaleString();
         const deviceLabel =
           deviceLabels[session.devicePubKey] ??
           `${session.devicePubKey.slice(0, 8)}…`;
@@ -160,11 +160,11 @@ export function ActiveSessions({ username }: { username: string }) {
             <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "0.4rem" }}>
               <code className="address">{hashShort}</code>
               <span className={`status-badge ${isRevoked ? "status-badge--revoked" : "status-badge--active"}`}>
-                {isRevoked ? "Revogada" : "✓ Ativa"}
+                {isRevoked ? "Revoked" : "✓ Active"}
               </span>
             </div>
-            <span className="muted">Dispositivo: {deviceLabel}</span>
-            <span className="muted"> · Criada em {createdAt}</span>
+            <span className="muted">Device: {deviceLabel}</span>
+            <span className="muted"> · Created at {createdAt}</span>
             {!isRevoked && (
               <div className="actions-row">
                 <button
@@ -174,10 +174,10 @@ export function ActiveSessions({ username }: { username: string }) {
                   }
                 >
                   {isBeingRevoked && isRevokeOnePending
-                    ? "Confirme no MetaMask..."
+                    ? "Confirm in wallet..."
                     : isBeingRevoked && isRevokeOneConfirming
-                    ? "Aguardando rede..."
-                    : "Revogar"}
+                    ? "Waiting for network..."
+                    : "Revoke"}
                 </button>
               </div>
             )}
@@ -189,10 +189,10 @@ export function ActiveSessions({ username }: { username: string }) {
         <div className="actions-row">
           <button onClick={handleRevokeAll} disabled={isBusy}>
             {isRevokeAllPending
-              ? "Confirme no MetaMask..."
+              ? "Confirm in wallet..."
               : isRevokeAllConfirming
-              ? "Aguardando rede..."
-              : `Revogar todas (${activeSessions.length})`}
+              ? "Waiting for network..."
+              : `Revoke all (${activeSessions.length})`}
           </button>
         </div>
       )}

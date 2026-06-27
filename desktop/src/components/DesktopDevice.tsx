@@ -67,7 +67,7 @@ export function DesktopDevice({ onRegistered }: { onRegistered: () => void }) {
         address: DEVICE_REGISTRY_ADDRESS,
         abi: DEVICE_REGISTRY_ABI,
         functionName: "registerDevice",
-        args: [address as `0x${string}`, "Este Desktop", salt],
+        args: [address as `0x${string}`, "This Desktop", salt],
       });
     }, 4000);
     return () => clearTimeout(timer);
@@ -111,45 +111,45 @@ export function DesktopDevice({ onRegistered }: { onRegistered: () => void }) {
   if (error) {
     return (
       <p className="error-text">
-        Erro ao acessar o keyring do SO: {error}
+        Error accessing OS keyring: {error}
       </p>
     );
   }
 
   if (!address) {
-    return <p className="muted">Inicializando chave do desktop...</p>;
+    return <p className="muted">Initializing desktop key...</p>;
   }
 
   return (
     <div className="card">
-      <h3 style={{ marginTop: 0 }}>Este desktop</h3>
+      <h3 style={{ marginTop: 0 }}>This desktop</h3>
       <code className="address">
         {address.slice(0, 10)}…{address.slice(-6)}
       </code>
       <div style={{ marginTop: "0.75rem" }}>
         {isActive ? (
-          <span className="status-badge status-badge--active">✓ Registrado como device</span>
+          <span className="status-badge status-badge--active">✓ Registered as device</span>
         ) : (
           <>
-            <span className="status-badge status-badge--revoked">Não registrado</span>
+            <span className="status-badge status-badge--revoked">Not registered</span>
             {isWriteError && (
               <p className="error-text">
                 {writeError?.message?.includes("rejected_by_user")
-                  ? "Transação rejeitada na Ledger."
-                  : `Erro: ${writeError?.message?.split("\n")[0]}`}
+                  ? "Transaction rejected on Ledger."
+                  : `Error: ${writeError?.message?.split("\n")[0]}`}
               </p>
             )}
             <div className="actions-row">
               <button onClick={handleRegister} disabled={isBusy}>
                 {phase === "committing" && isPending
-                  ? "Confirme na carteira (1/2)..."
+                  ? "Confirm in wallet (1/2)..."
                   : phase === "committing" && isConfirming
-                  ? "Aguardando rede (1/2)..."
+                  ? "Waiting for network (1/2)..."
                   : phase === "registering" && isPending
-                  ? "Confirme na carteira (2/2)..."
+                  ? "Confirm in wallet (2/2)..."
                   : phase === "registering" && isConfirming
-                  ? "Aguardando rede (2/2)..."
-                  : "Registrar este desktop"}
+                  ? "Waiting for network (2/2)..."
+                  : "Register this desktop"}
               </button>
             </div>
           </>

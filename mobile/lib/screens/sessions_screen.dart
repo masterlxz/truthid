@@ -92,12 +92,12 @@ class _SessionsScreenState extends State<SessionsScreen> {
               const Icon(Icons.link_off, size: 64, color: AppColors.textMuted),
               const SizedBox(height: 16),
               const Text(
-                'Dispositivo não pareado',
+                'Device not paired',
                 style: TextStyle(fontSize: 18, color: AppColors.textMuted),
               ),
               const SizedBox(height: 8),
               const Text(
-                'Pareie este dispositivo com uma identidade para ver as sessões ativas.',
+                'Pair this device with an identity to see active sessions.',
                 textAlign: TextAlign.center,
                 style: TextStyle(fontSize: 14, color: AppColors.textMuted),
               ),
@@ -123,14 +123,14 @@ class _SessionsScreenState extends State<SessionsScreen> {
               ),
               const Spacer(),
               Text(
-                '$activeSessions ativas',
+                '$activeSessions active',
                 style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
               ),
             ],
           ),
           const SizedBox(height: 4),
           const Text(
-            'Sessões são criadas pelos sites quando você aprova um login.',
+            'Sessions are created by websites when you approve a login.',
             style: TextStyle(fontSize: 12, color: AppColors.textMuted),
           ),
           const Divider(height: 24),
@@ -142,7 +142,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Text(
-                  'Erro ao carregar sessões: $_error',
+                  'Error loading sessions: $_error',
                   style: const TextStyle(color: AppColors.danger),
                 ),
               ),
@@ -154,7 +154,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
               padding: const EdgeInsets.symmetric(vertical: 32),
               child: Center(
                 child: Text(
-                  'Nenhuma sessão encontrada',
+                  'No sessions found',
                   style: TextStyle(color: AppColors.textMuted),
                 ),
               ),
@@ -185,8 +185,8 @@ class _SessionsScreenState extends State<SessionsScreen> {
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Para revogar sessões, use o app desktop. '
-                      'A revogação exige a controller wallet.',
+                      'To revoke sessions, use the desktop app. '
+                      'Revocation requires the controller wallet.',
                       style: TextStyle(fontSize: 13, color: AppColors.warning),
                     ),
                   ),
@@ -233,7 +233,7 @@ class _SessionCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     isCurrentDevice
-                        ? 'Este device · $dateStr'
+                        ? 'This device · $dateStr'
                         : dateStr,
                     style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                   ),
@@ -241,7 +241,7 @@ class _SessionCard extends StatelessWidget {
               ),
             ),
             Chip(
-              label: Text(session.isRevoked ? 'Revogada' : 'Ativa'),
+              label: Text(session.isRevoked ? 'Revoked' : 'Active'),
               backgroundColor: session.isRevoked
                   ? AppColors.surfaceAlt
                   : AppColors.successBg,
@@ -264,6 +264,6 @@ class _SessionCard extends StatelessWidget {
     final month = dt.month.toString().padLeft(2, '0');
     final hour = dt.hour.toString().padLeft(2, '0');
     final min = dt.minute.toString().padLeft(2, '0');
-    return '$day/$month às $hour:$min';
+    return '$day/$month at $hour:$min';
   }
 }

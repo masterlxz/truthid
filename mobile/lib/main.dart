@@ -49,7 +49,7 @@ class _RootScreenState extends State<RootScreen> {
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('QR não reconhecido: ${action ?? "sem action"}')),
+        SnackBar(content: Text('Unrecognized QR: ${action ?? "no action"}')),
       );
     }
   }
@@ -64,7 +64,7 @@ class _RootScreenState extends State<RootScreen> {
           IconButton(
             icon: const Icon(Icons.qr_code_scanner),
             onPressed: _openScanner,
-            tooltip: 'Escanear QR',
+            tooltip: 'Scan QR',
           ),
         ],
       ),
@@ -85,11 +85,11 @@ class _RootScreenState extends State<RootScreen> {
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.phone_android),
-            label: 'Dispositivos',
+            label: 'Devices',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.history),
-            label: 'Sessões',
+            label: 'Sessions',
           ),
         ],
       ),

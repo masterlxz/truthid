@@ -84,7 +84,7 @@ class _ShowDeviceQrScreenState extends State<ShowDeviceQrScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Parear dispositivo'),
+        title: const Text('Pair device'),
       ),
       body: Padding(
         padding: const EdgeInsets.all(24),
@@ -104,8 +104,8 @@ class _ShowDeviceQrScreenState extends State<ShowDeviceQrScreen> {
       mainAxisSize: MainAxisSize.min,
       children: [
         const Text(
-          'No computador, abra "Adicionar dispositivo" e leia este QR '
-          '(ou cole o endereço abaixo):',
+          'On your computer, open "Add device" and scan this QR code '
+          '(or paste the address below):',
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 24),
@@ -129,7 +129,7 @@ class _ShowDeviceQrScreenState extends State<ShowDeviceQrScreen> {
         const CircularProgressIndicator(),
         const SizedBox(height: 12),
         const Text(
-          'Aguardando o computador registrar este dispositivo...',
+          'Waiting for the computer to register this device...',
           textAlign: TextAlign.center,
           style: TextStyle(color: AppColors.textMuted),
         ),
@@ -143,7 +143,7 @@ class _ShowDeviceQrScreenState extends State<ShowDeviceQrScreen> {
       children: [
         Icon(Icons.check_circle, size: 72, color: AppColors.success),
         SizedBox(height: 16),
-        Text('Pareado com sucesso!', style: TextStyle(fontSize: 20)),
+        Text('Paired successfully!', style: TextStyle(fontSize: 20)),
       ],
     );
   }

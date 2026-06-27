@@ -47,7 +47,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
     // pra um endpoint que intercepta a resposta assinada em texto claro.
     if (challenge == null || callbackUrl == null || !callbackUrl.startsWith('https://')) {
       _status = _Status.error;
-      _statusMsg = 'QR inválido: challenge ausente ou callbackUrl não é https://.';
+      _statusMsg = 'Invalid QR: missing challenge or callbackUrl is not https://.';
       return;
     }
 
@@ -92,7 +92,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
         'deviceAddress': deviceAddress, // endereço Ethereum — site verifica no DeviceRegistry
       });
     } catch (_) {
-      _setError('Não foi possível enviar a resposta ao site. Verifique sua conexão.');
+      _setError('Could not send response to the website. Check your connection.');
       return;
     }
 
@@ -134,7 +134,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Pedido de Login'),
+        title: const Text('Login Request'),
       ),
       body: switch (_status) {
         _Status.challenge => _buildChallengeUI(),
@@ -145,7 +145,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
   }
 
   Widget _buildChallengeUI() {
-    final origin = _challenge!['origin'] as String? ?? 'site desconhecido';
+    final origin = _challenge!['origin'] as String? ?? 'unknown site';
     final issuedAt = _challenge!['issuedAt'] as int?;
     final time = issuedAt != null
         ? TimeOfDay.fromDateTime(
@@ -162,25 +162,25 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
           const Icon(Icons.lock_open_rounded, size: 64, color: AppColors.accent),
           const SizedBox(height: 16),
           const Text(
-            'Pedido de login recebido',
+            'Login request received',
             textAlign: TextAlign.center,
             style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           const Text(
-            'Um site está pedindo para entrar com sua identidade TruthID.',
+            'A website is requesting to sign in with your TruthID identity.',
             textAlign: TextAlign.center,
             style: TextStyle(color: AppColors.textMuted),
           ),
           const SizedBox(height: 32),
           _InfoRow(label: 'Site', value: origin),
           const SizedBox(height: 8),
-          _InfoRow(label: 'Hora', value: time),
+          _InfoRow(label: 'Time', value: time),
           const Spacer(),
           ElevatedButton.icon(
             onPressed: _approve,
             icon: const Icon(Icons.check_circle_outline),
-            label: const Text('Aprovar', style: TextStyle(fontSize: 18)),
+            label: const Text('Approve', style: TextStyle(fontSize: 18)),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.success,
               foregroundColor: AppColors.background,
@@ -191,7 +191,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
           OutlinedButton.icon(
             onPressed: _reject,
             icon: const Icon(Icons.cancel_outlined),
-            label: const Text('Recusar', style: TextStyle(fontSize: 18)),
+            label: const Text('Reject', style: TextStyle(fontSize: 18)),
             style: OutlinedButton.styleFrom(
               foregroundColor: AppColors.danger,
               side: const BorderSide(color: AppColors.danger),
@@ -211,7 +211,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
         children: [
           Icon(Icons.check_circle, size: 72, color: AppColors.success),
           SizedBox(height: 16),
-          Text('Resposta enviada!', style: TextStyle(fontSize: 20)),
+          Text('Response sent!', style: TextStyle(fontSize: 20)),
         ],
       ),
     );
@@ -234,7 +234,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Voltar'),
+              child: const Text('Back'),
             ),
           ],
         ),

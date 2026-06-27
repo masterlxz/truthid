@@ -55,7 +55,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
     if (_deviceAddress == null) return;
     Clipboard.setData(ClipboardData(text: _deviceAddress!));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Endereço copiado!')),
+      const SnackBar(content: Text('Address copied!')),
     );
   }
 
@@ -85,7 +85,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
                       const Icon(Icons.phone_android),
                       const SizedBox(width: 8),
                       const Text(
-                        'Este dispositivo',
+                        'This device',
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                       ),
                       const Spacer(),
@@ -98,7 +98,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
                               padding: EdgeInsets.zero,
                             )
                           : const Chip(
-                              label: Text('Não registrado'),
+                              label: Text('Not registered'),
                               backgroundColor: AppColors.surfaceAlt,
                             ),
                     ],
@@ -108,7 +108,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
 
                   // Endereço do device
                   const Text(
-                    'Endereço',
+                    'Address',
                     style: TextStyle(color: AppColors.textMuted, fontSize: 12),
                   ),
                   const SizedBox(height: 4),
@@ -123,7 +123,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
                       IconButton(
                         icon: const Icon(Icons.copy, size: 18),
                         onPressed: _copyAddress,
-                        tooltip: 'Copiar endereço',
+                        tooltip: 'Copy address',
                       ),
                     ],
                   ),
@@ -132,7 +132,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
                   if (_pairedIdentityId != null) ...[
                     const Divider(height: 24),
                     const Text(
-                      'Identidade',
+                      'Identity',
                       style: TextStyle(color: AppColors.textMuted, fontSize: 12),
                     ),
                     const SizedBox(height: 4),
@@ -148,7 +148,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
                       },
                       icon: const Icon(Icons.link_off, size: 18, color: AppColors.danger),
                       label: const Text(
-                        'Remover pareamento',
+                        'Unpair',
                         style: TextStyle(color: AppColors.danger),
                       ),
                     ),
@@ -171,9 +171,9 @@ class _DevicesScreenState extends State<DevicesScreen> {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Toque no botão abaixo pra mostrar um QR com o '
-                        'endereço deste device. Leia esse QR (ou cole o '
-                        'endereço) no app desktop pra registrá-lo.',
+                        'Tap the button below to show a QR code with this '
+                        'device address. Scan that QR (or paste the address) '
+                        'in the desktop app to register it.',
                         style: TextStyle(fontSize: 13, color: AppColors.info),
                       ),
                     ),
@@ -190,7 +190,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
             child: ElevatedButton.icon(
               onPressed: _openPairing,
               icon: const Icon(Icons.qr_code),
-              label: const Text('Mostrar QR para parear'),
+              label: const Text('Show QR to pair'),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),

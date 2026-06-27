@@ -41,24 +41,24 @@ function App() {
 
       {isWrongNetwork && (
         <div className="card">
-          <p>Rede incorreta. TruthID usa a Base Mainnet.</p>
+          <p>Wrong network. TruthID runs on Base Mainnet.</p>
           <button
             onClick={() => switchChain({ chainId: base.id })}
             disabled={isSwitching}
           >
-            {isSwitching ? "Trocando..." : "Trocar para Base Mainnet"}
+            {isSwitching ? "Switching..." : "Switch to Base Mainnet"}
           </button>
         </div>
       )}
 
-      {isLoadingIdentity && <p className="muted">Carregando...</p>}
+      {isLoadingIdentity && <p className="muted">Loading...</p>}
 
       {isConnected && !isWrongNetwork && !isLoadingIdentity && isIdentityError && (
         <div className="card">
           <p className="error-text">
-            Falha ao consultar identidade: {identityError?.message?.split("\n")[0]}
+            Failed to load identity: {identityError?.message?.split("\n")[0]}
           </p>
-          <button onClick={() => refetchIdentity()}>Tentar novamente</button>
+          <button onClick={() => refetchIdentity()}>Try again</button>
         </div>
       )}
 
@@ -73,13 +73,13 @@ function App() {
               onClick={() => setActiveTab("devices")}
               disabled={activeTab === "devices"}
             >
-              Dispositivos
+              Devices
             </button>
             <button
               onClick={() => setActiveTab("sessions")}
               disabled={activeTab === "sessions"}
             >
-              Sessões ativas
+              Active sessions
             </button>
           </nav>
 

@@ -11,9 +11,9 @@ export function ConnectWallet() {
     return (
       <div className="card actions-row" style={{ alignItems: "center", justifyContent: "space-between" }}>
         <p style={{ margin: 0 }}>
-          Conectado: <code className="address">{address}</code>
+          Connected: <code className="address">{address}</code>
         </p>
-        <button onClick={() => disconnect()}>Desconectar</button>
+        <button onClick={() => disconnect()}>Disconnect</button>
       </div>
     );
   }
@@ -23,7 +23,7 @@ export function ConnectWallet() {
       <div className="actions-row">
         {connectors.filter((connector) => connector.id !== LEDGER_CONNECTOR_ID).map((connector) => (
           <button key={connector.id} onClick={() => connect({ connector })}>
-            Conectar com {connector.name}
+            Connect with {connector.name}
           </button>
         ))}
       </div>

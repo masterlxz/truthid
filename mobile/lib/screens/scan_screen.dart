@@ -27,7 +27,7 @@ class _ScanScreenState extends State<ScanScreen> {
     } catch (_) {
       setState(() => _scanned = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('QR inválido — tente de novo')),
+        const SnackBar(content: Text('Invalid QR — try again')),
       );
     }
   }
@@ -35,7 +35,7 @@ class _ScanScreenState extends State<ScanScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Escanear QR')),
+      appBar: AppBar(title: const Text('Scan QR')),
       body: MobileScanner(onDetect: _onDetect),
     );
   }

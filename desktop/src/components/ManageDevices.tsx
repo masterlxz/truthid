@@ -153,29 +153,29 @@ function DeviceList({
   onRevoke: (pubKey: string) => void;
 }) {
   if (devices.length === 0) {
-    return <p className="muted">Nenhum device registrado ainda.</p>;
+    return <p className="muted">No devices registered yet.</p>;
   }
 
   return (
     <div>
-      <h3>Dispositivos</h3>
+      <h3>Devices</h3>
       {devices.map((device) => {
         const isBeingRevoked = revokingPubKey === device.pubKey;
         // addedAt vem em segundos (Unix timestamp do bloco)
-        const addedDate = new Date(Number(device.addedAt) * 1000).toLocaleDateString("pt-BR");
+        const addedDate = new Date(Number(device.addedAt) * 1000).toLocaleDateString();
 
         return (
           <div key={device.pubKey} className={`card${device.revoked ? " is-revoked" : ""}`}>
             <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "0.4rem" }}>
               <strong>{device.label}</strong>
               <span className={`status-badge ${device.revoked ? "status-badge--revoked" : "status-badge--active"}`}>
-                {device.revoked ? "Revogado" : "✓ Ativo"}
+                {device.revoked ? "Revoked" : "✓ Active"}
               </span>
             </div>
             <code className="address">
               {device.pubKey.slice(0, 10)}…{device.pubKey.slice(-6)}
             </code>
-            <span className="muted"> · Adicionado em {addedDate}</span>
+            <span className="muted"> · Added on {addedDate}</span>
             {!device.revoked && (
               <div className="actions-row">
                 <button
@@ -183,10 +183,10 @@ function DeviceList({
                   disabled={isRevokePending || isRevokeConfirming}
                 >
                   {isBeingRevoked && isRevokePending
-                    ? "Confirme na carteira..."
+                    ? "Confirm in wallet..."
                     : isBeingRevoked && isRevokeConfirming
-                    ? "Aguardando rede..."
-                    : "Revogar"}
+                    ? "Waiting for network..."
+                    : "Revoke"}
                 </button>
               </div>
             )}
@@ -306,7 +306,7 @@ function PairDevice({ onDeviceRegistered }: {
 
   if (!isOpen) {
     return (
-      <button onClick={() => setIsOpen(true)}>+ Adicionar dispositivo</button>
+      <button onClick={() => setIsOpen(true)}>+ Add device</button>
     );
   }
 
@@ -314,15 +314,15 @@ function PairDevice({ onDeviceRegistered }: {
 
   return (
     <div className="card">
-      <h3 style={{ marginTop: 0 }}>Adicionar dispositivo</h3>
+      <h3 style={{ marginTop: 0 }}>Add device</h3>
 
       <p className="muted">
-        No celular, abra <strong>Dispositivos → Mostrar QR para parear</strong> e
-        cole aqui o endereço exibido:
+        On your phone, open <strong>Devices → Show QR to pair</strong> and
+        paste the displayed address here:
       </p>
 
       <div className="field">
-        <label>Endereço do dispositivo</label>
+        <label>Device address</label>
         <input
           value={addressInput}
           onChange={(e) => setAddressInput(e.target.value.trim())}
@@ -330,11 +330,11 @@ function PairDevice({ onDeviceRegistered }: {
           disabled={registerPhase !== "idle"}
           style={{ fontFamily: "monospace" }}
         />
-        {!addressIsValid && <p className="error-text">Endereço inválido.</p>}
+        {!addressIsValid && <p className="error-text">Invalid address.</p>}
       </div>
 
       <div className="field">
-        <label>Nome do dispositivo</label>
+        <label>Device name</label>
         <input
           value={labelInput}
           onChange={(e) => setLabelInput(e.target.value)}
@@ -346,8 +346,8 @@ function PairDevice({ onDeviceRegistered }: {
       {isPairError && (
         <p className="error-text">
           {pairError?.message?.includes("rejected_by_user")
-            ? "Transação rejeitada na Ledger."
-            : `Erro: ${pairError?.message?.split("\n")[0]}`}
+            ? "Transaction rejected on Ledger."
+            : `Error: ${pairError?.message?.split("\n")[0]}`}
         </p>
       )}
       <div className="actions-row">
@@ -356,16 +356,16 @@ function PairDevice({ onDeviceRegistered }: {
           disabled={!isAddress(addressInput) || !labelInput || registerPhase !== "idle"}
         >
           {registerPhase === "committing" && isRegisterPendingAny
-            ? "Confirme na carteira (1/2)..."
+            ? "Confirm in wallet (1/2)..."
             : registerPhase === "committing" && isRegisterConfirmingAny
-            ? "Aguardando rede (1/2)..."
+            ? "Waiting for network (1/2)..."
             : registerPhase === "registering" && isRegisterPendingAny
-            ? "Confirme na carteira (2/2)..."
+            ? "Confirm in wallet (2/2)..."
             : registerPhase === "registering" && isRegisterConfirmingAny
-            ? "Aguardando rede (2/2)..."
-            : "Registrar dispositivo"}
+            ? "Waiting for network (2/2)..."
+            : "Register device"}
         </button>
-        <button onClick={closePairing}>Cancelar</button>
+        <button onClick={closePairing}>Cancel</button>
       </div>
     </div>
   );

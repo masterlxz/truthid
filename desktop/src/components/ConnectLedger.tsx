@@ -6,12 +6,12 @@ import { ledger, setLedgerAccountIndex } from "../connectors/ledger";
 // Mensagem mostrada conforme o rótulo de erro que o comando Rust devolve
 // (ver classify_error em desktop/src-tauri/src/ledger.rs).
 const INSTRUCTIONS: Record<string, string> = {
-  not_connected: "Conecte sua Ledger por USB.",
-  locked: "Desbloqueie a Ledger digitando o PIN nos botões físicos do dispositivo.",
-  wrong_app: "Abra o app Ethereum na Ledger.",
-  // access_denied: device visível mas não conseguiu abrir — no Windows pode ser
-  // conflito com o Ledger Live; no Linux, falta de regra udev.
-  access_denied: "Não foi possível acessar a Ledger. Feche o Ledger Live se estiver aberto, ou verifique as permissões USB (Linux: regra udev).",
+  not_connected: "Connect your Ledger via USB.",
+  locked: "Unlock your Ledger by entering the PIN using the physical buttons.",
+  wrong_app: "Open the Ethereum app on your Ledger.",
+  // access_denied: device visible but could not open — on Windows may be a
+  // conflict with Ledger Live; on Linux, missing udev rule.
+  access_denied: "Could not access the Ledger. Close Ledger Live if it is open, or check USB permissions (Linux: udev rule).",
 };
 
 export function ConnectLedger() {
@@ -53,9 +53,9 @@ export function ConnectLedger() {
     return (
       <div className="actions-row" style={{ alignItems: "center" }}>
         <p className="muted" style={{ margin: 0 }}>
-          {INSTRUCTIONS[status] ?? `Aguardando Ledger... (${status})`}
+          {INSTRUCTIONS[status] ?? `Waiting for Ledger... (${status})`}
         </p>
-        <button onClick={cancelPolling}>Cancelar</button>
+        <button onClick={cancelPolling}>Cancel</button>
       </div>
     );
   }
@@ -68,10 +68,10 @@ export function ConnectLedger() {
         style={{ padding: "0.25rem 0.5rem" }}
       >
         {[0, 1, 2, 3, 4].map((i) => (
-          <option key={i} value={i}>Conta {i}</option>
+          <option key={i} value={i}>Account {i}</option>
         ))}
       </select>
-      <button onClick={startPolling}>Conectar Ledger</button>
+      <button onClick={startPolling}>Connect Ledger</button>
     </div>
   );
 }

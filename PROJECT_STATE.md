@@ -2,7 +2,20 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-06-25 (Sessão 36)
+> Última atualização: 2026-06-27 (Sessão 37)
+
+---
+
+## Diretriz de código (IMPORTANTE — sempre seguir)
+
+**Todo código novo deve ser escrito em inglês — sem exceção.**
+- Strings visíveis ao usuário (UI, mensagens de erro, labels, placeholders): inglês
+- Nomes de variáveis, funções, classes, arquivos: inglês
+- Comentários no código: podem ficar em português (não são visíveis ao usuário e facilitam o aprendizado)
+- Esta regra vale para todos os arquivos: `.tsx`, `.ts`, `.rs`, `.dart`, `.py`, `.rb`, `.sol`
+
+**I18n (múltiplos idiomas) está planejado para uma fase futura:**
+Hoje o app é 100% inglês. Quando houver demanda, a estratégia é extrair todas as strings visíveis para arquivos de tradução (ex: `i18n/en.json`, `i18n/pt.json`) e usar uma biblioteca de i18n por plataforma (react-i18next no desktop, Flutter's `intl` no mobile). O inglês será o idioma base (source of truth); português e outros idiomas serão adicionados sobre ele.
 
 ---
 
@@ -557,7 +570,8 @@ Website          Relay           Mobile App        Blockchain
 - **Contexto**: retomada após crash do PC no meio da sessão anterior. Estado recuperado via `git diff HEAD` e revisão dos arquivos não commitados. Nenhum trabalho foi perdido.
 - **Etapas concluídas**: 10.6 (multiplataforma udev/macOS/Windows) e 10.7 (CI hidapi nos 3 SOs) — trabalho estava completo mas não commitado antes do crash.
 - **Fase 10 agora em 7/8**: só resta a etapa 10.8 (validação manual com Ledger física em cada SO).
-- **Próximo passo**: iniciar Fase 11 (teste E2E prático: login, revogação de sessão, revogação de device) — ou continuar com 10.8 se quiser fechar a Fase 10 primeiro.
+- **Strings traduzidas para inglês**: todas as strings visíveis ao usuário no desktop (React/TypeScript) e mobile (Flutter/Dart) foram traduzidas de português para inglês. Comentários no código preservados. Diretriz de código em inglês registrada no PROJECT_STATE.md.
+- **Próximo passo**: Fase 11 (teste E2E prático: login, revogação de sessão, revogação de device).
 
 ### 2026-06-25 — Sessão 36
 

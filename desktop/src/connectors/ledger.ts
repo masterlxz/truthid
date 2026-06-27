@@ -62,7 +62,7 @@ async function signTransaction(
 
 function unsupported(method: string) {
   return async () => {
-    throw new Error(`Ledger: ${method} não é suportado por este conector.`);
+    throw new Error(`Ledger: ${method} is not supported by this connector.`);
   };
 }
 
@@ -104,7 +104,7 @@ export const ledger = createConnector((config) => ({
   },
 
   async getAccounts() {
-    if (!cachedAddress) throw new Error("Ledger não conectada.");
+    if (!cachedAddress) throw new Error("Ledger not connected.");
     return [cachedAddress];
   },
 
@@ -141,8 +141,8 @@ export const ledger = createConnector((config) => ({
         if (method === "eth_accounts") return cachedAddress ? [cachedAddress] : [];
 
         if (method === "eth_sendTransaction") {
-          if (!cachedAddress) throw new Error("Ledger não conectada.");
-          if (!transport) throw new Error(`Sem transporte RPC configurado para a chain ${chain.id}.`);
+          if (!cachedAddress) throw new Error("Ledger not connected.");
+          if (!transport) throw new Error(`No RPC transport configured for chain ${chain.id}.`);
 
           const account = toAccount({
             address: cachedAddress,
@@ -160,7 +160,7 @@ export const ledger = createConnector((config) => ({
         // tipos entre custom provider e createPublicClient no JSC (WebKit).
         const rpcUrls = chain.rpcUrls.default.http;
         const url = rpcUrls[0];
-        if (!url) throw new Error(`Ledger: sem RPC URL para chain ${chain.id}.`);
+        if (!url) throw new Error(`Ledger: no RPC URL for chain ${chain.id}.`);
 
         const response = await fetch(url, {
           method: "POST",
