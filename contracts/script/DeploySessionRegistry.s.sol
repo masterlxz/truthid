@@ -5,9 +5,9 @@ import {Script, console} from "forge-std/Script.sol";
 import {SessionRegistry} from "../src/SessionRegistry.sol";
 
 contract DeploySessionRegistry is Script {
-    // Contratos já deployados na Base Sepolia (redeploy Sessão 24, pós-auditoria)
-    address constant IDENTITY_REGISTRY = 0x35D21c65980cBd2dAE7576e1bf6b8e46C9e180BF;
-    address constant DEVICE_REGISTRY = 0x225c67a98c9D675fE595ae05a2F9249C34d9C60a;
+    // Contratos deployados na Base Mainnet (Sessão 25, Fase 7.1)
+    address constant IDENTITY_REGISTRY = 0xbf097EC74d0Cc9b16D3d94EaCa62060d89A63b17;
+    address constant DEVICE_REGISTRY = 0x4A7a307cb6872bde24BAf3E9de2BeC3Ddd03e144;
 
     function run() external {
         vm.startBroadcast();

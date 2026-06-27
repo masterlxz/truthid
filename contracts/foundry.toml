@@ -10,6 +10,8 @@ tab_width = 4
 
 [rpc_endpoints]
 base_sepolia = "${BASE_SEPOLIA_RPC_URL}"
+base_mainnet = "${BASE_MAINNET_RPC_URL}"
 
 [etherscan]
 base_sepolia = { key = "${BASESCAN_API_KEY}", chain = 84532, url = "https://api.etherscan.io/v2/api" }
+base_mainnet = { key = "${BASESCAN_API_KEY}", chain = 8453, url = "https://api.etherscan.io/v2/api" }

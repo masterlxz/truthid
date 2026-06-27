@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-06-16 (Sessão 24)
+> Última atualização: 2026-06-17 (Sessão 25)
 
 ---
 
@@ -267,7 +267,18 @@ check_revocation(identity_id) → RevocationInfo
 ### Fase 7 — Mainnet & Lançamento
 
 **Etapas**:
-- [ ] 7.1 — Deploy contratos em Base Mainnet
+- [x] 7.1 — Deploy contratos em Base Mainnet
+  - Carteira deployadora: `0xB54fe9909D76d98e87a9fD76bDB5C69fABe10265` — 2ª conta derivada da Ledger do usuário (HD path `m/44'/60'/1'/0/0`, mesma seed de 24 palavras, índice diferente da conta principal). Decisão registrada em memória: endereço do deployer fica público para sempre como `owner()`, então não se usa a conta pessoal.
+  - RPC usado: pública `https://mainnet.base.org` (sem cadastro — volume baixo, suficiente para um deploy pontual)
+  - Endereços (Base Mainnet, chain 8453):
+    - IdentityRegistry : 0xbf097EC74d0Cc9b16D3d94EaCa62060d89A63b17
+    - DeviceRegistry   : 0x4A7a307cb6872bde24BAf3E9de2BeC3Ddd03e144
+    - RecoveryManager  : 0xA93123C1ca438D9F56E4E599363F4d973d61A307
+    - SessionRegistry  : 0x24074587a2aFB3aa5491361BB0a5eBee90797D1B
+  - Todos os 4 verificados no Basescan (`forge verify-contract`, Etherscan V2 API com `chainid=8453`)
+  - Custo total: ~0,000055 ETH (saldo antes 0,010082 ETH → depois 0,010045 ETH) — gas price ~0,011 gwei
+  - Sanity check: `owner()` do IdentityRegistry retorna a carteira deployer ✓; `totalIdentities()` retorna 0 ✓
+  - **Pendente**: propagar os novos endereços para desktop/mobile/SDKs (hoje ainda apontam para Base Sepolia) — decisão de quando fazer essa troca ainda não tomada
 - [ ] 7.2 — Relay Service em produção
 - [ ] 7.3 — Publicar SDKs (npm, pip, rubygems)
 - [ ] 7.4 — Documentação pública
@@ -325,7 +336,7 @@ docs.truthid.dev (ou truthid.github.io/truthid)
 | Framework de contratos | Foundry vs Hardhat | **Foundry** ✓ |
 | Camada de comunicação | Relay tradicional vs WebRTC | **WebRTC** ✓ |
 | Canal de sinalização WebRTC | On-chain / DHT / servidor leve | **Servidor leve (WebSocket)** ✓ |
-| Padrão de upgrade dos contratos | Proxy (upgradeable) vs Imutável | Pendente |
+| Padrão de upgrade dos contratos | Proxy (upgradeable) vs Imutável | **Imutável** ✓ — decidido na Sessão 25, antes do deploy em mainnet (etapa 7.1). Motivo: evitar superfície de ataque extra (controle de upgrade) e complexidade adicional; processo de redeploy + migração já é conhecido (feito 2x na Sessão 24) |
 | Formato do challenge de autenticação | JWT vs custom JSON | Pendente |
 | Armazenamento de sessões | Servidor central vs on-chain hash | **Hash keccak256 on-chain** ✓ — dados originais locais, só o hash vai pra chain; privado mas auditável; revogação granular por sessão |
 | Sinalização WebRTC (futuro) | Servidor fixo vs plugável | **SignalingAdapter** ✓ — interface abstrata com implementações trocáveis (WebSocketSignaling hoje, OnChainSignaling quando latência de L2 permitir); contratos de identidade ficam na Base, sinalização pode migrar de chain sem afetar o resto |
@@ -389,6 +400,25 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-17 — Sessão 25
+
+- **Etapa 7.1 concluída** — Deploy dos 4 contratos em Base Mainnet
+  - Decisão de arquitetura registrada antes do deploy: contratos **imutáveis** (sem proxy) — ver tabela "Decisões de Arquitetura em Aberto"
+  - Carteira deployer: 2ª conta derivada da Ledger do usuário (não a principal) — endereço público para sempre via `owner()`, então separado da carteira pessoal
+  - Descoberta do HD path da Ledger: testado por tentativa com `cast wallet address --ledger --mnemonic-derivation-path "..."` — índice 0 (`m/44'/60'/0'/0/0`) é a conta principal; a conta certa usa o padrão "Ledger Live legacy" `m/44'/60'/1'/0/0` (índice de conta no 3º componente do path, não no último)
+  - Fluxo seguido para cada um dos 2 scripts (`Deploy.s.sol`, `DeploySessionRegistry.s.sol`): simulação primeiro (`forge script` sem `--broadcast`, mostra endereços previstos e custo estimado sem gastar nada) → confirmação explícita do usuário → execução real com `--broadcast` e confirmação física na Ledger por transação
+  - `DeploySessionRegistry.s.sol` atualizado com os endereços novos de IdentityRegistry/DeviceRegistry antes de rodar (mesmo padrão da Sessão 24)
+  - Todos os 4 contratos verificados no Basescan via `forge verify-contract` com Etherscan V2 API (`--verifier-url ".../v2/api?chainid=8453"`)
+  - Custo real total: ~0,000055 ETH — bem abaixo da estimativa de simulação, gas da Base Mainnet seguiu o mesmo padrão de custo baixíssimo da testnet
+  - Endereços (Base Mainnet): ver tabela na etapa 7.1 acima
+- Bug encontrado e corrigido: `.env` não tinha quebra de linha final — `echo "VAR=valor" >> .env` colou a nova variável na mesma linha da anterior (`BASESCAN_API_KEY` + `BASE_MAINNET_RPC_URL` viraram uma string só), e o forge não achava a variável. Corrigido separando as linhas.
+- Conceitos ensinados:
+  - HD path / derivação de contas numa mesma seed: uma Ledger gera infinitas contas a partir das mesmas 24 palavras, cada uma com um caminho `m/44'/60'/.../.../...` diferente — só muda qual número vai em qual posição do caminho
+  - Padrão "Ledger Live legacy" vs padrão comum (MetaMask/outros): a posição do índice da conta no HD path muda entre os dois — por isso testar por tentativa foi necessário
+  - Por que simular antes de fazer broadcast: `forge script` sem `--broadcast` roda a transação contra uma cópia local da blockchain (fork), mostra o resultado e o custo, sem nunca enviar nada de verdade — permite revisar antes de gastar
+  - Por que a carteira do deploy não é a pessoal: `owner()` fica público e permanente no contrato; qualquer um pode olhar no Basescan e ligar aquele endereço ao projeto para sempre
+- **Próximo passo ao retomar**: decidir quando propagar os endereços novos (mainnet) para desktop/mobile/SDKs, hoje ainda apontando para Base Sepolia — depois seguir para etapa 7.2 (Relay/sinalização em produção) ou 7.3 (publicar SDKs)
 
 ### 2026-06-15 — Sessão 23
 
