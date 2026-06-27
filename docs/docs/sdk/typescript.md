@@ -277,4 +277,4 @@ Contract addresses for both networks are in [Smart contracts](/docs/intro#smart-
 - [Quickstart](/docs/quickstart) — full walkthrough from install to first login
 - [Full Express.js example](https://github.com/masterlxz/truthid/blob/main/sdk/README.md#full-examples) with session tokens and a protected route
 - [Python SDK reference](/docs/sdk/python)
-- Ruby reference — coming soon
+- [Ruby SDK reference](/docs/sdk/ruby)

@@ -1,38 +1,44 @@
 ---
-sidebar_position: 2
-sidebar_label: Python
+sidebar_position: 3
+sidebar_label: Ruby
 ---
 
-# Python SDK
+# Ruby SDK
 
-Full API reference for [`truthid-sdk`](https://pypi.org/project/truthid-sdk/) on PyPI. New to TruthID? Start with the [Quickstart](/docs/quickstart) — this page is the detailed reference for every method and type once you're integrating for real.
+Full API reference for [`truthid-sdk`](https://rubygems.org/gems/truthid-sdk) on RubyGems. New to TruthID? Start with the [Quickstart](/docs/quickstart) — this page is the detailed reference for every method and type once you're integrating for real.
 
 ## Installation
 
 ```bash
-pip install truthid-sdk
+gem install truthid-sdk
 ```
 
-Requires Python 3.10+.
+Requires Ruby 3.0+.
 
-## `TruthIDClient`
+## `TruthID::Client`
 
-```python
-from truthid import TruthIDClient
+```ruby
+require "truthid"
 
-truthid = TruthIDClient()  # defaults to network="base-mainnet"
+truthid = TruthID::Client.new  # defaults to network: "base-mainnet"
+```
+
+There's also a factory function, if you prefer it:
+
+```ruby
+truthid = TruthID.new_client  # equivalent to TruthID::Client.new
 ```
 
 ### Constructor
 
-`TruthIDClient(network: str = "base-mainnet", rpc_url: Optional[str] = None)`
+`TruthID::Client.new(network: "base-mainnet", rpc_url: nil)`
 
 | Field | Type | Required | Description |
 |-------|------|----------|--------------|
 | `network` | `"base-sepolia"` or `"base-mainnet"` | No — defaults to `"base-mainnet"` | Which network to read contracts from |
-| `rpc_url` | `Optional[str]` | No | Custom RPC endpoint. Defaults to the public Base RPC for the chosen network |
+| `rpc_url` | `String` or `nil` | No | Custom RPC endpoint. Defaults to the public Base RPC for the chosen network |
 
-Unlike the TypeScript SDK, `network` has a default here — you only need to pass it to override or to use the testnet.
+Like Python, `network` has a default here — you only need to pass it to override or to use the testnet. (The TypeScript SDK requires it explicitly, with no default.)
 
 ## Methods
 
@@ -44,20 +50,21 @@ Creates a one-time challenge to embed in the QR code shown to the user.
 
 | Name | Type | Description |
 |------|------|-------------|
-| `origin` | `str` | Your site's domain, e.g. `"yoursite.com"` |
+| `origin` | `String` | Your site's domain, e.g. `"yoursite.com"` |
 
 **Returns** [`AuthChallenge`](#authchallenge)
 
-```python
+```ruby
 challenge = truthid.create_challenge("yoursite.com")
-# AuthChallenge(type="challenge", nonce="3f2e1a4b-...", issuedAt=1718000000000, origin="yoursite.com")
+challenge.nonce      #=> "3f2e1a4b-..."
+challenge.issued_at  #=> 1718000000000
 ```
 
 :::tip[Store it, then delete it]
 Keep the challenge server-side, keyed by `nonce`, until `verify_auth_response` runs — then delete it immediately. See [Nonce invalidation](#nonce-invalidation) below.
 :::
 
-**Building the QR code** — the mobile app expects this exact shape:
+**Building the QR code** — the mobile app expects this exact shape (`challenge.to_h` already produces the right camelCase keys):
 
 ```json
 {
@@ -71,7 +78,7 @@ Keep the challenge server-side, keyed by `nonce`, until `verify_auth_response` r
 
 ---
 
-### `verify_auth_response(challenge, response, ttl_ms=30_000)`
+### `verify_auth_response(challenge, response, ttl_ms: 30_000)`
 
 Verifies the signed response received from the user's phone. Runs six checks in sequence and stops at the first failure:
 
@@ -88,30 +95,23 @@ Verifies the signed response received from the user's phone. Runs six checks in 
 |------|------|-------------|
 | `challenge` | [`AuthChallenge`](#authchallenge) | The challenge you created |
 | `response` | [`AuthResponse`](#authresponse) | The response received from the phone |
-| `ttl_ms` *(optional)* | `int` | Max challenge age in ms. Default: `30_000` |
+| `ttl_ms:` *(optional)* | `Integer` | Max challenge age in ms. Default: `30_000` |
 
 **Returns** [`VerifyAuthResult`](#verifyauthresult)
 
-`AuthResponse` has no `from_dict` helper — build it field by field from the parsed JSON body. Its fields are camelCase (matching the wire format), not snake_case:
+`AuthResponse.from_hash` builds it straight from the parsed JSON body — unlike the Python SDK, no manual field mapping needed:
 
-```python
-from truthid import AuthResponse
+```ruby
+data = JSON.parse(request.body.read)  # { "approved" => ..., "nonce" => ..., "signature" => ..., "deviceAddress" => ... }
 
-data = request.json  # { "approved": ..., "nonce": ..., "signature": ..., "deviceAddress": ... }
-
-response = AuthResponse(
-    approved=data["approved"],
-    nonce=data["nonce"],
-    signature=data["signature"],
-    deviceAddress=data["deviceAddress"],
-)
-
+response = TruthID::AuthResponse.from_hash(data)
 result = truthid.verify_auth_response(challenge, response)
 
-if result.valid:
-    print(f"Authenticated! Identity ID: {result.identity_id}")
-else:
-    print(f"Failed: {result.reason}")
+if result.valid
+  puts "Authenticated! Identity ID: #{result.identity_id}"
+else
+  puts "Failed: #{result.reason}"
+end
 ```
 
 **Failure reasons**
@@ -119,10 +119,10 @@ else:
 | `reason` | Cause |
 |----------|-------|
 | `"User rejected the login request"` | User tapped "Reject" on their phone |
-| `"Challenge expired"` | More than `ttl_ms` ms have passed since `issuedAt` |
+| `"Challenge expired"` | More than `ttl_ms` ms have passed since `issued_at` |
 | `"Nonce mismatch"` | Response nonce doesn't match the challenge |
 | `"Invalid signature format"` | Signature is malformed |
-| `"Signature does not match device address"` | Signature was not made by `deviceAddress` |
+| `"Signature does not match device address"` | Signature was not made by `device_address` |
 | `"Device is not active or has been revoked"` | Device was revoked by the identity owner |
 
 ---
@@ -135,14 +135,15 @@ Checks whether a session hash is still valid (not revoked). Call this on subsequ
 
 | Name | Type | Description |
 |------|------|-------------|
-| `session_hash` | `str` | `bytes32` hex string (`0x...`) |
+| `session_hash` | `String` | `bytes32` hex string (`0x...`) |
 
 **Returns** [`SessionInfo`](#sessioninfo)
 
-```python
+```ruby
 session = truthid.verify_session(session_hash)
-if session.exists and not session.revoked:
-    pass  # still logged in
+if session.exists && !session.revoked
+  # still logged in
+end
 ```
 
 ---
@@ -155,73 +156,54 @@ Looks up a device's current status on the blockchain.
 
 | Name | Type | Description |
 |------|------|-------------|
-| `device_pub_key` | `str` | Ethereum address of the device (`0x...`) |
+| `device_pub_key` | `String` | Ethereum address of the device (`0x...`) |
 
 **Returns** [`DeviceStatus`](#devicestatus)
 
-```python
+```ruby
 status = truthid.check_device_status(device_pub_key)
 ```
 
 ## Types
 
-All of the following are exported from `truthid`. `AuthChallenge` and `AuthResponse` use **camelCase** field names because they mirror the JSON shape the mobile app sends and signs directly — every other type follows normal Python snake_case, since it never crosses the wire.
+All of the following are in the `TruthID` module. `AuthChallenge` and `AuthResponse` are plain classes — their attributes follow normal Ruby snake_case (`issued_at`, `device_address`), and each has a conversion method (`to_h` / `from_hash`) at the boundary where it meets the camelCase JSON the mobile app actually sends and signs. `VerifyAuthResult`, `SessionInfo`, and `DeviceStatus` are `Struct`s, since they never cross the wire.
 
 #### `AuthChallenge`
 
-```python
-@dataclass
-class AuthChallenge:
-    type: str
-    nonce: str
-    issuedAt: int  # Unix timestamp in ms
-    origin: str
+```ruby
+class AuthChallenge
+  attr_reader :type, :nonce, :issued_at, :origin
+
+  # to_h => { "type" => ..., "nonce" => ..., "issuedAt" => ..., "origin" => ... }
+end
 ```
 
 #### `AuthResponse`
 
-```python
-@dataclass
-class AuthResponse:
-    approved: bool
-    nonce: str
-    signature: str      # secp256k1 signature, hex ("0x...")
-    deviceAddress: str  # Ethereum address of the device key
+```ruby
+class AuthResponse
+  attr_reader :approved, :nonce, :signature, :device_address
+
+  # self.from_hash(h) reads h["deviceAddress"] into device_address, etc.
+end
 ```
 
 #### `VerifyAuthResult`
 
-```python
-@dataclass
-class VerifyAuthResult:
-    valid: bool
-    identity_id: Optional[int] = None
-    device_address: Optional[str] = None
-    reason: Optional[str] = None
+```ruby
+VerifyAuthResult = Struct.new(:valid, :identity_id, :device_address, :reason, keyword_init: true)
 ```
 
 #### `SessionInfo`
 
-```python
-@dataclass
-class SessionInfo:
-    exists: bool
-    revoked: bool
-    identity_id: Optional[int] = None
-    device_pub_key: Optional[str] = None
-    created_at: Optional[datetime] = None
+```ruby
+SessionInfo = Struct.new(:exists, :revoked, :identity_id, :device_pub_key, :created_at, keyword_init: true)
 ```
 
 #### `DeviceStatus`
 
-```python
-@dataclass
-class DeviceStatus:
-    exists: bool
-    active: bool
-    label: Optional[str] = None
-    identity_id: Optional[int] = None
-    added_at: Optional[datetime] = None
+```ruby
+DeviceStatus = Struct.new(:exists, :active, :label, :identity_id, :added_at, keyword_init: true)
 ```
 
 ## Security notes
@@ -230,10 +212,10 @@ class DeviceStatus:
 
 Delete the challenge from your store **before** calling `verify_auth_response`, not after — deleting after leaves a race condition where the same signed response can be submitted twice within the TTL window.
 
-```python
+```ruby
 # Correct order
-del pending_challenges[response.nonce]          # delete first
-result = truthid.verify_auth_response(...)       # then verify
+pending_challenges.delete(response.nonce)            # delete first
+result = truthid.verify_auth_response(challenge, response)  # then verify
 ```
 
 ### TTL
@@ -251,12 +233,12 @@ The phone `POST`s the signed response directly to your callback URL — the mobi
 | `"base-sepolia"` | 84532 | Testnet — for development |
 | `"base-mainnet"` | 8453 | Production (default) |
 
-```python
+```ruby
 # Testnet during development
-truthid = TruthIDClient(network="base-sepolia")
+truthid = TruthID::Client.new(network: "base-sepolia")
 
 # Custom RPC instead of the public endpoint
-truthid = TruthIDClient(network="base-mainnet", rpc_url="https://your-private-rpc.example.com")
+truthid = TruthID::Client.new(network: "base-mainnet", rpc_url: "https://your-private-rpc.example.com")
 ```
 
 Contract addresses for both networks are in [Smart contracts](/docs/intro#smart-contracts-base-mainnet-chain-8453).
@@ -264,6 +246,6 @@ Contract addresses for both networks are in [Smart contracts](/docs/intro#smart-
 ## Next steps
 
 - [Quickstart](/docs/quickstart) — full walkthrough from install to first login
-- [Full Flask example](https://github.com/masterlxz/truthid/blob/main/sdk/README.md#full-examples) with session tokens and a protected route
+- [Full Sinatra example](https://github.com/masterlxz/truthid/blob/main/sdk/README.md#full-examples) with session tokens and a protected route
 - [TypeScript SDK reference](/docs/sdk/typescript)
-- [Ruby SDK reference](/docs/sdk/ruby)
+- [Python SDK reference](/docs/sdk/python)
