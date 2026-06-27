@@ -1,10 +1,20 @@
 import { createConfig, http, fallback } from "wagmi";
 import { base } from "wagmi/chains";
-import { injected } from "wagmi/connectors";
+import { injected, walletConnect } from "wagmi/connectors";
+
+// Project ID público do Reown/WalletConnect Cloud — identifica o app, não dá
+// acesso a nada (não é segredo). Necessário pro fluxo de QR code, já que o
+// Tauri usa WebKitGTK como webview e não suporta extensões de navegador tipo
+// MetaMask — o conector "injected" nunca encontra um provider dentro do app
+// empacotado, só funciona em desenvolvimento via `npm run dev` num browser normal.
+const WALLETCONNECT_PROJECT_ID = "ecf672e1e9d165bb65017b793e80c0af";
 
 export const config = createConfig({
   chains: [base],
-  connectors: [injected()],
+  connectors: [
+    injected(),
+    walletConnect({ projectId: WALLETCONNECT_PROJECT_ID, showQrModal: true }),
+  ],
   transports: {
     // fallback: tenta o primeiro RPC, se falhar vai pro próximo
     [base.id]: fallback([
