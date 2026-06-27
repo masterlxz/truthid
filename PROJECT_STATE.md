@@ -45,7 +45,7 @@ Stack principal:
 ```
 Fase 1 — Smart Contracts        [x] Concluída
 Fase 2 — Relay Service          [x] Concluída
-Fase 3 — Desktop App            [ ] Não iniciada
+Fase 3 — Desktop App            [x] Concluída
 Fase 4 — Mobile App             [ ] Não iniciada
 Fase 5 — SDKs                   [ ] Não iniciada
 Fase 6 — Integração & Testes    [ ] Não iniciada
@@ -150,7 +150,11 @@ Antes de rodar pela primeira vez na sessão (ou após reiniciar o computador), o
   - Algoritmo secp256k1 + endereço Ethereum derivado via keccak256 — compatível com DeviceRegistry
   - `DesktopDevice.tsx`: componente que registra o próprio desktop como device na blockchain
   - Desktop pode autenticar sem celular após registro
-- [ ] 3.8 — Build para Linux, Windows, macOS (em andamento — workflow criado, pendente commit + teste)
+- [x] 3.8 — Build para Linux, Windows, macOS
+  - GitHub Actions com matrix ubuntu-22.04 / windows-latest / macos-latest
+  - Gera .deb + AppImage (Linux), .msi (Windows), .dmg (macOS)
+  - Release draft criado automaticamente no GitHub ao criar tag de versão
+  - Trigger: `git tag vX.Y.Z && git push origin vX.Y.Z`
 
 ---
 
@@ -260,7 +264,7 @@ Website          Relay           Mobile App        Blockchain
 
 ### 2026-06-13 — Sessão 16
 
-- Etapa 3.8 em andamento — GitHub Actions para build multiplataforma
+- **Fase 3 concluída** — etapa 3.8 completa
 - Conceitos ensinados:
   - GitHub Actions: runners são VMs na nuvem (ubuntu/windows/macos-latest) que o GitHub sobe automaticamente
   - `strategy.matrix`: gera múltiplos jobs a partir de uma lista — evita repetir o workflow 3x
@@ -268,14 +272,17 @@ Website          Relay           Mobile App        Blockchain
   - Cache Rust (`Swatinem/rust-cache`): primeira execução ~15min, seguintes ~3min
   - `tauri-apps/tauri-action`: action oficial que compila e já cria GitHub Release com instaladores anexados
   - `releaseDraft: true`: release fica como rascunho para revisão antes de publicar
-  - `GITHUB_TOKEN`: token gerado automaticamente pelo GitHub por execução, sem configuração manual
-  - Trigger em tags (`v*`): build só dispara ao criar tag de versão (ex: `git tag v0.1.0 && git push origin v0.1.0`)
-  - Fluxo de git workflows: hoje push direto na main (dev solo); quando tiver usuários → branches + PRs + branch protection
+  - `GITHUB_TOKEN`: precisa de `permissions: contents: write` para criar Release — não vem habilitado por padrão
+  - `targets: "all"` no tauri.conf.json: gera todos os formatos suportados por SO (Linux: .deb + AppImage)
+  - Trigger em tags (`v*`): build só dispara ao criar tag de versão (ex: `git tag v0.1.2 && git push origin v0.1.2`)
+  - PAT do GitHub precisa do escopo `workflow` para fazer push em `.github/workflows/`
 - Arquivo criado: `.github/workflows/build.yml`
-  - Linux: ubuntu-22.04, gera `.deb`, instala libwebkit2gtk/libdbus/libsecret (keyring)
+  - Linux: ubuntu-22.04, gera `.deb` + AppImage, instala libwebkit2gtk/libdbus/libsecret (keyring)
   - Windows: windows-latest, gera `.msi`
   - macOS: macos-latest, gera `.dmg`
-- **Próximo passo ao retomar**: fazer commit do `.github/workflows/build.yml`, criar tag `v0.1.0` e acompanhar a primeira execução no GitHub Actions
+  - `npm ci --legacy-peer-deps` (wagmi requer TS >=5.9.3, projeto usa 5.8.3)
+- Builds v0.1.2 passaram nos 3 SOs — Release draft criada no GitHub com instaladores anexados
+- **Próximo passo ao retomar**: Fase 4 — Mobile App (Flutter)
 
 ### 2026-06-13 — Sessão 15
 - Sessão de arquitetura + etapa 3.5 concluída
