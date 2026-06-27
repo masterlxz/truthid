@@ -1,4 +1,5 @@
 import { useAccount, useConnect, useDisconnect } from "wagmi";
+import { ConnectLedger } from "./ConnectLedger";
 
 export function ConnectWallet() {
   const { address, isConnected } = useAccount();
@@ -17,12 +18,17 @@ export function ConnectWallet() {
   }
 
   return (
-    <div className="card actions-row">
-      {connectors.map((connector) => (
-        <button key={connector.id} onClick={() => connect({ connector })}>
-          Conectar com {connector.name}
-        </button>
-      ))}
+    <div className="card">
+      <div className="actions-row">
+        {connectors.map((connector) => (
+          <button key={connector.id} onClick={() => connect({ connector })}>
+            Conectar com {connector.name}
+          </button>
+        ))}
+      </div>
+      <div className="actions-row">
+        <ConnectLedger />
+      </div>
     </div>
   );
 }

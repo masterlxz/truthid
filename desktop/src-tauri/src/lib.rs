@@ -3,6 +3,8 @@ use keyring::Entry;
 use rand::rngs::OsRng;
 use sha3::{Digest, Keccak256};
 
+mod ledger;
+
 const SERVICE: &str = "truthid";
 const ACCOUNT: &str = "device-private-key";
 
@@ -73,7 +75,9 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             get_or_create_device_key,
-            sign_challenge
+            sign_challenge,
+            ledger::is_ledger_connected,
+            ledger::get_ledger_address
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

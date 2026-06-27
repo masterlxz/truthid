@@ -50,7 +50,9 @@ Fase 4 — Mobile App             [x] Concluída
 Fase 5 — SDKs                   [x] Concluída
 Fase 6 — Integração & Testes    [x] Concluída
 Fase 7 — Mainnet & Lançamento   [x] Concluída
-Fase 8 — Documentação Web       [~] Em andamento (8.7/11)
+Fase 8 — Documentação Web       [x] Concluída
+Fase 9 — Identidade Visual: Mobile & Desktop  [x] Concluída
+Fase 10 — Ledger via USB (Rust/hidapi)         [~] Em andamento (4/8)
 ```
 
 ---
@@ -142,7 +144,7 @@ Antes de rodar pela primeira vez na sessão (ou após reiniciar o computador), o
 
 **Etapas**:
 - [x] 3.1 — Setup Tauri + React + TypeScript
-- [x] 3.2 — Integração com wallet (wagmi + viem). **Achado na Sessão 33 (revisão visual da Fase 9, testando o app de verdade)**: só o conector `injected` foi de fato implementado — Rabby/Ledger/Trezor listados nas responsabilidades acima nunca foram. Pior: `injected` **nunca funciona no app empacotado**, só em `npm run dev` num browser normal — o Tauri usa WebKitGTK como webview, que não suporta extensões de navegador (MetaMask etc.) de forma alguma. Corrigido parcialmente na mesma sessão: conector `walletConnect` adicionado (`desktop/src/config/wagmi.ts`, Project ID público do Reown Cloud), resolvendo a conexão via QR code/celular. Ledger/Trezor diretos (USB) ficaram pendentes — ver "Pendências" na Sessão 33.
+- [x] 3.2 — Integração com wallet (wagmi + viem). **Achado na Sessão 33 (revisão visual da Fase 9, testando o app de verdade)**: só o conector `injected` foi de fato implementado — Rabby/Ledger/Trezor listados nas responsabilidades acima nunca foram. Pior: `injected` **nunca funciona no app empacotado**, só em `npm run dev` num browser normal — o Tauri usa WebKitGTK como webview, que não suporta extensões de navegador (MetaMask etc.) de forma alguma. Corrigido parcialmente na mesma sessão: conector `walletConnect` adicionado (`desktop/src/config/wagmi.ts`, Project ID público do Reown Cloud), resolvendo a conexão via QR code/celular. Ledger/Trezor diretos (USB) ficaram pendentes — ver "Pendências" na Sessão 33. **Decisão tomada na Sessão 34**: implementar Ledger via USB direto em Rust (não documentar fallback via WalletConnect) — ver Fase 10.
 - [x] 3.3 — Tela: Criar identidade (conectar wallet → escolher username → registrar)
 - [x] 3.4 — Tela: Gerenciar dispositivos (adicionar via QR, revogar)
 - [x] 3.5 — Tela: Sessões ativas (listar, revogar sessão individual ou todas)
@@ -360,6 +362,44 @@ masterlxz.github.io/truthid
 
 ---
 
+### Fase 10 — Ledger via USB direto (Desktop, Rust)
+
+**Objetivo**: conectar uma Ledger física ao desktop sem depender do celular/WalletConnect — comunicação USB feita no lado Rust do Tauri, exposta ao frontend via comando.
+
+**Contexto da decisão (Sessão 33→34)**: na Sessão 33, testando o app empacotado de verdade, confirmou-se que `navigator.hid`/`navigator.usb` são `false` no WebKitGTK (motor de webview do Tauri no Linux) — WebHID/WebUSB simplesmente não existem nesse motor, então um conector Ledger em JS puro é inviável. Três caminhos ficaram na mesa (documentar Ledger Live via WalletConnect / implementar cliente Rust / deixar de lado). **Decisão (Sessão 34): implementar de verdade, opção (b)** — mesmo padrão já usado pelos comandos `get_or_create_device_key`/`sign_challenge` (etapa 3.7), que também fazem trabalho sensível no lado Rust em vez de depender de uma API do navegador.
+
+**Fluxo de UX desejado**:
+1. Usuário clica em "Conectar Ledger" no desktop.
+2. App entra em polling, esperando a Ledger responder (ritmo planejado: ~1x/s).
+3. Enquanto não detecta, mostra instrução contextual — ex. "Conecte sua Ledger, desbloqueie com o PIN no dispositivo e abra o app Ethereum" — variando a mensagem conforme o tipo de erro retornado (não conectada / bloqueada / app errado aberto).
+4. **O PIN nunca passa pelo app TruthID** — é digitado nos botões físicos da própria Ledger. Proposital: protege contra malware no computador que tente capturar o PIN.
+5. Ao detectar o app Ethereum aberto e desbloqueado, o comando lê o endereço e o fluxo segue igual aos outros conectores de wallet já existentes (`wagmi`).
+
+**Arquitetura validada (não decidida ainda em código, só no desenho)**:
+- Crate `hidapi` para abrir o dispositivo USB — enumerar pelo `vendor_id` da Ledger (`0x2c97`), ler/escrever bytes brutos.
+- Protocolo APDU para falar com o app Ethereum da Ledger: frame `CLA (0xE0 p/ Ethereum) | INS | P1 | P2 | LC | DATA`; resposta vem com os dados + 2 bytes de status (`0x9000` = sucesso).
+- Novo comando Tauri (`#[tauri::command]`), exposto via `invoke()`, no mesmo arquivo/padrão dos comandos de device key já existentes (`src-tauri/src/`, etapa 3.7).
+- Frontend faz polling chamando esse comando repetidamente até sucesso, trocando a mensagem de instrução conforme o erro retornado.
+
+**Pontos de atenção multiplataforma (Linux, macOS, Windows)**:
+- **Linux**: pode precisar de regra `udev` pra acesso sem root ao `vendor_id` da Ledger — checar se a própria Ledger documenta a regra oficial.
+- **macOS**: o app empacotado pode precisar de uma entitlement específica pra acesso USB/HID na hora de assinar o binário (sandboxing).
+- **Windows**: geralmente mais simples, mas pode conflitar se o Ledger Live estiver aberto ao mesmo tempo, disputando o mesmo dispositivo.
+- `hidapi` tem componente nativo em C — confirmar que os runners do GitHub Actions (`build.yml`, etapa 3.8, já cobre os 3 SOs) têm as dependências de sistema necessárias pra compilar essa parte.
+- Permissão/sandboxing só dá pra validar de verdade em máquina real de cada SO — CI não simula isso 100%.
+
+**Etapas**:
+- [x] 10.1 — Detectar Ledger plugada via `hidapi` (enumerar por `vendor_id` 0x2c97), comando Tauri que retorna se o dispositivo foi encontrado. Implementado na Sessão 34: novo módulo `desktop/src-tauri/src/ledger.rs`, comando `is_ledger_connected` (enumera `HidApi::device_list()`, sem abrir o dispositivo). Achado de ambiente: faltava `libudev-dev`/`pkg-config` na imagem Docker do desktop pro `hidapi` linkar — corrigido no `Dockerfile`, numa camada própria *depois* da instalação de Rust/`tauri-cli` (camadas caras), pra não invalidar o cache delas a cada rebuild futuro. `cargo check` validado dentro do container. Ainda não testado contra uma Ledger física de verdade (sem botão na UI ainda) — fica pra etapa 10.8.
+- [x] 10.2 — Implementar o protocolo APDU básico para o app Ethereum (montar frame, abrir conexão, ler resposta + status `0x9000`). Implementado na Sessão 34: transporte HID da Ledger (não é só o APDU cru — um relatório HID tem 64 bytes fixos, então a Ledger fatia o APDU em pacotes com canal `0x0101`+tag `0x05`+sequência, e só o 1º pacote leva o tamanho total). `open_ledger_device` (abre por `path` o primeiro device com o vendor_id certo), `write_apdu`/`read_apdu_response` (fatiamento/remontagem) e `check_status` (separa os 2 bytes finais — status word — e confere `0x9000`). Nenhuma dessas funções é chamada por um comando Tauri ainda (isso é a 10.3, que vai montar o APDU real de "pedir endereço" e expor pro frontend) — `cargo check` mostra avisos de "função nunca usada", esperado nesse ponto. **Risco real não resolvido**: o byte de "report ID" e o exato formato de pacote variam um pouco entre Linux/macOS/Windows na prática — a implementação segue o protocolo documentado publicamente (ex. `@ledgerhq/hw-transport-node-hid`), mas só uma Ledger física confirma se está certo (etapa 10.8).
+- [x] 10.3 — Comando Tauri que retorna o endereço Ethereum da Ledger, distinguindo os 3 estados de erro (não conectada / bloqueada / app errado aberto). Implementado na Sessão 34: `build_get_address_apdu` monta o APDU `GET_ADDRESS` (CLA `0xE0`, INS `0x02`) do app Ethereum com o caminho de derivação padrão `m/44'/60'/0'/0/0` (conta 0), em modo silencioso — P1 sem confirmação na tela, necessário porque o frontend vai chamar isso em polling (~1x/s, etapa 10.4); confirmar na tela a cada poll não faria sentido. `parse_get_address_response` extrai só o endereço da resposta (ignora a chave pública, que vem junto mas não é usada aqui). `classify_error` traduz status words conhecidos em 3 rótulos (`not_connected`, `locked`, `wrong_app`) que a 10.4 vai usar pra trocar a mensagem de instrução. Novo comando `get_ledger_address` registrado no `lib.rs`. `cargo check` limpo, sem avisos (todas as funções da 10.1/10.2 agora são usadas). **Os status words de `locked`/`wrong_app` ainda não foram confirmados contra uma Ledger física** — só documentados publicamente; fica pra etapa 10.8 junto com o resto.
+- [x] 10.4 — Frontend: botão "Conectar Ledger" + polling (~1x/s) + mensagens de instrução condicionais por estado. Implementado na Sessão 34: novo componente `desktop/src/components/ConnectLedger.tsx` (não usa wagmi — a Ledger não é um connector injetado, é um comando Tauri direto), com 3 estados (parado/procurando/achou) e um dicionário traduzindo `not_connected`/`locked`/`wrong_app` pra instrução em português. Plugado dentro de `ConnectWallet.tsx`, ao lado dos outros botões de conectar. `npx tsc --noEmit` limpo; validado visualmente com Playwright contra um `vite` dev server real (mesmo workaround de `cacheDir` temporário da etapa 9.2, por causa do `node_modules/.vite` root-owned) — confirmado que o botão aparece corretamente e que clicar nele entra no estado de polling com a mensagem + botão "Cancelar". Fora do Tauri (browser puro, sem `window.__TAURI_INTERNALS__`), o `invoke` lança um erro diferente do esperado (`TypeError: Cannot read properties of undefined`) — confirmado que o fallback genérico da UI (`Aguardando Ledger... (${status})`) absorve isso sem quebrar a tela, mas o teste real do fluxo de sucesso (achar o endereço) só é possível dentro do app Tauri empacotado, com uma Ledger física (etapa 10.8). Ajuste de CSS no caminho: `ConnectLedger` numa `.actions-row` própria, separada da dos outros botões — colocar tudo na mesma linha flex espremia os botões de carteira em texto de 3 linhas.
+- [ ] 10.5 — Integração com o fluxo de wallet existente (paridade com os outros conectores já usados pelo resto do app)
+- [ ] 10.6 — Multiplataforma: regra udev (Linux), entitlement USB/HID (macOS), checar conflito com Ledger Live aberto (Windows)
+- [ ] 10.7 — Confirmar que `build.yml` compila a parte nativa do `hidapi` nos 3 SOs (CI)
+- [ ] 10.8 — Validação manual em máquina real de cada SO (Linux primeiro — ambiente atual; macOS/Windows quando disponível)
+
+---
+
 ## Decisões de Arquitetura em Aberto
 
 | Decisão | Opções | Status |
@@ -375,6 +415,7 @@ masterlxz.github.io/truthid
 | Interface e experiência do usuário | UI funcional vs identidade visual própria | **Pendente** — app e desktop têm UI funcional (Material Design padrão) mas sem logo, cores, tipografia ou fluxos polidos; previsto para uma fase dedicada após Fase 4 ou como Fase 8 pós-lançamento |
 | Endereços de contrato nos SDKs (multi-rede) | Endereço fixo único vs mapa por rede | **Mapa por rede** ✓ — decidido na Sessão 26. Os 3 SDKs já tinham um parâmetro `network` desde a Fase 5, mas os endereços eram fixos (só Sepolia); completar o design original em vez de descartá-lo. Python/Ruby agora default para `"base-mainnet"`; TypeScript continua exigindo `network` explícito (sem default) |
 | Domínio do site de docs (Fase 8) | Domínio próprio (ex: truthid.dev) vs subdomínio grátis do GitHub Pages | **GitHub Pages grátis** ✓ — decidido na Sessão 31. Usuário ainda não tem domínio próprio registrado; `masterlxz.github.io/truthid` configurado no `docusaurus.config.ts` (etapa 8.1). Dá pra trocar pra domínio próprio depois (basta um arquivo `CNAME` em `docs/static/` + DNS) sem precisar redeployar nada além disso |
+| Conexão com Ledger (desktop) | USB direto via Rust (`hidapi`+APDU) vs documentar Ledger Live via WalletConnect (sem código novo) vs deixar de lado | **USB direto via Rust** ✓ — decidido na Sessão 34. WebHID/WebUSB confirmados ausentes no WebKitGTK (Sessão 33) — só dá pra fazer via comando Tauri em Rust, mesmo padrão de `get_or_create_device_key`/`sign_challenge` (etapa 3.7). Ver Fase 10 |
 
 ---
 
@@ -442,6 +483,18 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-23 — Sessão 34
+
+- **Contexto**: retomada das pendências da Sessão 33. Usuário decidiu resolver a pendência #1 (caminho do Ledger) antes de validar o pareamento E2E (pendência #2, ainda em aberto).
+- **Decisão tomada**: implementar suporte a Ledger via USB direto no desktop, em Rust (opção "b" das 3 que estavam na mesa) — sem documentar Ledger Live via WalletConnect como atalho. Motivo: WebHID/WebUSB não existem no WebKitGTK (confirmado na Sessão 33), então só dá pra fazer com um comando Tauri em Rust, mesmo padrão já usado por `get_or_create_device_key`/`sign_challenge`.
+- **Planejamento**: nova **Fase 10 — Ledger via USB direto (Desktop, Rust)** criada no documento (objetivo, fluxo de UX, arquitetura validada — `hidapi` + protocolo APDU para o app Ethereum —, pontos de atenção multiplataforma, 8 etapas). Tabela de "Decisões de Arquitetura em Aberto" atualizada.
+- **Etapas 10.1 e 10.2 implementadas** (ver detalhes nas próprias etapas, Fase 10): módulo `desktop/src-tauri/src/ledger.rs` criado com `is_ledger_connected` (detecção via enumeração HID) e o transporte HID completo (`open_ledger_device`, `write_apdu`, `read_apdu_response`, `check_status`) — ainda não ligado a nenhum comando exposto pro frontend (isso é a 10.3).
+- **Incidente de disco evitado por pouco**: ao adicionar `libudev-dev` na mesma linha `RUN apt-get install` que já existia no `Dockerfile` do desktop, isso invalidou o cache de uma camada cara e posterior (instalação de Rust + `cargo install tauri-cli`), disparando um rebuild pesado não-intencional. Disco caiu de 6.9GB pra 3.4GB livres rapidamente — build abortado a tempo (`kill` no processo). Um `docker container prune -f && docker image prune -f` (sem `--volumes`) recuperou 7GB, mas como efeito colateral apagou as camadas de cache do build (imagens "dangling" que eram, na prática, o cache do Rust/tauri-cli) — então o rebuild subsequente, já com o `Dockerfile` corrigido (nova camada separada, depois da instalação cara, só com `libudev-dev`+`pkg-config`), teve que refazer aquela parte cara do zero de qualquer forma (~15min). Disco monitorado de perto durante esse rebuild (chegou a 1.8GB livres, nunca cruzou a linha de 1GB de segurança, recuperou pra 2.7GB ao terminar). **Lição de ambiente pra próximas mudanças no `Dockerfile` do desktop**: adicionar dependências de sistema numa camada nova *depois* das etapas caras (Rust/tauri-cli), nunca editando a `RUN apt-get install` original — e não usar `docker image prune` sem necessidade enquanto um build alheio ainda pode precisar do cache.
+- **Etapa 10.3 implementada** (ver detalhes na própria etapa, Fase 10): comando `get_ledger_address` (GET_ADDRESS do app Ethereum, caminho `m/44'/60'/0'/0/0`, modo silencioso pro polling) + classificação de erro em 3 rótulos (`not_connected`/`locked`/`wrong_app`). `cargo check` limpo, sem avisos.
+- **Refinamento de estilo de explicação de código (ver [[user-truthid-profile]])**: usuário perguntou diretamente se valia entender o código Rust/hidapi sintaticamente ou só "mais ou menos" — confirmado que, pra esse tipo de código (protocolo/transporte, baixo risco), prefere explicações por blocos em linguagem simples, não linha por linha, daqui pra frente.
+- **Etapa 10.4 implementada** (ver detalhes na própria etapa, Fase 10): botão "Conectar Ledger" + polling + mensagens de instrução, validado por `tsc` e visualmente via Playwright (estado "parado" e "procurando" — o estado de sucesso depende de hardware real).
+- **Próximo passo ao retomar**: etapa 10.5 — integração com o fluxo de wallet existente (paridade com os outros conectores: o que acontece depois de achar o endereço da Ledger — hoje só mostra o endereço, não conecta de fato pro resto do app usar em transações). Validação contra uma Ledger física de verdade (etapa 10.8) ainda não foi feita — nenhuma das etapas 10.1-10.4 foi testada com hardware real ainda.
 
 ### 2026-06-22/23 — Sessão 33 (continuação — testando os apps de verdade, pós-Fase 9)
 
