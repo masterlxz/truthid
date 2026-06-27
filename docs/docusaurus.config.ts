@@ -92,6 +92,10 @@ const config: Config = {
               label: 'Quickstart',
               to: '/docs/quickstart',
             },
+            {
+              label: 'Security',
+              to: '/docs/security',
+            },
           ],
         },
         {
