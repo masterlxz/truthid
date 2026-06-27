@@ -49,7 +49,7 @@ Fase 3 — Desktop App            [x] Concluída
 Fase 4 — Mobile App             [x] Concluída
 Fase 5 — SDKs                   [x] Concluída
 Fase 6 — Integração & Testes    [x] Concluída
-Fase 7 — Mainnet & Lançamento   [ ] Não iniciada
+Fase 7 — Mainnet & Lançamento   [x] Concluída
 Fase 8 — Documentação Web       [ ] Não iniciada
 ```
 
@@ -284,7 +284,7 @@ check_revocation(identity_id) → RevocationInfo
 - [x] 7.2 — Eliminar o servidor de sinalização (substitui "Relay Service em produção" — não fazia sentido hospedar algo que ia ser removido). Implementado na Sessão 26 (continuação): pareamento via QR mostrado pelo mobile + polling on-chain; login via challenge embutido no QR + POST HTTPS direto pro backend do site. `signaling/`, `turn/` e `webrtc-demo/` removidos. Ver "Roadmap de Evoluções Planejadas → Sinalização sem servidor"
 - [x] 7.3 — Publicar SDKs (npm, pip, rubygems). Implementado na Sessão 29: `truthid-sdk@0.1.0` publicado nos três registros — npm (https://www.npmjs.com/package/truthid-sdk), PyPI (https://pypi.org/project/truthid-sdk/0.1.0/) e RubyGems. Ver Sessão 29 no Log de Sessões para detalhes.
 - [x] 7.4 — Documentação pública. `README.md` criado na raiz do repositório (Sessão 30) — escopo limitado a esse arquivo, a pedido do usuário (CONTRIBUTING.md/SECURITY.md ficaram fora). Cobre: o que é o TruthID, fluxo de auth (diagrama ASCII), arquitetura, tabela de endereços mainnet, SDKs publicados, como buildar cada componente, seção de segurança (aponta pra "GitHub Security tab" para reports privados, sem expor e-mail pessoal — decisão consciente do usuário)
-- [ ] 7.5 — Open source (GitHub)
+- [x] 7.5 — Open source (GitHub). Descoberto na Sessão 30 que o repositório já estava público desde 2026-06-04 (criado assim, sem que tivesse sido uma decisão consciente registrada) — `curl` na API do GitHub sem autenticação retornou `"private": false`. Varredura em `git log --all -p` confirmou que nenhum segredo de verdade jamais foi commitado (só placeholders em `contracts/.env.example`; o PAT exposto era só na configuração local do git, nunca em conteúdo versionado). Decisão consciente do usuário: manter `PROJECT_STATE.md` como está, sem reescrever histórico nem mover pra repositório separado — o conteúdo "bastidor" (diretriz de ensino, log de sessões) não representa risco de segurança real hoje, é só uma questão de tom. Fechamento da etapa: README/PROJECT_STATE.md commitados e enviados via SSH (`73de3e9`), e "Private vulnerability reporting" habilitado nas configurações do repositório (confirmado via API: `private-vulnerability-reporting` → `enabled: true`)
 
 ---
 
@@ -445,6 +445,21 @@ Website          Relay           Mobile App        Blockchain
   - Risco de fixar dados pessoais (e-mail) em texto versionado: mesmo que removido depois, o histórico do git mantém a versão antiga acessível pra sempre (mesmo princípio do achado dos tokens, mais cedo nesta sessão)
   - GitHub Security Advisories / private vulnerability reporting: mecanismo nativo que permite reportar bugs de segurança sem expor contato pessoal nem abrir issue pública
 - **Próximo passo ao retomar**: etapa 7.5 (abrir o repositório no GitHub) — decidir nessa etapa o que fazer com `PROJECT_STATE.md`/`CONTEXT.md` (manter público, trimar, ou mover pra fora do controle de versão) e habilitar o private vulnerability reporting
+
+### 2026-06-20 — Sessão 30 (continuação — etapa 7.5)
+
+- **Etapa 7.5 concluída — e com ela, a Fase 7 inteira.**
+- **Descoberta importante**: o repositório já estava público desde a criação (2026-06-04) — `curl https://api.github.com/repos/masterlxz/truthid` sem nenhuma autenticação retornou `"private": false`. A etapa nunca foi de fato "abrir" o repositório; era mais sobre arrumar a casa antes de tratar ele como aberto de propósito
+  - Varredura em `git log --all -p` (todos os commits, todos os branches) procurando por padrões de segredo (`ghp_`/`gho_`, chaves PEM, chaves AWS, `.env` commitado, `PRIVATE_KEY=`/`MNEMONIC=` com valor real): **nenhum segredo de verdade foi encontrado em momento algum do histórico**. Os únicos "falsos positivos" foram bytecode Solidity (hex longo) e os placeholders do `contracts/.env.example` (`PRIVATE_KEY=0xsua_chave_privada_aqui`). O PAT do achado da Sessão 29 nunca esteve em conteúdo versionado — só na configuração local do git (`.git/config`, fora do repositório)
+  - Decisão consciente do usuário sobre `PROJECT_STATE.md`/`CONTEXT.md`: manter os dois como estão. `CONTEXT.md` é um PRD limpo, fica público sem ressalvas. `PROJECT_STATE.md` tem conteúdo "de bastidor" (diretriz de ensino endereçada à IA, log sessão-a-sessão) mas, sem segredo real, isso é só uma questão de tom/apresentação — não vale o esforço de criar um repositório separado ou reescrever histórico só por isso
+- Fechamento prático:
+  - `README.md` (novo) e as edições do `PROJECT_STATE.md` da etapa 7.4 foram commitados (`73de3e9`, mensagem `docs: etapa 7.4 — criar README.md público na raiz`) e enviados via SSH — primeiro push do repositório usando a chave nova em vez do PAT
+  - "Private vulnerability reporting" habilitado pelo usuário em Settings → Code security and analysis — confirmado via API (`GET /repos/.../private-vulnerability-reporting` → `{"enabled": true}`)
+  - Descrição e topics do repositório (campo "About") ficaram como melhoria opcional, não bloqueante — usuário pode fazer quando quiser
+- Conceitos ensinados:
+  - Por que consultar a API REST do GitHub sem autenticação é um jeito confiável de checar se um repositório é público (retorna 404 pra privado sem auth, 200 com `"private": false` pra público) — mais rápido que confiar na memória de decisões antigas
+  - Diferença entre "segredo na configuração local do git" (`.git/config`, nunca sai da máquina a menos que alguém leia o disco) e "segredo no conteúdo versionado" (vai pra todo lugar que clonar o repositório, inclusive em commits antigos) — o achado da Sessão 29 era do primeiro tipo, por isso nunca esteve realmente exposto publicamente mesmo com o repo já sendo público
+- **Fase 7 — Mainnet & Lançamento: CONCLUÍDA.** Próximo passo, se o usuário quiser continuar: Fase 8 (Documentação Web — site Docusaurus) ou qualquer outra prioridade fora do roadmap original
 
 ### 2026-06-20 — Sessão 29
 
