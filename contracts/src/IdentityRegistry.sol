@@ -30,12 +30,17 @@ contract IdentityRegistry {
     // endereço da carteira → username (saber qual username uma carteira tem)
     mapping(address => string) private _usernameByController;
 
+    // Endereço do RecoveryManager — único contrato autorizado a chamar recoverController.
+    // Definido uma única vez após o deploy. Veja setRecoveryManager().
+    address private _recoveryManager;
+
     // -------------------------------------------------------------------------
     // Eventos (notificações para o mundo externo)
     // -------------------------------------------------------------------------
 
     event IdentityCreated(uint256 indexed id, string username, address indexed controller);
     event ControllerTransferred(string username, address indexed oldController, address indexed newController);
+    event RecoveryManagerSet(address indexed recoveryManager);
 
     // -------------------------------------------------------------------------
     // Erros customizados (mais eficientes que require com string)
@@ -46,6 +51,8 @@ contract IdentityRegistry {
     error IdentityNotFound(string username);
     error NotController(address caller, string username);
     error InvalidUsername();
+    error RecoveryManagerAlreadySet();
+    error NotRecoveryManager();
 
     // -------------------------------------------------------------------------
     // Funções de escrita (modificam o estado → custam gas)
@@ -83,6 +90,38 @@ contract IdentityRegistry {
 
         if (!identity.exists) revert IdentityNotFound(username);
         if (identity.controller != msg.sender) revert NotController(msg.sender, username);
+        if (bytes(_usernameByController[newController]).length > 0) {
+            revert AddressAlreadyHasIdentity(newController);
+        }
+
+        address oldController = identity.controller;
+
+        delete _usernameByController[oldController];
+        _usernameByController[newController] = username;
+        identity.controller = newController;
+
+        emit ControllerTransferred(username, oldController, newController);
+    }
+
+    // -------------------------------------------------------------------------
+    // Funções do RecoveryManager
+    // -------------------------------------------------------------------------
+
+    /// Define o endereço do RecoveryManager. Só pode ser chamado uma vez.
+    /// Ordem de deploy: (1) IdentityRegistry, (2) RecoveryManager, (3) esta função.
+    function setRecoveryManager(address rm) external {
+        if (_recoveryManager != address(0)) revert RecoveryManagerAlreadySet();
+        _recoveryManager = rm;
+        emit RecoveryManagerSet(rm);
+    }
+
+    /// Troca o controller de uma identidade via recovery social.
+    /// Só o RecoveryManager pode chamar — nunca um usuário diretamente.
+    function recoverController(string calldata username, address newController) external {
+        if (msg.sender != _recoveryManager) revert NotRecoveryManager();
+
+        Identity storage identity = _identityByUsername[username];
+        if (!identity.exists) revert IdentityNotFound(username);
         if (bytes(_usernameByController[newController]).length > 0) {
             revert AddressAlreadyHasIdentity(newController);
         }
