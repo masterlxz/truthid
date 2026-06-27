@@ -422,7 +422,8 @@ Website          Relay           Mobile App        Blockchain
     - "Architecture": tabela de componentes (contracts/desktop/mobile/sdk/integration) — mesma tabela do `README.md` raiz, mas com os links relativos (`contracts/`, `desktop/`...) trocados por URLs completas do GitHub, porque o site de docs é publicado separado do repositório e link relativo apontaria pro domínio errado
   - `npm run build` validado sem erros dentro de `docs/`
   - Verificação visual: `npx docusaurus serve` (build estático, não dev server) + screenshot via Playwright headless (mesmo processo já usado na etapa 8.2) — tabelas novas renderizam corretamente no tema dark, sem quebra de layout
-- Conceitos ensinados: nenhum conceito novo de blockchain/Solidity nesta sessão — trabalho foi só de documentação (reorganizar conteúdo já decidido em sessões anteriores)
+- **Favicon trocado** (a pedido do usuário, fora do roadmap formal da etapa 8.3) — `docs/static/img/favicon.ico` era ainda o ícone padrão do Docusaurus (nunca substituído desde o scaffold da 8.1); trocado pelo mesmo logo escudo+check ciano usado na navbar (`logo.svg`, criado na 8.2). Gerado com `rsvg-convert` (SVG → PNG em 16/32/48px) + `magick` (PNGs → `.ico` multi-resolução) — ferramentas de linha de comando já instaladas no sistema, sem precisar de serviço externo. Validado conferindo o HTML servido (`<link rel="icon" href="/truthid/img/favicon.ico">`) e visualmente nos três tamanhos antes de empacotar
+- Conceitos ensinados: nenhum conceito novo de blockchain/Solidity nesta sessão — trabalho foi só de documentação (reorganizar conteúdo já decidido em sessões anteriores) e um ajuste visual pequeno (favicon)
 - **Próximo passo ao retomar**: etapa 8.4 (quickstart interativo) ou qualquer outra dentro da Fase 8 (8.5-8.7 referência de SDK, 8.8 segurança, 8.9 contratos, 8.10 identidade visual definitiva, 8.11 deploy — já automático)
 
 ### 2026-06-21 — Sessão 31
