@@ -94,3 +94,83 @@ export const DEVICE_REGISTRY_ABI = [
     stateMutability: "view",
   },
 ] as const;
+
+// ─── SessionRegistry ───────────────────────────────────────────────────────────
+
+export const SESSION_REGISTRY_ADDRESS =
+  "0x93B56d40B304269Ee23f84A1cF3BD7B338514b42" as const;
+
+export const SESSION_REGISTRY_ABI = [
+  {
+    type: "function",
+    name: "revokeSession",
+    inputs: [{ name: "hash", type: "bytes32" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "revokeAllSessions",
+    inputs: [],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "isSessionRevoked",
+    inputs: [{ name: "hash", type: "bytes32" }],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getSessionsByIdentity",
+    inputs: [{ name: "identityId", type: "uint256" }],
+    outputs: [{ name: "", type: "bytes32[]" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getSession",
+    inputs: [{ name: "hash", type: "bytes32" }],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        components: [
+          { name: "identityId", type: "uint256" },
+          { name: "devicePubKey", type: "address" },
+          { name: "createdAt", type: "uint256" },
+          { name: "revoked", type: "bool" },
+          { name: "exists", type: "bool" },
+        ],
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "event",
+    name: "SessionCreated",
+    inputs: [
+      { name: "identityId", type: "uint256", indexed: true },
+      { name: "hash", type: "bytes32", indexed: true },
+      { name: "devicePubKey", type: "address", indexed: true },
+    ],
+  },
+  {
+    type: "event",
+    name: "SessionRevoked",
+    inputs: [
+      { name: "identityId", type: "uint256", indexed: true },
+      { name: "hash", type: "bytes32", indexed: true },
+    ],
+  },
+  {
+    type: "event",
+    name: "AllSessionsRevoked",
+    inputs: [
+      { name: "identityId", type: "uint256", indexed: true },
+      { name: "revokedBefore", type: "uint256", indexed: false },
+    ],
+  },
+] as const;
