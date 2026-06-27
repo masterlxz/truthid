@@ -3,6 +3,7 @@ import 'screens/approval_screen.dart';
 import 'screens/devices_screen.dart';
 import 'screens/scan_screen.dart';
 import 'screens/sessions_screen.dart';
+import 'theme.dart';
 
 void main() {
   runApp(const TruthIDApp());
@@ -15,9 +16,7 @@ class TruthIDApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'TruthID',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
-      ),
+      theme: appTheme,
       home: const RootScreen(),
     );
   }
@@ -60,7 +59,6 @@ class _RootScreenState extends State<RootScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('TruthID'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
           // Botão de scan no AppBar — acessível de qualquer aba
           IconButton(
