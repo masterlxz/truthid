@@ -55,9 +55,13 @@ fn open_ledger_device(api: &HidApi) -> Result<HidDevice, String> {
 
 /// Envia um APDU completo (fatiado em pacotes HID) e devolve a resposta
 /// crua (dados + 2 bytes de status word no final).
-fn send_apdu(device: &HidDevice, apdu: &[u8]) -> Result<Vec<u8>, String> {
+/// `timeout_ms`: quanto tempo esperar pela resposta da Ledger.
+///   - Polling (get_ledger_address): 5_000 ms — curto, chamado a cada ~1s.
+///   - Assinatura (sign_ledger_transaction): 120_000 ms — o usuário precisa
+///     ler a transação na tela pequena da Ledger e pressionar os botões físicos.
+fn send_apdu(device: &HidDevice, apdu: &[u8], timeout_ms: i32) -> Result<Vec<u8>, String> {
     write_apdu(device, apdu)?;
-    read_apdu_response(device)
+    read_apdu_response(device, timeout_ms)
 }
 
 fn write_apdu(device: &HidDevice, apdu: &[u8]) -> Result<(), String> {
@@ -96,7 +100,7 @@ fn write_apdu(device: &HidDevice, apdu: &[u8]) -> Result<(), String> {
     Ok(())
 }
 
-fn read_apdu_response(device: &HidDevice) -> Result<Vec<u8>, String> {
+fn read_apdu_response(device: &HidDevice, timeout_ms: i32) -> Result<Vec<u8>, String> {
     let mut sequence: u16 = 0;
     let mut expected_len: usize = 0;
     let mut data = Vec::new();
@@ -104,10 +108,10 @@ fn read_apdu_response(device: &HidDevice) -> Result<Vec<u8>, String> {
     loop {
         let mut buf = [0u8; HID_PACKET_SIZE];
         let read = device
-            .read_timeout(&mut buf, 5_000)
+            .read_timeout(&mut buf, timeout_ms)
             .map_err(|e| e.to_string())?;
         if read == 0 {
-            return Err("Timeout esperando resposta da Ledger".to_string());
+            return Err("Timeout waiting for Ledger response".to_string());
         }
 
         // bytes 0-1 canal, 2 tag, 3-4 sequência — não validados aqui ainda.
@@ -220,7 +224,7 @@ pub fn get_ledger_address(account_index: u32) -> Result<String, String> {
     let device = open_ledger_device(&api).map_err(|_| "not_connected".to_string())?;
 
     let apdu = build_get_address_apdu(account_index);
-    let response = send_apdu(&device, &apdu)?;
+    let response = send_apdu(&device, &apdu, 5_000)?;
     let data = check_status(response).map_err(classify_error)?;
 
     parse_get_address_response(&data)
@@ -307,7 +311,7 @@ pub fn sign_ledger_transaction(unsigned_tx_hex: String, account_index: u32) -> R
 
     let mut last_response = Vec::new();
     for apdu in build_sign_tx_apdus(&unsigned_tx, account_index) {
-        let response = send_apdu(&device, &apdu)?;
+        let response = send_apdu(&device, &apdu, 120_000)?;
         last_response = check_status(response).map_err(|sw| match sw {
             // 0x6985 = "Conditions of use not satisfied" — durante assinatura
             // significa que o usuário rejeitou na tela da Ledger.

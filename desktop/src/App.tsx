@@ -1,18 +1,21 @@
 import { useState } from "react";
 import { useAccount, useReadContract, useSwitchChain } from "wagmi";
+import { useQueryClient } from "@tanstack/react-query";
 import { base } from "wagmi/chains";
 import { ConnectWallet } from "./components/ConnectWallet";
 import { CreateIdentity } from "./components/CreateIdentity";
 import { ManageDevices } from "./components/ManageDevices";
 import { ActiveSessions } from "./components/ActiveSessions";
+import { TestLogin } from "./components/TestLogin";
 import { IDENTITY_REGISTRY_ADDRESS, IDENTITY_REGISTRY_ABI } from "./config/contracts";
 import "./App.css";
 
-type Tab = "devices" | "sessions";
+type Tab = "devices" | "sessions" | "login-test";
 
 function App() {
   const { isConnected, address, chainId } = useAccount();
   const [activeTab, setActiveTab] = useState<Tab>("devices");
+  const queryClient = useQueryClient();
 
   const isWrongNetwork = isConnected && chainId !== base.id;
   const { switchChain, isPending: isSwitching } = useSwitchChain();
@@ -81,10 +84,23 @@ function App() {
             >
               Active sessions
             </button>
+            <button
+              onClick={() => setActiveTab("login-test")}
+              disabled={activeTab === "login-test"}
+            >
+              Login test
+            </button>
+            <button
+              onClick={() => queryClient.invalidateQueries()}
+              style={{ marginLeft: "auto" }}
+            >
+              ↻ Refresh
+            </button>
           </nav>
 
           {activeTab === "devices" && <ManageDevices username={username!} />}
           {activeTab === "sessions" && <ActiveSessions username={username!} />}
+          {activeTab === "login-test" && <TestLogin />}
         </>
       )}
     </main>

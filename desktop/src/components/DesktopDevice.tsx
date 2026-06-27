@@ -77,8 +77,8 @@ export function DesktopDevice({ onRegistered }: { onRegistered: () => void }) {
     if (!isRegisterSuccess || phase !== "registering") return;
     setPhase("idle");
     queryClient.invalidateQueries();
-    refetch();
-    onRegistered();
+    // Wait for the RPC node to index the new block before refetching
+    setTimeout(() => { refetch(); onRegistered(); }, 3000);
   }, [isRegisterSuccess]);
 
   function handleRegister() {

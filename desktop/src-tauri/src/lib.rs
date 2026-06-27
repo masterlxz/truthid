@@ -72,8 +72,44 @@ fn get_or_create_device_key() -> Result<String, String> {
     Ok(address)
 }
 
-/// Assina um challenge com a chave privada deste desktop.
-/// Retorna a assinatura em formato Ethereum: 0x + r (32 bytes) + s (32 bytes) + v (1 byte).
+/// Signs a 32-byte session hash for on-chain createSession.
+/// The contract verifies: ecrecover(keccak256("\x19Ethereum Signed Message:\n32" + hash), v, r, s) == devicePubKey
+/// Returns (r, s, v) as separate values so the caller can pass them as distinct ABI arguments.
+#[tauri::command]
+fn sign_session_hash(hash: String) -> Result<(String, String, u8), String> {
+    let hash_bytes = hex::decode(hash.trim_start_matches("0x"))
+        .map_err(|e| format!("invalid hash hex: {e}"))?;
+    if hash_bytes.len() != 32 {
+        return Err(format!("hash must be 32 bytes, got {}", hash_bytes.len()));
+    }
+
+    let priv_hex = get_device_key_hex()?;
+    let priv_bytes = hex::decode(&priv_hex).map_err(|e| e.to_string())?;
+    let signing_key = SigningKey::from_bytes(priv_bytes.as_slice().into())
+        .map_err(|e| e.to_string())?;
+
+    // Ethereum personal_sign of 32 raw bytes — same prefix the contract uses:
+    // keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", hash))
+    let prefix = b"\x19Ethereum Signed Message:\n32";
+    let mut msg = Vec::with_capacity(prefix.len() + 32);
+    msg.extend_from_slice(prefix);
+    msg.extend_from_slice(&hash_bytes);
+    let digest = Keccak256::digest(&msg);
+
+    let (signature, recovery_id) = signing_key
+        .sign_prehash_recoverable(&digest)
+        .map_err(|e| e.to_string())?;
+
+    let sig_bytes = signature.to_bytes();
+    let r = format!("0x{}", hex::encode(&sig_bytes[..32]));
+    let s = format!("0x{}", hex::encode(&sig_bytes[32..]));
+    let v = recovery_id.to_byte() + 27u8;
+
+    Ok((r, s, v))
+}
+
+/// Signs a challenge with this desktop's private key.
+/// Returns the signature in Ethereum format: 0x + r (32 bytes) + s (32 bytes) + v (1 byte).
 #[tauri::command]
 fn sign_challenge(challenge: String) -> Result<String, String> {
     let priv_hex = get_device_key_hex()?;
@@ -82,8 +118,14 @@ fn sign_challenge(challenge: String) -> Result<String, String> {
     let signing_key = SigningKey::from_bytes(priv_bytes.as_slice().into())
         .map_err(|e| e.to_string())?;
 
-    // Hash keccak256 do challenge — compatível com ecrecover do Solidity
-    let hash = Keccak256::digest(challenge.as_bytes());
+    // Ethereum personal_sign format: keccak256("\x19Ethereum Signed Message:\n{len}{message}")
+    // Matches what viem's recoverMessageAddress() expects on the server side.
+    let msg_bytes = challenge.as_bytes();
+    let prefix = format!("\x19Ethereum Signed Message:\n{}", msg_bytes.len());
+    let mut prefixed = Vec::with_capacity(prefix.len() + msg_bytes.len());
+    prefixed.extend_from_slice(prefix.as_bytes());
+    prefixed.extend_from_slice(msg_bytes);
+    let hash = Keccak256::digest(&prefixed);
 
     let (signature, recovery_id) = signing_key
         .sign_prehash_recoverable(&hash)
@@ -103,6 +145,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_or_create_device_key,
             sign_challenge,
+            sign_session_hash,
             ledger::is_ledger_connected,
             ledger::get_ledger_address,
             ledger::sign_ledger_transaction

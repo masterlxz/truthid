@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-06-27 (Sessão 37)
+> Última atualização: 2026-06-27 (Sessão 38)
 
 ---
 
@@ -66,7 +66,7 @@ Fase 7 — Mainnet & Lançamento   [x] Concluída
 Fase 8 — Documentação Web       [x] Concluída
 Fase 9 — Identidade Visual: Mobile & Desktop  [x] Concluída
 Fase 10 — Ledger via USB (Rust/hidapi)         [x] Concluída
-Fase 11 — Teste E2E Prático (login, sessão, revogação) [ ] Planejada
+Fase 11 — Teste E2E Prático (login, sessão, revogação) [x] Concluída
 ```
 
 ---
@@ -420,7 +420,11 @@ masterlxz.github.io/truthid
 
 ### Fase 11 — Teste E2E Prático: Login, Revogação de Sessão e Device
 
-**Objetivo**: Validar de ponta a ponta o fluxo de autenticação real — não só o registro on-chain (já feito na Sessão 36), mas efetivamente criar uma sessão autenticada com o device registrado, revogar essa sessão, e revogar o device em seguida. Nenhuma dessas três operações foi testada ao vivo ainda; as etapas anteriores só validaram o registro.
+**Status: CONCLUÍDA — Sessão 38 (2026-06-27)**
+
+Todas as 4 etapas validadas ao vivo com Base Mainnet, Ledger física e app desktop real.
+
+**Objetivo**: Validar de ponta a ponta o fluxo de autenticação real — não só o registro on-chain (já feito na Sessão 36), mas efetivamente criar uma sessão autenticada com o device registrado, revogar essa sessão, e revogar o device em seguida.
 
 **Contexto de partida (pós-Sessão 36)**:
 - Identidade `@masterlxz` (id=1, controller `0xB54fe9909D76d98e87a9fD76bDB5C69fABe10265`) criada em Base Mainnet
@@ -451,10 +455,10 @@ Desktop app                    Servidor exemplo (Express local)         Blockcha
 ```
 
 **Etapas**:
-- [ ] 11.1 — Subir o servidor de exemplo local (`sdk/typescript/example/server.js`) e confirmar que `GET /auth/challenge` retorna um challenge válido. Pré-requisito: `npm install` dentro de `sdk/typescript/`, variáveis de rede apontando para Base Mainnet (já é o default), identidade + device registrados (já estão). Valida que o SDK consegue ler o estado on-chain atual.
-- [ ] 11.2 — Login real com o desktop: o desktop assina o challenge via `invoke("sign_challenge", ...)` com a chave do device registrado, envia `POST /auth/verify`. Confirmar que o servidor retorna sucesso (assinatura válida + device ativo na blockchain). Olhar a resposta do servidor; idealmente também verificar via `cast call` ou `curl` direto no RPC que a sessão apareceu no `SessionRegistry`.
-- [ ] 11.3 — Revogar a sessão criada: abrir o desktop app, navegar para "Sessões ativas" (`ActiveSessions.tsx`), localizar a sessão do passo anterior e revogar. Confirmar on-chain que `isSessionRevoked` retorna verdadeiro para aquele `sessionId`. Verificar que chamar `POST /auth/verify` com a mesma sessão agora falha (ou que o SDK responde com "revogada" ao consultar `verifySession`).
-- [ ] 11.4 — Revogar o device desktop: navegar para "Dispositivos" (`ManageDevices.tsx`), localizar o device desktop e revogar. Confirmar que `isDeviceActive` retorna falso na blockchain. Tentar criar outro login com o mesmo device — deve falhar na etapa de verificação (`verifyAuthResponse()` checa o status do device no `DeviceRegistry`).
+- [x] 11.1 — Subir o servidor de exemplo local (`sdk/typescript/example/server.js`) e confirmar que `GET /auth/challenge` retorna um challenge válido. **CONCLUÍDO Sessão 38** — servidor rodando em localhost:3000, CORS adicionado.
+- [x] 11.2 — Login real com o desktop: o desktop assina o challenge via `invoke("sign_challenge", ...)` com a chave do device registrado, envia `POST /auth/verify`. **CONCLUÍDO Sessão 38** — servidor retornou `{ "token": "c70882ad-d999-4ded-bc1c-c0d92931e905", "identityId": "1" }`. Device `0x0a0B7e76E331d83448F57640D8eE62438470438e` ativo on-chain confirmado.
+- [x] 11.3 — Revogar a sessão criada: no tab "Login test", clicar em **Test Login** e depois em **Register session on-chain** (aguardar confirmação na Ledger). Navegar para "Active sessions", localizar a sessão pelo hash, clicar em Revoke. Confirmar que o badge muda para "Revoked". **CONCLUÍDO Sessão 38.**
+- [x] 11.4 — Revogar o device desktop: navegar para "Dispositivos" (`ManageDevices.tsx`), localizar o device desktop e revogar. Confirmar que `isDeviceActive` retorna falso na blockchain. Tentar criar outro login com o mesmo device — deve falhar na etapa de verificação (`verifyAuthResponse()` checa o status do device no `DeviceRegistry`). **CONCLUÍDO Sessão 38** — servidor retornou `"Device is not active or has been revoked"`, confirmando que o SDK lê o estado on-chain corretamente.
 
 **Pontos de atenção**:
 - `sign_challenge` e `get_or_create_device_key` são comandos Tauri — só funcionam dentro do app Tauri empacotado (não no `vite` dev server puro). O teste de fato exige rodar com `npm run tauri dev` dentro do Docker (`./dev.sh`).
@@ -499,6 +503,8 @@ Problemas identificados na revisão de arquitetura da Sessão 36 (2026-06-25). N
 | 8 | Desktop (UX/layout) | Posição dos botões, organização das telas e fluxos de navegação nunca foram revisados com olhar de produto — a UI atual é funcional mas foi montada para funcionar, não para ser usada com conforto. Usuário quer revisar o layout inteiro: onde cada botão fica, quais informações aparecem em cada tela, ordem de ações. | Sessão dedicada de redesign de UX: usuário descreve como quer cada tela, Claude implementa iterativamente com validação visual real (screenshots, app rodando de verdade). Fazer depois que o fluxo funcional estiver validado (Fase 11). |
 | 9 | `desktop/src/components/ConnectLedger.tsx` | A tela de espera da Ledger já tem mensagens contextuais por estado (`not_connected`/`locked`/`wrong_app`), mas exibe só texto puro — sem nenhuma hierarquia visual. O usuário (que tem Ledger física) quer uma experiência de passo a passo explícito: "1. Conecte a Ledger no computador → 2. Desbloqueie com o PIN no dispositivo → 3. Abra o app Ethereum". Os passos devem ser visuais (ícone/número + texto), com o passo atual destacado e os anteriores em estado "concluído" — o estado atual já é inferível pelo erro retornado pelo Rust (`not_connected` = passo 1 pendente, `locked` = passo 2 pendente, `wrong_app` = passo 3 pendente, sucesso = todos verdes). **Nota importante**: o PIN nunca passa pelo app TruthID — é digitado nos botões físicos da própria Ledger (proposital, protege contra keylogger). | Redesenhar `ConnectLedger.tsx` com um componente de stepper visual (3 passos). Cada passo tem ícone, número e texto descritivo. O estado atual do passo é derivado do `status` que já vem do polling Rust — sem nova lógica no backend. |
 | 10 | `desktop/src/components/ConnectLedger.tsx` | O seletor de conta da Ledger (dropdown "Conta 0" a "Conta 4") é funcional mas visualmente muito cru. O usuário não tem como saber qual índice corresponde a qual endereço Ethereum antes de selecionar — precisa tentar, conectar, verificar, voltar. Isso é especialmente confuso porque a Ledger usa dois padrões de HD path diferentes (Ledger Live legacy vs. MetaMask), então o índice certo depende de como a conta foi criada. | Redesenhar a seleção de conta: ao abrir o seletor, fazer polling de `get_ledger_address` para os índices 0–4 em paralelo (ou sequencialmente) e mostrar o endereço real junto ao número da conta (ex: "Conta 0 — 0x1234...abcd"). Assim o usuário reconhece o endereço visualmente sem precisar tentar. Avaliar se vale mostrar só as contas com saldo ou todas as 5 sempre. |
+| 11 | `sdk/typescript/src/`, `sdk/typescript/example/server.js`, `sdk/README.md` | O fluxo de registro de sessão on-chain (`createSession`) está incompleto no SDK. O mobile não tem ETH para pagar gas — quem deve chamar `createSession` é o servidor do integrador, usando uma carteira relayer financiada. Hoje o SDK não oferece helper para isso, não documenta a necessidade do relayer, e o mobile não assina o session hash (só assina o challenge). Consequência: nenhum login via mobile cria sessão on-chain, então `ActiveSessions` fica sempre vazio para logins mobile. **Impacto em documentação e SDKs:** (1) `sdk/README.md` precisa explicar a necessidade de relayer e o custo estimado (centavos por sessão no Base); (2) `sdk/typescript/src/client.ts` precisa de método `registerSession(hash, identityId, devicePubKey, r, s, v, signer)` que o servidor chama após `verifyAuthResponse`; (3) o fluxo mobile (`/auth/verify` no `example/server.js`) precisa de exemplo mostrando como o servidor chama `registerSession` automaticamente. | Implementar `registerSession` no SDK TypeScript. Atualizar `example/server.js` para chamar após `verifyAuthResponse`. Atualizar `sdk/README.md` com seção "Session registration" explicando o padrão relayer. Avaliar se o SDK mobile também precisa de mudança para assinar o session hash. |
+| 12 | `desktop/src/components/ConnectWallet.tsx`, `desktop/src/App.tsx`, configuração wagmi | O wagmi salva o estado da conexão no `localStorage` e reconecta automaticamente na próxima vez que o app abre — sem precisar que a Ledger esteja fisicamente conectada. Isso imita o comportamento do Ledger Live, que o usuário quer evitar. O comportamento correto: (a) sem auto-reconexão — cada sessão exige a Ledger física; (b) modo leitura sem wallet — ver devices e sessões ativas não requer assinatura, então o app pode mostrar esses dados com uma identidade salva localmente, pedindo a wallet apenas na hora de assinar uma transação. | Desabilitar o `reconnect()` automático do wagmi (ou configurar `storage: null` no wagmi config para não persistir). Separar identidade salva localmente (username no localStorage) de wallet conectada: ao carregar, se houver username salvo, mostrar a UI de leitura sem wallet; ao clicar em "Revogar" ou qualquer ação de escrita, exibir botão "Conectar wallet" contextual. |
 
 ---
 

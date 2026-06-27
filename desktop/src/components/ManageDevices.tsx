@@ -6,6 +6,7 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
 } from "wagmi";
+import { useQueryClient } from "@tanstack/react-query";
 import { keccak256, encodePacked, isAddress } from "viem";
 import {
   IDENTITY_REGISTRY_ADDRESS,
@@ -18,6 +19,8 @@ import { DesktopDevice } from "./DesktopDevice";
 // ─── Componente principal ─────────────────────────────────────────────────────
 
 export function ManageDevices({ username }: { username: string }) {
+  const queryClient = useQueryClient();
+
   // ── Leitura 1: buscar o identityId a partir do username ──────────────────
   // Por que precisamos do identityId? O contrato DeviceRegistry organiza os
   // devices por ID numérico, não por username. Então precisamos converter:
@@ -88,12 +91,13 @@ export function ManageDevices({ username }: { username: string }) {
     });
   }
 
-  // Quando a revogação confirmar, atualiza a lista
+  // Quando a revogação confirmar, invalida o cache e atualiza a lista
   useEffect(() => {
     if (isRevokeSuccess) {
       setRevokingPubKey(null);
-      refetchDevices();
-      refetchDeviceDetails();
+      queryClient.invalidateQueries();
+      // Wait for the RPC node to index the new block before refetching
+      setTimeout(() => { refetchDevices(); refetchDeviceDetails(); }, 3000);
     }
   }, [isRevokeSuccess]);
 

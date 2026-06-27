@@ -118,6 +118,20 @@ export const SESSION_REGISTRY_ADDRESS =
 export const SESSION_REGISTRY_ABI = [
   {
     type: "function",
+    name: "createSession",
+    inputs: [
+      { name: "hash", type: "bytes32" },
+      { name: "identityId", type: "uint256" },
+      { name: "devicePubKey", type: "address" },
+      { name: "r", type: "bytes32" },
+      { name: "s", type: "bytes32" },
+      { name: "v", type: "uint8" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
     name: "revokeSession",
     inputs: [{ name: "hash", type: "bytes32" }],
     outputs: [],
