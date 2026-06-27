@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'screens/approval_screen.dart';
 import 'screens/scan_screen.dart';
 import 'services/device_key_service.dart';
 
@@ -49,23 +50,21 @@ class _DeviceInfoScreenState extends State<DeviceInfoScreen> {
     );
     if (payload == null || !mounted) return;
 
-    // Temporário: mostra o payload — será substituído pela tela de aprovação na 4.4
-    showDialog(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('QR lido'),
-        content: Text(
-          'action: ${payload['action']}\n'
-          'roomId: ${payload['roomId']}',
+    final action = payload['action'] as String?;
+
+    if (action == 'truthid-auth') {
+      // Pedido de login — abre a tela de aprovação
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ApprovalScreen(payload: payload),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
+      );
+    } else {
+      // QR desconhecido ou de outra ação (ex: truthid-pair)
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('QR não reconhecido: ${action ?? "sem action"}')),
+      );
+    }
   }
 
   @override

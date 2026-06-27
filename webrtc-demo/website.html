@@ -2,46 +2,49 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>TruthID — Website (Offerer)</title>
+  <title>TruthID — Website (Auth Demo)</title>
   <style>
-    body { font-family: monospace; max-width: 600px; margin: 40px auto; padding: 0 20px; }
+    body { font-family: monospace; max-width: 650px; margin: 40px auto; padding: 0 20px; }
     button { padding: 8px 16px; margin: 4px; cursor: pointer; }
     #log { background: #111; color: #0f0; padding: 16px; height: 300px; overflow-y: auto; white-space: pre-wrap; }
-    #room-link { word-break: break-all; background: #f5f5f5; padding: 8px; margin: 8px 0; }
-    #message-area { display: none; }
-    input { padding: 6px; width: 300px; }
+    #qr-section { display: none; background: #f9f9f9; border: 1px solid #ddd; padding: 16px; margin: 12px 0; border-radius: 8px; text-align: center; }
+    #qr-container canvas { display: block; margin: 12px auto; }
+    #challenge-section { display: none; }
   </style>
+  <!-- QR code generator -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <!-- ethers.js para verificar assinatura secp256k1 (mesma curva do Ethereum) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
 </head>
 <body>
-  <h2>TruthID — Website (Offerer)</h2>
-  <button id="btn-start">1. Criar sala e iniciar conexão</button>
-  <div id="room-link"></div>
+  <h2>TruthID — Website (Auth Demo)</h2>
 
-  <div id="message-area">
+  <button id="btn-start">1. Criar sala e gerar QR</button>
+
+  <div id="qr-section">
+    <b>Escaneie com o app TruthID no celular:</b>
+    <div id="qr-container"></div>
+    <small id="room-id-label" style="color:#555"></small>
+    <p><em>Aguardando o celular conectar...</em></p>
+  </div>
+
+  <div id="challenge-section">
     <hr>
-    <button id="btn-challenge">2. Gerar e enviar challenge</button>
+    <button id="btn-challenge">2. Enviar challenge para o celular</button>
   </div>
 
   <hr>
   <div id="log"></div>
 
   <script>
-    const SIGNALING = 'ws://localhost:8000';
-    const API = 'http://localhost:8000';
-    const ICE_SERVERS = [
-      { urls: 'stun:stun.l.google.com:19302' },
-      { urls: 'stun:stun.cloudflare.com:3478' },
-      {
-        urls: 'turn:localhost:3478',
-        username: 'truthid',
-        credential: 'secret123',
-      },
-    ];
+    const SIGNALING_WS = 'ws://localhost:8000';
+    const SIGNALING_API = 'http://localhost:8000';
+    const CHALLENGE_TTL_MS = 30_000;
 
-    const CHALLENGE_TTL_MS = 30_000; // 30 segundos
+    // Set de nonces já usados — protege contra replay attack
     const usedNonces = new Set();
 
-    let pc, ws, dataChannel;
+    let ws = null;
     let lastChallenge = null;
 
     function log(msg) {
@@ -50,13 +53,16 @@
       el.scrollTop = el.scrollHeight;
     }
 
+    // ── Passo 1: criar sala e mostrar QR ─────────────────────────────────────
+
     document.getElementById('btn-start').addEventListener('click', async () => {
       document.getElementById('btn-start').disabled = true;
+      document.getElementById('qr-container').innerHTML = '';
 
-      // 1. Cria sala no servidor de sinalização
-      let res, room_id;
+      // Cria sala no servidor de sinalização
+      let room_id;
       try {
-        res = await fetch(`${API}/rooms`, { method: 'POST' });
+        const res = await fetch(`${SIGNALING_API}/rooms`, { method: 'POST' });
         ({ room_id } = await res.json());
       } catch (err) {
         log(`ERRO ao criar sala: ${err.message}`);
@@ -66,88 +72,76 @@
       }
       log(`Sala criada: ${room_id}`);
 
-      // Exibe link para o mobile entrar (simula QR code)
-      const mobileUrl = `${location.origin}/mobile.html?room=${room_id}`;
-      document.getElementById('room-link').innerHTML =
-        `<b>Link para o mobile (simula QR):</b><br><a href="${mobileUrl}" target="_blank">${mobileUrl}</a>`;
+      // Payload que o QR vai conter — exatamente o que o app mobile espera
+      const qrPayload = JSON.stringify({
+        action: 'truthid-auth',
+        signalingUrl: SIGNALING_WS,
+        roomId: room_id,
+      });
 
-      // 2. Conecta ao WebSocket de sinalização
-      ws = new WebSocket(`${SIGNALING}/rooms/${room_id}`);
-      ws.onopen = () => log('Conectado à sinalização');
-      ws.onmessage = (evt) => handleSignal(JSON.parse(evt.data));
+      // Mostra o QR
+      document.getElementById('qr-section').style.display = 'block';
+      document.getElementById('room-id-label').textContent = `Sala: ${room_id}`;
+      new QRCode(document.getElementById('qr-container'), {
+        text: qrPayload,
+        width: 220,
+        height: 220,
+      });
 
-      // 3. Cria RTCPeerConnection com servidores STUN
-      pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
-
-      // Quando o ICE encontrar um candidato, envia pela sinalização
-      pc.onicecandidate = ({ candidate }) => {
-        if (candidate) {
-          log(`ICE candidate encontrado: ${candidate.type}`);
-          ws.send(JSON.stringify({ type: 'ice', candidate }));
-        }
-      };
-
-      pc.onconnectionstatechange = () => {
-        log(`Estado da conexão: ${pc.connectionState}`);
-        if (pc.connectionState === 'connected') {
-          log('*** CONEXÃO P2P ESTABELECIDA! ***');
-          document.getElementById('message-area').style.display = 'block';
-        }
-      };
-
-      // 4. Cria data channel (canal de dados P2P)
-      dataChannel = pc.createDataChannel('auth');
-      dataChannel.onopen = () => log('Data channel aberto');
-      dataChannel.onmessage = (evt) => handleMessage(JSON.parse(evt.data));
-
-      log('Aguardando o mobile entrar na sala...');
+      // Conecta ao WebSocket da sala para receber mensagens do mobile
+      ws = new WebSocket(`${SIGNALING_WS}/rooms/${room_id}`);
+      ws.onopen = () => log('Conectado à sinalização — aguardando o celular...');
+      ws.onmessage = (evt) => handleMessage(JSON.parse(evt.data));
+      ws.onerror = () => log('Erro na conexão WebSocket.');
     });
 
-    async function handleSignal(msg) {
+    // ── Passo 2: receber mensagens do mobile ─────────────────────────────────
+
+    function handleMessage(msg) {
       if (msg.type === 'ready') {
-        log('Mobile entrou na sala — criando oferta SDP...');
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        log('Oferta SDP criada — enviando pela sinalização...');
-        ws.send(JSON.stringify({ type: 'offer', sdp: offer.sdp }));
-      } else if (msg.type === 'answer') {
-        log('Resposta SDP recebida do mobile');
-        await pc.setRemoteDescription({ type: 'answer', sdp: msg.sdp });
-      } else if (msg.type === 'ice') {
-        log(`ICE candidate recebido do mobile: ${msg.candidate.type}`);
-        await pc.addIceCandidate(msg.candidate);
+        // Mobile entrou na sala — libera o botão de enviar challenge
+        log('Celular conectado! Pronto para enviar o challenge.');
+        document.getElementById('challenge-section').style.display = 'block';
+      } else if (msg.type === 'auth-response') {
+        handleAuthResponse(msg);
       }
     }
 
+    // ── Passo 3: enviar challenge ─────────────────────────────────────────────
+
     document.getElementById('btn-challenge').addEventListener('click', () => {
-      if (!dataChannel || dataChannel.readyState !== 'open') return;
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        log('WebSocket não está aberto.');
+        return;
+      }
 
       const challenge = {
         type: 'challenge',
         nonce: crypto.randomUUID(),
         issuedAt: Date.now(),
-        origin: location.host,
+        origin: location.host || 'localhost',
       };
 
       lastChallenge = challenge;
-      dataChannel.send(JSON.stringify(challenge));
-      log(`Challenge enviado (P2P):`);
-      log(`  nonce:     ${challenge.nonce}`);
-      log(`  issuedAt:  ${new Date(challenge.issuedAt).toLocaleTimeString()}`);
-      log(`  origin:    ${challenge.origin}`);
+      ws.send(JSON.stringify(challenge));
+
+      log(`Challenge enviado:`);
+      log(`  nonce:    ${challenge.nonce}`);
+      log(`  issuedAt: ${new Date(challenge.issuedAt).toLocaleTimeString()}`);
+      log(`  origin:   ${challenge.origin}`);
     });
 
-    window.handleMessage = async function handleMessage(msg) {
-      if (msg.type !== 'auth-response') return;
+    // ── Passo 4: verificar a resposta do mobile ───────────────────────────────
 
+    async function handleAuthResponse(msg) {
       if (!msg.approved) {
         log('*** LOGIN RECUSADO pelo dispositivo ***');
         return;
       }
 
-      log('Resposta recebida (P2P) — verificando...');
+      log('Resposta recebida — verificando...');
 
-      // Camada 1: TTL
+      // Camada 1: TTL — desafio não pode ter mais de 30 segundos
       const age = Date.now() - lastChallenge.issuedAt;
       if (age > CHALLENGE_TTL_MS) {
         log(`*** REJEITADO: challenge expirado (${(age / 1000).toFixed(1)}s > 30s) ***`);
@@ -155,46 +149,35 @@
       }
       log(`  TTL ok (${(age / 1000).toFixed(1)}s)`);
 
-      // Camada 2: nonce único
+      // Camada 2: nonce único — protege contra replay attack
       if (usedNonces.has(msg.nonce)) {
         log('*** REJEITADO: nonce já utilizado (replay attack) ***');
         return;
       }
       usedNonces.add(msg.nonce);
-      log('  Nonce ok (nunca usado antes)');
+      log('  Nonce ok');
 
-      log('Verificando assinatura...');
+      // Camada 3: verificar assinatura secp256k1
+      // O app Flutter usa signPersonalMessageToUint8List() que adiciona o prefixo:
+      //   "\x19Ethereum Signed Message:\n{len}"
+      // ethers.verifyMessage() adiciona o mesmo prefixo antes de verificar,
+      // então eles são compatíveis.
+      log('Verificando assinatura secp256k1...');
+      try {
+        const challengeJson = JSON.stringify(lastChallenge);
+        const recoveredAddress = ethers.utils.verifyMessage(challengeJson, msg.signature);
 
-      // Reconstrói a chave pública a partir do base64 recebido
-      const pubKeyBytes = Uint8Array.from(atob(msg.publicKey), c => c.charCodeAt(0));
-      const publicKey = await crypto.subtle.importKey(
-        'raw',
-        pubKeyBytes,
-        { name: 'ECDSA', namedCurve: 'P-256' },
-        false,
-        ['verify']
-      );
-
-      // Reconstrói os bytes que o mobile assinou (o challenge original)
-      const encoder = new TextEncoder();
-      const data = encoder.encode(JSON.stringify(lastChallenge));
-
-      // Reconstrói a assinatura a partir do base64
-      const signatureBytes = Uint8Array.from(atob(msg.signature), c => c.charCodeAt(0));
-
-      // Verifica: essa assinatura foi feita com a chave privada correspondente?
-      const valid = await crypto.subtle.verify(
-        { name: 'ECDSA', hash: 'SHA-256' },
-        publicKey,
-        signatureBytes,
-        data
-      );
-
-      if (valid) {
-        log('*** ASSINATURA VÁLIDA — LOGIN APROVADO! ***');
-        log(`  nonce confirmado: ${msg.nonce}`);
-      } else {
-        log('*** ASSINATURA INVÁLIDA — LOGIN REJEITADO ***');
+        if (recoveredAddress.toLowerCase() === msg.deviceAddress.toLowerCase()) {
+          log('*** ASSINATURA VÁLIDA — LOGIN APROVADO! ***');
+          log(`  device: ${msg.deviceAddress}`);
+          log('  (prod: verificar no DeviceRegistry se o device está ativo na blockchain)');
+        } else {
+          log('*** ASSINATURA INVÁLIDA — endereço não bate ***');
+          log(`  esperado:   ${msg.deviceAddress}`);
+          log(`  recuperado: ${recoveredAddress}`);
+        }
+      } catch (err) {
+        log(`*** ERRO na verificação: ${err.message} ***`);
       }
     }
   </script>
