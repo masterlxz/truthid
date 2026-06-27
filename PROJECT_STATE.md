@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-06-14 (Sessão 18)
+> Última atualização: 2026-06-14 (Sessão 20)
 
 ---
 
@@ -172,8 +172,8 @@ Antes de rodar pela primeira vez na sessão (ou após reiniciar o computador), o
 - [x] 4.1 — Setup Flutter
 - [x] 4.2 — Geração de key pair no dispositivo (Android Keystore / iOS Secure Enclave)
 - [x] 4.3 — Scanner de QR code
-- [ ] 4.4 — Tela: Aprovar login (exibir quem está pedindo, aprovar/recusar)
-- [ ] 4.5 — Assinatura do challenge + envio via relay
+- [x] 4.4 — Tela: Aprovar login (exibir quem está pedindo, aprovar/recusar)
+- [x] 4.5 — Assinatura do challenge + envio via WebSocket relay
 - [ ] 4.6 — Tela: Meus dispositivos
 - [ ] 4.7 — Tela: Sessões ativas
 
@@ -261,6 +261,34 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-14 — Sessão 20
+
+- **Etapas 4.4 e 4.5 concluídas** — Tela de aprovação de login + assinatura do challenge
+  - `lib/screens/approval_screen.dart`: nova tela com máquina de estados (`_Status` enum)
+    - `_connect()`: abre WebSocket (`dart:io`) com servidor de sinalização, envia `{ type: "ready" }`
+    - `_handleMessage()`: recebe `{ type: "challenge", nonce, issuedAt, origin }`, muda estado para `challenge`
+    - `_buildChallengeUI()`: exibe nome do site, hora do pedido, botões Aprovar/Recusar
+    - `_approve()`: chama `signChallenge()` do `DeviceKeyService`, envia `auth-response` com assinatura secp256k1 + deviceAddress
+    - `_reject()`: envia `auth-response { approved: false }` sem assinar
+  - `lib/main.dart`: roteamento por `action` — `"truthid-auth"` abre `ApprovalScreen`; outros actions mostram snackbar
+  - `webrtc-demo/website.html`: reformulado como demo de auth completo
+    - Gera QR com `{ action: "truthid-auth", signalingUrl, roomId }` via `qrcodejs`
+    - Aguarda `{ type: "ready" }` do mobile, libera botão de challenge
+    - Envia challenge via WebSocket (não P2P), recebe resposta via WebSocket
+    - Verifica assinatura secp256k1 com `ethers.verifyMessage()` (compatível com `signPersonalMessageToUint8List()`)
+  - APK debug gerado com sucesso
+  - Fix recorrente: `sudo chown -R masterlxz:masterlxz mobile/lib/` (Docker cria como root)
+  - `flutter_webrtc 0.10.8` incompatível com Flutter 3.44.2 (remove `PluginRegistry.Registrar` da V1 API) — decisão: usar WebSocket relay em vez de WebRTC P2P (segurança equivalente: nonce + TTL + secp256k1; privacidade P2P pode ser adicionada quando o pacote tiver compat)
+- Conceitos ensinados:
+  - `dart:io` `WebSocket.connect()`: conexão persistente bidirecional — diferente de `http.get` (dispara e esquece), fica aberta e recebe eventos assíncronos
+  - `ws.listen(onData, onError, onDone)`: 3 callbacks para os 3 eventos do ciclo de vida do WebSocket
+  - Máquina de estados com `enum`: quando uma tela tem muitos estados possíveis, um enum é mais claro que múltiplos `bool` (`_scanned`, `_loading`, `_hasError`...)
+  - `switch (_status)` no `build()`: expressão pattern matching do Dart 3 — cada estado gera uma UI diferente sem `if/else` aninhados
+  - `_responded` flag: mesmo padrão do `_scanned` do scanner — garante que a resposta seja enviada exatamente uma vez mesmo que o usuário toque duas vezes
+  - `jsonEncode(_challenge)`: serializar o challenge exatamente como recebido antes de assinar — qualquer diferença de espaço/ordem invalidaria a verificação
+  - `ethers.verifyMessage(msg, sig)`: recupera o endereço Ethereum que assinou a mensagem — é o inverso de `signPersonalMessageToUint8List()`; se a assinatura for válida, retorna o endereço correto
+- **Próximo passo ao retomar**: Etapa 4.6 — Tela: Meus dispositivos
 
 ### 2026-06-14 — Sessão 19
 
