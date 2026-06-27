@@ -1,5 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:web3dart/crypto.dart';
 
 import 'package:flutter/material.dart';
 
@@ -78,18 +81,26 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
     if (_challenge == null || _responded) return;
     _responded = true;
 
-    // Serializa o challenge exatamente como recebido.
-    // O site vai verificar que: hash(conteúdo) bate com o challenge que ele criou.
+    final nonce = _challenge!['nonce'] as String;
+
+    // 1. Assina o challenge JSON (autenticação — verificado pelo SDK no servidor)
     final challengeJson = jsonEncode(_challenge);
     final signature = await _keyService.signChallenge(challengeJson);
     final deviceAddress = await _keyService.getDeviceAddress();
 
+    // 2. Assina o session hash (registro on-chain — verificado pelo SessionRegistry)
+    // sessionHash = keccak256(utf8_bytes_do_nonce), igual ao que o servidor calcula
+    final nonceBytes = Uint8List.fromList(utf8.encode(nonce));
+    final sessionHash = keccak256(nonceBytes);
+    final sessionSignature = await _keyService.signHash(sessionHash);
+
     try {
       await _postResponse({
         'approved': true,
-        'nonce': _challenge!['nonce'],
-        'signature': signature,       // assinatura secp256k1 com prefixo Ethereum personal_sign
-        'deviceAddress': deviceAddress, // endereço Ethereum — site verifica no DeviceRegistry
+        'nonce': nonce,
+        'signature': signature,           // autenticação: personal_sign(JSON do challenge)
+        'deviceAddress': deviceAddress,   // endereço Ethereum — verificado no DeviceRegistry
+        'sessionSignature': sessionSignature, // registro on-chain: personal_sign(keccak256(nonce))
       });
     } catch (_) {
       _setError('Could not send response to the website. Check your connection.');

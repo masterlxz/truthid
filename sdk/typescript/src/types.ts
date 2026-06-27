@@ -49,3 +49,16 @@ export interface DeviceStatus {
   identityId?: bigint;
   addedAt?: Date;
 }
+
+export interface RegisterSessionParams {
+  nonce: string;
+  identityId: bigint;
+  devicePubKey: string;
+  sessionSignature: string; // 65-byte hex from personal_sign over the session hash
+  relayerPrivateKey: `0x${string}`;
+}
+
+export interface RegisterSessionResult {
+  txHash: `0x${string}`;
+  sessionHash: `0x${string}`; // keccak256(nonce) — the on-chain session identifier
+}

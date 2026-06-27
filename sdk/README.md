@@ -321,6 +321,54 @@ end
 
 ---
 
+## Session Registration (On-Chain Audit Trail)
+
+After a successful login, you can register the session on-chain so it appears in `ActiveSessions` in the TruthID desktop app and can be individually revoked by the user.
+
+### Why a relayer?
+
+The mobile device key never holds ETH — it only signs messages. Gas must be paid by a server-side **relayer wallet** that you fund. On Base, this costs fractions of a cent per session.
+
+### How it works
+
+When the mobile approves a login, it produces two signatures:
+1. **Auth signature** — `personal_sign(JSON.stringify(challenge))` — verified by `verifyAuthResponse`
+2. **Session signature** — `personal_sign(keccak256(nonce))` — verified on-chain by the contract
+
+Both use the same device key. The session hash (`keccak256(nonce)`) is derived independently by both the mobile and the server from the nonce already in the challenge — no extra round-trip needed.
+
+### Setup
+
+Fund a relayer wallet (any Ethereum key) with a small amount of ETH on Base (0.01 ETH covers thousands of sessions), then pass its private key via environment variable:
+
+```bash
+RELAYER_PRIVATE_KEY=0x... node server.js
+```
+
+### Code
+
+```typescript
+// After verifyAuthResponse succeeds:
+if (response.sessionSignature && process.env.RELAYER_PRIVATE_KEY) {
+  const { txHash, sessionHash } = await truthid.registerSession({
+    nonce: response.nonce,
+    identityId: result.identityId!,
+    devicePubKey: result.deviceAddress!,
+    sessionSignature: response.sessionSignature,
+    relayerPrivateKey: process.env.RELAYER_PRIVATE_KEY as `0x${string}`,
+  });
+  console.log("Session registered on-chain:", sessionHash);
+}
+```
+
+`registerSession` is non-blocking for auth — if it fails (e.g. relayer has no ETH), the login still succeeds. Wrap it in a try/catch and log the error.
+
+### Mobile compatibility
+
+`sessionSignature` is only present in TruthID mobile app v1.1+. Older clients don't send it; registrations just won't happen. The field is optional — check for its presence before calling `registerSession`.
+
+---
+
 ## Security Notes
 
 ### Nonce invalidation (required)

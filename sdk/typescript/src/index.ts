@@ -8,4 +8,6 @@ export type {
   SessionInfo,
   DeviceStatus,
   Network,
+  RegisterSessionParams,
+  RegisterSessionResult,
 } from "./types.js";

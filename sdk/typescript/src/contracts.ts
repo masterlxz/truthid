@@ -98,4 +98,18 @@ export const SESSION_REGISTRY_ABI = [
     ],
     stateMutability: "view",
   },
+  {
+    type: "function",
+    name: "createSession",
+    inputs: [
+      { name: "hash", type: "bytes32" },
+      { name: "identityId", type: "uint256" },
+      { name: "devicePubKey", type: "address" },
+      { name: "r", type: "bytes32" },
+      { name: "s", type: "bytes32" },
+      { name: "v", type: "uint8" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
 ] as const;

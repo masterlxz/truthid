@@ -45,8 +45,11 @@ app.get("/auth/challenge", (req, res) => {
 });
 
 // ─── Step 2: mobile signed → website posts the response here ─────────────────
+// Body: { approved, nonce, signature, deviceAddress, sessionSignature? }
+// sessionSignature is only present when the mobile is TruthID app v1.1+.
+// If absent (old client), auth still works; the session just won't appear on-chain.
 app.post("/auth/verify", async (req, res) => {
-  const response = req.body; // { approved, nonce, signature, deviceAddress }
+  const response = req.body;
 
   // Retrieve the original challenge by nonce
   const challenge = pendingChallenges.get(response.nonce);
@@ -71,9 +74,30 @@ app.post("/auth/verify", async (req, res) => {
     deviceAddress: result.deviceAddress,
   });
 
+  // Optional: register session on-chain via relayer so it appears in ActiveSessions.
+  // Requires RELAYER_PRIVATE_KEY env var (funded wallet that pays gas on Base).
+  // Gas cost is minimal — fractions of a cent per session on Base.
+  let sessionHash = null;
+  if (response.sessionSignature && process.env.RELAYER_PRIVATE_KEY) {
+    try {
+      const registered = await truthid.registerSession({
+        nonce: response.nonce,
+        identityId: result.identityId,
+        devicePubKey: result.deviceAddress,
+        sessionSignature: response.sessionSignature,
+        relayerPrivateKey: process.env.RELAYER_PRIVATE_KEY,
+      });
+      sessionHash = registered.sessionHash;
+    } catch (err) {
+      // Non-fatal: auth succeeded, session just won't be on-chain
+      console.error("registerSession failed:", err.message);
+    }
+  }
+
   res.json({
     token: sessionToken,
     identityId: result.identityId.toString(),
+    ...(sessionHash && { sessionHash }),
   });
 });
 

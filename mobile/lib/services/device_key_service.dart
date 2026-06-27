@@ -33,4 +33,12 @@ class DeviceKeyService {
     final signature = key.signPersonalMessageToUint8List(messageBytes);
     return bytesToHex(signature, include0x: true);
   }
+
+  // Signs a 32-byte hash using Ethereum's personal_sign prefix for 32-byte messages.
+  // This produces the (r, s, v) signature the SessionRegistry.createSession contract expects.
+  Future<String> signHash(Uint8List hash32) async {
+    final key = await _getOrCreateKey();
+    final signature = key.signPersonalMessageToUint8List(hash32);
+    return bytesToHex(signature, include0x: true);
+  }
 }

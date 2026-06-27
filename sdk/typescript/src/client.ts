@@ -1,5 +1,7 @@
-import { createPublicClient, http, recoverMessageAddress } from "viem";
+import { createPublicClient, createWalletClient, http, keccak256, toBytes, recoverMessageAddress } from "viem";
+import type { Chain } from "viem";
 import { baseSepolia, base } from "viem/chains";
+import { privateKeyToAccount } from "viem/accounts";
 import { randomUUID } from "crypto";
 
 import {
@@ -15,25 +17,29 @@ import type {
   VerifyAuthResult,
   SessionInfo,
   DeviceStatus,
+  RegisterSessionParams,
+  RegisterSessionResult,
 } from "./types.js";
 
 export class TruthIDClient {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private publicClient: any;
+  private chain: Chain;
+  private rpcUrl: string;
   private deviceRegistryAddress: `0x${string}`;
   private sessionRegistryAddress: `0x${string}`;
 
   constructor(config: TruthIDClientConfig) {
-    const chain = config.network === "base-mainnet" ? base : baseSepolia;
-    const rpcUrl =
+    this.chain = config.network === "base-mainnet" ? base : baseSepolia;
+    this.rpcUrl =
       config.rpcUrl ??
       (config.network === "base-mainnet"
         ? "https://mainnet.base.org"
         : "https://sepolia.base.org");
 
     this.publicClient = createPublicClient({
-      chain,
-      transport: http(rpcUrl),
+      chain: this.chain,
+      transport: http(this.rpcUrl),
     });
     this.deviceRegistryAddress = DEVICE_REGISTRY_ADDRESSES[config.network];
     this.sessionRegistryAddress = SESSION_REGISTRY_ADDRESSES[config.network];
@@ -149,6 +155,44 @@ export class TruthIDClient {
       devicePubKey: session.devicePubKey,
       createdAt: new Date(Number(session.createdAt) * 1000),
     };
+  }
+
+  // Registers an authenticated session on-chain via a relayer wallet.
+  // The mobile device signed the session hash (keccak256 of the challenge nonce)
+  // with personal_sign — the contract uses that signature to verify device ownership.
+  // The relayer submits the transaction and pays the gas; the device key never holds ETH.
+  async registerSession({
+    nonce,
+    identityId,
+    devicePubKey,
+    sessionSignature,
+    relayerPrivateKey,
+  }: RegisterSessionParams): Promise<RegisterSessionResult> {
+    // Both sides derive the session hash from the nonce — no extra communication needed
+    const sessionHash = keccak256(toBytes(nonce));
+
+    // Split the 65-byte compact signature into the (r, s, v) components the contract expects
+    const r = `0x${sessionSignature.slice(2, 66)}` as `0x${string}`;
+    const s = `0x${sessionSignature.slice(66, 130)}` as `0x${string}`;
+    const v = parseInt(sessionSignature.slice(130, 132), 16);
+
+    const account = privateKeyToAccount(relayerPrivateKey);
+    const walletClient = createWalletClient({
+      account,
+      chain: this.chain,
+      transport: http(this.rpcUrl),
+    });
+
+    const txHash = await walletClient.writeContract({
+      address: this.sessionRegistryAddress,
+      abi: SESSION_REGISTRY_ABI,
+      functionName: "createSession",
+      args: [sessionHash, identityId, devicePubKey as `0x${string}`, r, s, v],
+      account,
+      chain: this.chain,
+    });
+
+    return { txHash, sessionHash };
   }
 
   // Checks the status of a device on-chain
