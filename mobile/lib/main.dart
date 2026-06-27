@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'screens/scan_screen.dart';
 import 'services/device_key_service.dart';
 
 void main() {
@@ -42,6 +43,31 @@ class _DeviceInfoScreenState extends State<DeviceInfoScreen> {
     setState(() => _deviceAddress = address);
   }
 
+  Future<void> _openScanner() async {
+    final payload = await Navigator.of(context).push<Map<String, dynamic>>(
+      MaterialPageRoute(builder: (_) => const ScanScreen()),
+    );
+    if (payload == null || !mounted) return;
+
+    // Temporário: mostra o payload — será substituído pela tela de aprovação na 4.4
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('QR lido'),
+        content: Text(
+          'action: ${payload['action']}\n'
+          'roomId: ${payload['roomId']}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -62,6 +88,18 @@ class _DeviceInfoScreenState extends State<DeviceInfoScreen> {
                     _deviceAddress!,
                     style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
                   ),
+            const SizedBox(height: 40),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _openScanner,
+                icon: const Icon(Icons.qr_code_scanner),
+                label: const Text('Escanear QR'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+              ),
+            ),
           ],
         ),
       ),

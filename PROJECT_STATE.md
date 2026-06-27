@@ -171,7 +171,7 @@ Antes de rodar pela primeira vez na sessão (ou após reiniciar o computador), o
 **Etapas**:
 - [x] 4.1 — Setup Flutter
 - [x] 4.2 — Geração de key pair no dispositivo (Android Keystore / iOS Secure Enclave)
-- [ ] 4.3 — Scanner de QR code
+- [x] 4.3 — Scanner de QR code
 - [ ] 4.4 — Tela: Aprovar login (exibir quem está pedindo, aprovar/recusar)
 - [ ] 4.5 — Assinatura do challenge + envio via relay
 - [ ] 4.6 — Tela: Meus dispositivos
@@ -262,6 +262,30 @@ Website          Relay           Mobile App        Blockchain
 
 ## Log de Sessões
 
+### 2026-06-14 — Sessão 19
+
+- **Etapa 4.3 concluída** — Scanner de QR code
+  - `pubspec.yaml`: adicionado `mobile_scanner: ^6.0.0` (instalou 6.0.11)
+  - `android/app/src/main/AndroidManifest.xml`: adicionado `<uses-permission android:name="android.permission.CAMERA" />`
+  - `lib/screens/scan_screen.dart`: tela de câmera com `MobileScanner`
+    - `_scanned` flag: evita processar o mesmo QR múltiplas vezes (câmera roda a 30fps)
+    - `onDetect`: extrai `rawValue`, tenta parsear como JSON, retorna payload via `Navigator.pop`
+    - QR inválido: reseta `_scanned` e exibe SnackBar — usuário pode tentar de novo
+  - `lib/main.dart`: adicionado botão "Escanear QR" na `DeviceInfoScreen`
+    - `_openScanner`: abre `ScanScreen` com `Navigator.push`, aguarda retorno assíncrono
+    - Resultado temporário: dialog com `action` + `roomId` (será substituído pela `ApprovalScreen` na 4.4)
+  - APK debug gerado com sucesso (instalou Android SDK Platform 34/35 e CMake 3.22.1 automaticamente)
+  - Fix recorrente: `sudo chown -R masterlxz:masterlxz mobile/android` (Docker criou pasta como root)
+- Conceitos ensinados:
+  - Permissão de câmera Android: declarar no manifest (quais recursos o app pode usar) + runtime dialog (o sistema pede ao usuário na primeira vez)
+  - `mobile_scanner`: wrapper Dart sobre as APIs nativas de câmera/barcode — lida com o popup de permissão automaticamente
+  - `Navigator.push` / `Navigator.pop`: pilha de telas — `pop(valor)` devolve dados para a tela anterior
+  - `await Navigator.push<T>()`: `Future<T?>` — a tela anterior espera assincronamente o retorno
+  - `_scanned` flag: padrão para operações que devem ocorrer exatamente uma vez (câmera emite eventos contínuos)
+  - `firstOrNull`: extensão de List em Dart 3 — retorna primeiro elemento ou null (equivale a `next(iter, None)` em Python)
+  - `mounted`: checar se o widget ainda está na árvore antes de usar `context` após um `await`
+- **Próximo passo ao retomar**: Etapa 4.4 — Tela: Aprovar login (exibir quem está pedindo, aprovar/recusar)
+
 ### 2026-06-14 — Sessão 18
 
 - **Etapa 4.2 concluída** — Geração de key pair no dispositivo (Android Keystore)
@@ -284,7 +308,7 @@ Website          Relay           Mobile App        Blockchain
   - `initState()`: roda uma vez quando a tela é criada — lugar certo para carregar dados assíncronos
   - `signPersonalMessageToUint8List()`: adiciona prefixo Ethereum antes de assinar (evita assinar transações acidentalmente)
   - EIP-55: formato checksumado de endereço Ethereum (maiúsculas/minúsculas como checksum visual)
-- **Próximo passo ao retomar**: Etapa 4.3 — Scanner de QR code
+- **Próximo passo ao retomar**: Etapa 4.4 — Tela: Aprovar login
 
 ### 2026-06-13 — Sessão 17
 
