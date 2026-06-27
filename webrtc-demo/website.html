@@ -19,8 +19,7 @@
 
   <div id="message-area">
     <hr>
-    <input id="msg-input" placeholder="Mensagem para o mobile..." />
-    <button id="btn-send">Enviar via P2P</button>
+    <button id="btn-challenge">2. Gerar e enviar challenge</button>
   </div>
 
   <hr>
@@ -111,13 +110,21 @@
       }
     }
 
-    document.getElementById('btn-send').addEventListener('click', () => {
-      const input = document.getElementById('msg-input');
-      if (dataChannel && dataChannel.readyState === 'open') {
-        dataChannel.send(input.value);
-        log(`Mensagem enviada (P2P): ${input.value}`);
-        input.value = '';
-      }
+    document.getElementById('btn-challenge').addEventListener('click', () => {
+      if (!dataChannel || dataChannel.readyState !== 'open') return;
+
+      const challenge = {
+        type: 'challenge',
+        nonce: crypto.randomUUID(),
+        issuedAt: Date.now(),
+        origin: location.host,
+      };
+
+      dataChannel.send(JSON.stringify(challenge));
+      log(`Challenge enviado (P2P):`);
+      log(`  nonce:     ${challenge.nonce}`);
+      log(`  issuedAt:  ${new Date(challenge.issuedAt).toLocaleTimeString()}`);
+      log(`  origin:    ${challenge.origin}`);
     });
   </script>
 </body>
