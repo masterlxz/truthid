@@ -144,8 +144,12 @@ Antes de rodar pela primeira vez na sessão (ou após reiniciar o computador), o
   - SDK dos sites consulta "esse hash está revogado?" sem saber o que o hash representa
   - Privacidade: público que existe um registro, privado o que representa (site, device, horário)
   - Custo estimado por login: ~$0,0002 (Base Mainnet, gas ~0.001 gwei)
-- [ ] 3.6 — Geração de QR code para pareamento de novo dispositivo
-- [ ] 3.7 — Armazenamento seguro de chaves (Windows TPM / Linux Keyring)
+- [x] 3.6 — Geração de QR code para pareamento de novo dispositivo (implementado dentro da 3.4 — componente PairDevice em ManageDevices.tsx)
+- [x] 3.7 — Armazenamento seguro de chaves (Windows TPM / Linux Keyring)
+  - Dois comandos Tauri em Rust: `get_or_create_device_key` (gera/recupera chave do keyring do SO) e `sign_challenge` (assina com a chave privada)
+  - Algoritmo secp256k1 + endereço Ethereum derivado via keccak256 — compatível com DeviceRegistry
+  - `DesktopDevice.tsx`: componente que registra o próprio desktop como device na blockchain
+  - Desktop pode autenticar sem celular após registro
 - [ ] 3.8 — Build para Linux, Windows, macOS
 
 ---
