@@ -3,6 +3,7 @@ import 'screens/approval_screen.dart';
 import 'screens/devices_screen.dart';
 import 'screens/pairing_screen.dart';
 import 'screens/scan_screen.dart';
+import 'screens/sessions_screen.dart';
 
 void main() {
   runApp(const TruthIDApp());
@@ -92,7 +93,7 @@ class _RootScreenState extends State<RootScreen> {
             key: _devicesKey,
             onScanPairing: _openScanner,
           ),
-          const _SessionsPlaceholder(),
+          const SessionsScreen(),
         ],
       ),
 
@@ -114,29 +115,3 @@ class _RootScreenState extends State<RootScreen> {
   }
 }
 
-// Placeholder para a aba de Sessões — será implementada na etapa 4.7
-class _SessionsPlaceholder extends StatelessWidget {
-  const _SessionsPlaceholder();
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.history, size: 64, color: Colors.grey.shade300),
-          const SizedBox(height: 16),
-          Text(
-            'Sessões ativas',
-            style: TextStyle(fontSize: 18, color: Colors.grey.shade500),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Em breve...',
-            style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
-          ),
-        ],
-      ),
-    );
-  }
-}

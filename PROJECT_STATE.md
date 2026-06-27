@@ -46,7 +46,7 @@ Stack principal:
 Fase 1 — Smart Contracts        [x] Concluída
 Fase 2 — Relay Service          [x] Concluída
 Fase 3 — Desktop App            [x] Concluída
-Fase 4 — Mobile App             [.] Em andamento
+Fase 4 — Mobile App             [x] Concluída
 Fase 5 — SDKs                   [ ] Não iniciada
 Fase 6 — Integração & Testes    [ ] Não iniciada
 Fase 7 — Mainnet & Lançamento   [ ] Não iniciada
@@ -175,7 +175,7 @@ Antes de rodar pela primeira vez na sessão (ou após reiniciar o computador), o
 - [x] 4.4 — Tela: Aprovar login (exibir quem está pedindo, aprovar/recusar)
 - [x] 4.5 — Assinatura do challenge + envio via WebSocket relay
 - [x] 4.6 — Tela: Meus dispositivos
-- [ ] 4.7 — Tela: Sessões ativas
+- [x] 4.7 — Tela: Sessões ativas
 
 ---
 
@@ -295,6 +295,37 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-14 — Sessão 22
+
+- **Etapa 4.7 concluída** — Tela: Sessões ativas — **Fase 4 completa**
+  - `lib/services/blockchain_service.dart`: novo serviço de leitura on-chain
+    - `_ethCall(fn, params)`: faz `eth_call` JSON-RPC via `dart:io` (sem pacote `http`)
+      - `fn.encodeCall(params)`: codifica parâmetros em ABI binário
+      - Converte bytes → hex para enviar ao nó RPC
+      - `fn.decodeReturnValues(hexString)`: decodifica resposta do nó em tipos Dart
+    - `getSessionsForIdentity(identityId)`: busca hashes via `getSessionsByIdentity`, depois
+      `getSession` + `isSessionRevoked` em paralelo com `Future.wait`
+    - `SessionInfo`: data class com hash, devicePubKey, createdAt, isRevoked
+    - Fix: `decodeReturnValues` recebe `String` hex (sem `0x`), não `Uint8List`
+  - `lib/screens/sessions_screen.dart`: nova tela de sessões
+    - Se não pareado: tela explicativa ("Pareie este dispositivo...")
+    - Se pareado: lê `identityId` do storage, consulta blockchain, exibe lista
+    - `_SessionCard`: card com hash truncado, data, "Este device" se for o device atual, chip Ativa/Revogada
+    - Aviso amarelo: revogação requer controller wallet (desktop)
+    - `RefreshIndicator` para recarregar manualmente
+  - `lib/main.dart`: `_SessionsPlaceholder` removido, substituído por `SessionsScreen`
+  - APK debug gerado com sucesso
+- Conceitos ensinados:
+  - `eth_call` JSON-RPC: leitura de contrato via HTTP — não gasta gas, não precisa de wallet
+  - `ContractAbi.fromJson` + `DeployedContract`: define o contrato em Dart para encoding/decoding
+  - `fn.encodeCall(params)` / `fn.decodeReturnValues(hex)`: conversão ABI ↔ Dart sem biblioteca extra
+  - `dart:io HttpClient`: fazer requisições HTTP sem o pacote `http` — nativo do Dart
+  - `Future.wait([a, b])`: disparar múltiplas chamadas async em paralelo — equivalente a `asyncio.gather()` em Python
+  - `whereType<T>()`: filtrar nulls e fazer cast em uma lista — equivale a `[x for x in lista if x is not None]`
+  - Revogação requer controller wallet: o device key só assina challenges, não transações de gerenciamento
+- **Fase 4 — Mobile App: CONCLUÍDA**
+- **Próximo passo ao retomar**: Fase 5 — SDKs (TypeScript SDK primeiro)
 
 ### 2026-06-14 — Sessão 21
 
