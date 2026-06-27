@@ -475,6 +475,14 @@ Website          Relay           Mobile App        Blockchain
 - Conceitos ensinados: como o mesmo problema (JSON camelCase vs. convenção idiomática da linguagem) teve 3 soluções de design diferentes nos 3 SDKs — Python expõe camelCase direto no dataclass, Ruby isola a conversão na borda, TypeScript nem precisa de conversão (camelCase é idiomático em JS). Nenhuma é "errada", são trade-offs diferentes entre fidelidade ao protocolo e idiomaticidade da linguagem
 - **Próximo passo ao retomar**: decidir o que fazer com `sdk/README.md` (ver decisão em aberto acima), depois etapa 8.8 (segurança), 8.9 (contratos), 8.10 (identidade visual definitiva) ou 8.11 (deploy — já automático)
 
+### 2026-06-21 — Sessão 32 (continuação — simplificação do sdk/README.md)
+
+- **Decisão em aberto da etapa 8.7 resolvida**: usuário escolheu simplificar a seção "API Reference" do `sdk/README.md` e linkar pro site, em vez de manter a versão completa duplicada
+  - Substituída a tabela detalhada de cada método (createChallenge/verifyAuthResponse/verifySession/checkDeviceStatus — parâmetros, retorno, exemplo, razões de falha pros 3 SDKs misturados, ~150 linhas) por um resumo de 1 linha por método + links pras 3 páginas novas (`/docs/sdk/typescript`, `/docs/sdk/python`, `/docs/sdk/ruby`)
+  - Escopo da simplificação ficou só na seção "API Reference" — "How It Works", "Installation", "Quick Start", "Full Examples" (Express/Flask/Sinatra, que o site linka de volta pra eles), "Security Notes", "Networks" e "Smart Contracts" não foram tocados, por não terem sido o que o usuário pediu pra simplificar nesta rodada
+  - Arquivo caiu de 530 para 406 linhas. Nenhum link interno (no repo) apontava pras âncoras antigas (`#createchallenge--create_challenge` etc.) — confirmado via grep antes de remover
+- **Próximo passo ao retomar**: etapa 8.8 (página de segurança), 8.9 (contratos), 8.10 (identidade visual definitiva) ou 8.11 (deploy — já automático)
+
 ### 2026-06-21 — Sessão 31
 
 - **Etapa 8.1 concluída** — setup inicial do site de documentação (Docusaurus), início da Fase 8

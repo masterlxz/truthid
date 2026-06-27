@@ -128,149 +128,20 @@ end
 
 ## API Reference
 
-### `createChallenge` / `create_challenge`
+Full parameter tables, return types, and failure reasons for every method now live on the docs site — one detailed reference page per language:
 
-Creates a one-time challenge to send to the user's phone.
+- **[TypeScript reference](https://masterlxz.github.io/truthid/docs/sdk/typescript)**
+- **[Python reference](https://masterlxz.github.io/truthid/docs/sdk/python)**
+- **[Ruby reference](https://masterlxz.github.io/truthid/docs/sdk/ruby)**
 
-**Parameters**
+Quick summary of what each client gives you:
 
-| Name | Type | Description |
-|------|------|-------------|
-| `origin` | `string` | Your site's domain (e.g. `"yoursite.com"`) |
-
-**Returns** `AuthChallenge`
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `type` | `"challenge"` | Protocol identifier |
-| `nonce` | `string` | UUID v4 — unique per challenge |
-| `issuedAt` | `number` | Unix timestamp in milliseconds |
-| `origin` | `string` | The origin passed in |
-
-**Example**
-
-```typescript
-const challenge = truthid.createChallenge("yoursite.com");
-// {
-//   type: "challenge",
-//   nonce: "3f2e1a4b-...",
-//   issuedAt: 1718000000000,
-//   origin: "yoursite.com"
-// }
-```
-
-> **Important:** Store the challenge server-side by `nonce`. Delete it immediately after use to prevent replay attacks.
-
-**Building the QR code**
-
-The TruthID mobile app expects the QR code to contain this exact JSON shape — the challenge itself, plus the HTTPS URL where it should POST the signed response (typically your own `/auth/verify` endpoint):
-
-```json
-{
-  "action": "truthid-auth",
-  "challenge": { "type": "challenge", "nonce": "...", "issuedAt": 1718000000000, "origin": "yoursite.com" },
-  "callbackUrl": "https://yoursite.com/auth/verify"
-}
-```
-
-`callbackUrl` **must** use `https://` — the mobile app refuses to send the signed response to a plain `http://` URL.
-
----
-
-### `verifyAuthResponse` / `verify_auth_response`
-
-Verifies the signed response received from the user's phone.
-
-Runs six checks in sequence:
-1. User approved (not rejected)
-2. Challenge is within TTL (default: 30 seconds)
-3. Nonce matches the original challenge
-4. Cryptographic signature is valid
-5. Device is registered and active on the blockchain
-6. Retrieves the identity ID linked to this device
-
-**Parameters**
-
-| Name | Type | Description |
-|------|------|-------------|
-| `challenge` | `AuthChallenge` | The challenge you created |
-| `response` | `AuthResponse` | The response received from the phone |
-| `ttlMs` *(optional)* | `number` | Max challenge age in ms. Default: `30_000` |
-
-**`AuthResponse` fields**
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `approved` | `boolean` | Whether the user approved |
-| `nonce` | `string` | Must match the challenge nonce |
-| `signature` | `string` | secp256k1 signature in hex (`0x...`) |
-| `deviceAddress` | `string` | Ethereum address of the device key |
-
-**Returns** `VerifyAuthResult`
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `valid` | `boolean` | Whether authentication succeeded |
-| `identityId` | `bigint / int` | On-chain identity ID (use as user identifier) |
-| `deviceAddress` | `string` | The device that authenticated |
-| `reason` | `string?` | Failure reason if `valid` is `false` |
-
-**Failure reasons**
-
-| `reason` | Cause |
-|----------|-------|
-| `"User rejected the login request"` | User tapped "Reject" on their phone |
-| `"Challenge expired"` | More than `ttlMs` ms have passed since `issuedAt` |
-| `"Nonce mismatch"` | Response nonce doesn't match the challenge |
-| `"Invalid signature format"` | Signature is malformed |
-| `"Signature does not match device address"` | Signature was not made by `deviceAddress` |
-| `"Device is not active or has been revoked"` | Device was revoked by the identity owner |
-
----
-
-### `verifySession` / `verify_session`
-
-Checks whether a session hash is still valid (not revoked).
-
-Use this on subsequent requests after the user is logged in, to verify their session hasn't been revoked from another device.
-
-**Parameters**
-
-| Name | Type | Description |
-|------|------|-------------|
-| `sessionHash` | `string` | `bytes32` hex string (`0x...`) |
-
-**Returns** `SessionInfo`
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `exists` | `boolean` | Whether this session hash exists on-chain |
-| `revoked` | `boolean` | Whether the session has been revoked |
-| `identityId` | `bigint / int?` | Identity that owns this session |
-| `devicePubKey` | `string?` | Device that created this session |
-| `createdAt` | `Date / datetime?` | When the session was created |
-
----
-
-### `checkDeviceStatus` / `check_device_status`
-
-Looks up a device's current status on the blockchain.
-
-**Parameters**
-
-| Name | Type | Description |
-|------|------|-------------|
-| `devicePubKey` | `string` | Ethereum address of the device (`0x...`) |
-
-**Returns** `DeviceStatus`
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `exists` | `boolean` | Whether this device is registered |
-| `active` | `boolean` | Whether the device is currently active |
-| `label` | `string?` | Human-readable label (e.g. `"iPhone 15"`) |
-| `identityId` | `bigint / int?` | Identity this device belongs to |
-| `addedAt` | `Date / datetime?` | When the device was registered |
+| Method | Purpose |
+|--------|---------|
+| `createChallenge` / `create_challenge` | Create a one-time challenge to embed in the QR code |
+| `verifyAuthResponse` / `verify_auth_response` | Verify the signed response from the user's phone (signature, TTL, device status) |
+| `verifySession` / `verify_session` | Check whether a session hash is still valid (not revoked) |
+| `checkDeviceStatus` / `check_device_status` | Look up a device's current status on the blockchain |
 
 ---
 
