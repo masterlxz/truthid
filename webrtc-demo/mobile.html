@@ -21,7 +21,9 @@
       <b>Pedido de login recebido</b><br><br>
       <span id="c-origin"></span><br>
       <span id="c-time"></span><br>
-      <span id="c-nonce" style="font-size:11px;color:#888"></span>
+      <span id="c-nonce" style="font-size:11px;color:#888"></span><br><br>
+      <button id="btn-approve" style="background:#2a9d2a;color:white;font-size:16px">✓ Aprovar</button>
+      <button id="btn-reject"  style="background:#c0392b;color:white;font-size:16px">✗ Recusar</button>
     </div>
   </div>
 
@@ -36,6 +38,25 @@
     ];
 
     let pc, ws, dataChannel;
+    let devicePrivateKey, devicePublicKeyRaw;
+    let pendingChallenge = null;
+
+    // Gera um key pair ECDSA para este dispositivo (só na inicialização)
+    async function initDeviceKey() {
+      const keyPair = await crypto.subtle.generateKey(
+        { name: 'ECDSA', namedCurve: 'P-256' },
+        false,         // não exportável (chave privada fica presa no browser)
+        ['sign', 'verify']
+      );
+      devicePrivateKey = keyPair.privateKey;
+
+      // Exporta a chave pública para poder enviá-la ao website
+      const pubKeyDer = await crypto.subtle.exportKey('raw', keyPair.publicKey);
+      devicePublicKeyRaw = btoa(String.fromCharCode(...new Uint8Array(pubKeyDer)));
+      log(`Key pair gerado — chave pública: ${devicePublicKeyRaw.slice(0, 20)}...`);
+    }
+
+    initDeviceKey();
 
     function log(msg) {
       const el = document.getElementById('log');
@@ -116,6 +137,8 @@
         log(`  issuedAt:  ${new Date(msg.issuedAt).toLocaleTimeString()}`);
         log(`  origin:    ${msg.origin}`);
 
+        pendingChallenge = msg;
+
         document.getElementById('c-origin').textContent = `Site: ${msg.origin}`;
         document.getElementById('c-time').textContent   = `Hora: ${new Date(msg.issuedAt).toLocaleTimeString()}`;
         document.getElementById('c-nonce').textContent  = `Nonce: ${msg.nonce}`;
@@ -123,6 +146,55 @@
         document.getElementById('message-area').style.display = 'block';
       }
     }
+
+    document.getElementById('btn-approve').addEventListener('click', async () => {
+      if (!pendingChallenge) return;
+
+      // Serializa o challenge em bytes para assinar
+      const encoder = new TextEncoder();
+      const data = encoder.encode(JSON.stringify(pendingChallenge));
+
+      // Assina com a chave privada do dispositivo
+      const signatureBuffer = await crypto.subtle.sign(
+        { name: 'ECDSA', hash: 'SHA-256' },
+        devicePrivateKey,
+        data
+      );
+
+      // Converte a assinatura (bytes) para base64 para poder enviar como JSON
+      const signature = btoa(String.fromCharCode(...new Uint8Array(signatureBuffer)));
+
+      const response = {
+        type: 'auth-response',
+        approved: true,
+        nonce: pendingChallenge.nonce,
+        signature,
+        publicKey: devicePublicKeyRaw,
+      };
+
+      dataChannel.send(JSON.stringify(response));
+      log('Resposta assinada enviada (P2P)');
+      log(`  assinatura: ${signature.slice(0, 20)}...`);
+
+      document.getElementById('btn-approve').disabled = true;
+      document.getElementById('btn-reject').disabled  = true;
+      pendingChallenge = null;
+    });
+
+    document.getElementById('btn-reject').addEventListener('click', () => {
+      if (!pendingChallenge) return;
+
+      dataChannel.send(JSON.stringify({
+        type: 'auth-response',
+        approved: false,
+        nonce: pendingChallenge.nonce,
+      }));
+
+      log('Login recusado — resposta enviada (P2P)');
+      document.getElementById('btn-approve').disabled = true;
+      document.getElementById('btn-reject').disabled  = true;
+      pendingChallenge = null;
+    });
   </script>
 </body>
 </html>
