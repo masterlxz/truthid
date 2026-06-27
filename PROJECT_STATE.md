@@ -43,7 +43,7 @@ Stack principal:
 ## Status Geral
 
 ```
-Fase 1 — Smart Contracts        [~] Em andamento (4/7 etapas)
+Fase 1 — Smart Contracts        [x] Concluída
 Fase 2 — Relay Service          [ ] Não iniciada
 Fase 3 — Desktop App            [ ] Não iniciada
 Fase 4 — Mobile App             [ ] Não iniciada
@@ -78,7 +78,7 @@ Fase 7 — Mainnet & Lançamento   [ ] Não iniciada
   - IdentityRegistry : 0xd4484aDD6DCd0919568B6365882cDB207fE27D9c
   - DeviceRegistry   : 0xe87633b148cf7a7F6c60DdA84AD7f4D3a9eC187F
   - RecoveryManager  : 0x66be956D14b9383aE9a58f70edD6Cae406Eb960f
-- [ ] 1.7 — Verificar contratos no Basescan
+- [x] 1.7 — Verificar contratos no Basescan
 
 **Decisões pendentes**:
 - Padrão de upgrade: Proxy ou imutável na v1?
@@ -240,6 +240,15 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-05 — Sessão 8
+- Etapa 1.7 concluída — 3 contratos verificados no Basescan
+  - Ferramenta: `forge verify-contract` com Etherscan V2 API (`https://api.etherscan.io/v2/api?chainid=84532`)
+  - IdentityRegistry: sem constructor args — verificação direta
+  - DeviceRegistry e RecoveryManager: constructor arg = endereço do IdentityRegistry (encodado com `cast abi-encode`)
+  - Links: sepolia.basescan.org/address/<endereço> para cada contrato
+- **Fase 1 concluída** — todos os 7 contratos implementados, testados, deployados e verificados
+- Próximo passo: Fase 2 — decidir canal de sinalização WebRTC (etapa 2.1)
 
 ### 2026-06-05 — Sessão 7
 - Etapas 1.6 concluída — deploy dos 3 contratos na Base Sepolia
