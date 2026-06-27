@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-06-20 (Sessão 30)
+> Última atualização: 2026-06-21 (Sessão 31)
 
 ---
 
@@ -50,7 +50,7 @@ Fase 4 — Mobile App             [x] Concluída
 Fase 5 — SDKs                   [x] Concluída
 Fase 6 — Integração & Testes    [x] Concluída
 Fase 7 — Mainnet & Lançamento   [x] Concluída
-Fase 8 — Documentação Web       [ ] Não iniciada
+Fase 8 — Documentação Web       [~] Em andamento (8.1/11)
 ```
 
 ---
@@ -304,7 +304,7 @@ check_revocation(identity_id) → RevocationInfo
 **O que o site vai ter**:
 
 ```
-docs.truthid.dev (ou truthid.github.io/truthid)
+masterlxz.github.io/truthid
 ├── / (landing page)  ← "Replace passwords forever"
 ├── /docs/intro        ← O que é TruthID, como funciona (diagrama animado)
 ├── /docs/quickstart   ← Do zero ao primeiro login em 5 minutos
@@ -317,7 +317,7 @@ docs.truthid.dev (ou truthid.github.io/truthid)
 ```
 
 **Etapas**:
-- [ ] 8.1 — Setup Docusaurus em `docs/` + configuração GitHub Pages (Action de deploy automático)
+- [x] 8.1 — Setup Docusaurus em `docs/` + configuração GitHub Pages (Action de deploy automático). Implementado na Sessão 31: `npx create-docusaurus@latest docs classic --typescript`; `docusaurus.config.ts` ajustado (title/tagline TruthID, `url`/`baseUrl`/`organizationName`/`projectName` para `masterlxz.github.io/truthid`, `editUrl` apontando pro repo, navbar/footer sem branding genérico do template); blog do template (posts de dinossauro) desativado (`blog: false`) e pasta removida — não fazia parte do roadmap e não fazia sentido publicar conteúdo de exemplo; `.github/workflows/deploy-docs.yml` criado (build + `actions/deploy-pages`, dispara em push na main que toque `docs/`); `npm run build` validado localmente sem erros. **Pendente de ação manual do usuário**: habilitar em Settings → Pages → Source → "GitHub Actions" no repositório no GitHub (a Action falha até isso ser feito uma vez)
 - [ ] 8.2 — Landing page: headline, diagrama do fluxo, botão "Get Started"
 - [ ] 8.3 — Guia de introdução: o que é TruthID, pré-requisitos, arquitetura
 - [ ] 8.4 — Quickstart interativo: passo a passo comentado do fluxo completo
@@ -345,6 +345,7 @@ docs.truthid.dev (ou truthid.github.io/truthid)
 | Sinalização sem servidor do TruthID | On-chain (eventos+gas) vs transporte direto sem blockchain | **Transporte direto, sem blockchain** ✓ — Sessão 26 (continuação). Pareamento: o device mostra seu próprio endereço em QR, o controller (desktop) lê e registra on-chain; confirmação via polling (`getDevice`), sem canal ao vivo. Login: o challenge vai embutido no QR, a resposta assinada vai via HTTPS direto pro `callbackUrl` do próprio site (backend que o integrador já roda). Zero gas extra, zero latência de handshake on-chain — `signaling/`, `turn/` e `webrtc-demo/` removidos do repositório |
 | Interface e experiência do usuário | UI funcional vs identidade visual própria | **Pendente** — app e desktop têm UI funcional (Material Design padrão) mas sem logo, cores, tipografia ou fluxos polidos; previsto para uma fase dedicada após Fase 4 ou como Fase 8 pós-lançamento |
 | Endereços de contrato nos SDKs (multi-rede) | Endereço fixo único vs mapa por rede | **Mapa por rede** ✓ — decidido na Sessão 26. Os 3 SDKs já tinham um parâmetro `network` desde a Fase 5, mas os endereços eram fixos (só Sepolia); completar o design original em vez de descartá-lo. Python/Ruby agora default para `"base-mainnet"`; TypeScript continua exigindo `network` explícito (sem default) |
+| Domínio do site de docs (Fase 8) | Domínio próprio (ex: truthid.dev) vs subdomínio grátis do GitHub Pages | **GitHub Pages grátis** ✓ — decidido na Sessão 31. Usuário ainda não tem domínio próprio registrado; `masterlxz.github.io/truthid` configurado no `docusaurus.config.ts` (etapa 8.1). Dá pra trocar pra domínio próprio depois (basta um arquivo `CNAME` em `docs/static/` + DNS) sem precisar redeployar nada além disso |
 
 ---
 
@@ -412,6 +413,22 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-21 — Sessão 31
+
+- **Etapa 8.1 concluída** — setup inicial do site de documentação (Docusaurus), início da Fase 8
+  - `npx create-docusaurus@latest docs classic --typescript` — scaffold criado dentro de `docs/` na raiz do repositório
+  - `docusaurus.config.ts` configurado para GitHub Pages: `title`/`tagline` TruthID, `url: https://masterlxz.github.io`, `baseUrl: /truthid/`, `organizationName: masterlxz`, `projectName: truthid`, `editUrl` apontando pro repo real ("Edit this page" vai abrir o GitHub de verdade); navbar e footer com os links genéricos do template (Docusaurus/Facebook, Discord, X, Stack Overflow) trocados pelos do projeto
+  - Blog do template desativado (`blog: false` no preset, pasta `docs/blog/` removida) — vinha com posts de exemplo sobre dinossauros; blog é "opcional" no roadmap da Fase 8 e não há decisão de usar, então não fazia sentido publicar conteúdo de exemplo
+  - `.github/workflows/deploy-docs.yml` criado — builda `docs/` e publica via `actions/upload-pages-artifact` + `actions/deploy-pages`; dispara em push na `main` que toque `docs/**` (mais `workflow_dispatch` manual)
+  - `npm run build` validado localmente dentro de `docs/` — gerou `docs/build/` sem erros
+  - **Ação pendente do usuário (não automatizável daqui)**: habilitar em Settings → Pages → "Build and deployment" → Source = "GitHub Actions" no repositório no GitHub. Sem isso, o job `deploy` da Action falha na primeira execução (Pages precisa estar "ligado" pro ambiente `github-pages` existir)
+  - **Decisão de domínio confirmada com o usuário**: sem domínio próprio registrado ainda, então o site fica em `masterlxz.github.io/truthid` (GitHub Pages grátis) por agora — já é o que está configurado no `docusaurus.config.ts`, nenhuma mudança de código necessária. Ver tabela de Decisões de Arquitetura
+- Conceitos ensinados:
+  - O que o Docusaurus resolve (site de docs com busca, dark mode, sidebar, versionamento) e por que foi a ferramenta escolhida já no planejamento original da Fase 8
+  - Diferença entre o `docs/` da raiz do repo (o projeto Docusaurus inteiro) e o `docs/docs/` interno (só as páginas de conteúdo em Markdown/MDX) — convenção do próprio framework, não uma escolha nossa
+  - Por que GitHub Pages com deploy via Actions (`actions/deploy-pages`) é preferível ao antigo método de publicar numa branch `gh-pages`: não deixa artefato de build commitado no histórico do git, e usa OIDC (`id-token: write`) em vez de um token de longa duração
+- **Próximo passo ao retomar**: usuário habilita GitHub Actions como source do Pages (ação manual de configuração, fora do alcance do Claude Code sem `gh` CLI instalado); depois seguir para etapa 8.2 (landing page) ou outra ordem que o usuário preferir dentro da Fase 8
 
 ### 2026-06-20 — Sessão 30
 
