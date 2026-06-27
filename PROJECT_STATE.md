@@ -573,6 +573,28 @@ Website          Relay           Mobile App        Blockchain
 
 ## Log de Sessões
 
+### 2026-06-27 — Sessão 38
+
+- **Contexto**: retomada com o objetivo de fechar a Fase 11 — teste E2E prático de login com o device desktop registrado na Sessão 36 (identidade `@masterlxz`, id=1; device `0x0a0B7e76E331d83448F57640D8eE62438470438e`). Todas as 4 etapas foram validadas ao vivo com Base Mainnet e Ledger física.
+- **Correções feitas antes/durante o teste**:
+  - `sign_challenge` estava usando assinatura ECDSA pura — o SDK (`verifyAuthResponse`) esperava Ethereum `personal_sign` (prefixo `\x19Ethereum Signed Message:\n`). Corrigido no Rust pra usar o prefixo correto, alinhando desktop e SDK.
+  - `send_apdu` no Rust tinha timeout fixo de 30s — insuficiente para a Ledger aguardar confirmação física do usuário. Parametrizado: detecção usa 5s, assinatura usa 120s.
+  - `SESSION_REGISTRY_ABI` em `contracts.ts` não tinha a função `createSession` — estava faltando desde a auditoria da Sessão 24. Adicionado.
+  - Novo comando Tauri `sign_session_hash`: assina um hash de 32 bytes com a chave do device usando `personal_sign`, devolvendo `(r, s, v)` separados para uso direto como argumentos ABI em `createSession`.
+  - CORS não estava configurado no `sdk/typescript/example/server.js` — o app desktop (Tauri/WebKitGTK) é origem diferente de `localhost:3000`; adicionado middleware `cors()` no Express.
+- **Novos componentes**:
+  - `TestLogin.tsx`: componente de 2 etapas — Step 1 autentica no servidor (sign challenge → POST `/auth/verify`), Step 2 registra a sessão on-chain via `SessionRegistry.createSession` assinada pela chave do device. Arquivo criado nesta sessão mas não commitado (esquecido o `git add` — corrigido na Sessão 39 logo em seguida).
+  - Aba "Login test" adicionada ao `App.tsx` com botão ↻ Refresh para recarregar o estado on-chain.
+  - `invalidateQueries` + delay de 3s adicionados nos effects de sucesso de `ManageDevices` e `DesktopDevice` para que o cache do wagmi reflita o novo estado da blockchain após escritas on-chain.
+- **Resultado do teste (Base Mainnet, Ledger física)**:
+  - 11.1 — servidor retornou challenge válido ✓
+  - 11.2 — desktop login retornou `{ token, identityId: "1" }` ✓
+  - 11.3 — sessão criada on-chain e revogada via aba "Active sessions" ✓
+  - 11.4 — device revogado → servidor retornou `"Device is not active or has been revoked"` ✓
+- **Débitos técnicos registrados**: #11 (relayer server-side para `createSession` no fluxo mobile) e #12 (auto-reconexão do wagmi / modo leitura sem wallet).
+- **Fase 11 — Teste E2E Prático: CONCLUÍDA.**
+- **Próximo passo**: a definir — candidatos são redesign de UX (débito #8), stepper visual da Ledger (débito #9), ou implementação do relayer para sessões mobile (débito #11).
+
 ### 2026-06-27 — Sessão 37
 
 - **Contexto**: retomada após crash do PC no meio da sessão anterior. Estado recuperado via `git diff HEAD` e revisão dos arquivos não commitados. Nenhum trabalho foi perdido.
