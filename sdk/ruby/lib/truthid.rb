@@ -7,7 +7,7 @@ module TruthID
   # TypeScript: new TruthIDClient(...)
   # Python:     TruthIDClient(...)
   # Ruby:       TruthID::Client.new(...)  ou  TruthID.new_client(...)
-  def self.new_client(network: "base-sepolia", rpc_url: nil)
+  def self.new_client(network: "base-mainnet", rpc_url: nil)
     Client.new(network: network, rpc_url: rpc_url)
   end
 end

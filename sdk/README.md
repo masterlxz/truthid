@@ -67,7 +67,7 @@ Requires Ruby 3.0+.
 ```typescript
 import { TruthIDClient } from "truthid-sdk";
 
-const truthid = new TruthIDClient({ network: "base-sepolia" });
+const truthid = new TruthIDClient({ network: "base-mainnet" });
 
 // 1. Create a challenge (embed this in the QR code)
 const challenge = truthid.createChallenge("yoursite.com");
@@ -87,7 +87,7 @@ if (result.valid) {
 ```python
 from truthid import TruthIDClient, AuthResponse
 
-truthid = TruthIDClient(network="base-sepolia")
+truthid = TruthIDClient()  # defaults to network="base-mainnet"
 
 # 1. Create a challenge
 challenge = truthid.create_challenge("yoursite.com")
@@ -106,7 +106,7 @@ else:
 ```ruby
 require "truthid"
 
-truthid = TruthID::Client.new(network: "base-sepolia")
+truthid = TruthID::Client.new  # defaults to network: "base-mainnet"
 
 # 1. Create a challenge
 challenge = truthid.create_challenge("yoursite.com")
@@ -269,7 +269,7 @@ import { TruthIDClient, AuthChallenge, AuthResponse } from "truthid-sdk";
 const app = express();
 app.use(express.json());
 
-const truthid = new TruthIDClient({ network: "base-sepolia" });
+const truthid = new TruthIDClient({ network: "base-mainnet" });
 
 // In production, use Redis with a TTL instead of an in-memory Map
 const pendingChallenges = new Map<string, AuthChallenge>();
@@ -330,7 +330,7 @@ from flask import Flask, request, jsonify
 from truthid import TruthIDClient, AuthResponse
 
 app = Flask(__name__)
-truthid = TruthIDClient(network="base-sepolia")
+truthid = TruthIDClient()  # defaults to network="base-mainnet"
 
 pending_challenges = {}  # nonce → AuthChallenge
 sessions = {}            # token → { identity_id, device_address }
@@ -381,7 +381,7 @@ require "json"
 require "securerandom"
 require "truthid"
 
-truthid = TruthID::Client.new(network: "base-sepolia")
+truthid = TruthID::Client.new  # defaults to network: "base-mainnet"
 pending_challenges = {}  # nonce → AuthChallenge
 sessions = {}            # token → { identity_id:, device_address: }
 
@@ -450,20 +450,22 @@ Always serve your `/auth/*` endpoints over HTTPS. The challenge and response tra
 | Network | ID | Description |
 |---------|-----|-------------|
 | `"base-sepolia"` | 84532 | Testnet — for development |
-| `"base-mainnet"` | 8453 | Production |
+| `"base-mainnet"` | 8453 | Production (default for Python and Ruby) |
 
-**Switching to mainnet:**
+The TypeScript SDK requires `network` explicitly — there is no default. Python and Ruby default to `"base-mainnet"`.
+
+**Using testnet during development:**
 
 ```typescript
-const truthid = new TruthIDClient({ network: "base-mainnet" });
+const truthid = new TruthIDClient({ network: "base-sepolia" });
 ```
 
 ```python
-truthid = TruthIDClient(network="base-mainnet")
+truthid = TruthIDClient(network="base-sepolia")
 ```
 
 ```ruby
-truthid = TruthID::Client.new(network: "base-mainnet")
+truthid = TruthID::Client.new(network: "base-sepolia")
 ```
 
 You can also pass a custom RPC URL:
@@ -477,13 +479,26 @@ const truthid = new TruthIDClient({
 
 ---
 
-## Smart Contracts (Base Sepolia)
+## Smart Contracts
+
+### Base Mainnet (production, chain ID 8453)
 
 | Contract | Address |
 |----------|---------|
-| IdentityRegistry | `0xd4484aDD6DCd0919568B6365882cDB207fE27D9c` |
-| DeviceRegistry | `0xe87633b148cf7a7F6c60DdA84AD7f4D3a9eC187F` |
-| RecoveryManager | `0x66be956D14b9383aE9a58f70edD6Cae406Eb960f` |
-| SessionRegistry | `0x93B56d40B304269Ee23f84A1cF3BD7B338514b42` |
+| IdentityRegistry | `0xbf097EC74d0Cc9b16D3d94EaCa62060d89A63b17` |
+| DeviceRegistry | `0x4A7a307cb6872bde24BAf3E9de2BeC3Ddd03e144` |
+| RecoveryManager | `0xA93123C1ca438D9F56E4E599363F4d973d61A307` |
+| SessionRegistry | `0x24074587a2aFB3aa5491361BB0a5eBee90797D1B` |
+
+All contracts are verified on [Basescan](https://basescan.org).
+
+### Base Sepolia (testnet, chain ID 84532)
+
+| Contract | Address |
+|----------|---------|
+| IdentityRegistry | `0x35D21c65980cBd2dAE7576e1bf6b8e46C9e180BF` |
+| DeviceRegistry | `0x225c67a98c9D675fE595ae05a2F9249C34d9C60a` |
+| RecoveryManager | `0xDd4CE29A35022741Bbe2F8f38aa185ddF41A8Fa7` |
+| SessionRegistry | `0xdeD2Ad865069CA6546172926540D3A3Aa73C1CA6` |
 
 All contracts are verified on [Basescan](https://sepolia.basescan.org).

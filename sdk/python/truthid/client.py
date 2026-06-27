@@ -10,9 +10,9 @@ from eth_account.messages import encode_defunct
 from web3 import Web3
 
 from .contracts import (
-    DEVICE_REGISTRY_ADDRESS,
+    DEVICE_REGISTRY_ADDRESSES,
     DEVICE_REGISTRY_ABI,
-    SESSION_REGISTRY_ADDRESS,
+    SESSION_REGISTRY_ADDRESSES,
     SESSION_REGISTRY_ABI,
 )
 from .types import AuthChallenge, AuthResponse, DeviceStatus, SessionInfo, VerifyAuthResult
@@ -24,15 +24,15 @@ _RPC_URLS = {
 
 
 class TruthIDClient:
-    def __init__(self, network: str = "base-sepolia", rpc_url: Optional[str] = None):
+    def __init__(self, network: str = "base-mainnet", rpc_url: Optional[str] = None):
         url = rpc_url or _RPC_URLS[network]
         self._w3 = Web3(Web3.HTTPProvider(url))
         self._devices = self._w3.eth.contract(
-            address=Web3.to_checksum_address(DEVICE_REGISTRY_ADDRESS),
+            address=Web3.to_checksum_address(DEVICE_REGISTRY_ADDRESSES[network]),
             abi=DEVICE_REGISTRY_ABI,
         )
         self._sessions = self._w3.eth.contract(
-            address=Web3.to_checksum_address(SESSION_REGISTRY_ADDRESS),
+            address=Web3.to_checksum_address(SESSION_REGISTRY_ADDRESSES[network]),
             abi=SESSION_REGISTRY_ABI,
         )
 

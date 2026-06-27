@@ -12,17 +12,17 @@ module TruthID
       "base-mainnet" => "https://mainnet.base.org"
     }.freeze
 
-    def initialize(network: "base-sepolia", rpc_url: nil)
+    def initialize(network: "base-mainnet", rpc_url: nil)
       url = rpc_url || RPC_URLS.fetch(network)
       @rpc = Eth::Client.create(url)
       @devices = Eth::Contract.from_abi(
         name: "DeviceRegistry",
-        address: Contracts::DEVICE_REGISTRY_ADDRESS,
+        address: Contracts::DEVICE_REGISTRY_ADDRESSES.fetch(network),
         abi: Contracts::DEVICE_REGISTRY_ABI
       )
       @sessions = Eth::Contract.from_abi(
         name: "SessionRegistry",
-        address: Contracts::SESSION_REGISTRY_ADDRESS,
+        address: Contracts::SESSION_REGISTRY_ADDRESSES.fetch(network),
         abi: Contracts::SESSION_REGISTRY_ABI
       )
     end

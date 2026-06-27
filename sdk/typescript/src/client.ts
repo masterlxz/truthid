@@ -3,9 +3,9 @@ import { baseSepolia, base } from "viem/chains";
 import { randomUUID } from "crypto";
 
 import {
-  DEVICE_REGISTRY_ADDRESS,
+  DEVICE_REGISTRY_ADDRESSES,
   DEVICE_REGISTRY_ABI,
-  SESSION_REGISTRY_ADDRESS,
+  SESSION_REGISTRY_ADDRESSES,
   SESSION_REGISTRY_ABI,
 } from "./contracts.js";
 import type {
@@ -20,6 +20,8 @@ import type {
 export class TruthIDClient {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   private publicClient: any;
+  private deviceRegistryAddress: `0x${string}`;
+  private sessionRegistryAddress: `0x${string}`;
 
   constructor(config: TruthIDClientConfig) {
     const chain = config.network === "base-mainnet" ? base : baseSepolia;
@@ -33,6 +35,8 @@ export class TruthIDClient {
       chain,
       transport: http(rpcUrl),
     });
+    this.deviceRegistryAddress = DEVICE_REGISTRY_ADDRESSES[config.network];
+    this.sessionRegistryAddress = SESSION_REGISTRY_ADDRESSES[config.network];
   }
 
   // Cria um challenge no formato exato que o mobile espera e assina
@@ -92,7 +96,7 @@ export class TruthIDClient {
 
     // 5. Verificar na blockchain se o device ainda está ativo (não foi revogado)
     const isActive = await this.publicClient.readContract({
-      address: DEVICE_REGISTRY_ADDRESS,
+      address: this.deviceRegistryAddress,
       abi: DEVICE_REGISTRY_ABI,
       functionName: "isDeviceActive",
       args: [response.deviceAddress as `0x${string}`],
@@ -104,7 +108,7 @@ export class TruthIDClient {
 
     // 6. Buscar o identityId associado a este device
     const device = await this.publicClient.readContract({
-      address: DEVICE_REGISTRY_ADDRESS,
+      address: this.deviceRegistryAddress,
       abi: DEVICE_REGISTRY_ABI,
       functionName: "getDevice",
       args: [response.deviceAddress as `0x${string}`],
@@ -121,13 +125,13 @@ export class TruthIDClient {
   async verifySession(hash: string): Promise<SessionInfo> {
     const [session, revoked] = await Promise.all([
       this.publicClient.readContract({
-        address: SESSION_REGISTRY_ADDRESS,
+        address: this.sessionRegistryAddress,
         abi: SESSION_REGISTRY_ABI,
         functionName: "getSession",
         args: [hash as `0x${string}`],
       }),
       this.publicClient.readContract({
-        address: SESSION_REGISTRY_ADDRESS,
+        address: this.sessionRegistryAddress,
         abi: SESSION_REGISTRY_ABI,
         functionName: "isSessionRevoked",
         args: [hash as `0x${string}`],
@@ -150,7 +154,7 @@ export class TruthIDClient {
   // Verifica o status de um device na blockchain
   async checkDeviceStatus(devicePubKey: string): Promise<DeviceStatus> {
     const device = await this.publicClient.readContract({
-      address: DEVICE_REGISTRY_ADDRESS,
+      address: this.deviceRegistryAddress,
       abi: DEVICE_REGISTRY_ABI,
       functionName: "getDevice",
       args: [devicePubKey as `0x${string}`],

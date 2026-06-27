@@ -1,5 +1,5 @@
 export const IDENTITY_REGISTRY_ADDRESS =
-  "0x35D21c65980cBd2dAE7576e1bf6b8e46C9e180BF" as const;
+  "0xbf097EC74d0Cc9b16D3d94EaCa62060d89A63b17" as const;
 
 export const IDENTITY_REGISTRY_ABI = [
   {
@@ -46,7 +46,7 @@ export const IDENTITY_REGISTRY_ABI = [
 // ─── DeviceRegistry ────────────────────────────────────────────────────────────
 
 export const DEVICE_REGISTRY_ADDRESS =
-  "0x225c67a98c9D675fE595ae05a2F9249C34d9C60a" as const;
+  "0x4A7a307cb6872bde24BAf3E9de2BeC3Ddd03e144" as const;
 
 export const DEVICE_REGISTRY_ABI = [
   {
@@ -113,7 +113,7 @@ export const DEVICE_REGISTRY_ABI = [
 // ─── SessionRegistry ───────────────────────────────────────────────────────────
 
 export const SESSION_REGISTRY_ADDRESS =
-  "0xdeD2Ad865069CA6546172926540D3A3Aa73C1CA6" as const;
+  "0x24074587a2aFB3aa5491361BB0a5eBee90797D1B" as const;
 
 export const SESSION_REGISTRY_ABI = [
   {

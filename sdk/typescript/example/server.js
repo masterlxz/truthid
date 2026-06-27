@@ -5,7 +5,7 @@ const { TruthIDClient } = require("../dist");
 const app = express();
 app.use(express.json());
 
-const truthid = new TruthIDClient({ network: "base-sepolia" });
+const truthid = new TruthIDClient({ network: "base-mainnet" });
 
 // Armazenamento em memória (use Redis em produção)
 // Map: nonce → AuthChallenge

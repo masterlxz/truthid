@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useAccount, useReadContract, useSwitchChain } from "wagmi";
-import { baseSepolia } from "wagmi/chains";
+import { base } from "wagmi/chains";
 import { ConnectWallet } from "./components/ConnectWallet";
 import { CreateIdentity } from "./components/CreateIdentity";
 import { ManageDevices } from "./components/ManageDevices";
@@ -14,7 +14,7 @@ function App() {
   const { isConnected, address, chainId } = useAccount();
   const [activeTab, setActiveTab] = useState<Tab>("devices");
 
-  const isWrongNetwork = isConnected && chainId !== baseSepolia.id;
+  const isWrongNetwork = isConnected && chainId !== base.id;
   const { switchChain, isPending: isSwitching } = useSwitchChain();
 
   const { data: username, isLoading: isLoadingUsername } = useReadContract({
@@ -35,12 +35,12 @@ function App() {
 
       {isWrongNetwork && (
         <div>
-          <p>Rede incorreta. TruthID usa a Base Sepolia.</p>
+          <p>Rede incorreta. TruthID usa a Base Mainnet.</p>
           <button
-            onClick={() => switchChain({ chainId: baseSepolia.id })}
+            onClick={() => switchChain({ chainId: base.id })}
             disabled={isSwitching}
           >
-            {isSwitching ? "Trocando..." : "Trocar para Base Sepolia"}
+            {isSwitching ? "Trocando..." : "Trocar para Base Mainnet"}
           </button>
         </div>
       )}
