@@ -1,0 +1,489 @@
+# TruthID SDK
+
+Integrate passwordless, decentralized authentication into your app in minutes.
+
+TruthID replaces passwords and social login with cryptographic device keys. Users authenticate by approving a login request on their phone — no password, no email, no third-party server.
+
+---
+
+## How It Works
+
+```
+Your Website              TruthID Relay         User's Phone
+     |                         |                     |
+     |── GET /auth/challenge ──>|                     |
+     |<── { nonce, origin } ───|                     |
+     |                         |                     |
+     |── (show QR code) ──────────────────────────>  |
+     |                         |<── scan QR ─────────|
+     |                         |<── { approved,       |
+     |                         |     signature,       |
+     |                         |     deviceAddress }  |
+     |<── POST /auth/verify ───|                     |
+     |    (SDK verifies:)      |                     |
+     |    1. signature valid   |                     |
+     |    2. device active on blockchain             |
+     |    3. challenge not expired                   |
+     |                                               |
+     LOGIN OK
+```
+
+The SDK handles steps that require blockchain reads — verifying the signature, checking device status, and reading session state. No wallet, no gas, no private key needed on your server.
+
+---
+
+## Installation
+
+### TypeScript / Node.js
+
+```bash
+npm install truthid-sdk
+```
+
+Requires Node.js 16+.
+
+### Python
+
+```bash
+pip install truthid-sdk
+```
+
+Requires Python 3.10+.
+
+### Ruby
+
+```bash
+gem install truthid-sdk
+```
+
+Requires Ruby 3.0+.
+
+---
+
+## Quick Start
+
+### TypeScript
+
+```typescript
+import { TruthIDClient } from "truthid-sdk";
+
+const truthid = new TruthIDClient({ network: "base-sepolia" });
+
+// 1. Create a challenge (embed this in the QR code)
+const challenge = truthid.createChallenge("yoursite.com");
+
+// 2. After the user approves on their phone, verify the response
+const result = await truthid.verifyAuthResponse({ challenge, response });
+
+if (result.valid) {
+  console.log("Authenticated! Identity ID:", result.identityId);
+} else {
+  console.log("Failed:", result.reason);
+}
+```
+
+### Python
+
+```python
+from truthid import TruthIDClient, AuthResponse
+
+truthid = TruthIDClient(network="base-sepolia")
+
+# 1. Create a challenge
+challenge = truthid.create_challenge("yoursite.com")
+
+# 2. Verify the response from the phone
+result = truthid.verify_auth_response(challenge, response)
+
+if result.valid:
+    print(f"Authenticated! Identity ID: {result.identity_id}")
+else:
+    print(f"Failed: {result.reason}")
+```
+
+### Ruby
+
+```ruby
+require "truthid"
+
+truthid = TruthID::Client.new(network: "base-sepolia")
+
+# 1. Create a challenge
+challenge = truthid.create_challenge("yoursite.com")
+
+# 2. Verify the response from the phone
+result = truthid.verify_auth_response(challenge, response)
+
+if result.valid
+  puts "Authenticated! Identity ID: #{result.identity_id}"
+else
+  puts "Failed: #{result.reason}"
+end
+```
+
+---
+
+## API Reference
+
+### `createChallenge` / `create_challenge`
+
+Creates a one-time challenge to send to the user's phone.
+
+**Parameters**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `origin` | `string` | Your site's domain (e.g. `"yoursite.com"`) |
+
+**Returns** `AuthChallenge`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | `"challenge"` | Protocol identifier |
+| `nonce` | `string` | UUID v4 — unique per challenge |
+| `issuedAt` | `number` | Unix timestamp in milliseconds |
+| `origin` | `string` | The origin passed in |
+
+**Example**
+
+```typescript
+const challenge = truthid.createChallenge("yoursite.com");
+// {
+//   type: "challenge",
+//   nonce: "3f2e1a4b-...",
+//   issuedAt: 1718000000000,
+//   origin: "yoursite.com"
+// }
+```
+
+> **Important:** Store the challenge server-side by `nonce`. Delete it immediately after use to prevent replay attacks.
+
+---
+
+### `verifyAuthResponse` / `verify_auth_response`
+
+Verifies the signed response received from the user's phone.
+
+Runs six checks in sequence:
+1. User approved (not rejected)
+2. Challenge is within TTL (default: 30 seconds)
+3. Nonce matches the original challenge
+4. Cryptographic signature is valid
+5. Device is registered and active on the blockchain
+6. Retrieves the identity ID linked to this device
+
+**Parameters**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `challenge` | `AuthChallenge` | The challenge you created |
+| `response` | `AuthResponse` | The response received from the phone |
+| `ttlMs` *(optional)* | `number` | Max challenge age in ms. Default: `30_000` |
+
+**`AuthResponse` fields**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `approved` | `boolean` | Whether the user approved |
+| `nonce` | `string` | Must match the challenge nonce |
+| `signature` | `string` | secp256k1 signature in hex (`0x...`) |
+| `deviceAddress` | `string` | Ethereum address of the device key |
+
+**Returns** `VerifyAuthResult`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `valid` | `boolean` | Whether authentication succeeded |
+| `identityId` | `bigint / int` | On-chain identity ID (use as user identifier) |
+| `deviceAddress` | `string` | The device that authenticated |
+| `reason` | `string?` | Failure reason if `valid` is `false` |
+
+**Failure reasons**
+
+| `reason` | Cause |
+|----------|-------|
+| `"User rejected the login request"` | User tapped "Reject" on their phone |
+| `"Challenge expired"` | More than `ttlMs` ms have passed since `issuedAt` |
+| `"Nonce mismatch"` | Response nonce doesn't match the challenge |
+| `"Invalid signature format"` | Signature is malformed |
+| `"Signature does not match device address"` | Signature was not made by `deviceAddress` |
+| `"Device is not active or has been revoked"` | Device was revoked by the identity owner |
+
+---
+
+### `verifySession` / `verify_session`
+
+Checks whether a session hash is still valid (not revoked).
+
+Use this on subsequent requests after the user is logged in, to verify their session hasn't been revoked from another device.
+
+**Parameters**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `sessionHash` | `string` | `bytes32` hex string (`0x...`) |
+
+**Returns** `SessionInfo`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `exists` | `boolean` | Whether this session hash exists on-chain |
+| `revoked` | `boolean` | Whether the session has been revoked |
+| `identityId` | `bigint / int?` | Identity that owns this session |
+| `devicePubKey` | `string?` | Device that created this session |
+| `createdAt` | `Date / datetime?` | When the session was created |
+
+---
+
+### `checkDeviceStatus` / `check_device_status`
+
+Looks up a device's current status on the blockchain.
+
+**Parameters**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `devicePubKey` | `string` | Ethereum address of the device (`0x...`) |
+
+**Returns** `DeviceStatus`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `exists` | `boolean` | Whether this device is registered |
+| `active` | `boolean` | Whether the device is currently active |
+| `label` | `string?` | Human-readable label (e.g. `"iPhone 15"`) |
+| `identityId` | `bigint / int?` | Identity this device belongs to |
+| `addedAt` | `Date / datetime?` | When the device was registered |
+
+---
+
+## Full Examples
+
+### Express.js (TypeScript)
+
+```typescript
+import express from "express";
+import { randomUUID } from "crypto";
+import { TruthIDClient, AuthChallenge, AuthResponse } from "truthid-sdk";
+
+const app = express();
+app.use(express.json());
+
+const truthid = new TruthIDClient({ network: "base-sepolia" });
+
+// In production, use Redis with a TTL instead of an in-memory Map
+const pendingChallenges = new Map<string, AuthChallenge>();
+const sessions = new Map<string, { identityId: string; deviceAddress: string }>();
+
+// Step 1: client requests a challenge to embed in the QR code
+app.get("/auth/challenge", (req, res) => {
+  const challenge = truthid.createChallenge(req.hostname);
+  pendingChallenges.set(challenge.nonce, challenge);
+  setTimeout(() => pendingChallenges.delete(challenge.nonce), 35_000);
+  res.json(challenge);
+});
+
+// Step 2: client sends the phone's response here
+app.post("/auth/verify", async (req, res) => {
+  const response: AuthResponse = req.body;
+  const challenge = pendingChallenges.get(response.nonce);
+
+  if (!challenge) {
+    return res.status(400).json({ error: "Challenge not found or already used" });
+  }
+
+  // Delete immediately — prevents the same response being accepted twice
+  pendingChallenges.delete(response.nonce);
+
+  const result = await truthid.verifyAuthResponse({ challenge, response });
+
+  if (!result.valid) {
+    return res.status(401).json({ error: result.reason });
+  }
+
+  // In production, issue a JWT instead of a random token
+  const token = randomUUID();
+  sessions.set(token, {
+    identityId: result.identityId!.toString(),
+    deviceAddress: result.deviceAddress!,
+  });
+
+  res.json({ token, identityId: result.identityId!.toString() });
+});
+
+// Protected route
+app.get("/api/profile", (req, res) => {
+  const token = req.headers.authorization?.split(" ")[1];
+  const session = sessions.get(token ?? "");
+  if (!session) return res.status(401).json({ error: "Unauthorized" });
+  res.json(session);
+});
+
+app.listen(3000);
+```
+
+### Flask (Python)
+
+```python
+import uuid
+from flask import Flask, request, jsonify
+from truthid import TruthIDClient, AuthResponse
+
+app = Flask(__name__)
+truthid = TruthIDClient(network="base-sepolia")
+
+pending_challenges = {}  # nonce → AuthChallenge
+sessions = {}            # token → { identity_id, device_address }
+
+@app.get("/auth/challenge")
+def get_challenge():
+    challenge = truthid.create_challenge(request.host)
+    pending_challenges[challenge.nonce] = challenge
+    return jsonify({"type": challenge.type, "nonce": challenge.nonce,
+                    "issuedAt": challenge.issuedAt, "origin": challenge.origin})
+
+@app.post("/auth/verify")
+def verify():
+    data = request.json
+    challenge = pending_challenges.pop(data.get("nonce", ""), None)
+    if not challenge:
+        return jsonify({"error": "Challenge not found or already used"}), 400
+
+    response = AuthResponse(
+        approved=data["approved"],
+        nonce=data["nonce"],
+        signature=data["signature"],
+        deviceAddress=data["deviceAddress"],
+    )
+    result = truthid.verify_auth_response(challenge, response)
+
+    if not result.valid:
+        return jsonify({"error": result.reason}), 401
+
+    token = str(uuid.uuid4())
+    sessions[token] = {"identity_id": result.identity_id, "device_address": result.device_address}
+    return jsonify({"token": token, "identity_id": result.identity_id})
+
+@app.get("/api/profile")
+def profile():
+    token = request.headers.get("Authorization", "").removeprefix("Bearer ")
+    session = sessions.get(token)
+    if not session:
+        return jsonify({"error": "Unauthorized"}), 401
+    return jsonify(session)
+```
+
+### Sinatra (Ruby)
+
+```ruby
+require "sinatra"
+require "json"
+require "securerandom"
+require "truthid"
+
+truthid = TruthID::Client.new(network: "base-sepolia")
+pending_challenges = {}  # nonce → AuthChallenge
+sessions = {}            # token → { identity_id:, device_address: }
+
+get "/auth/challenge" do
+  content_type :json
+  challenge = truthid.create_challenge(request.host)
+  pending_challenges[challenge.nonce] = challenge
+  challenge.to_json
+end
+
+post "/auth/verify" do
+  content_type :json
+  data = JSON.parse(request.body.read)
+  challenge = pending_challenges.delete(data["nonce"])
+  halt 400, { error: "Challenge not found or already used" }.to_json unless challenge
+
+  response = TruthID::AuthResponse.from_hash(data)
+  result = truthid.verify_auth_response(challenge, response)
+
+  halt 401, { error: result.reason }.to_json unless result.valid
+
+  token = SecureRandom.uuid
+  sessions[token] = { identity_id: result.identity_id, device_address: result.device_address }
+  { token: token, identity_id: result.identity_id }.to_json
+end
+
+get "/api/profile" do
+  content_type :json
+  token = request.env["HTTP_AUTHORIZATION"]&.delete_prefix("Bearer ")
+  session = sessions[token]
+  halt 401, { error: "Unauthorized" }.to_json unless session
+  session.to_json
+end
+```
+
+---
+
+## Security Notes
+
+### Nonce invalidation (required)
+
+Delete the challenge from your store **before** calling `verifyAuthResponse`. If you delete after, a race condition allows the same signed response to be submitted twice within the TTL window.
+
+```typescript
+// Correct order
+pendingChallenges.delete(response.nonce);       // delete first
+const result = await truthid.verifyAuthResponse(...); // then verify
+```
+
+### TTL
+
+The default TTL is 30 seconds. This matches the mobile app's challenge expiry. You can lower it — raising it above 30 seconds doesn't help, as the mobile will already have rejected the challenge.
+
+### Session tokens
+
+The examples above use random UUIDs as session tokens. In production, use signed JWTs so you can validate sessions without a database lookup. Include `identityId` and `deviceAddress` in the payload.
+
+### HTTPS only
+
+Always serve your `/auth/*` endpoints over HTTPS. The challenge and response travel through your relay — TLS prevents interception.
+
+---
+
+## Networks
+
+| Network | ID | Description |
+|---------|-----|-------------|
+| `"base-sepolia"` | 84532 | Testnet — for development |
+| `"base-mainnet"` | 8453 | Production |
+
+**Switching to mainnet:**
+
+```typescript
+const truthid = new TruthIDClient({ network: "base-mainnet" });
+```
+
+```python
+truthid = TruthIDClient(network="base-mainnet")
+```
+
+```ruby
+truthid = TruthID::Client.new(network: "base-mainnet")
+```
+
+You can also pass a custom RPC URL:
+
+```typescript
+const truthid = new TruthIDClient({
+  network: "base-mainnet",
+  rpcUrl: "https://your-private-rpc.example.com",
+});
+```
+
+---
+
+## Smart Contracts (Base Sepolia)
+
+| Contract | Address |
+|----------|---------|
+| IdentityRegistry | `0xd4484aDD6DCd0919568B6365882cDB207fE27D9c` |
+| DeviceRegistry | `0xe87633b148cf7a7F6c60DdA84AD7f4D3a9eC187F` |
+| RecoveryManager | `0x66be956D14b9383aE9a58f70edD6Cae406Eb960f` |
+| SessionRegistry | `0x93B56d40B304269Ee23f84A1cF3BD7B338514b42` |
+
+All contracts are verified on [Basescan](https://sepolia.basescan.org).

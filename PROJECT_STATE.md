@@ -47,9 +47,10 @@ Fase 1 — Smart Contracts        [x] Concluída
 Fase 2 — Relay Service          [x] Concluída
 Fase 3 — Desktop App            [x] Concluída
 Fase 4 — Mobile App             [x] Concluída
-Fase 5 — SDKs                   [ ] Não iniciada
+Fase 5 — SDKs                   [x] Concluída
 Fase 6 — Integração & Testes    [ ] Não iniciada
 Fase 7 — Mainnet & Lançamento   [ ] Não iniciada
+Fase 8 — Documentação Web       [ ] Não iniciada
 ```
 
 ---
@@ -192,11 +193,30 @@ check_revocation(identity_id) → RevocationInfo
 ```
 
 **Etapas**:
-- [ ] 5.1 — TypeScript SDK (npm package)
-- [ ] 5.2 — Python SDK (pip package)
-- [ ] 5.3 — Ruby SDK (gem)
-- [ ] 5.4 — Documentação e exemplos para cada SDK
-- [ ] 5.5 — Exemplo de integração: app Express.js protegido com TruthID
+- [x] 5.1 — TypeScript SDK (npm package)
+  - `sdk/typescript/src/`: client.ts, types.ts, contracts.ts, index.ts
+  - `TruthIDClient`: createChallenge(), verifyAuthResponse(), verifySession(), checkDeviceStatus()
+  - Compila para `dist/` com declarações TypeScript (.d.ts)
+  - viem v1.21.4 (CommonJS, sem dependência de ox)
+- [x] 5.2 — Python SDK (pip package)
+  - `sdk/python/truthid/`: client.py, types.py, contracts.py, __init__.py
+  - `TruthIDClient`: create_challenge(), verify_auth_response(), verify_session(), check_device_status()
+  - Síncrono (web3.py padrão), sem async/await
+  - `separators=(',', ':')` no json.dumps — JSON compacto compatível com Dart/JS
+- [x] 5.3 — Ruby SDK (gem)
+  - `sdk/ruby/lib/truthid/`: client.rb, types.rb, contracts.rb
+  - `TruthID::Client`: create_challenge, verify_auth_response, verify_session, check_device_status
+  - `AuthChallenge#to_h` → camelCase para JSON; `AuthResponse.from_hash` → parseia JSON do mobile
+  - `Struct.new(keyword_init: true)` para tipos de resultado (VerifyAuthResult, SessionInfo, DeviceStatus)
+  - JSON.generate compacto por padrão — sem `separators` como no Python
+- [x] 5.4 — Documentação e exemplos para cada SDK
+  - `sdk/README.md`: documentação única em inglês cobrindo os 3 SDKs
+  - Seções: How It Works (ASCII flow), Installation, Quick Start, API Reference completa, Full Examples (Express/Flask/Sinatra), Security Notes, Networks, Smart Contracts
+- [x] 5.5 — Exemplo de integração: app Express.js protegido com TruthID
+  - `sdk/typescript/example/server.js`
+  - GET /auth/challenge → cria challenge (vai no QR)
+  - POST /auth/verify → verifica resposta do mobile via SDK
+  - GET /api/profile → rota protegida com Bearer token
 
 ---
 
@@ -221,6 +241,49 @@ check_revocation(identity_id) → RevocationInfo
 - [ ] 7.3 — Publicar SDKs (npm, pip, rubygems)
 - [ ] 7.4 — Documentação pública
 - [ ] 7.5 — Open source (GitHub)
+
+---
+
+### Fase 8 — Documentação Web
+
+**Objetivo**: Transformar o `sdk/README.md` em um site de documentação profissional, hospedado no GitHub Pages, com visual próprio do TruthID — o rosto público do projeto para desenvolvedores.
+
+**Ferramenta**: [Docusaurus](https://docusaurus.io/) (React, criado pelo Meta para documentações de SDKs — exatamente o caso do TruthID)
+
+**Por que Docusaurus?**
+- Deploy no GitHub Pages com um comando (`npm run deploy`)
+- Busca full-text embutida
+- Versionamento de docs (útil quando os contratos evoluírem)
+- MDX: Markdown + componentes React (permite demos interativos)
+- Dark mode out of the box
+
+**O que o site vai ter**:
+
+```
+docs.truthid.dev (ou truthid.github.io/truthid)
+├── / (landing page)  ← "Replace passwords forever"
+├── /docs/intro        ← O que é TruthID, como funciona (diagrama animado)
+├── /docs/quickstart   ← Do zero ao primeiro login em 5 minutos
+├── /docs/sdk/typescript
+├── /docs/sdk/python
+├── /docs/sdk/ruby
+├── /docs/security     ← Modelo de segurança, threat model
+├── /docs/contracts    ← ABIs, endereços, Basescan links
+└── /blog              ← (opcional) posts sobre decisões de arquitetura
+```
+
+**Etapas**:
+- [ ] 8.1 — Setup Docusaurus em `docs/` + configuração GitHub Pages (Action de deploy automático)
+- [ ] 8.2 — Landing page: headline, diagrama do fluxo, botão "Get Started"
+- [ ] 8.3 — Guia de introdução: o que é TruthID, pré-requisitos, arquitetura
+- [ ] 8.4 — Quickstart interativo: passo a passo comentado do fluxo completo
+- [ ] 8.5 — Referência de API: TypeScript SDK (migrar e expandir o README atual)
+- [ ] 8.6 — Referência de API: Python SDK
+- [ ] 8.7 — Referência de API: Ruby SDK
+- [ ] 8.8 — Página de segurança: modelo de ameaças, o que o TruthID protege e o que não protege
+- [ ] 8.9 — Página de contratos: endereços, ABIs, links Basescan, custo por operação
+- [ ] 8.10 — Identidade visual: logo, cores, tipografia aplicados ao site
+- [ ] 8.11 — Deploy em produção (GitHub Pages ou domínio customizado)
 
 ---
 
@@ -295,6 +358,32 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-15 — Sessão 23
+
+- **Etapas 5.1 e 5.5 concluídas** — TypeScript SDK + exemplo Express.js
+  - `sdk/typescript/src/contracts.ts`: ABIs e endereços dos 3 contratos (sem wagmi)
+  - `sdk/typescript/src/types.ts`: tipos TypeScript — TruthIDClientConfig, AuthChallenge, AuthResponse, VerifyAuthResult, SessionInfo, DeviceStatus
+  - `sdk/typescript/src/client.ts`: classe TruthIDClient
+    - `constructor`: `createPublicClient` do viem — conexão somente-leitura com a blockchain
+    - `createChallenge(origin)`: gera challenge com `randomUUID()` + timestamp — formato exato que o mobile assina
+    - `verifyAuthResponse({ challenge, response })`: 6 verificações em sequência — approved, TTL, nonce, assinatura (recoverMessageAddress), device ativo, identityId
+    - `verifySession(hash)`: lê SessionRegistry — `getSession` + `isSessionRevoked` em paralelo com Promise.all
+    - `checkDeviceStatus(devicePubKey)`: lê DeviceRegistry — `getDevice`
+  - `sdk/typescript/src/index.ts`: barrel export
+  - `sdk/typescript/example/server.js`: servidor Express.js de exemplo
+    - GET /auth/challenge: cria challenge, guarda em Map por nonce, auto-remove em 35s
+    - POST /auth/verify: recupera challenge por nonce, remove (anti-replay), chama SDK, cria sessionToken
+    - GET /api/profile: rota protegida com middleware requireAuth (Bearer token)
+  - viem v1.21.4 (não v2.x) — v2 depende de `ox` que só funciona com moduleResolution: bundler
+- Conceitos ensinados:
+  - `createPublicClient` vs wagmi: conexão somente-leitura sem wallet, sem estado de UI — equivale a requests.Session() do Python
+  - `recoverMessageAddress({ message, signature })`: recovers o endereço que assinou — inverso do signPersonalMessage
+  - 6 camadas de verificação: cada uma cobre um vetor de ataque diferente (repúdio, replay por tempo, replay por conteúdo, assinatura falsa, device revogado, device inexistente)
+  - `pendingChallenges.delete(nonce)`: remover o nonce após uso — impede replay mesmo dentro do TTL
+  - `requireAuth` middleware: padrão Express de proteção de rotas — `req.headers.authorization?.split(' ')[1]`
+  - Por que viem v1 e não v2: v2.x exige moduleResolution bundler (Vite); v1.x funciona com CommonJS puro
+- **Próximo passo ao retomar**: Fase 6 — Integração & Testes E2E (etapa 6.1)
 
 ### 2026-06-14 — Sessão 22
 

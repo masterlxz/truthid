@@ -1,0 +1,18 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "truthid-sdk"
+version = "0.1.0"
+description = "TruthID authentication SDK for Python"
+requires-python = ">=3.10"
+dependencies = [
+    "web3>=6.0.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["truthid"]
