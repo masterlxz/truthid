@@ -10,6 +10,33 @@ TruthID is decentralized authentication that replaces "Login with Google/Apple/M
 
 Centralized identity providers create account lockouts, data collection, and a single point of failure. TruthID gives users sovereignty over their own identity (a wallet they control) while giving integrators a simple SDK to verify logins against a public blockchain.
 
+## Prerequisites
+
+TruthID has two kinds of users — people logging into a site, and developers adding TruthID to one. Each side needs different things.
+
+**To log in with TruthID:**
+- An identity registered on-chain — created once with any EVM wallet (MetaMask, Rabby, Ledger, Trezor, WalletConnect) holding a small amount of ETH on [Base](https://base.org) to cover gas (typically well under a cent).
+- A trusted device paired to that identity — the desktop app or the mobile app. The device's own private key never leaves it; the wallet above is only needed once, to create the identity, not for day-to-day logins.
+
+**To integrate TruthID into your app:**
+- A backend that can receive an HTTPS `POST` request (the signed login response). Any language works — official SDKs exist for TypeScript, Python, and Ruby (see [Integrating TruthID](#integrating-truthid) below), and other languages can verify directly against the public contracts.
+- A way to render a QR code on your login page — the SDK builds the payload, your frontend just needs any QR rendering library.
+- Nothing else to provision: no database, no server, no third-party account.
+
+## Architecture
+
+TruthID is a set of independent pieces that all read and write the same four contracts on Base Mainnet — there's no central server tying them together.
+
+| Component | Stack | Path |
+|---|---|---|
+| Smart contracts | Solidity (Foundry) | [`contracts/`](https://github.com/masterlxz/truthid/tree/main/contracts) |
+| Desktop app | Tauri + Rust + React + TypeScript | [`desktop/`](https://github.com/masterlxz/truthid/tree/main/desktop) |
+| Mobile app | Flutter | [`mobile/`](https://github.com/masterlxz/truthid/tree/main/mobile) |
+| SDKs | TypeScript, Python, Ruby | [`sdk/`](https://github.com/masterlxz/truthid/tree/main/sdk) |
+| Integration tests | viem + tsx, against local Anvil | [`integration/`](https://github.com/masterlxz/truthid/tree/main/integration) |
+
+There is no relay, signaling server, or backend operated by TruthID — every off-chain message either travels inside a QR code or goes directly between the user's phone and the integrator's own backend.
+
 ## How it works
 
 - **Identity** — a username bound to a controller wallet, created on-chain (`IdentityRegistry`).

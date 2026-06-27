@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-06-21 (Sessão 31)
+> Última atualização: 2026-06-21 (Sessão 32)
 
 ---
 
@@ -50,7 +50,7 @@ Fase 4 — Mobile App             [x] Concluída
 Fase 5 — SDKs                   [x] Concluída
 Fase 6 — Integração & Testes    [x] Concluída
 Fase 7 — Mainnet & Lançamento   [x] Concluída
-Fase 8 — Documentação Web       [~] Em andamento (8.2/11)
+Fase 8 — Documentação Web       [~] Em andamento (8.3/11)
 ```
 
 ---
@@ -319,7 +319,7 @@ masterlxz.github.io/truthid
 **Etapas**:
 - [x] 8.1 — Setup Docusaurus em `docs/` + configuração GitHub Pages (Action de deploy automático). Implementado na Sessão 31: `npx create-docusaurus@latest docs classic --typescript`; `docusaurus.config.ts` ajustado (title/tagline TruthID, `url`/`baseUrl`/`organizationName`/`projectName` para `masterlxz.github.io/truthid`, `editUrl` apontando pro repo, navbar/footer sem branding genérico do template); blog do template (posts de dinossauro) desativado (`blog: false`) e pasta removida — não fazia parte do roadmap e não fazia sentido publicar conteúdo de exemplo; `.github/workflows/deploy-docs.yml` criado (build + `actions/deploy-pages`, dispara em push na main que toque `docs/`); `npm run build` validado localmente sem erros. Commitado (`7737249`) e enviado via push. **Pages habilitado automaticamente pela própria Action**: `actions/configure-pages` tem permissão (`pages: write`) pra habilitar o GitHub Pages com source "GitHub Actions" caso ainda não esteja configurado — não precisou de nenhum passo manual no Settings. Workflow rodou (`build` + `deploy`, ambos `success`) e o site já está no ar em `https://masterlxz.github.io/truthid/` (confirmado via `curl -o /dev/null -w "%{http_code}"` → 200). **Fase 8.1 totalmente concluída.**
 - [x] 8.2 — Landing page: headline, diagrama do fluxo, botão "Get Started". Implementado na Sessão 31 (continuação): hero com a tagline já configurada na 8.1 + botões "Get Started" (→ `/docs/intro`) e "View on GitHub"; seção "How a login works" com o diagrama ASCII do README; 3 cards de feature reais substituindo os de exemplo do template. Removidas as pastas de tutorial genérico do Docusaurus (`tutorial-basics/`, `tutorial-extras/`) e reescrito `docs/docs/intro.mdx` com conteúdo real (necessário porque o CTA "Get Started" apontava pra lá). **Tema visual também refeito** (feedback do usuário: o padrão do template estava "feio") — paleta dark/cripto com acento ciano (`#4DD0E1`) como modo padrão (toggle claro/escuro mantido), tipografia Space Grotesk+Inter, hero com fundo navy fixo e glow sutil, botões customizados, ícones SVG desenhados à mão nos cards (cadeado, carteira, code brackets), e logo padrão (dinossauro do Docusaurus) trocado por uma marca mínima provisória (escudo+check em ciano) — identidade visual definitiva continua sendo a etapa 8.10. Validado visualmente nos dois modos via screenshot (Playwright headless, instalado ad-hoc nesta sessão).
-- [ ] 8.3 — Guia de introdução: o que é TruthID, pré-requisitos, arquitetura
+- [x] 8.3 — Guia de introdução: o que é TruthID, pré-requisitos, arquitetura. Implementado na Sessão 32: `docs/docs/intro.mdx` ganhou duas seções novas (a versão da 8.2 só tinha "o que é" + "how it works"). "Prerequisites" separa o que é preciso pra logar com TruthID (identidade on-chain + device pareado) do que é preciso pra integrar TruthID (backend que recebe POST HTTPS + lib de QR) — sem banco de dados, servidor ou conta de terceiro a provisionar. "Architecture" reaproveita a tabela de componentes do `README.md` raiz (contracts/desktop/mobile/sdk/integration), adaptando os links relativos do repo para URLs completas do GitHub (esse site é hospedado separado do repo, links relativos não funcionariam). `npm run build` validado sem erros; revisão visual via screenshot (Playwright headless, mesmo processo da 8.2) confirmou que as tabelas novas renderizam bem no tema dark, sem quebra de layout.
 - [ ] 8.4 — Quickstart interativo: passo a passo comentado do fluxo completo
 - [ ] 8.5 — Referência de API: TypeScript SDK (migrar e expandir o README atual)
 - [ ] 8.6 — Referência de API: Python SDK
@@ -413,6 +413,17 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-21 — Sessão 32
+
+- **Etapa 8.3 concluída** — guia de introdução expandido com pré-requisitos e arquitetura
+  - `docs/docs/intro.mdx`: duas seções novas entre "Why" e "How it works"
+    - "Prerequisites": separa as duas audiências do site — quem só vai logar num site que integrou TruthID (precisa de uma identidade on-chain criada com qualquer wallet EVM + um device pareado, desktop ou mobile) e quem está integrando TruthID no próprio app (precisa só de um backend que receba `POST` HTTPS e uma lib de QR no frontend — sem banco, sem servidor, sem conta de terceiro)
+    - "Architecture": tabela de componentes (contracts/desktop/mobile/sdk/integration) — mesma tabela do `README.md` raiz, mas com os links relativos (`contracts/`, `desktop/`...) trocados por URLs completas do GitHub, porque o site de docs é publicado separado do repositório e link relativo apontaria pro domínio errado
+  - `npm run build` validado sem erros dentro de `docs/`
+  - Verificação visual: `npx docusaurus serve` (build estático, não dev server) + screenshot via Playwright headless (mesmo processo já usado na etapa 8.2) — tabelas novas renderizam corretamente no tema dark, sem quebra de layout
+- Conceitos ensinados: nenhum conceito novo de blockchain/Solidity nesta sessão — trabalho foi só de documentação (reorganizar conteúdo já decidido em sessões anteriores)
+- **Próximo passo ao retomar**: etapa 8.4 (quickstart interativo) ou qualquer outra dentro da Fase 8 (8.5-8.7 referência de SDK, 8.8 segurança, 8.9 contratos, 8.10 identidade visual definitiva, 8.11 deploy — já automático)
 
 ### 2026-06-21 — Sessão 31
 
