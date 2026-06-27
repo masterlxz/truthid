@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-06-13 (Sessão 17)
+> Última atualização: 2026-06-14 (Sessão 18)
 
 ---
 
@@ -170,7 +170,7 @@ Antes de rodar pela primeira vez na sessão (ou após reiniciar o computador), o
 
 **Etapas**:
 - [x] 4.1 — Setup Flutter
-- [ ] 4.2 — Geração de key pair no dispositivo (Android Keystore / iOS Secure Enclave)
+- [x] 4.2 — Geração de key pair no dispositivo (Android Keystore / iOS Secure Enclave)
 - [ ] 4.3 — Scanner de QR code
 - [ ] 4.4 — Tela: Aprovar login (exibir quem está pedindo, aprovar/recusar)
 - [ ] 4.5 — Assinatura do challenge + envio via relay
@@ -261,6 +261,30 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-14 — Sessão 18
+
+- **Etapa 4.2 concluída** — Geração de key pair no dispositivo (Android Keystore)
+  - `pubspec.yaml`: adicionados `flutter_secure_storage: ^9.2.4` e `web3dart: ^2.7.3`
+  - `lib/services/device_key_service.dart`: serviço de chave do device
+    - `_getOrCreateKey()`: gera key pair secp256k1 na primeira execução, carrega do storage nas seguintes
+    - `getDeviceAddress()`: retorna endereço Ethereum (formato EIP-55 checksumado) — é isso que vai pro `DeviceRegistry`
+    - `signChallenge()`: assina JSON do challenge com prefixo Ethereum personal_sign
+    - Chave privada armazenada como hex no `flutter_secure_storage` (cifrado pelo Android Keystore)
+  - `lib/main.dart`: substituído contador demo por `DeviceInfoScreen` que exibe o endereço do device
+  - APK debug gerado com sucesso (148MB)
+  - Fix: `sudo chown -R masterlxz:masterlxz mobile/lib` (Docker criou pasta como root na sessão anterior)
+- Conceitos ensinados:
+  - Device key vs controller wallet: são chaves separadas — device key não tem fundos, só assina challenges
+  - Android Keystore/iOS Secure Enclave: cofre de hardware que cifra o storage; não suporta secp256k1 nativamente
+  - Solução: chave secp256k1 gerada em software, privada cifrada pelo Keystore (padrão de wallets mobile)
+  - `Random.secure()`: fonte de entropia do SO — equivalente a `secrets.token_bytes()` em Python
+  - `Future<T>` + `async/await` em Dart: equivalente a `async def` + `await` em Python
+  - `setState()`: notifica Flutter que o estado mudou e a tela precisa ser redesenhada
+  - `initState()`: roda uma vez quando a tela é criada — lugar certo para carregar dados assíncronos
+  - `signPersonalMessageToUint8List()`: adiciona prefixo Ethereum antes de assinar (evita assinar transações acidentalmente)
+  - EIP-55: formato checksumado de endereço Ethereum (maiúsculas/minúsculas como checksum visual)
+- **Próximo passo ao retomar**: Etapa 4.3 — Scanner de QR code
 
 ### 2026-06-13 — Sessão 17
 
