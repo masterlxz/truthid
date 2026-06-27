@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../services/device_key_service.dart';
+import '../theme.dart';
 
 // Estados possíveis da tela — do início ao fim do fluxo de login
 enum _Status {
@@ -134,7 +135,6 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Pedido de Login'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
       body: switch (_status) {
         _Status.challenge => _buildChallengeUI(),
@@ -159,7 +159,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const SizedBox(height: 16),
-          const Icon(Icons.lock_open_rounded, size: 64, color: Colors.indigo),
+          const Icon(Icons.lock_open_rounded, size: 64, color: AppColors.accent),
           const SizedBox(height: 16),
           const Text(
             'Pedido de login recebido',
@@ -170,7 +170,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
           const Text(
             'Um site está pedindo para entrar com sua identidade TruthID.',
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey),
+            style: TextStyle(color: AppColors.textMuted),
           ),
           const SizedBox(height: 32),
           _InfoRow(label: 'Site', value: origin),
@@ -182,8 +182,8 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
             icon: const Icon(Icons.check_circle_outline),
             label: const Text('Aprovar', style: TextStyle(fontSize: 18)),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.green.shade700,
-              foregroundColor: Colors.white,
+              backgroundColor: AppColors.success,
+              foregroundColor: AppColors.background,
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
           ),
@@ -193,8 +193,8 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
             icon: const Icon(Icons.cancel_outlined),
             label: const Text('Recusar', style: TextStyle(fontSize: 18)),
             style: OutlinedButton.styleFrom(
-              foregroundColor: Colors.red.shade700,
-              side: BorderSide(color: Colors.red.shade700),
+              foregroundColor: AppColors.danger,
+              side: const BorderSide(color: AppColors.danger),
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
           ),
@@ -209,7 +209,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.check_circle, size: 72, color: Colors.green),
+          Icon(Icons.check_circle, size: 72, color: AppColors.success),
           SizedBox(height: 16),
           Text('Resposta enviada!', style: TextStyle(fontSize: 20)),
         ],
@@ -224,7 +224,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.error_outline, size: 72, color: Colors.red),
+            const Icon(Icons.error_outline, size: 72, color: AppColors.danger),
             const SizedBox(height: 16),
             Text(
               _statusMsg,
@@ -253,7 +253,7 @@ class _InfoRow extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
+        color: AppColors.surfaceAlt,
         borderRadius: BorderRadius.circular(8),
       ),
       child: Row(

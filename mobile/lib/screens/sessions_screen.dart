@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/blockchain_service.dart';
 import '../services/device_key_service.dart';
 import '../services/local_storage_service.dart';
+import '../theme.dart';
 
 class SessionsScreen extends StatefulWidget {
   const SessionsScreen({super.key});
@@ -88,17 +89,17 @@ class _SessionsScreenState extends State<SessionsScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.link_off, size: 64, color: Colors.grey.shade300),
+              const Icon(Icons.link_off, size: 64, color: AppColors.textMuted),
               const SizedBox(height: 16),
-              Text(
+              const Text(
                 'Dispositivo não pareado',
-                style: TextStyle(fontSize: 18, color: Colors.grey.shade600),
+                style: TextStyle(fontSize: 18, color: AppColors.textMuted),
               ),
               const SizedBox(height: 8),
-              Text(
+              const Text(
                 'Pareie este dispositivo com uma identidade para ver as sessões ativas.',
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+                style: TextStyle(fontSize: 14, color: AppColors.textMuted),
               ),
             ],
           ),
@@ -123,26 +124,26 @@ class _SessionsScreenState extends State<SessionsScreen> {
               const Spacer(),
               Text(
                 '$activeSessions ativas',
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
               ),
             ],
           ),
           const SizedBox(height: 4),
-          Text(
+          const Text(
             'Sessões são criadas pelos sites quando você aprova um login.',
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+            style: TextStyle(fontSize: 12, color: AppColors.textMuted),
           ),
           const Divider(height: 24),
 
           // ── Erro de leitura ───────────────────────────────────────────────
           if (_error != null)
             Card(
-              color: Colors.red.shade50,
+              color: AppColors.dangerBg,
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Text(
                   'Erro ao carregar sessões: $_error',
-                  style: const TextStyle(color: Colors.red),
+                  style: const TextStyle(color: AppColors.danger),
                 ),
               ),
             )
@@ -154,7 +155,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
               child: Center(
                 child: Text(
                   'Nenhuma sessão encontrada',
-                  style: TextStyle(color: Colors.grey.shade400),
+                  style: TextStyle(color: AppColors.textMuted),
                 ),
               ),
             )
@@ -174,19 +175,19 @@ class _SessionsScreenState extends State<SessionsScreen> {
           // ── Aviso: revogação requer desktop ──────────────────────────────
           const SizedBox(height: 16),
           Card(
-            color: Colors.amber.shade50,
+            color: AppColors.warningBg,
             child: const Padding(
               padding: EdgeInsets.all(12),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(Icons.info_outline, color: Colors.amber, size: 18),
+                  Icon(Icons.info_outline, color: AppColors.warning, size: 18),
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
                       'Para revogar sessões, use o app desktop. '
                       'A revogação exige a controller wallet.',
-                      style: TextStyle(fontSize: 13, color: Colors.amber),
+                      style: TextStyle(fontSize: 13, color: AppColors.warning),
                     ),
                   ),
                 ],
@@ -219,7 +220,7 @@ class _SessionCard extends StatelessWidget {
         padding: const EdgeInsets.all(12),
         child: Row(
           children: [
-            const Icon(Icons.vpn_key, size: 20, color: Colors.grey),
+            const Icon(Icons.vpn_key, size: 20, color: AppColors.textMuted),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
@@ -234,7 +235,7 @@ class _SessionCard extends StatelessWidget {
                     isCurrentDevice
                         ? 'Este device · $dateStr'
                         : dateStr,
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                   ),
                 ],
               ),
@@ -242,13 +243,13 @@ class _SessionCard extends StatelessWidget {
             Chip(
               label: Text(session.isRevoked ? 'Revogada' : 'Ativa'),
               backgroundColor: session.isRevoked
-                  ? Colors.grey.shade200
-                  : Colors.green.shade100,
+                  ? AppColors.surfaceAlt
+                  : AppColors.successBg,
               labelStyle: TextStyle(
                 fontSize: 12,
                 color: session.isRevoked
-                    ? Colors.grey.shade600
-                    : Colors.green.shade700,
+                    ? AppColors.textMuted
+                    : AppColors.success,
               ),
               padding: EdgeInsets.zero,
             ),

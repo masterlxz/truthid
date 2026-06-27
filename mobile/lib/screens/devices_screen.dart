@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../services/device_key_service.dart';
 import '../services/local_storage_service.dart';
+import '../theme.dart';
 import 'show_device_qr_screen.dart';
 
 class DevicesScreen extends StatefulWidget {
@@ -90,14 +91,15 @@ class _DevicesScreenState extends State<DevicesScreen> {
                       const Spacer(),
                       _pairedIdentityId != null
                           ? Chip(
-                              avatar: const Icon(Icons.verified, size: 14),
+                              avatar: const Icon(Icons.verified, size: 14, color: AppColors.success),
                               label: Text('Identidade #$_pairedIdentityId'),
-                              backgroundColor: Colors.green.shade100,
+                              labelStyle: const TextStyle(color: AppColors.success),
+                              backgroundColor: AppColors.successBg,
                               padding: EdgeInsets.zero,
                             )
-                          : Chip(
-                              label: const Text('Não registrado'),
-                              backgroundColor: Colors.grey.shade200,
+                          : const Chip(
+                              label: Text('Não registrado'),
+                              backgroundColor: AppColors.surfaceAlt,
                             ),
                     ],
                   ),
@@ -107,7 +109,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
                   // Endereço do device
                   const Text(
                     'Endereço',
-                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                    style: TextStyle(color: AppColors.textMuted, fontSize: 12),
                   ),
                   const SizedBox(height: 4),
                   Row(
@@ -131,7 +133,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
                     const Divider(height: 24),
                     const Text(
                       'Identidade',
-                      style: TextStyle(color: Colors.grey, fontSize: 12),
+                      style: TextStyle(color: AppColors.textMuted, fontSize: 12),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -144,10 +146,10 @@ class _DevicesScreenState extends State<DevicesScreen> {
                         await _storage.clearPairedIdentity();
                         _reload();
                       },
-                      icon: const Icon(Icons.link_off, size: 18, color: Colors.red),
+                      icon: const Icon(Icons.link_off, size: 18, color: AppColors.danger),
                       label: const Text(
                         'Remover pareamento',
-                        style: TextStyle(color: Colors.red),
+                        style: TextStyle(color: AppColors.danger),
                       ),
                     ),
                   ],
@@ -160,19 +162,19 @@ class _DevicesScreenState extends State<DevicesScreen> {
           if (_pairedIdentityId == null) ...[
             const SizedBox(height: 8),
             Card(
-              color: Colors.blue.shade50,
+              color: AppColors.infoBg,
               child: const Padding(
                 padding: EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline, color: Colors.blue, size: 18),
+                    Icon(Icons.info_outline, color: AppColors.info, size: 18),
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
                         'Toque no botão abaixo pra mostrar um QR com o '
                         'endereço deste device. Leia esse QR (ou cole o '
                         'endereço) no app desktop pra registrá-lo.',
-                        style: TextStyle(fontSize: 13, color: Colors.blue),
+                        style: TextStyle(fontSize: 13, color: AppColors.info),
                       ),
                     ),
                   ],

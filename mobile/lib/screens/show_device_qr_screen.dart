@@ -7,6 +7,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../services/blockchain_service.dart';
 import '../services/device_key_service.dart';
 import '../services/local_storage_service.dart';
+import '../theme.dart';
 
 // Tela mostrada quando o usuário quer parear este celular com uma
 // identidade. Diferente do fluxo antigo (escanear um QR do desktop e trocar
@@ -84,7 +85,6 @@ class _ShowDeviceQrScreenState extends State<ShowDeviceQrScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Parear dispositivo'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
       body: Padding(
         padding: const EdgeInsets.all(24),
@@ -109,7 +109,16 @@ class _ShowDeviceQrScreenState extends State<ShowDeviceQrScreen> {
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 24),
-        QrImageView(data: _qrPayload, size: 220),
+        // Fundo branco explícito: o tema é dark, e um QR com módulos pretos
+        // sobre um fundo quase preto (#0B0F14) ficaria ilegível pra câmera.
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: QrImageView(data: _qrPayload, size: 220),
+        ),
         const SizedBox(height: 24),
         SelectableText(
           _address!,
@@ -122,7 +131,7 @@ class _ShowDeviceQrScreenState extends State<ShowDeviceQrScreen> {
         const Text(
           'Aguardando o computador registrar este dispositivo...',
           textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.grey),
+          style: TextStyle(color: AppColors.textMuted),
         ),
       ],
     );
@@ -132,7 +141,7 @@ class _ShowDeviceQrScreenState extends State<ShowDeviceQrScreen> {
     return const Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.check_circle, size: 72, color: Colors.green),
+        Icon(Icons.check_circle, size: 72, color: AppColors.success),
         SizedBox(height: 16),
         Text('Pareado com sucesso!', style: TextStyle(fontSize: 20)),
       ],
