@@ -96,6 +96,10 @@ const config: Config = {
               label: 'Security',
               to: '/docs/security',
             },
+            {
+              label: 'Smart Contracts',
+              to: '/docs/contracts',
+            },
           ],
         },
         {

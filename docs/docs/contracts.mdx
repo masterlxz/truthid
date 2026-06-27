@@ -1,0 +1,125 @@
+---
+sidebar_position: 5
+---
+
+# Smart Contracts
+
+TruthID is four Solidity contracts on [Base](https://base.org) — no backend, no database. Everything described below is on the public chain and independently checkable; this page exists for integrators who want to read on-chain data directly, write their own SDK, or just verify what's actually deployed.
+
+All four contracts are **immutable** (no upgrade proxy) and **verified** on Basescan.
+
+## Addresses
+
+### Base Mainnet (production, chain ID 8453)
+
+| Contract | Address |
+|---|---|
+| `IdentityRegistry` | [`0xbf097EC74d0Cc9b16D3d94EaCa62060d89A63b17`](https://basescan.org/address/0xbf097EC74d0Cc9b16D3d94EaCa62060d89A63b17) |
+| `DeviceRegistry` | [`0x4A7a307cb6872bde24BAf3E9de2BeC3Ddd03e144`](https://basescan.org/address/0x4A7a307cb6872bde24BAf3E9de2BeC3Ddd03e144) |
+| `RecoveryManager` | [`0xA93123C1ca438D9F56E4E599363F4d973d61A307`](https://basescan.org/address/0xA93123C1ca438D9F56E4E599363F4d973d61A307) |
+| `SessionRegistry` | [`0x24074587a2aFB3aa5491361BB0a5eBee90797D1B`](https://basescan.org/address/0x24074587a2aFB3aa5491361BB0a5eBee90797D1B) |
+
+### Base Sepolia (testnet, chain ID 84532)
+
+| Contract | Address |
+|---|---|
+| `IdentityRegistry` | [`0x35D21c65980cBd2dAE7576e1bf6b8e46C9e180BF`](https://sepolia.basescan.org/address/0x35D21c65980cBd2dAE7576e1bf6b8e46C9e180BF) |
+| `DeviceRegistry` | [`0x225c67a98c9D675fE595ae05a2F9249C34d9C60a`](https://sepolia.basescan.org/address/0x225c67a98c9D675fE595ae05a2F9249C34d9C60a) |
+| `RecoveryManager` | [`0xDd4CE29A35022741Bbe2F8f38aa185ddF41A8Fa7`](https://sepolia.basescan.org/address/0xDd4CE29A35022741Bbe2F8f38aa185ddF41A8Fa7) |
+| `SessionRegistry` | [`0xdeD2Ad865069CA6546172926540D3A3Aa73C1CA6`](https://sepolia.basescan.org/address/0xdeD2Ad865069CA6546172926540D3A3Aa73C1CA6) |
+
+Use testnet while developing — see [Networks](/docs/sdk/typescript#networks) in the SDK reference for how to point a client at Sepolia.
+
+## Getting the ABI
+
+You probably don't need this — the [SDKs](/docs/sdk/typescript) already wrap every contract call behind plain functions. Reach for the raw ABI only if you're reading state from a language without an official SDK, or auditing the deployment yourself.
+
+- **Basescan** — since every contract is verified, each address page above has a "Contract" tab with the full ABI and source, plus a one-click "Export ABI" button. This is the easiest source and always matches what's actually deployed.
+- **GitHub source** — the canonical `.sol` interfaces: [`IdentityRegistry.sol`](https://github.com/masterlxz/truthid/blob/main/contracts/src/IdentityRegistry.sol), [`DeviceRegistry.sol`](https://github.com/masterlxz/truthid/blob/main/contracts/src/DeviceRegistry.sol), [`RecoveryManager.sol`](https://github.com/masterlxz/truthid/blob/main/contracts/src/RecoveryManager.sol), [`SessionRegistry.sol`](https://github.com/masterlxz/truthid/blob/main/contracts/src/SessionRegistry.sol).
+
+There's no published npm/PyPI/RubyGems package containing the full ABI JSON — the SDKs only embed the minimal fragment each function needs internally. To generate the full artifact yourself: `git clone` the repo, then `cd contracts && forge build` (output lands in the gitignored `out/` directory).
+
+## Contract reference
+
+A quick map of what each contract does and who's allowed to call what. Full behavior (commit-reveal, guardian thresholds, session hashing) is covered in [Introduction](/docs/intro#how-it-works) and [Security Model](/docs/security) — this is just the function list.
+
+### IdentityRegistry
+
+Username ↔ controller wallet mapping. The root of every other contract — `DeviceRegistry`, `RecoveryManager`, and `SessionRegistry` all resolve a caller's identity by asking this contract who controls which username.
+
+| Function | Caller | Purpose |
+|---|---|---|
+| `createIdentity(username)` | anyone (becomes controller) | Mint a new identity |
+| `transferController(username, newController)` | current controller | Move control to another wallet |
+| `setRecoveryManager(rm)` | deploy owner, once | Wire up the `RecoveryManager` address |
+| `recoverController(username, newController)` | `RecoveryManager` only | Change controller via social recovery |
+| `getIdentity(username)` / `getUsernameByController(addr)` / `isUsernameTaken(username)` / `totalIdentities()` | anyone, free | Reads |
+
+### DeviceRegistry
+
+Device public keys per identity, registered via commit-reveal to prevent front-running.
+
+| Function | Caller | Purpose |
+|---|---|---|
+| `commitDevice(commitment)` | the future device owner | Step 1/2 — commit a hidden hash |
+| `registerDevice(devicePubKey, label, salt)` | same caller as the commit | Step 2/2 — reveal and register |
+| `revokeDevice(devicePubKey)` | the identity's controller | Deactivate a device |
+| `isDeviceActive(devicePubKey)` / `getDevice(devicePubKey)` / `getDevicesByIdentity(id)` / `deviceCount(id)` | anyone, free | Reads |
+
+### RecoveryManager
+
+M-of-N guardian recovery with a 7-day timelock (`TIMELOCK` constant) and a 20-guardian cap (`MAX_GUARDIANS` constant).
+
+| Function | Caller | Purpose |
+|---|---|---|
+| `configureGuardians(username, guardians[], threshold)` | the identity's controller | Set or replace the guardian set |
+| `proposeRecovery(username, newController)` | a configured guardian | Start a recovery |
+| `approveRecovery(username)` | a configured guardian | Vote on the active proposal |
+| `executeRecovery(username)` | anyone, after threshold + 7 days | Apply the new controller |
+| `cancelRecovery(username)` | the current controller | Abort during the timelock window |
+| `getGuardianConfig(username)` / `getProposal(username)` / `hasGuardianApproved(username, guardian)` | anyone, free | Reads |
+
+### SessionRegistry
+
+Stores only a `keccak256` hash per session — never the data it represents.
+
+| Function | Caller | Purpose |
+|---|---|---|
+| `createSession(hash, identityId, devicePubKey, r, s, v)` | anyone can submit, but requires the device's own ECDSA signature over `hash` | Record a session hash |
+| `revokeSession(hash)` | the session's identity controller | Revoke one session |
+| `revokeAllSessions()` | the identity's controller | Revoke every session up to now, in one O(1) call |
+| `isSessionRevoked(hash)` / `getSession(hash)` / `getSessionsByIdentity(id)` / `getRevokedBefore(id)` | anyone, free | Reads |
+
+## Cost per operation
+
+Real gas numbers from the project's own test suite (`forge test --gas-report`, 120 tests passing), not estimates. Read functions (`view`) are free when called the normal way — directly via an RPC `eth_call`, exactly how every SDK reads them. The "free" label below stops applying only if another contract calls them mid-transaction, which no part of TruthID does today.
+
+| Operation | Min gas | Median gas | Max gas |
+|---|---|---|---|
+| `createIdentity` | 22,153 | 141,483 | 142,832 |
+| `commitDevice` | 44,211 | 44,211 | 44,211 |
+| `registerDevice` | 23,278 | 204,428 | 204,428 |
+| `revokeDevice` | 24,411 | 51,490 | 51,490 |
+| `configureGuardians` | 37,894 | 340,329 | 1,028,006 |
+| `proposeRecovery` | 22,532 | 162,839 | 162,839 |
+| `approveRecovery` | 39,187 | 71,787 | 88,887 |
+| `executeRecovery` | 39,349 | 126,801 | 126,801 |
+| `cancelRecovery` | 36,929 | 43,951 | 43,951 |
+| `createSession` | 27,061 | 183,605 | 183,605 |
+| `revokeSession` | 24,501 | 53,880 | 56,224 |
+| `revokeAllSessions` | 28,694 | 65,169 | 65,169 |
+
+:::info[Why configureGuardians has such a wide range]
+Gas scales with the size of the `guardians` array. The low end is a couple of guardians; the high end in this table comes from a test that exercises the full `MAX_GUARDIANS` cap of 20. A typical 3-of-5 setup lands well below the median shown here.
+:::
+
+**What that costs in ETH**: at the ~0.011 gwei gas price observed during the [mainnet deploy](https://basescan.org/address/0xbf097EC74d0Cc9b16D3d94EaCa62060d89A63b17), even the heaviest row here (`registerDevice`, ~204k gas) comes out to roughly 0.0000022 ETH — a small fraction of a cent. Gas price moves with network demand; check [Base's live gas tracker](https://basescan.org/gastracker) for the current rate before assuming these numbers hold exactly.
+
+## Audit status
+
+See [Security Model → Audit status](/docs/security#audit-status) for the manual review findings and what's not yet covered by a third-party audit.
+
+## Next steps
+
+- [Security Model](/docs/security) — threat model and what TruthID does and doesn't protect against
+- [SDK Reference](/docs/sdk/typescript) — the typed, documented way to call these contracts from TypeScript, Python, or Ruby
