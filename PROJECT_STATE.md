@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-06-07 (Sessão 12)
+> Última atualização: 2026-06-08 (Sessão 13)
 
 ---
 
@@ -132,8 +132,8 @@ Antes de rodar pela primeira vez na sessão (ou após reiniciar o computador), o
 
 **Etapas**:
 - [x] 3.1 — Setup Tauri + React + TypeScript
-- [ ] 3.2 — Integração com wallet (wagmi + viem)
-- [ ] 3.3 — Tela: Criar identidade (conectar wallet → escolher username → registrar)
+- [x] 3.2 — Integração com wallet (wagmi + viem)
+- [x] 3.3 — Tela: Criar identidade (conectar wallet → escolher username → registrar)
 - [ ] 3.4 — Tela: Gerenciar dispositivos (adicionar via QR, revogar)
 - [ ] 3.5 — Tela: Sessões ativas (listar, revogar selecionadas, revogar todas)
 - [ ] 3.6 — Geração de QR code para pareamento de novo dispositivo
@@ -245,14 +245,22 @@ Website          Relay           Mobile App        Blockchain
 ## Log de Sessões
 
 ### 2026-06-08 — Sessão 13
-- Etapa 3.1 concluída — Setup Tauri + React + TypeScript
-  - Ambiente de desenvolvimento em Docker: `desktop/Dockerfile`, `desktop/docker-compose.yml`, `desktop/dev.sh`
-  - Imagem Docker: Node 20 + Rust 1.96 + Tauri CLI 2.11.2 + dependências GTK/WebKit
-  - Projeto scaffoldado com `create-tauri-app` (template react-ts, npm)
-  - Primeira compilação: 3m 19s (488 crates); subsequentes instantâneas via volume `cargo-target`
-  - App abriu com sucesso via `./dev.sh` (X11 forwarding, WebKit em software rendering)
-  - Conceitos ensinados: TypeScript vs Python, React componentes, Tauri arquitetura (WebView + Rust), mecanismo invoke (React → Rust)
-- Próximo passo: etapa 3.2 — integração com wallet (wagmi + viem)
+- Etapas 3.2 e 3.3 concluídas
+  - 3.2: integração com wallet (wagmi + viem)
+    - Pacotes instalados dentro do Docker: `wagmi`, `viem`, `@tanstack/react-query` (--legacy-peer-deps por TypeScript 5.8 vs 5.9 exigido pelo wagmi v3)
+    - `src/config/wagmi.ts`: configuração central — Base Sepolia, conector `injected`, transporte HTTP
+    - `src/main.tsx`: WagmiProvider + QueryClientProvider envolvendo o app
+    - `src/components/ConnectWallet.tsx`: botão conectar/desconectar usando useAccount, useConnect, useDisconnect
+    - Conector `injected` funciona no browser (dev); WalletConnect será adicionado na etapa 3.8 (build Tauri)
+  - 3.3: tela de criar identidade
+    - `src/config/contracts.ts`: endereço e ABI mínimo do IdentityRegistry (3 funções)
+    - `src/components/CreateIdentity.tsx`: formulário com validação, 3 hooks wagmi encadeados
+    - useReadContract: leitura gratuita (isUsernameTaken, getUsernameByController)
+    - useWriteContract: chama createIdentity, cobre fase MetaMask (isPending)
+    - useWaitForTransactionReceipt: aguarda confirmação da rede (isConfirming → isSuccess)
+    - App.tsx: renderização condicional — ConnectWallet sempre visível, CreateIdentity só quando conectado
+  - Conceitos ensinados: ABI, leitura vs escrita on-chain, ciclo de vida de transação, hooks React como observadores, desestruturação, renderização condicional, `as const`, `enabled` no useReadContract
+- Próximo passo: etapa 3.4 — tela gerenciar dispositivos (adicionar via QR, revogar)
 
 ### 2026-06-07 — Sessão 12
 - Etapas 2.7 e 2.8 concluídas — **Fase 2 completa**
