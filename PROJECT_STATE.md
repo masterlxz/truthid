@@ -73,8 +73,11 @@ Fase 7 — Mainnet & Lançamento   [ ] Não iniciada
 - [x] 1.2 — `IdentityRegistry`: criar identidade, resolver username → identity (16 testes passando)
 - [x] 1.3 — `DeviceRegistry`: registrar device, revogar device, checar status (25 testes passando)
 - [x] 1.4 — `RecoveryManager`: propor recovery, coletar aprovações, executar com timelock (7 dias) — 34 testes passando
-- [ ] 1.5 — Testes unitários completos
-- [ ] 1.6 — Deploy em testnet (Base Sepolia)
+- [x] 1.5 — Testes unitários completos — 80 testes passando (17 IdentityRegistry + 25 DeviceRegistry + 38 RecoveryManager)
+- [x] 1.6 — Deploy em testnet (Base Sepolia)
+  - IdentityRegistry : 0xd4484aDD6DCd0919568B6365882cDB207fE27D9c
+  - DeviceRegistry   : 0xe87633b148cf7a7F6c60DdA84AD7f4D3a9eC187F
+  - RecoveryManager  : 0x66be956D14b9383aE9a58f70edD6Cae406Eb960f
 - [ ] 1.7 — Verificar contratos no Basescan
 
 **Decisões pendentes**:
@@ -237,6 +240,28 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-05 — Sessão 7
+- Etapas 1.6 concluída — deploy dos 3 contratos na Base Sepolia
+  - Script de deploy: `contracts/script/Deploy.s.sol`
+  - Conceito ensinado: scripts Foundry herdam de `Script`, `vm.startBroadcast()` delimita transações reais
+  - IdentityRegistry : 0xd4484aDD6DCd0919568B6365882cDB207fE27D9c
+  - DeviceRegistry   : 0xe87633b148cf7a7F6c60DdA84AD7f4D3a9eC187F
+  - RecoveryManager  : 0x66be956D14b9383aE9a58f70edD6Cae406Eb960f
+  - Custo total: ~0.000068 ETH (gas Base Sepolia é quase zero)
+  - Carteira deployadora: 0x8814D40EF00B829fe0412112192C6Fb778CC2787
+- Próximo passo: etapa 1.7 — verificar contratos no Basescan
+
+### 2026-06-04 — Sessão 6
+- Etapa 1.5 concluída — revisão e complemento dos testes unitários
+- 5 lacunas identificadas e corrigidas:
+  - RecoveryManager: guardian removido na reconfiguração não pode mais propor
+  - RecoveryManager: `approveRecovery` em proposta cancelada → `ProposalAlreadyCancelled`
+  - RecoveryManager: `cancelRecovery` em proposta já cancelada → `ProposalAlreadyCancelled`
+  - RecoveryManager: reconfigurar guardians após cancelamento (simétrico ao após execução)
+  - IdentityRegistry: evento `ControllerTransferred` testado com `vm.expectEmit`
+- Total: 80 testes passando (17 + 25 + 38)
+- Próximo passo: etapa 1.6 — deploy em Base Sepolia (testnet)
 
 ### 2026-06-04 — Sessão 5
 - `RecoveryManager` implementado e testado — 34 testes passando
