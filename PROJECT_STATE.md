@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-06-18 (Sessão 26)
+> Última atualização: 2026-06-20 (Sessão 30)
 
 ---
 
@@ -283,7 +283,7 @@ check_revocation(identity_id) → RevocationInfo
   - **Endereços propagados (Sessão 26)** — desktop, mobile e os 3 SDKs agora apontam para Base Mainnet. Ver detalhes na Sessão 26 do Log de Sessões.
 - [x] 7.2 — Eliminar o servidor de sinalização (substitui "Relay Service em produção" — não fazia sentido hospedar algo que ia ser removido). Implementado na Sessão 26 (continuação): pareamento via QR mostrado pelo mobile + polling on-chain; login via challenge embutido no QR + POST HTTPS direto pro backend do site. `signaling/`, `turn/` e `webrtc-demo/` removidos. Ver "Roadmap de Evoluções Planejadas → Sinalização sem servidor"
 - [x] 7.3 — Publicar SDKs (npm, pip, rubygems). Implementado na Sessão 29: `truthid-sdk@0.1.0` publicado nos três registros — npm (https://www.npmjs.com/package/truthid-sdk), PyPI (https://pypi.org/project/truthid-sdk/0.1.0/) e RubyGems. Ver Sessão 29 no Log de Sessões para detalhes.
-- [ ] 7.4 — Documentação pública
+- [x] 7.4 — Documentação pública. `README.md` criado na raiz do repositório (Sessão 30) — escopo limitado a esse arquivo, a pedido do usuário (CONTRIBUTING.md/SECURITY.md ficaram fora). Cobre: o que é o TruthID, fluxo de auth (diagrama ASCII), arquitetura, tabela de endereços mainnet, SDKs publicados, como buildar cada componente, seção de segurança (aponta pra "GitHub Security tab" para reports privados, sem expor e-mail pessoal — decisão consciente do usuário)
 - [ ] 7.5 — Open source (GitHub)
 
 ---
@@ -412,6 +412,39 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-20 — Sessão 30
+
+- **Achado de segurança da Sessão 29 resolvido** — token do GitHub que estava em texto puro na URL do `origin` (`git remote -v`)
+  - Investigação ampliou o achado: além do token atual (`ghp_nb9Sts...`), o `~/.bash_history` tinha **mais um token antigo** (`ghp_eZSoJ2...`, de um `set-url` anterior) — total de 2 tokens vazados, 3 linhas no histórico
+  - Usuário revogou os 2 tokens manualmente no GitHub (Settings → Developer settings → Personal access tokens)
+  - Gerada chave SSH nova (`~/.ssh/id_ed25519_github`, ed25519) com passphrase, dedicada a esta máquina; usuário adicionou a chave pública em Settings → SSH and GPG keys
+  - `origin` trocado de `https://ghp_...@github.com/...` para `git@github.com:masterlxz/truthid.git`
+  - As 3 linhas com token foram removidas do `~/.bash_history` (resto do histórico preservado)
+  - **Configurado agente SSH persistente via systemd** (`ssh-agent.socket`, antes existia mas estava `disabled`/`inactive` — habilitado com `systemctl --user enable --now`) + `export SSH_AUTH_SOCK=".../ssh-agent.socket"` adicionado ao `~/.bashrc`. Resultado: a partir de agora, qualquer terminal novo já enxerga o mesmo agente — passphrase é pedida uma vez por sessão de login, não uma vez por terminal
+- **Obstáculo real, não trivial**: digitar a passphrase interativamente não funcionou nem rodando o comando direto (Bash tool) nem via o prefixo `!` (execução no terminal do usuário) — em ambos os casos o processo não tinha um TTY de verdade atrelado (`tty` retornava "not a tty"), e como a sessão tinha `DISPLAY` setado (ambiente gráfico KDE Plasma), o `ssh-add` (diferente do `ssh-keygen`, que abre `/dev/tty` direto e funcionou normalmente) preferiu tentar um askpass gráfico — e o caminho padrão hardcoded `/usr/lib/ssh/ssh-askpass` não existe no Arch. Resolvido encontrando o `ksshaskpass` (KDE Plasma, pacote `ksshaskpass`, já instalado) e forçando seu uso com `SSH_ASKPASS=/usr/bin/ksshaskpass SSH_ASKPASS_REQUIRE=force` — abre uma janela gráfica de senha de verdade na tela do usuário, fora do terminal/chat
+- Verificação: `ssh -T git@github.com` retornou "Hi masterlxz!"; `git fetch origin` funcionou via SSH sem nenhuma credencial em texto puro
+- Conceitos ensinados:
+  - Por que uma URL com token embutido (`https://TOKEN@github.com/...`) é pior que SSH: o token fica em texto puro em qualquer lugar que registre o comando (histórico do shell, `git remote -v`, logs) — a chave privada SSH nunca trafega nem é exibida, só a assinatura
+  - Diferença entre um agente SSH "ad-hoc" (`ssh-agent -s`, processo solto, morre se for matado ou a máquina reiniciar) e um agente "socket-activated" do systemd (nasce sob demanda na primeira conexão, mesmo socket compartilhado por todos os terminais da sessão de login)
+  - `SSH_ASKPASS` / `SSH_ASKPASS_REQUIRE=force`: como o OpenSSH decide entre pedir a senha no terminal (via `/dev/tty`) ou abrir um programa gráfico — `ssh-add` (mas não `ssh-keygen`) cai pro caminho gráfico quando não acha um TTY E existe `DISPLAY` no ambiente
+  - Por que revogar e gerar uma chave nova é melhor que só trocar a URL do remote: o token antigo continuava válido (e utilizável por qualquer um que tivesse visto o histórico) até ser revogado de propósito na origem (GitHub), não só removido localmente
+- **Próximo passo ao retomar**: etapa 7.4 (documentação pública) ou 7.5 (abrir o repositório no GitHub) — o bloqueio de segurança que adiava a 7.5 está resolvido
+
+### 2026-06-20 — Sessão 30 (continuação — etapa 7.4)
+
+- **Etapa 7.4 concluída** — criado `README.md` na raiz do repositório (não existia nenhum antes; só havia `CONTEXT.md` e `PROJECT_STATE.md`, ambos documentos internos)
+  - Escopo decidido com o usuário: só o README raiz por agora — `CONTRIBUTING.md`/`SECURITY.md` ficam pra depois (talvez etapa 7.5, quando o repositório for aberto)
+  - Conteúdo: tagline, diagrama ASCII do fluxo de login (mesmo estilo do `sdk/README.md`), seção "Why", "How it works" resumido, tabela de arquitetura (contracts/desktop/mobile/sdk/integration com link relativo pra cada pasta), tabela de endereços Base Mainnet (linkados pro Basescan), tabela dos 3 SDKs publicados (linkados pro npm/PyPI/RubyGems), instruções de build pra cada componente, seção de segurança, license
+  - `desktop/README.md` e `mobile/README.md` são boilerplate puro do `tauri create`/`flutter create` (nunca customizados) — decisão de não editá-los agora e manter as instruções de build auto-contidas no README raiz em vez de linkar pra eles
+  - **Decisão sobre contato de segurança**: primeira versão do README usava o e-mail pessoal do usuário pra reports de vulnerabilidade — antes de fixar isso permanentemente num arquivo público (e no histórico do git), perguntado ao usuário; decisão final foi apontar pra "GitHub Security tab" (private vulnerability reporting nativo do GitHub) em vez de expor e-mail. Esse recurso precisa ser habilitado nas configurações do repositório quando ele for aberto (etapa 7.5)
+  - Todos os links relativos (`contracts/`, `sdk/README.md`, `LICENSE` etc.) validados com `[ -e "$f" ]` antes de fechar — todos existem
+  - Âncora `sdk/README.md#smart-contracts` confirmada batendo com o heading real (`## Smart Contracts`); âncora equivalente pra `PROJECT_STATE.md` foi evitada (heading tem "—" e "&", slug do GitHub pra esses casos é difícil de prever sem testar de verdade) — link aponta só pro arquivo, sem fragmento
+- Conceitos ensinados:
+  - Por que o README raiz é "a porta de entrada" de um projeto open source — diferente de um doc interno (`PROJECT_STATE.md`) ou de um PRD (`CONTEXT.md`), ele é escrito pra quem nunca viu o projeto antes
+  - Risco de fixar dados pessoais (e-mail) em texto versionado: mesmo que removido depois, o histórico do git mantém a versão antiga acessível pra sempre (mesmo princípio do achado dos tokens, mais cedo nesta sessão)
+  - GitHub Security Advisories / private vulnerability reporting: mecanismo nativo que permite reportar bugs de segurança sem expor contato pessoal nem abrir issue pública
+- **Próximo passo ao retomar**: etapa 7.5 (abrir o repositório no GitHub) — decidir nessa etapa o que fazer com `PROJECT_STATE.md`/`CONTEXT.md` (manter público, trimar, ou mover pra fora do controle de versão) e habilitar o private vulnerability reporting
 
 ### 2026-06-20 — Sessão 29
 
