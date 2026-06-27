@@ -88,6 +88,10 @@ const config: Config = {
               label: 'Introduction',
               to: '/docs/intro',
             },
+            {
+              label: 'Quickstart',
+              to: '/docs/quickstart',
+            },
           ],
         },
         {

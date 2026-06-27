@@ -1,0 +1,206 @@
+---
+sidebar_position: 2
+---
+
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+# Quickstart
+
+Add "Login with TruthID" to your backend: create a challenge, show it as a QR code, and verify the signed response that comes back from the user's phone. Check the [prerequisites](/docs/intro#prerequisites) first — you'll need a backend that can receive an HTTPS `POST`.
+
+## 1. Install the SDK
+
+<Tabs groupId="sdk-lang">
+<TabItem value="ts" label="TypeScript">
+
+```bash
+npm install truthid-sdk
+```
+
+</TabItem>
+<TabItem value="py" label="Python">
+
+```bash
+pip install truthid-sdk
+```
+
+</TabItem>
+<TabItem value="rb" label="Ruby">
+
+```bash
+gem install truthid-sdk
+```
+
+</TabItem>
+</Tabs>
+
+## 2. Create a challenge
+
+A challenge is what gets embedded in the QR code on your login page. It's single-use and expires after 30 seconds — create it on demand, right before rendering the QR code.
+
+<Tabs groupId="sdk-lang">
+<TabItem value="ts" label="TypeScript">
+
+```typescript
+import { TruthIDClient } from "truthid-sdk";
+
+const truthid = new TruthIDClient({ network: "base-mainnet" });
+const pendingChallenges = new Map(); // any store with a TTL works
+
+app.get("/auth/challenge", (req, res) => {
+  const challenge = truthid.createChallenge(req.hostname);
+  pendingChallenges.set(challenge.nonce, challenge);
+
+  res.json({
+    action: "truthid-auth",
+    challenge,
+    callbackUrl: `https://${req.hostname}/auth/verify`,
+  });
+});
+```
+
+</TabItem>
+<TabItem value="py" label="Python">
+
+```python
+from truthid import TruthIDClient
+
+truthid = TruthIDClient()  # defaults to network="base-mainnet"
+pending_challenges = {}  # any store with a TTL works
+
+@app.get("/auth/challenge")
+def get_challenge():
+    challenge = truthid.create_challenge(request.host)
+    pending_challenges[challenge.nonce] = challenge
+
+    return jsonify({
+        "action": "truthid-auth",
+        "challenge": {"type": challenge.type, "nonce": challenge.nonce,
+                       "issuedAt": challenge.issuedAt, "origin": challenge.origin},
+        "callbackUrl": f"https://{request.host}/auth/verify",
+    })
+```
+
+</TabItem>
+<TabItem value="rb" label="Ruby">
+
+```ruby
+truthid = TruthID::Client.new  # defaults to network: "base-mainnet"
+pending_challenges = {}        # any store with a TTL works
+
+get "/auth/challenge" do
+  content_type :json
+  challenge = truthid.create_challenge(request.host)
+  pending_challenges[challenge.nonce] = challenge
+  {
+    action: "truthid-auth",
+    challenge: challenge.to_h,
+    callbackUrl: "https://#{request.host}/auth/verify"
+  }.to_json
+end
+```
+
+</TabItem>
+</Tabs>
+
+## 3. Render the QR code
+
+Your frontend turns that JSON response into a QR code — any QR rendering library works, server-side or client-side. The TruthID mobile app expects this exact shape:
+
+```json
+{
+  "action": "truthid-auth",
+  "challenge": { "type": "challenge", "nonce": "...", "issuedAt": 1718000000000, "origin": "yoursite.com" },
+  "callbackUrl": "https://yoursite.com/auth/verify"
+}
+```
+
+`callbackUrl` must be `https://` — the mobile app refuses to send the signed response anywhere else.
+
+## 4. Verify the response
+
+When the user approves on their phone, it `POST`s straight to `callbackUrl` — no server in between. `verifyAuthResponse` checks the signature and reads the device's status from the blockchain.
+
+<Tabs groupId="sdk-lang">
+<TabItem value="ts" label="TypeScript">
+
+```typescript
+app.post("/auth/verify", async (req, res) => {
+  const response = req.body;
+  const challenge = pendingChallenges.get(response.nonce);
+  if (!challenge) return res.status(400).json({ error: "Challenge not found or already used" });
+  pendingChallenges.delete(response.nonce); // prevents replay
+
+  const result = await truthid.verifyAuthResponse({ challenge, response });
+  if (!result.valid) return res.status(401).json({ error: result.reason });
+
+  res.json({ identityId: result.identityId!.toString() });
+});
+```
+
+</TabItem>
+<TabItem value="py" label="Python">
+
+```python
+@app.post("/auth/verify")
+def verify():
+    data = request.json
+    challenge = pending_challenges.pop(data.get("nonce", ""), None)
+    if not challenge:
+        return jsonify({"error": "Challenge not found or already used"}), 400  # prevents replay
+
+    response = AuthResponse(
+        approved=data["approved"],
+        nonce=data["nonce"],
+        signature=data["signature"],
+        deviceAddress=data["deviceAddress"],
+    )
+    result = truthid.verify_auth_response(challenge, response)
+    if not result.valid:
+        return jsonify({"error": result.reason}), 401
+
+    return jsonify({"identityId": result.identity_id})
+```
+
+</TabItem>
+<TabItem value="rb" label="Ruby">
+
+```ruby
+post "/auth/verify" do
+  content_type :json
+  data = JSON.parse(request.body.read)
+  challenge = pending_challenges.delete(data["nonce"]) # prevents replay
+  halt 400, { error: "Challenge not found or already used" }.to_json unless challenge
+
+  response = TruthID::AuthResponse.from_hash(data)
+  result = truthid.verify_auth_response(challenge, response)
+  halt 401, { error: result.reason }.to_json unless result.valid
+
+  { identityId: result.identity_id }.to_json
+end
+```
+
+</TabItem>
+</Tabs>
+
+That's the whole backend integration. Full runnable examples (Express, Flask, Sinatra) with session tokens and a protected route are in the [SDK reference](https://github.com/masterlxz/truthid/blob/main/sdk/README.md#full-examples).
+
+## 5. Test it with a real device
+
+To actually scan a QR code and approve a login, you need:
+
+- A **TruthID identity** — created once with any EVM wallet on Base.
+- A **trusted device** paired to that identity — the desktop app or the mobile app.
+
+There are no pre-built downloads yet — both apps are currently built from source. See [Building from source](https://github.com/masterlxz/truthid#building-from-source) in the main README.
+
+Two things that trip people up on the first try:
+- `callbackUrl` must be reachable from the internet over HTTPS — `localhost` won't work. Use a tunnel (e.g. `ngrok http 3000`) during development.
+- The challenge expires in 30 seconds, so generate it right before showing the QR code, not ahead of time.
+
+## Next steps
+
+- Full API reference: [`sdk/README.md`](https://github.com/masterlxz/truthid/blob/main/sdk/README.md)
+- Smart contract addresses: [Smart contracts](/docs/intro#smart-contracts-base-mainnet-chain-8453) in the introduction
+- Security model and threat model — coming soon
