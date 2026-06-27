@@ -331,6 +331,31 @@ masterlxz.github.io/truthid
 
 ---
 
+### Fase 9 — Identidade Visual: Mobile & Desktop
+
+**Objetivo**: aplicar a identidade visual já aprovada no site de docs (Fase 8) aos dois apps reais — hoje ambos usam tema 100% padrão de template, sem nenhuma marca do TruthID.
+
+**Estado de partida (levantado na Sessão 33)**:
+- **Mobile** (Flutter): `ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo))` — Material padrão, sem fonte customizada, sem logo, AppBar genérica. 5 telas: `approval_screen.dart`, `devices_screen.dart`, `scan_screen.dart`, `sessions_screen.dart`, `show_device_qr_screen.dart` (~920 linhas).
+- **Desktop** (Tauri+React): `App.css` é literalmente o template padrão do `create-tauri-app` (logos de hover do Vite/React/Tauri, fundo claro com fallback de dark mode genérico) — nenhuma linha de marca própria. 5 componentes + shell: `ConnectWallet.tsx`, `CreateIdentity.tsx`, `ManageDevices.tsx`, `DesktopDevice.tsx`, `ActiveSessions.tsx`, `App.tsx` (~920 linhas).
+
+**Decisões já tomadas (Sessão 33, antes de iniciar)**:
+- Reaproveitar a identidade do site (não abrir nova rodada de propostas): paleta dark `#0B0F14`/ciano `#4DD0E1`, tipografia Space Grotesk (headings) + Inter (corpo), logo escudo+check
+- Mobile abre sempre no tema dark, igual ao site — sem alternância por tema do sistema (decisão consciente: não implementar uma segunda paleta clara)
+- O logo de linha fina (pensado pra fundo escuro do site) continua dentro dos apps; uma versão preenchida/com fundo sólido é criada separadamente só para os ícones de app (launcher Android/iOS, ícone de janela do Tauri), que ficam sobre fundos arbitrários (wallpaper, dock)
+
+**Etapas**:
+- [ ] 9.1 — Fundamentos compartilhados: paleta/tipografia adaptadas pra cada stack (fonte via `google_fonts` no Flutter — sem `@import` de CSS como na web; CSS custom properties no desktop, mesmo padrão do `docs/src/css/custom.css`)
+- [ ] 9.2 — Desktop: tema global (`App.css`) — remove resíduos do template Vite/Tauri, aplica paleta dark+ciano, tipografia
+- [ ] 9.3 — Desktop: aplica o tema nos 5 componentes (`ConnectWallet`, `CreateIdentity`, `ManageDevices`, `DesktopDevice`, `ActiveSessions`) + shell do `App.tsx`
+- [ ] 9.4 — Desktop: ícone da janela (Tauri usa um conjunto de ícones em vários tamanhos/formatos por SO — `tauri.conf.json` referencia a pasta `icons/`)
+- [ ] 9.5 — Mobile: tema global (`ThemeData` em `main.dart`) — `ColorScheme` baseado no ciano, sempre dark, fonte via `google_fonts`
+- [ ] 9.6 — Mobile: aplica o tema nas 5 telas + AppBar/bottom navigation
+- [ ] 9.7 — Mobile: ícone do app (launcher icon Android/iOS — pacote `flutter_launcher_icons` é o caminho usual pra gerar todos os tamanhos a partir de uma imagem-fonte)
+- [ ] 9.8 — Revisão visual final: rodar os dois apps de verdade (não só ler código) e confirmar visualmente antes de fechar a fase
+
+---
+
 ## Decisões de Arquitetura em Aberto
 
 | Decisão | Opções | Status |
