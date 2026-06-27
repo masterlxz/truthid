@@ -2,46 +2,47 @@
 sidebar_position: 1
 ---
 
-# Tutorial Intro
+# Introduction
 
-Let's discover **Docusaurus in less than 5 minutes**.
+TruthID is decentralized authentication that replaces "Login with Google/Apple/Microsoft." Users own their identity through a blockchain wallet and authenticate with trusted devices — no password, no email, no third-party identity provider sitting in the middle.
 
-## Getting Started
+## Why
 
-Get started by **creating a new site**.
+Centralized identity providers create account lockouts, data collection, and a single point of failure. TruthID gives users sovereignty over their own identity (a wallet they control) while giving integrators a simple SDK to verify logins against a public blockchain.
 
-Or **try Docusaurus immediately** with **[docusaurus.new](https://docusaurus.new)**.
+## How it works
 
-### What you'll need
+- **Identity** — a username bound to a controller wallet, created on-chain (`IdentityRegistry`).
+- **Trusted devices** — each device (desktop, phone) generates its own keypair locally; private keys never leave the device. Devices are registered on-chain (`DeviceRegistry`) via a commit-reveal scheme that prevents front-running.
+- **Login** — a website embeds a signed challenge directly in a QR code along with a callback URL. The user's phone scans it, signs locally, and `POST`s the response straight to that callback. The integrator's backend verifies the signature and device status on-chain using a TruthID SDK.
+- **Sessions** — only a `keccak256` hash of session data is stored on-chain (`SessionRegistry`); what the hash represents stays local to the user's device. Revoking a session (or all of them) is a single on-chain call.
+- **Recovery** — identities can configure M-of-N guardians (default 3-of-5) to recover a lost controller wallet, with a 7-day timelock before the recovery takes effect (`RecoveryManager`).
 
-- [Node.js](https://nodejs.org/en/download/) version 20.0 or above:
-  - When installing Node.js, you are recommended to check all checkboxes related to dependencies.
+No TruthID-operated server sits in this path — the challenge travels inside the QR code, and the signed response goes straight from the phone to your own backend over HTTPS.
 
-## Generate a new site
+## Integrating TruthID
 
-Generate a new Docusaurus site using the **classic template**.
+Use one of the official SDKs — they wrap challenge creation, signature verification, and on-chain reads so your backend never talks to the blockchain directly:
 
-The classic template will automatically be added to your project after you run the command:
+| SDK | Package |
+|---|---|
+| TypeScript | [`truthid-sdk`](https://www.npmjs.com/package/truthid-sdk) on npm |
+| Python | [`truthid-sdk`](https://pypi.org/project/truthid-sdk/) on PyPI |
+| Ruby | [`truthid-sdk`](https://rubygems.org/gems/truthid-sdk) on RubyGems |
 
-```bash
-npm init docusaurus@latest my-website classic
-```
+Full API reference, quickstart, and framework examples (Express / Flask / Sinatra) are in the [`sdk/README.md`](https://github.com/masterlxz/truthid/blob/main/sdk/README.md) for now — a dedicated SDK reference section is coming to this site.
 
-You can type this command into Command Prompt, Powershell, Terminal, or any other integrated terminal of your code editor.
+## Smart contracts (Base Mainnet, chain 8453)
 
-The command also installs all necessary dependencies you need to run Docusaurus.
+| Contract | Address |
+|---|---|
+| `IdentityRegistry` | [`0xbf097EC74d0Cc9b16D3d94EaCa62060d89A63b17`](https://basescan.org/address/0xbf097EC74d0Cc9b16D3d94EaCa62060d89A63b17) |
+| `DeviceRegistry` | [`0x4A7a307cb6872bde24BAf3E9de2BeC3Ddd03e144`](https://basescan.org/address/0x4A7a307cb6872bde24BAf3E9de2BeC3Ddd03e144) |
+| `RecoveryManager` | [`0xA93123C1ca438D9F56E4E599363F4d973d61A307`](https://basescan.org/address/0xA93123C1ca438D9F56E4E599363F4d973d61A307) |
+| `SessionRegistry` | [`0x24074587a2aFB3aa5491361BB0a5eBee90797D1B`](https://basescan.org/address/0x24074587a2aFB3aa5491361BB0a5eBee90797D1B) |
 
-## Start your site
+All four contracts are immutable (no upgrade proxy) and verified on Basescan.
 
-Run the development server:
+## Source code
 
-```bash
-cd my-website
-npm run start
-```
-
-The `cd` command changes the directory you're working with. In order to work with your newly created Docusaurus site, you'll need to navigate the terminal there.
-
-The `npm run start` command builds your website locally and serves it through a development server, ready for you to view at http://localhost:3000/.
-
-Open `docs/intro.md` (this page) and edit some lines: the site **reloads automatically** and displays your changes.
+TruthID is open source under the MIT license: [github.com/masterlxz/truthid](https://github.com/masterlxz/truthid).

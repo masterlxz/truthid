@@ -55,7 +55,8 @@ const config: Config = {
     // Replace with your project's social card
     image: 'img/docusaurus-social-card.jpg',
     colorMode: {
-      respectPrefersColorScheme: true,
+      defaultMode: 'dark',
+      respectPrefersColorScheme: false,
     },
     navbar: {
       title: 'TruthID',
@@ -84,7 +85,7 @@ const config: Config = {
           title: 'Docs',
           items: [
             {
-              label: 'Introdução',
+              label: 'Introduction',
               to: '/docs/intro',
             },
           ],

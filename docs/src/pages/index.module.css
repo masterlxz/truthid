@@ -4,15 +4,30 @@
  */
 
 .heroBanner {
-  padding: 4rem 0;
+  padding: 5.5rem 0 4.5rem;
   text-align: center;
   position: relative;
   overflow: hidden;
+  background-color: #0b0f14;
+  background-image: radial-gradient(
+    circle at 50% 0%,
+    rgba(77, 208, 225, 0.16),
+    transparent 60%
+  );
+  color: #f5f7fa;
+}
+
+.heroBanner :global(.hero__title) {
+  color: #f5f7fa;
+}
+
+.heroBanner :global(.hero__subtitle) {
+  color: #aebac6;
 }
 
 @media screen and (max-width: 996px) {
   .heroBanner {
-    padding: 2rem;
+    padding: 3rem 1.5rem;
   }
 }
 
@@ -20,4 +35,46 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.ctaPrimary {
+  background: #4dd0e1;
+  border-color: #4dd0e1;
+  color: #08222a;
+}
+
+.ctaPrimary:hover {
+  background: #6cd9e7;
+  border-color: #6cd9e7;
+  color: #08222a;
+}
+
+.ctaSecondary {
+  background: transparent;
+  border-color: #4dd0e1;
+  color: #4dd0e1;
+}
+
+.ctaSecondary:hover {
+  background: rgba(77, 208, 225, 0.12);
+  border-color: #6cd9e7;
+  color: #6cd9e7;
+}
+
+.howItWorks {
+  padding: 3rem 0 3.5rem;
+}
+
+.diagram {
+  background: var(--ifm-background-surface-color);
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: var(--ifm-code-border-radius);
+  padding: 1.5rem;
+  margin: 1.5rem auto;
+  max-width: 720px;
+  overflow-x: auto;
+  font-size: 0.8rem;
+  line-height: 1.4;
 }

@@ -50,7 +50,7 @@ Fase 4 — Mobile App             [x] Concluída
 Fase 5 — SDKs                   [x] Concluída
 Fase 6 — Integração & Testes    [x] Concluída
 Fase 7 — Mainnet & Lançamento   [x] Concluída
-Fase 8 — Documentação Web       [~] Em andamento (8.1/11)
+Fase 8 — Documentação Web       [~] Em andamento (8.2/11)
 ```
 
 ---
@@ -318,7 +318,7 @@ masterlxz.github.io/truthid
 
 **Etapas**:
 - [x] 8.1 — Setup Docusaurus em `docs/` + configuração GitHub Pages (Action de deploy automático). Implementado na Sessão 31: `npx create-docusaurus@latest docs classic --typescript`; `docusaurus.config.ts` ajustado (title/tagline TruthID, `url`/`baseUrl`/`organizationName`/`projectName` para `masterlxz.github.io/truthid`, `editUrl` apontando pro repo, navbar/footer sem branding genérico do template); blog do template (posts de dinossauro) desativado (`blog: false`) e pasta removida — não fazia parte do roadmap e não fazia sentido publicar conteúdo de exemplo; `.github/workflows/deploy-docs.yml` criado (build + `actions/deploy-pages`, dispara em push na main que toque `docs/`); `npm run build` validado localmente sem erros. Commitado (`7737249`) e enviado via push. **Pages habilitado automaticamente pela própria Action**: `actions/configure-pages` tem permissão (`pages: write`) pra habilitar o GitHub Pages com source "GitHub Actions" caso ainda não esteja configurado — não precisou de nenhum passo manual no Settings. Workflow rodou (`build` + `deploy`, ambos `success`) e o site já está no ar em `https://masterlxz.github.io/truthid/` (confirmado via `curl -o /dev/null -w "%{http_code}"` → 200). **Fase 8.1 totalmente concluída.**
-- [ ] 8.2 — Landing page: headline, diagrama do fluxo, botão "Get Started"
+- [x] 8.2 — Landing page: headline, diagrama do fluxo, botão "Get Started". Implementado na Sessão 31 (continuação): hero com a tagline já configurada na 8.1 + botões "Get Started" (→ `/docs/intro`) e "View on GitHub"; seção "How a login works" com o diagrama ASCII do README; 3 cards de feature reais substituindo os de exemplo do template. Removidas as pastas de tutorial genérico do Docusaurus (`tutorial-basics/`, `tutorial-extras/`) e reescrito `docs/docs/intro.mdx` com conteúdo real (necessário porque o CTA "Get Started" apontava pra lá). **Tema visual também refeito** (feedback do usuário: o padrão do template estava "feio") — paleta dark/cripto com acento ciano (`#4DD0E1`) como modo padrão (toggle claro/escuro mantido), tipografia Space Grotesk+Inter, hero com fundo navy fixo e glow sutil, botões customizados, ícones SVG desenhados à mão nos cards (cadeado, carteira, code brackets), e logo padrão (dinossauro do Docusaurus) trocado por uma marca mínima provisória (escudo+check em ciano) — identidade visual definitiva continua sendo a etapa 8.10. Validado visualmente nos dois modos via screenshot (Playwright headless, instalado ad-hoc nesta sessão).
 - [ ] 8.3 — Guia de introdução: o que é TruthID, pré-requisitos, arquitetura
 - [ ] 8.4 — Quickstart interativo: passo a passo comentado do fluxo completo
 - [ ] 8.5 — Referência de API: TypeScript SDK (migrar e expandir o README atual)
@@ -430,6 +430,25 @@ Website          Relay           Mobile App        Blockchain
   - Diferença entre o `docs/` da raiz do repo (o projeto Docusaurus inteiro) e o `docs/docs/` interno (só as páginas de conteúdo em Markdown/MDX) — convenção do próprio framework, não uma escolha nossa
   - Por que GitHub Pages com deploy via Actions (`actions/deploy-pages`) é preferível ao antigo método de publicar numa branch `gh-pages`: não deixa artefato de build commitado no histórico do git, e usa OIDC (`id-token: write`) em vez de um token de longa duração
 - **Etapa 8.1 totalmente concluída — site no ar em `https://masterlxz.github.io/truthid/`.** Próximo passo ao retomar: etapa 8.2 (landing page) ou outra ordem que o usuário preferir dentro da Fase 8
+
+### 2026-06-21 — Sessão 31 (continuação — etapa 8.2)
+
+- **Etapa 8.2 concluída** — landing page real + tema visual (o usuário achou o resultado da 8.1 "muito simples e feio" e pediu pra melhorar antes de seguir)
+  - Landing (`docs/src/pages/index.tsx`): hero com a tagline da 8.1, botões "Get Started" (→ `/docs/intro`) e "View on GitHub"; nova seção "How a login works" com o diagrama ASCII do fluxo (mesmo do README); 3 cards de feature reais ("No Passwords, No Servers", "Self-Sovereign Identity", "Open Source SDKs") substituindo os 3 cards de exemplo do template (Easy to Use / Focus on What Matters / Powered by React)
+  - `docs/docs/intro.mdx` reescrito com conteúdo real (o que é TruthID, why, how it works, SDKs, endereços dos contratos, link pro repo) — precisou ser feito junto porque o botão "Get Started" apontava pra lá e ainda tinha o tutorial genérico de 5 minutos do Docusaurus
+  - Removidas `docs/docs/tutorial-basics/` e `docs/docs/tutorial-extras/` (tutorial genérico do Docusaurus, fora do roadmap de conteúdo da Fase 8) e as imagens de exemplo (`undraw_*.svg`, `docusaurus.png`) que ficaram órfãs
+  - **Decisão de estilo com o usuário**: ofereci 3 direções (dark/cripto, minimalista claro, cor de marca forte com previews) — escolhida **dark/cripto moderno**
+  - Tema (`docs/src/css/custom.css`): paleta ciano (`#4dd0e1` no dark, `#0e7490` no light) substituindo o verde padrão do Docusaurus; fundo `#0b0f14` no dark mode (navbar/footer/surface ajustados); fontes Space Grotesk (títulos) + Inter (corpo) via Google Fonts; `colorMode.defaultMode: 'dark'` no `docusaurus.config.ts` (toggle pro claro continua disponível, só mudou o padrão)
+  - Hero (`index.module.css`): fundo navy fixo com glow ciano sutil, sempre escuro independente do toggle (mesma lógica que `hero--primary` já usava antes, só que com cor própria); botões customizados (`ctaPrimary` sólido ciano, `ctaSecondary` outline ciano) em vez do cinza padrão do Infima
+  - `HomepageFeatures`: 3 ícones SVG desenhados à mão (cadeado, carteira, code brackets — não copiados de nenhuma lib de ícones, pra evitar problema de licença/precisão sem acesso à internet pra conferir paths) + visual de card (borda, fundo, padding)
+  - `docs/static/img/logo.svg`: o dinossauro padrão do Docusaurus trocado por uma marca mínima (escudo com check, em ciano) — provisória; identidade visual de verdade continua sendo a etapa 8.10
+  - Achado pequeno: o rodapé tinha um link em português ("Introdução") sobrando da configuração da 8.1 — corrigido para "Introduction"
+  - **Verificação visual real**: sem `chromium-cli` disponível neste ambiente, instalei `playwright` (CLI via `npx`, depois o pacote local em `/tmp/pwtest` pra rodar um script que clica no toggle de tema) e o Chromium headless (`npx playwright install chromium`, já estava em cache de uma sessão anterior). Tirei screenshots da home e da `/docs/intro` nos dois modos (claro/escuro) e revisei visualmente antes de fechar a etapa — nenhuma quebra de layout, contraste ok nos dois modos
+- Conceitos ensinados:
+  - Por que o hero pode ter uma cor fixa (sempre escuro) enquanto o resto do site segue o toggle claro/escuro — é o mesmo padrão que o tema padrão do Docusaurus já usa com `hero--primary`, só que aqui generalizado pra cor de marca em vez da paleta default
+  - CSS Modules + `:global()`: como estilizar uma classe global do Infima (`.hero__title`) de dentro de um arquivo `.module.css` que por padrão escopa tudo localmente
+  - Diferença entre instalar só o *browser* do Playwright (`npx playwright install chromium`, baixa o binário) e instalar o *pacote* (`npm install playwright`, dá acesso à API JS pra script de automação) — precisou dos dois pra simular o clique no toggle de tema
+- **Próximo passo ao retomar**: etapa 8.3 (guia de introdução — já tem uma versão mínima real em `docs/docs/intro.mdx` da 8.2, mas a etapa formal do roadmap pode expandir) ou seguir a ordem que o usuário preferir dentro da Fase 8 (8.4-8.9 são referência de SDK/segurança/contratos; 8.10 é a identidade visual definitiva, que já tem uma base provisória desta sessão; 8.11 é o deploy final, que via Actions já está automático desde a 8.1)
 
 ### 2026-06-20 — Sessão 30
 

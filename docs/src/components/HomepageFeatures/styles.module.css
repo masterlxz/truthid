@@ -1,11 +1,23 @@
 .features {
   display: flex;
   align-items: center;
-  padding: 2rem 0;
+  padding: 1rem 0 3rem;
   width: 100%;
 }
 
-.featureSvg {
-  height: 200px;
-  width: 200px;
+.card {
+  height: 100%;
+  text-align: center;
+  padding: 2rem 1.5rem;
+  margin: 0 0.5rem 1rem;
+  border: 1px solid var(--ifm-color-emphasis-300);
+  border-radius: 12px;
+  background: var(--ifm-background-surface-color);
+}
+
+.card svg {
+  width: 40px;
+  height: 40px;
+  color: var(--ifm-color-primary);
+  margin-bottom: 0.75rem;
 }

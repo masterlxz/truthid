@@ -4,27 +4,41 @@
  * work well for content-centric websites.
  */
 
-/* You can override the default Infima variables here. */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap');
+
 :root {
-  --ifm-color-primary: #2e8555;
-  --ifm-color-primary-dark: #29784c;
-  --ifm-color-primary-darker: #277148;
-  --ifm-color-primary-darkest: #205d3b;
-  --ifm-color-primary-light: #33925d;
-  --ifm-color-primary-lighter: #359962;
-  --ifm-color-primary-lightest: #3cad6e;
+  --ifm-font-family-base: 'Inter', system-ui, -apple-system, sans-serif;
+  --ifm-heading-font-family: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  --ifm-heading-font-weight: 600;
+
+  /* Light mode: darker teal/cyan, readable on a white background */
+  --ifm-color-primary: #0e7490;
+  --ifm-color-primary-dark: #0c6177;
+  --ifm-color-primary-darker: #0b5b6f;
+  --ifm-color-primary-darkest: #094a5a;
+  --ifm-color-primary-light: #108bab;
+  --ifm-color-primary-lighter: #1296b8;
+  --ifm-color-primary-lightest: #16add3;
   --ifm-code-font-size: 95%;
   --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
 }
 
-/* For readability concerns, you should choose a lighter palette in dark mode. */
+/* Dark mode is the brand default: near-black background, cyan accent */
 [data-theme='dark'] {
-  --ifm-color-primary: #25c2a0;
-  --ifm-color-primary-dark: #21af90;
-  --ifm-color-primary-darker: #1fa588;
-  --ifm-color-primary-darkest: #1a8870;
-  --ifm-color-primary-light: #29d5b0;
-  --ifm-color-primary-lighter: #32d8b4;
-  --ifm-color-primary-lightest: #4fddbf;
-  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+  --ifm-color-primary: #4dd0e1;
+  --ifm-color-primary-dark: #34c3d6;
+  --ifm-color-primary-darker: #29b8cc;
+  --ifm-color-primary-darkest: #1f96a8;
+  --ifm-color-primary-light: #6cd9e7;
+  --ifm-color-primary-lighter: #8be2ed;
+  --ifm-color-primary-lightest: #b3edf3;
+
+  --ifm-background-color: #0b0f14;
+  --ifm-background-surface-color: #111820;
+  --ifm-navbar-background-color: #0b0f14;
+  --ifm-footer-background-color: #080b0e;
+  --ifm-toc-border-color: #1f2630;
+  --ifm-color-emphasis-300: #283140;
+
+  --docusaurus-highlighted-code-line-bg: rgba(255, 255, 255, 0.08);
 }
