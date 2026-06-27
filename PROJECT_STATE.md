@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-06-13 (Sessão 16)
+> Última atualização: 2026-06-13 (Sessão 17)
 
 ---
 
@@ -46,7 +46,7 @@ Stack principal:
 Fase 1 — Smart Contracts        [x] Concluída
 Fase 2 — Relay Service          [x] Concluída
 Fase 3 — Desktop App            [x] Concluída
-Fase 4 — Mobile App             [ ] Não iniciada
+Fase 4 — Mobile App             [.] Em andamento
 Fase 5 — SDKs                   [ ] Não iniciada
 Fase 6 — Integração & Testes    [ ] Não iniciada
 Fase 7 — Mainnet & Lançamento   [ ] Não iniciada
@@ -169,7 +169,7 @@ Antes de rodar pela primeira vez na sessão (ou após reiniciar o computador), o
 - Gerenciar dispositivos e sessões
 
 **Etapas**:
-- [ ] 4.1 — Setup Flutter
+- [x] 4.1 — Setup Flutter
 - [ ] 4.2 — Geração de key pair no dispositivo (Android Keystore / iOS Secure Enclave)
 - [ ] 4.3 — Scanner de QR code
 - [ ] 4.4 — Tela: Aprovar login (exibir quem está pedindo, aprovar/recusar)
@@ -261,6 +261,26 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-13 — Sessão 17
+
+- **Etapa 4.1 concluída** — Setup Flutter com Docker
+  - Docker data-root movido para `/home/masterlxz/.docker/storage` (root estava 100% cheia)
+  - VM Kali Linux removida (liberou 16GB no root)
+  - `mobile/Dockerfile`: Ubuntu 22.04 + JDK 17 + Android SDK 36 + Flutter stable (3.44.2)
+  - `mobile/docker-compose.yml`: volumes para pub cache e Gradle cache (em /home, não na raiz)
+  - `mobile/dev.sh`: `./dev.sh shell` (bash interativo) ou `./dev.sh build` (APK direto)
+  - Projeto Flutter criado com `flutter create --org com.truthid --project-name truthid_mobile .`
+  - Primeiro APK debug gerado com sucesso: `build/app/outputs/flutter-apk/app-debug.apk`
+  - Fix: `--allow-unauthenticated` no apt (GPG signature issue com Ubuntu 22.04 no Docker)
+  - Fix: `flutter clean && flutter pub get` para resolver pub cache interrompido pelo disco cheio
+- Conceitos ensinados:
+  - Flutter: um código → iOS e Android (Dart, tipagem obrigatória, async/await nativo)
+  - Docker para mobile: compila o APK no container, instala no celular — sem X11 necessário
+  - `data-root` do Docker: onde ficam imagens e volumes — pode ser movido para qualquer partição
+  - `gradle_cache` como volume: Gradle baixa ~400MB na primeira vez; volume persiste entre sessões
+  - `flutter clean && flutter pub get`: reset do estado de build quando pub cache fica inconsistente
+- **Próximo passo ao retomar**: Etapa 4.2 — Geração de key pair no dispositivo (Android Keystore)
 
 ### 2026-06-13 — Sessão 16
 

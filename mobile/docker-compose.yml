@@ -1,0 +1,14 @@
+services:
+  flutter:
+    build: .
+    volumes:
+      - .:/app
+      - flutter_pub_cache:/root/.pub-cache
+      - gradle_cache:/root/.gradle
+    working_dir: /app
+    stdin_open: true
+    tty: true
+
+volumes:
+  flutter_pub_cache:
+  gradle_cache:
