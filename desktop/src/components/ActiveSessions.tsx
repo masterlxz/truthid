@@ -6,26 +6,17 @@ import {
   useWaitForTransactionReceipt,
 } from "wagmi";
 import {
-  IDENTITY_REGISTRY_ADDRESS,
-  IDENTITY_REGISTRY_ABI,
   DEVICE_REGISTRY_ADDRESS,
   DEVICE_REGISTRY_ABI,
   SESSION_REGISTRY_ADDRESS,
   SESSION_REGISTRY_ABI,
 } from "../config/contracts";
+import { useIdentity } from "../contexts/IdentityContext";
 
-export function ActiveSessions({ username }: { username: string }) {
-  // ── Leitura 1: identityId a partir do username ────────────────────────────
-  const { data: identity } = useReadContract({
-    address: IDENTITY_REGISTRY_ADDRESS,
-    abi: IDENTITY_REGISTRY_ABI,
-    functionName: "getIdentity",
-    args: [username],
-  });
+export function ActiveSessions() {
+  const { username, identityId } = useIdentity();
 
-  const identityId = identity?.id;
-
-  // ── Leitura 2: lista de hashes de sessão desta identidade ─────────────────
+  // ── Leitura 1: lista de hashes de sessão desta identidade ─────────────────
   const { data: sessionHashes, refetch: refetchHashes } = useReadContract({
     address: SESSION_REGISTRY_ADDRESS,
     abi: SESSION_REGISTRY_ABI,
@@ -34,7 +25,7 @@ export function ActiveSessions({ username }: { username: string }) {
     query: { enabled: !!identityId },
   });
 
-  // ── Leitura 3: detalhes de cada sessão em paralelo ────────────────────────
+  // ── Leitura 2: detalhes de cada sessão em paralelo ────────────────────────
   const { data: sessionResults, refetch: refetchSessions } = useReadContracts({
     contracts: (sessionHashes ?? []).map((hash) => ({
       address: SESSION_REGISTRY_ADDRESS,
@@ -51,7 +42,7 @@ export function ActiveSessions({ username }: { username: string }) {
     )
     .filter(Boolean) as SessionWithHash[];
 
-  // ── Leitura 4: label de cada device em paralelo ───────────────────────────
+  // ── Leitura 3: label de cada device em paralelo ───────────────────────────
   // Queremos mostrar "iPhone 15 Pro" em vez de "0x1a2b…" para cada sessão.
   // Buscamos o device de cada sessão usando o devicePubKey.
   const devicePubKeys = sessions.map((s) => s.devicePubKey);

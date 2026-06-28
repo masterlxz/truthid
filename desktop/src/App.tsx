@@ -7,6 +7,7 @@ import { CreateIdentity } from "./components/CreateIdentity";
 import { ManageDevices } from "./components/ManageDevices";
 import { ActiveSessions } from "./components/ActiveSessions";
 import { QuickLogin } from "./components/QuickLogin";
+import { IdentityProvider } from "./contexts/IdentityContext";
 import { IDENTITY_REGISTRY_ADDRESS, IDENTITY_REGISTRY_ABI } from "./config/contracts";
 import "./App.css";
 
@@ -128,7 +129,7 @@ function App() {
         )}
 
         {!isWrongNetwork && !isLoadingIdentity && !isIdentityError && hasIdentity && (
-          <>
+          <IdentityProvider username={username!}>
             <nav className="tabs">
               <button
                 onClick={() => setActiveTab("devices")}
@@ -144,9 +145,9 @@ function App() {
               </button>
             </nav>
 
-            {activeTab === "devices" && <ManageDevices username={username!} />}
-            {activeTab === "sessions" && <ActiveSessions username={username!} />}
-          </>
+            {activeTab === "devices" && <ManageDevices />}
+            {activeTab === "sessions" && <ActiveSessions />}
+          </IdentityProvider>
         )}
       </main>
 

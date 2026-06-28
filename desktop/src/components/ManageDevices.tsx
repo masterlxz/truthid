@@ -7,30 +7,20 @@ import {
 } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  IDENTITY_REGISTRY_ADDRESS,
-  IDENTITY_REGISTRY_ABI,
   DEVICE_REGISTRY_ADDRESS,
   DEVICE_REGISTRY_ABI,
 } from "../config/contracts";
 import type { DeviceInfo } from "../types";
+import { useIdentity } from "../contexts/IdentityContext";
 import { DeviceList } from "./DeviceList";
 import { PairDevice } from "./PairDevice";
 import { DesktopDevice } from "./DesktopDevice";
 
-export function ManageDevices({ username }: { username: string }) {
+export function ManageDevices() {
+  const { username, identityId } = useIdentity();
   const queryClient = useQueryClient();
 
-  // ── Leitura 1: buscar o identityId a partir do username ──────────────────
-  const { data: identity } = useReadContract({
-    address: IDENTITY_REGISTRY_ADDRESS,
-    abi: IDENTITY_REGISTRY_ABI,
-    functionName: "getIdentity",
-    args: [username],
-  });
-
-  const identityId = identity?.id;
-
-  // ── Leitura 2: buscar lista de pubkeys dos devices desta identidade ───────
+  // ── Leitura 1: buscar lista de pubkeys dos devices desta identidade ───────
   const { data: devicePubKeys, refetch: refetchDevices } = useReadContract({
     address: DEVICE_REGISTRY_ADDRESS,
     abi: DEVICE_REGISTRY_ABI,
@@ -39,7 +29,7 @@ export function ManageDevices({ username }: { username: string }) {
     query: { enabled: !!identityId },
   });
 
-  // ── Leitura 3: buscar detalhes de cada device em paralelo ─────────────────
+  // ── Leitura 2: buscar detalhes de cada device em paralelo ─────────────────
   const { data: deviceResults, refetch: refetchDeviceDetails } = useReadContracts({
     contracts: (devicePubKeys ?? []).map((pk) => ({
       address: DEVICE_REGISTRY_ADDRESS,
