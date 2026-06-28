@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data'; // Uint8List — ainda usado em SessionInfo.hash e nos hashes bytes32
 import 'package:web3dart/web3dart.dart';
+import '../contracts/abis.dart';
 
 // Dados de uma sessão retornados pelo contrato
 class SessionInfo {
@@ -44,67 +45,13 @@ class BlockchainService {
   static const _deviceRegistryAddress =
       '0x4A7a307cb6872bde24BAf3E9de2BeC3Ddd03e144';
 
-  // ABI: apenas as funções que vamos usar (não precisa do ABI completo)
   static final _sessionContract = DeployedContract(
-    ContractAbi.fromJson('''[
-      {
-        "type": "function",
-        "name": "getSessionsByIdentity",
-        "inputs": [{"name": "identityId", "type": "uint256"}],
-        "outputs": [{"name": "", "type": "bytes32[]"}],
-        "stateMutability": "view"
-      },
-      {
-        "type": "function",
-        "name": "getSession",
-        "inputs": [{"name": "hash", "type": "bytes32"}],
-        "outputs": [{
-          "name": "",
-          "type": "tuple",
-          "components": [
-            {"name": "identityId", "type": "uint256"},
-            {"name": "devicePubKey", "type": "address"},
-            {"name": "createdAt", "type": "uint256"},
-            {"name": "revoked", "type": "bool"},
-            {"name": "exists", "type": "bool"}
-          ]
-        }],
-        "stateMutability": "view"
-      },
-      {
-        "type": "function",
-        "name": "isSessionRevoked",
-        "inputs": [{"name": "hash", "type": "bytes32"}],
-        "outputs": [{"name": "", "type": "bool"}],
-        "stateMutability": "view"
-      }
-    ]''',
-        'SessionRegistry'),
+    ContractAbi.fromJson(sessionRegistryAbi, 'SessionRegistry'),
     EthereumAddress.fromHex(_sessionRegistryAddress),
   );
 
   static final _deviceContract = DeployedContract(
-    ContractAbi.fromJson('''[
-      {
-        "type": "function",
-        "name": "getDevice",
-        "inputs": [{"name": "devicePubKey", "type": "address"}],
-        "outputs": [{
-          "name": "",
-          "type": "tuple",
-          "components": [
-            {"name": "identityId", "type": "uint256"},
-            {"name": "pubKey", "type": "address"},
-            {"name": "label", "type": "string"},
-            {"name": "addedAt", "type": "uint256"},
-            {"name": "revoked", "type": "bool"},
-            {"name": "exists", "type": "bool"}
-          ]
-        }],
-        "stateMutability": "view"
-      }
-    ]''',
-        'DeviceRegistry'),
+    ContractAbi.fromJson(deviceRegistryAbi, 'DeviceRegistry'),
     EthereumAddress.fromHex(_deviceRegistryAddress),
   );
 

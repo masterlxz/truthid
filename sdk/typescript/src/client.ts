@@ -22,8 +22,7 @@ import type {
 } from "./types.js";
 
 export class TruthIDClient {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  private publicClient: any;
+  private publicClient: ReturnType<typeof createPublicClient>;
   private chain: Chain;
   private rpcUrl: string;
   private deviceRegistryAddress: `0x${string}`;
