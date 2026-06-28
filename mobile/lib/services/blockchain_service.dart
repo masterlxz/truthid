@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data'; // Uint8List — ainda usado em SessionInfo.hash e nos hashes bytes32
+import 'dart:typed_data';
+import 'package:web3dart/crypto.dart';
 import 'package:web3dart/web3dart.dart';
 import '../contracts/abis.dart';
 
@@ -44,6 +45,8 @@ class BlockchainService {
       '0x24074587a2aFB3aa5491361BB0a5eBee90797D1B';
   static const _deviceRegistryAddress =
       '0x4A7a307cb6872bde24BAf3E9de2BeC3Ddd03e144';
+  static const _identityRegistryAddress =
+      '0xbf097EC74d0Cc9b16D3d94EaCa62060d89A63b17';
 
   static final _sessionContract = DeployedContract(
     ContractAbi.fromJson(sessionRegistryAbi, 'SessionRegistry'),
@@ -142,6 +145,60 @@ class BlockchainService {
     // whereType<T>() filtra nulls e faz o cast — equivale a
     // [s for s in sessions if s is not None] em Python
     return sessions.whereType<SessionInfo>().toList();
+  }
+
+  // Resolve o @username da identidade via eth_getLogs no evento IdentityCreated.
+  // O contrato não tem um getter id→username, então a única fonte é o log.
+  // Retorna null se não encontrar (identidade não existe ou RPC falhou).
+  Future<String?> getUsernameForIdentity(BigInt identityId) async {
+    // keccak256("IdentityCreated(uint256,string,address)") — topic[0]
+    final sigBytes = keccak256(
+      Uint8List.fromList(utf8.encode('IdentityCreated(uint256,string,address)')));
+    final eventTopic =
+        '0x${sigBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+    // topic[1] = indexed uint256 id, padded to 32 bytes
+    final idTopic = '0x${identityId.toRadixString(16).padLeft(64, '0')}';
+
+    final client = HttpClient();
+    try {
+      final request = await client.postUrl(Uri.parse(_rpcUrl));
+      request.headers.set('content-type', 'application/json');
+      request.write(jsonEncode({
+        'jsonrpc': '2.0',
+        'method': 'eth_getLogs',
+        'params': [
+          {
+            'address': _identityRegistryAddress,
+            'topics': [eventTopic, idTopic],
+          }
+        ],
+        'id': 1,
+      }));
+
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
+      final json = jsonDecode(body) as Map<String, dynamic>;
+
+      if (json.containsKey('error')) return null;
+      final logs = json['result'] as List<dynamic>;
+      if (logs.isEmpty) return null;
+
+      // ABI-decode the non-indexed `string username` from log.data.
+      // Layout: [0-31] offset=0x20 | [32-63] length N | [64-64+N] UTF-8 bytes
+      final dataHex =
+          ((logs[0] as Map<String, dynamic>)['data'] as String).substring(2);
+      final length = int.parse(dataHex.substring(64, 128), radix: 16);
+      final strHex = dataHex.substring(128, 128 + length * 2);
+      final strBytes = Uint8List.fromList(
+        List.generate(strHex.length ~/ 2,
+            (i) => int.parse(strHex.substring(i * 2, i * 2 + 2), radix: 16)),
+      );
+      return utf8.decode(strBytes);
+    } catch (_) {
+      return null;
+    } finally {
+      client.close();
+    }
   }
 
   // Leitura usada no polling do pareamento: confirma se este device já foi

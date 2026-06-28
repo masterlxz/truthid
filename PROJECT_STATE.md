@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-06-28 (Sessão 44 — completa)
+> Última atualização: 2026-06-28 (Sessão 45 — completa)
 
 ---
 
@@ -506,6 +506,87 @@ Problemas identificados na revisão de arquitetura da Sessão 36 (2026-06-25). N
 | ~~11~~ | ~~`sdk/typescript/src/`, `sdk/typescript/example/server.js`, `sdk/README.md`~~ | ~~O fluxo de registro de sessão on-chain (`createSession`) está incompleto no SDK.~~ | **RESOLVIDO — Sessão 39**. Ver log da sessão para detalhes. |
 | ~~12~~ | ~~wagmi auto-reconnect~~ | ~~O wagmi reconectava automaticamente o conector Ledger na abertura do app.~~ | **RESOLVIDO — Sessão 41**. `storage: null` no wagmi config (sem persistência de conector). Username salvo em `useStoredUsername` (`localStorage`, chave `truthid:username`). `WalletModalContext` permite qualquer componente abrir o modal de conexão. App shell carrega direto do localStorage; "Disconnect wallet" mantém modo leitura; "Log out" limpa o localStorage. Ações de escrita (revoke/register) abrem o modal se não há wallet conectada. |
 | ~~13~~ | ~~Site de documentação web (Fase 8)~~ | ~~`sdk/README.md` atualizado mas site não refletia a seção Session Registration.~~ | **RESOLVIDO — Sessão 42**. `typescript.md`: método `registerSession`, tipos `RegisterSessionParams`/`RegisterSessionResult`, campo `sessionSignature` no `AuthResponse`. `quickstart.mdx`: passo 5 opcional de registro on-chain. `python.md`/`ruby.md`: nota que `registerSession` é TypeScript-only por enquanto. Build do Docusaurus validado sem erros. |
+| 14 | `mobile/lib/screens/devices_screen.dart` | `DevicesScreen` não detecta automaticamente que o device foi registrado on-chain — só checa no `_reload()` manual ou pull-to-refresh. Se o usuário pareou colando o endereço no desktop (sem abrir a tela de QR), precisa fazer pull-to-refresh pra ver o status atualizado. Pior: se simplesmente navegar pelas abas sem nunca fazer pull, nunca vê o pareamento. | Adicionar polling passivo em `DevicesScreen` quando `_pairedIdentityId == null`: checar `_blockchain.getDevice(_deviceAddress)` a cada ~5s e chamar `_reload()` se retornar `exists && !revoked`. Cancelar o timer quando `_pairedIdentityId != null` ou ao fazer `dispose()`. |
+| 15 | `mobile/lib/screens/show_device_qr_screen.dart` | `ShowDeviceQrScreen` tem polling automático a cada 3s, mas se a rede cair pontualmente e o timer perder a confirmação, o usuário não tem como forçar uma nova tentativa sem fechar e reabrir a tela. | Adicionar botão "Refresh" (ou `TextButton`) abaixo do spinner "Waiting for the computer to register…" que chame `_checkIfRegistered(_address!)` manualmente. |
+| 16 | Desktop (`App.tsx`, AppBar) + Mobile (`main.dart`, `_NavTab`) | Não existe nenhum mecanismo de doação no app. O projeto é open source, self-hostable e sem monetização — uma forma de doação (link para OpenCollective, GitHub Sponsors ou endereço ETH) ajudaria a sustentar o desenvolvimento. | Desktop: adicionar link de doação no topbar ou menu do app. Mobile: adicionar na tela de configurações (ainda inexistente) ou como item no bottom sheet. Em ambos: abrir browser/deep link. Endereço ETH do projeto ou página de GitHub Sponsors. |
+
+---
+
+## Fase 12 — Publicação & Release (próxima grande etapa)
+
+**Objetivo**: empacotar tudo, assinar os binários e publicar o primeiro release público — desktop + mobile — via GitHub Releases, de forma que qualquer pessoa possa baixar e instalar.
+
+### 12.1 — Keystore de assinatura do APK (pré-requisito bloqueante)
+
+O Android exige que todo APK seja assinado com a mesma keystore para que atualizações funcionem. Se a keystore for perdida, o usuário precisa desinstalar e reinstalar o app (perde dados locais). **Deve ser feita uma única vez e a keystore guardada com muito cuidado.**
+
+```bash
+# Gerar a keystore (rodar uma vez, salvar em local seguro fora do repositório)
+keytool -genkey -v \
+  -keystore truthid-release.jks \
+  -alias truthid \
+  -keyalg RSA -keysize 2048 \
+  -validity 10000
+```
+
+Onde guardar:
+- Arquivo `.jks` — **nunca commitar no repositório** (git-ignored)
+- Backup em local seguro (cofre de senhas, drive criptografado)
+- Para o CI: encodar em base64 (`base64 truthid-release.jks`) e salvar como GitHub Secret (`KEYSTORE_BASE64`), junto com `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD`
+
+Configurar `mobile/android/app/build.gradle` para usar a keystore em release builds (via variáveis de ambiente que o CI injeta).
+
+### 12.2 — Workflow CI para o APK (`.github/workflows/build-mobile.yml`)
+
+O `build.yml` existente só constrói o desktop. Criar um workflow separado para o mobile que:
+- Dispara no mesmo evento (`push` de tag `v*`)
+- Usa `subosito/flutter-action@v2` com Flutter 3.44.x
+- Decodifica o `KEYSTORE_BASE64` do GitHub Secret, configura as variáveis de assinatura
+- Roda `flutter build apk --release`
+- Faz upload do `app-release.apk` para o mesmo GitHub Release draft que o `build.yml` cria
+
+Resultado: ao criar uma tag, o GitHub Actions entrega **5 arquivos** no release:
+| Arquivo | Plataforma |
+|---|---|
+| `TruthID_linux_x86_64.AppImage` | Linux |
+| `truthid_linux_amd64.deb` | Linux (Debian/Ubuntu) |
+| `TruthID_windows_x64.msi` | Windows |
+| `TruthID_macos_universal.dmg` | macOS |
+| `TruthID_android.apk` | Android |
+
+### 12.3 — Publicar o release
+
+```bash
+# Após todos os débitos (#14, #15, #16) estarem resolvidos e commitados:
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+O GitHub Actions roda, constrói tudo, cria um release draft. Depois:
+1. Abrir o draft no GitHub → escrever release notes
+2. Publicar o release
+
+**Instalação pelo usuário final (Android)**:
+- Baixa o `.apk` do GitHub Releases
+- No Android: Configurações → Segurança → "Instalar apps de fontes desconhecidas" (ou Instalar app desconhecido, dependendo da versão)
+- Abre o `.apk` → instala
+- Atualizações futuras: mesmo processo, o Android reconhece a mesma assinatura e faz update em cima
+
+**Alternativa futura (mais fácil pro usuário)**: publicar na Google Play Store (exige conta de desenvolvedor, ~$25 taxa única) — o processo de build+assinatura seria o mesmo, só o destino muda.
+
+### 12.4 — Atualizar o site de docs pós-release
+
+- Adicionar seção "Download" na landing page (`docs/src/pages/index.tsx`) com links diretos para os binários do último release
+- Ou usar a API do GitHub (`api.github.com/repos/masterlxz/truthid/releases/latest`) para mostrar os links dinamicamente sem atualizar o site a cada release
+
+### Status das etapas
+
+- [ ] 12.1 — Gerar e guardar keystore de assinatura
+- [ ] 12.2 — Criar `build-mobile.yml` com CI de APK
+- [ ] 12.3 — Criar tag `v1.0.0` e publicar release
+- [ ] 12.4 — Atualizar site com links de download
+
+**Pré-requisito**: resolver débitos #14, #15, #16 antes de criar o tag de release.
 
 ---
 
@@ -530,7 +611,7 @@ Problemas identificados na revisão de arquitetura da Sessão 36 (2026-06-25). N
 
 **Removido do repositório**: `signaling/` (FastAPI/WebSocket), `turn/` (coturn) e `webrtc-demo/` — confirmados como código morto (nenhum dos dois fluxos de produção dependia deles; só existiam pelo prototype abandonado da Fase 2/Sessão 20).
 
-**Trade-off aceito conscientemente**: o mobile não consegue mais resolver `@username` ao parear — o `IdentityRegistry` só tem `username → id`, não o inverso, e adicionar isso exigiria mudar e re-deployar um contrato que já está em mainnet. O app mostra "Identidade #&lt;id&gt;" em vez de "@username". Decisão: não vale o custo de redeploy só por uma label cosmética.
+**Trade-off original (Sessão 26) revisitado na Sessão 45**: o `IdentityRegistry` não tem `id → username`, mas o evento `IdentityCreated(uint256 indexed id, string username, address indexed controller)` emitido no deploy é indexado pelo `id`. Na Sessão 45 o mobile passou a resolver `@username` via `eth_getLogs` filtrando pelo topic do `id` — `getUsernameForIdentity(BigInt id)` em `blockchain_service.dart`. Username cacheado em `FlutterSecureStorage` após o pareamento; limpo junto com `clearPairedIdentity`. Sem redeploy de contrato.
 
 ---
 
@@ -573,6 +654,36 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-28 — Sessão 45
+
+- **Objetivo**: implementar @username no mobile, botão de scan centralizado no estilo Steam, e realizar teste E2E completo com o celular real (parear device, fazer login, revogar).
+
+**Features implementadas (mobile):**
+
+- **@username via `eth_getLogs`**: o `IdentityRegistry` não expõe `id → username`, mas o evento `IdentityCreated(uint256 indexed id, string username, address indexed controller)` é indexado pelo `id`. Novo método `getUsernameForIdentity(BigInt id)` em `blockchain_service.dart` faz `eth_getLogs` filtrando topic[0] = keccak256 da assinatura do evento + topic[1] = id (padded 32 bytes). Decodificação manual do ABI-encoded `string` no `log.data` (offset 32 bytes → length → bytes UTF-8). Chamada feita em background após o pareamento (`show_device_qr_screen.dart`). Username cacheado em `FlutterSecureStorage` via `savePairedUsername`/`getPairedUsername` (novo em `local_storage_service.dart`); limpo junto com `clearPairedIdentity`. Chips e headers de `devices_screen.dart` e `sessions_screen.dart` mostram `@username` se disponível, fallback para `Identity #X`.
+- **Scanner centralizado (estilo Steam)**: `BottomNavigationBar` substituído por `BottomAppBar(shape: CircularNotchedRectangle(), notchMargin: 8)` + `FloatingActionButton(location: centerDocked)` ciano/navy. Nova widget `_NavTab` (`InkWell` + `Column`: ícone + label) para as duas abas laterais. Botão de scan removido do `AppBar` (redundante). Fix de layout: `SizedBox(height: 2)` removido do `_NavTab` pra evitar overflow de 2px na altura do `BottomAppBar` detectado pelos testes.
+- **APK gerado**: `flutter build apk --debug` — não instalado ainda (usuário optou por testar o APK anterior).
+- **Testes**: `flutter analyze` — `No issues found!`; `flutter test` — 8/8 passando.
+
+**Teste E2E mobile (celular físico Samsung, Base Mainnet):**
+
+- **Parear**: usuário copiou o endereço da tela de QR e colou no desktop app (em vez de escanear o QR com a câmera do desktop). Device registrado on-chain pelo desktop. Celular não detectou automaticamente porque o polling de `ShowDeviceQrScreen` só corre enquanto aquela tela está aberta — usuário precisou mantê-la aberta para o polling pegar a confirmação. **Descoberta**: mesmo quando se para via endereço colado, ainda é necessário estar na tela de QR. Registrado como débito #14 e #15.
+- **Login real**: SDK de exemplo (`sdk/typescript/example/server.js`) expandido com página HTML de demo (`GET /`) e endpoint de QR server-side (`GET /auth/qr/:nonce` — `QRCode.toFileStream` gerando PNG no backend, sem CDN). Endpoint de polling (`GET /auth/poll/:nonce`) para a demo page detectar aprovação. Túnel HTTPS via `localhost.run` necessário porque o mobile exige `callbackUrl: https://` e `localhost` não é alcançável pelo celular. Resultado: **login aprovado** — `{ token, identityId, deviceAddress }` retornado e exibido na página. Sessão não registrada on-chain (sem `RELAYER_PRIVATE_KEY` no ambiente de teste — normal).
+- **Revogar device**: feito pelo desktop app. Confirmado que após revogação o device não consegue mais logar (SDK retorna erro de device inativo).
+
+**Problemas encontrados e resolvidos durante a sessão:**
+
+| Problema | Solução |
+|---|---|
+| Disco root 0% durante `flutter build apk` | Removida imagem `ghcr.io/cirruslabs/flutter:stable` (7GB desnecessária) — root voltou para 73% livre (8.1GB) |
+| QR library CDN (`cdn.jsdelivr.net/qrcode`) não carregou na demo page | Trocado para geração server-side com `npm install qrcode` + endpoint `GET /auth/qr/:nonce` que serve PNG via `QRCode.toFileStream` |
+| `xhost` não instalado — desktop app Docker não abreria janela | Contornado passando `DISPLAY=:1 XAUTHORITY=/run/user/1000/xauth_JPkkZq` diretamente no `docker compose up` via `sg docker` |
+| Túnel SSH bloqueado pelo modo automático do Claude Code | Usuário rodou `ssh -R 80:localhost:3000 nokey@localhost.run` no próprio terminal |
+
+**Débitos registrados nesta sessão**: #14 (polling passivo em `DevicesScreen`), #15 (refresh manual em `ShowDeviceQrScreen`), #16 (doação no desktop e mobile).
+
+---
 
 ### 2026-06-28 — Sessão 44
 

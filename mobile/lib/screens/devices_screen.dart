@@ -18,6 +18,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
 
   String? _deviceAddress;
   String? _pairedIdentityId;
+  String? _pairedUsername;
   bool _isLoading = true;
 
   @override
@@ -31,11 +32,13 @@ class _DevicesScreenState extends State<DevicesScreen> {
 
     final address = await _keyService.getDeviceAddress();
     final identityId = await _storage.getPairedIdentityId();
+    final username = await _storage.getPairedUsername();
 
     if (!mounted) return;
     setState(() {
       _deviceAddress = address;
       _pairedIdentityId = identityId;
+      _pairedUsername = username;
       _isLoading = false;
     });
   }
@@ -92,7 +95,9 @@ class _DevicesScreenState extends State<DevicesScreen> {
                       _pairedIdentityId != null
                           ? Chip(
                               avatar: const Icon(Icons.verified, size: 14, color: AppColors.success),
-                              label: Text('Identity #$_pairedIdentityId'),
+                              label: Text(_pairedUsername != null
+                                  ? '@$_pairedUsername'
+                                  : 'Identity #$_pairedIdentityId'),
                               labelStyle: const TextStyle(color: AppColors.success),
                               backgroundColor: AppColors.successBg,
                               padding: EdgeInsets.zero,
@@ -137,7 +142,9 @@ class _DevicesScreenState extends State<DevicesScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '#$_pairedIdentityId',
+                      _pairedUsername != null
+                          ? '@$_pairedUsername'
+                          : '#$_pairedIdentityId',
                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                     ),
                     const SizedBox(height: 12),

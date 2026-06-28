@@ -19,6 +19,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
   bool _isLoading = true;
   bool _isPaired = false;
   String? _pairedIdentityId;
+  String? _pairedUsername;
   String? _deviceAddress;
   List<SessionInfo>? _sessions;
   String? _error;
@@ -37,8 +38,8 @@ class _SessionsScreenState extends State<SessionsScreen> {
 
     final identityId = await _storage.getPairedIdentityId();
     final address = await _keyService.getDeviceAddress();
+    final username = await _storage.getPairedUsername();
 
-    // Sem identidade pareada: só mostra a tela de "não pareado"
     if (identityId == null) {
       if (mounted) {
         setState(() {
@@ -51,13 +52,13 @@ class _SessionsScreenState extends State<SessionsScreen> {
     }
 
     try {
-      // identityId foi salvo como String no storage — precisa converter para BigInt
       final sessions = await _blockchain.getSessionsForIdentity(BigInt.parse(identityId));
 
       if (mounted) {
         setState(() {
           _isPaired = true;
           _pairedIdentityId = identityId;
+          _pairedUsername = username;
           _deviceAddress = address;
           _sessions = sessions;
           _isLoading = false;
@@ -68,6 +69,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
         setState(() {
           _isPaired = true;
           _pairedIdentityId = identityId;
+          _pairedUsername = username;
           _isLoading = false;
           _error = e.toString();
         });
@@ -118,7 +120,9 @@ class _SessionsScreenState extends State<SessionsScreen> {
           Row(
             children: [
               Text(
-                'Identity #$_pairedIdentityId',
+                _pairedUsername != null
+                    ? '@$_pairedUsername'
+                    : 'Identity #$_pairedIdentityId',
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const Spacer(),

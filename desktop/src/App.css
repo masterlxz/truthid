@@ -608,3 +608,39 @@ code, .address {
   background: rgba(159, 177, 194, 0.1);
   color: var(--color-text);
 }
+
+/* ── Update banner ────────────────────────────────────────────────────────── */
+.update-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 1.25rem;
+  background: rgba(77, 208, 225, 0.08);
+  border-bottom: 1px solid rgba(77, 208, 225, 0.25);
+  font-size: 0.85rem;
+  color: var(--color-accent);
+}
+
+.update-banner-link {
+  color: var(--color-accent);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.update-banner-dismiss {
+  margin-left: auto;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0.1rem 0.3rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  line-height: 1;
+}
+
+.update-banner-dismiss:hover {
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.05);
+}

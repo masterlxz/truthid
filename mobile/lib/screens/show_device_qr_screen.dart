@@ -56,10 +56,16 @@ class _ShowDeviceQrScreenState extends State<ShowDeviceQrScreen> {
     if (_confirmed) return;
 
     final device = await _blockchain.getDevice(address);
-    if (device == null || device.revoked) return; // ainda não — tenta na próxima rodada
+    if (device == null || device.revoked) return;
 
     _pollTimer?.cancel();
     await _storage.savePairedIdentity(device.identityId.toString());
+
+    // Fetch username in the background — don't block the confirmation UX.
+    // If the RPC call fails, the app falls back to showing Identity #X.
+    _blockchain.getUsernameForIdentity(device.identityId).then((username) {
+      if (username != null) _storage.savePairedUsername(username);
+    });
 
     if (!mounted) return;
     setState(() => _confirmed = true);

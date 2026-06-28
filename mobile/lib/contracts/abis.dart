@@ -1,6 +1,6 @@
 // ABI fragments used by the mobile app.
 // Only the functions actually called are listed — no need for the full ABI.
-// Source: contracts/src/SessionRegistry.sol and DeviceRegistry.sol
+// Source: contracts/src/SessionRegistry.sol, DeviceRegistry.sol, IdentityRegistry.sol
 // Update here when the contract interface changes.
 
 const String sessionRegistryAbi = '''[
@@ -34,6 +34,18 @@ const String sessionRegistryAbi = '''[
     "inputs": [{"name": "hash", "type": "bytes32"}],
     "outputs": [{"name": "", "type": "bool"}],
     "stateMutability": "view"
+  }
+]''';
+
+const String identityRegistryAbi = '''[
+  {
+    "type": "event",
+    "name": "IdentityCreated",
+    "inputs": [
+      {"name": "id", "type": "uint256", "indexed": true},
+      {"name": "username", "type": "string", "indexed": false},
+      {"name": "controller", "type": "address", "indexed": true}
+    ]
   }
 ]''';
 

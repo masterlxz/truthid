@@ -10,6 +10,7 @@ import { QuickLogin } from "./components/QuickLogin";
 import { IdentityProvider } from "./contexts/IdentityContext";
 import { WalletModalContext } from "./contexts/WalletModalContext";
 import { useStoredUsername } from "./hooks/useStoredUsername";
+import { useUpdateCheck } from "./hooks/useUpdateCheck";
 import { IDENTITY_REGISTRY_ADDRESS, IDENTITY_REGISTRY_ABI } from "./config/contracts";
 import "./App.css";
 
@@ -44,6 +45,8 @@ function App() {
   const queryClient = useQueryClient();
 
   const { username: storedUsername, save: saveUsername, clear: clearUsername } = useStoredUsername();
+  const { updateVersion, updateUrl } = useUpdateCheck();
+  const [updateDismissed, setUpdateDismissed] = useState(false);
 
   const isWrongNetwork = isConnected && chainId !== base.id;
   const { switchChain, isPending: isSwitching } = useSwitchChain();
@@ -135,6 +138,18 @@ function App() {
             </button>
           </div>
         </header>
+
+        {updateVersion && !updateDismissed && (
+          <div className="update-banner">
+            <span>⬆ TruthID {updateVersion} available</span>
+            <a href={updateUrl} target="_blank" rel="noreferrer" className="update-banner-link">
+              Download
+            </a>
+            <button className="update-banner-dismiss" onClick={() => setUpdateDismissed(true)}>
+              ✕
+            </button>
+          </div>
+        )}
 
         <main className="main-content">
           {isWrongNetwork && (
