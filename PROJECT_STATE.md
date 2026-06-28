@@ -574,15 +574,20 @@ Website          Relay           Mobile App        Blockchain
 
 ## Log de Sessões
 
-### 2026-06-27 — Sessão 41
+### 2026-06-28 — Sessão 41
 
-- **Objetivo**: resolver débitos técnicos #2, #3 e #5.
-- **#2** — ABIs do mobile extraídas de strings inline no `blockchain_service.dart` para constantes nomeadas em `mobile/lib/contracts/abis.dart`. `flutter analyze`: sem erros.
-- **#3** — `publicClient` no SDK TypeScript tipado como `ReturnType<typeof createPublicClient>` (era `any`). `tsc --noEmit`: limpo.
-- **#5** — `ErrorBoundary` adicionado ao desktop (`desktop/src/components/ErrorBoundary.tsx`) e envolvendo toda a árvore em `main.tsx`. `tsc --noEmit`: limpo.
-- **Débitos #2, #3, #5 resolvidos** (ver acima).
-- **Sessão 41 (continuação)**: débito #6 resolvido — `IdentityContext` com `useIdentity()` hook.
-- **Sessão 41 (continuação)**: débito #12 resolvido — modo leitura sem wallet, `WalletModalContext`, `useStoredUsername`.
+- **Objetivo**: resolver débitos técnicos #2, #3, #5, #6 e #12.
+- **#2** — ABIs do mobile (`blockchain_service.dart`) extraídas de strings JSON inline para constantes nomeadas em `mobile/lib/contracts/abis.dart` (`sessionRegistryAbi`, `deviceRegistryAbi`). Agora há um lugar óbvio pra atualizar quando o contrato mudar. `flutter analyze`: sem erros.
+- **#3** — `publicClient` no SDK TypeScript (`sdk/typescript/src/client.ts`) tipado como `ReturnType<typeof createPublicClient>` (era `any`). `tsc --noEmit`: limpo.
+- **#5** — `ErrorBoundary` criado em `desktop/src/components/ErrorBoundary.tsx` e adicionado na raiz do `main.tsx` envolvendo toda a árvore. Erro em qualquer componente agora mostra mensagem + botão "Try again" em vez de tela branca.
+- **#6** — `IdentityContext` criado em `desktop/src/contexts/IdentityContext.tsx` com hook `useIdentity()` que expõe `{ username, identityId }`. `ManageDevices` e `ActiveSessions` eliminaram o prop `username` e a chamada `getIdentity(username)` duplicada — usam `useIdentity()`. Novos componentes têm o hook disponível sem prop drilling.
+- **#12** — Modo leitura sem wallet. Quatro mudanças coordenadas:
+  - `desktop/src/config/wagmi.ts`: `storage: null` — wagmi não persiste o conector, sem auto-reconexão.
+  - `desktop/src/hooks/useStoredUsername.ts` (novo): salva/lê username em `localStorage` com chave `truthid:username`, independente do wagmi.
+  - `desktop/src/contexts/WalletModalContext.tsx` (novo): hook `useWalletModal()` que expõe `openConnectModal()` — qualquer componente pode abrir o modal de conexão.
+  - `desktop/src/App.tsx`: nova máquina de estados — se há username no localStorage, mostra app shell direto (sem wallet); quando wallet conecta e username é verificado on-chain, salva no localStorage. Topbar: "Disconnect wallet" mantém modo leitura; "Log out" limpa localStorage e desconecta, voltando ao login. `ConnectWallet` agora aceita `asModal` para renderizar dentro de modal overlay.
+  - `ManageDevices`, `ActiveSessions`, `PairDevice`, `DesktopDevice`: ações de escrita (`handleRevoke`, `handleRegister`) chamam `openConnectModal()` se wallet não está conectada, em vez de falhar silenciosamente.
+- **Débitos fechados nesta sessão**: #2, #3, #5, #6, #12.
 - **Próximo passo**: débito #13 (site de docs com Session Registration) ou débito #7 (testes de UI).
 
 ### 2026-06-27 — Sessão 40
