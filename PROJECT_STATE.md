@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-06-28 (Sessão 43 — completa)
+> Última atualização: 2026-06-28 (Sessão 44 — completa)
 
 ---
 
@@ -573,6 +573,23 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-28 — Sessão 44
+
+- **Objetivo**: revisão de UX do app mobile — identificar e resolver todos os problemas de experiência do usuário encontrados na Sessão 43.
+- **Planejamento**: 7 problemas identificados e mapeados para 5 arquivos. Plano gravado em `/home/masterlxz/.claude/plans/jazzy-swinging-raven.md`.
+- **Fixes implementados**:
+  - `mobile/lib/main.dart` — ícones da bottom nav: `phone_android` → `phonelink_lock` (phone com cadeado), `history` → `verified_user` (usuário verificado).
+  - `mobile/lib/screens/devices_screen.dart` — string PT→EN: chip "Identidade #X" → "Identity #X"; Unpair com `showDialog` AlertDialog de confirmação antes de `clearPairedIdentity()` (ação destrutiva sem rollback precisa de confirmação).
+  - `mobile/lib/screens/sessions_screen.dart` — string PT→EN: cabeçalho "Identidade #X" → "Identity #X"; formato de data: `28/06 at 12:30` → `Jun 28 at 12:30` (novo `_formatDate` com array de nomes de mês em inglês).
+  - `mobile/lib/screens/scan_screen.dart` — overlay de scan: `body` trocado de `MobileScanner` puro por `Stack` com `MobileScanner` + `IgnorePointer(CustomPaint(_ScanOverlayPainter()))` + texto de instrução. `_ScanOverlayPainter` usa `saveLayer` + `BlendMode.dstOut` pra criar recorte transparente 260×260 sobre fundo `Colors.black54`, com borda ciano (`AppColors.accent`) e cantos arredondados. Importação de `../theme.dart` adicionada.
+  - `mobile/lib/screens/approval_screen.dart` — 2 mudanças: (1) `LocalStorageService().getPairedIdentityId().then(...)` em `initState` carrega `_identityId` async; `_InfoRow(label: 'Signing as', value: 'Identity #$_identityId')` exibido quando disponível. (2) `displaySite` derivado do `callbackUrl` validado (`Uri.parse(_callbackUrl!).scheme + '://' + host`) em vez do campo `origin` do challenge — mostra `https://example.com` em vez de só `example.com`.
+- **Teste atualizado**: `test/screens/approval_screen_test.dart` — `expect(find.text('example.com'), ...)` → `expect(find.text('https://example.com'), ...)` para refletir a nova exibição de site.
+- **Verificação**:
+  - `flutter analyze` (imagem `mobile-flutter:latest`, Flutter 3.44.4): `No issues found!`
+  - `flutter test`: 8/8 passando.
+- **Commit**: `14723ea` — `feat(mobile): UX polish — scanner overlay, unpair confirmation, identity display`.
+- **Próximo passo**: sem débitos ou itens planejados abertos. Projeto completo.
 
 ### 2026-06-28 — Sessão 41
 
