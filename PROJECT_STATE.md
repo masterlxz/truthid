@@ -498,7 +498,7 @@ Problemas identificados na revisão de arquitetura da Sessão 36 (2026-06-25). N
 | ~~3~~ | ~~`sdk/typescript/src/client.ts:22`~~ | ~~`private publicClient: any`~~ | **RESOLVIDO — Sessão 41**. Tipado como `ReturnType<typeof createPublicClient>`. `tsc --noEmit` limpo. |
 | ~~4~~ | ~~`desktop/src/components/ManageDevices.tsx:133`~~ | ~~`DeviceInfo` type definido localmente.~~ | **RESOLVIDO — Sessão 39**. Movido para `desktop/src/types.ts` (criado). |
 | ~~5~~ | ~~Desktop (React geral)~~ | ~~Nenhum `ErrorBoundary` no app.~~ | **RESOLVIDO — Sessão 41**. `ErrorBoundary` criado em `desktop/src/components/ErrorBoundary.tsx` e adicionado em `main.tsx` envolvendo toda a árvore. Mostra mensagem de erro + botão "Try again" em vez de tela em branco. |
-| 6 | Desktop (React geral) | Estado todo local via `useState`. Funciona bem agora, mas se precisar compartilhar estado entre componentes não-relacionados (ex: `ActiveSessions` saber que um device foi revogado em `ManageDevices`), vai exigir prop drilling ou refatoração maior. | Sem ação imediata — só avaliar quando surgir a necessidade real. Opções: Zustand (leve) ou React Context. |
+| ~~6~~ | ~~Desktop (React geral)~~ | ~~Estado todo local via `useState`, sem estado compartilhado.~~ | **RESOLVIDO — Sessão 41**. `IdentityContext` criado em `desktop/src/contexts/IdentityContext.tsx` com `{ username, identityId }`. `ManageDevices` e `ActiveSessions` eliminaram o prop `username` e a chamada duplicada `getIdentity(username)` — usam `useIdentity()`. Novos componentes que precisarem de identidade já têm o hook disponível. |
 | 7 | Desktop + Mobile (geral) | Zero testes de UI/frontend. Os 120 testes Foundry cobrem os contratos; os 4 scripts E2E cobrem o fluxo de rede. Mas nenhum teste cobre o comportamento dos componentes React ou das telas Flutter. | Adicionar pelo menos testes dos fluxos mais críticos: `PairDevice` (commit-reveal em 2 passos) e `ApprovalScreen` (aprovar/rejeitar login). Framework: Vitest + React Testing Library no desktop, flutter_test no mobile. |
 | ~~8~~ | ~~Desktop (UX/layout)~~ | ~~Posição dos botões, organização das telas e fluxos de navegação nunca foram revisados com olhar de produto.~~ | **RESOLVIDO — Sessão 40**. Tela de login full-viewport com ícones de wallet, fluxo Ledger separado em sub-tela, app shell com topbar fixo (`@username` · `↻` · `⎋ Login`), modal de Quick Login, aba "Login test" removida. |
 | ~~9~~ | ~~`desktop/src/components/ConnectLedger.tsx`~~ | ~~Tela de espera da Ledger exibia só texto puro, sem hierarquia visual.~~ | **RESOLVIDO — Sessão 40** (junto com o #8). Stepper visual de 3 passos em `ConnectLedger.tsx`: conectar USB → desbloquear PIN → abrir app Ethereum. Passo ativo destacado em ciano, passos anteriores em verde ✓, posteriores em cinza. |
@@ -580,6 +580,8 @@ Website          Relay           Mobile App        Blockchain
 - **#2** — ABIs do mobile extraídas de strings inline no `blockchain_service.dart` para constantes nomeadas em `mobile/lib/contracts/abis.dart`. `flutter analyze`: sem erros.
 - **#3** — `publicClient` no SDK TypeScript tipado como `ReturnType<typeof createPublicClient>` (era `any`). `tsc --noEmit`: limpo.
 - **#5** — `ErrorBoundary` adicionado ao desktop (`desktop/src/components/ErrorBoundary.tsx`) e envolvendo toda a árvore em `main.tsx`. `tsc --noEmit`: limpo.
+- **Débitos #2, #3, #5 resolvidos** (ver acima).
+- **Sessão 41 (continuação)**: débito #6 resolvido — `IdentityContext` com `useIdentity()` hook.
 - **Próximo passo**: débitos #12 e #13, ou débito #7 (testes de UI).
 
 ### 2026-06-27 — Sessão 40
