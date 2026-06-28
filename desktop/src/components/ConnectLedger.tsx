@@ -18,6 +18,8 @@ const STEP_LABELS = [
   "Open the Ethereum app on your Ledger",
 ];
 
+const ACCOUNT_COUNT = 5;
+
 export function ConnectLedger({ onBack }: { onBack: () => void }) {
   const { connectAsync } = useConnect();
   const [phase, setPhase] = useState<LedgerPhase>("detecting");
@@ -26,6 +28,11 @@ export function ConnectLedger({ onBack }: { onBack: () => void }) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [connectError, setConnectError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // null = still loading, string = resolved address
+  const [addresses, setAddresses] = useState<(string | null)[]>(
+    Array(ACCOUNT_COUNT).fill(null)
+  );
 
   // Start polling on mount
   useEffect(() => {
@@ -43,6 +50,37 @@ export function ConnectLedger({ onBack }: { onBack: () => void }) {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, []);
+
+  // When device is detected, fetch addresses for all accounts sequentially.
+  // Sequential (not parallel) because the Ledger HID interface is serial —
+  // concurrent APDUs would conflict on the device.
+  useEffect(() => {
+    if (phase !== "account-select") return;
+
+    let cancelled = false;
+    setAddresses(Array(ACCOUNT_COUNT).fill(null));
+
+    (async () => {
+      for (let i = 0; i < ACCOUNT_COUNT; i++) {
+        if (cancelled) break;
+        try {
+          const addr = await invoke<string>("get_ledger_address", { accountIndex: i });
+          if (!cancelled) {
+            setAddresses((prev) => {
+              const next = [...prev];
+              next[i] = addr;
+              return next;
+            });
+          }
+        } catch {
+          // If the device disconnects mid-fetch, stop silently.
+          break;
+        }
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [phase]);
 
   function handleBack() {
     if (intervalRef.current) clearInterval(intervalRef.current);
@@ -102,7 +140,7 @@ export function ConnectLedger({ onBack }: { onBack: () => void }) {
           <h2 className="ledger-connect-title">Select account</h2>
 
           <div className="account-list">
-            {[0, 1, 2, 3, 4].map((i) => (
+            {Array.from({ length: ACCOUNT_COUNT }, (_, i) => (
               <button
                 key={i}
                 className={`account-option${selectedIndex === i ? " account-option--selected" : ""}`}
@@ -110,7 +148,16 @@ export function ConnectLedger({ onBack }: { onBack: () => void }) {
                 disabled={isConnecting}
               >
                 <div className="account-radio" />
-                Account {i}
+                <div className="account-option-info">
+                  <span className="account-option-name">Account {i}</span>
+                  {addresses[i] !== null ? (
+                    <code className="account-option-address">
+                      {addresses[i]!.slice(0, 6)}…{addresses[i]!.slice(-4)}
+                    </code>
+                  ) : (
+                    <span className="account-option-loading">loading…</span>
+                  )}
+                </div>
               </button>
             ))}
           </div>

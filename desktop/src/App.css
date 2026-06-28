@@ -441,6 +441,30 @@ code, .address {
   background: var(--color-accent);
 }
 
+.account-option-info {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+}
+
+.account-option-name {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.account-option-address {
+  font-family: 'SF Mono', 'Menlo', monospace;
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+}
+
+.account-option-loading {
+  font-size: 0.78rem;
+  color: var(--color-text-muted);
+  opacity: 0.45;
+}
+
 /* ═══════════════════════════════════════════════════════
    App Shell (topbar + content)
 ═══════════════════════════════════════════════════════ */
