@@ -40,14 +40,6 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
 }
 
-.container {
-  margin: 0 auto;
-  max-width: 720px;
-  padding: 4rem 1.5rem;
-  display: flex;
-  flex-direction: column;
-}
-
 a {
   font-weight: 500;
   color: var(--color-accent);
@@ -68,7 +60,7 @@ button {
   font-family: inherit;
   color: var(--color-text);
   background-color: var(--color-surface);
-  transition: border-color 0.2s, color 0.2s;
+  transition: border-color 0.2s, color 0.2s, background-color 0.2s;
 }
 
 input::placeholder {
@@ -184,4 +176,411 @@ code, .address {
   color: var(--color-bg);
   background-color: var(--color-accent);
   border-color: var(--color-accent);
+}
+
+/* ═══════════════════════════════════════════════════════
+   Wallet Login Screen
+═══════════════════════════════════════════════════════ */
+
+.wallet-screen {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--color-bg);
+  padding: 2rem;
+}
+
+.wallet-card {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2.5rem;
+}
+
+.wallet-screen-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  text-align: center;
+}
+
+.wallet-screen-logo {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-family: var(--font-heading);
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.wallet-screen-tagline {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.wallet-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  width: 100%;
+}
+
+.wallet-option {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.9rem 1.1rem;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  font-size: 0.95rem;
+  font-weight: 500;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.wallet-option:hover:not(:disabled) {
+  border-color: rgba(77, 208, 225, 0.5);
+  background: rgba(77, 208, 225, 0.05);
+  color: var(--color-text);
+}
+
+.wallet-option-icon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.wallet-option-name {
+  flex: 1;
+}
+
+.wallet-option-arrow {
+  color: var(--color-text-muted);
+  font-size: 1rem;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Ledger Connect Flow
+═══════════════════════════════════════════════════════ */
+
+.ledger-connect {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.back-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: 0.875rem;
+  padding: 0;
+  align-self: flex-start;
+}
+
+.back-btn:hover:not(:disabled) {
+  color: var(--color-accent);
+  background: transparent;
+}
+
+.ledger-connect-title {
+  font-family: var(--font-heading);
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--color-text);
+}
+
+.ledger-error-box {
+  color: var(--color-danger);
+  font-size: 0.875rem;
+  background: rgba(226, 92, 92, 0.08);
+  border: 1px solid rgba(226, 92, 92, 0.2);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+}
+
+/* ─── Stepper ─── */
+
+.stepper {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.step-indicator {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+.step-text {
+  font-size: 0.9rem;
+  transition: color 0.2s;
+}
+
+.step--done .step-indicator {
+  background: rgba(76, 217, 100, 0.15);
+  color: #4cd964;
+}
+
+.step--done .step-text {
+  color: var(--color-text-muted);
+}
+
+.step--active .step-indicator {
+  background: rgba(77, 208, 225, 0.15);
+  color: var(--color-accent);
+  border: 1.5px solid rgba(77, 208, 225, 0.5);
+}
+
+.step--active .step-text {
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+.step--pending .step-indicator {
+  background: rgba(159, 177, 194, 0.08);
+  color: var(--color-text-muted);
+}
+
+.step--pending .step-text {
+  color: var(--color-text-muted);
+}
+
+/* ─── Account Select ─── */
+
+.account-select-title {
+  font-family: var(--font-heading);
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin: 0 0 1.25rem 0;
+  color: var(--color-text);
+}
+
+.account-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  width: 100%;
+}
+
+.account-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  border: 1.5px solid var(--color-border);
+  background: var(--color-surface);
+  cursor: pointer;
+  color: var(--color-text);
+  font-size: 0.9rem;
+  text-align: left;
+  transition: border-color 0.15s, background 0.15s;
+  width: 100%;
+}
+
+.account-option:hover:not(:disabled) {
+  border-color: rgba(77, 208, 225, 0.4);
+  background: rgba(77, 208, 225, 0.04);
+  color: var(--color-text);
+}
+
+.account-option--selected {
+  border-color: var(--color-accent) !important;
+  background: rgba(77, 208, 225, 0.08) !important;
+}
+
+.account-radio {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--color-border);
+  flex-shrink: 0;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.account-option--selected .account-radio {
+  border-color: var(--color-accent);
+  background: var(--color-accent);
+}
+
+/* ═══════════════════════════════════════════════════════
+   App Shell (topbar + content)
+═══════════════════════════════════════════════════════ */
+
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 1.5rem;
+  height: 56px;
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  flex-shrink: 0;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-family: var(--font-heading);
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--color-text);
+}
+
+.topbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.topbar-username {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+  padding: 0.25rem 0.65rem;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  white-space: nowrap;
+}
+
+.topbar-btn {
+  padding: 0.3rem 0.7rem;
+  font-size: 0.85rem;
+  border-color: var(--color-border);
+  color: var(--color-text-muted);
+  background: transparent;
+}
+
+.topbar-btn:hover:not(:disabled) {
+  background: var(--color-surface);
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+}
+
+.topbar-btn-danger {
+  border-color: transparent;
+  color: var(--color-text-muted);
+  background: transparent;
+}
+
+.topbar-btn-danger:hover:not(:disabled) {
+  background: rgba(226, 92, 92, 0.08);
+  border-color: rgba(226, 92, 92, 0.3);
+  color: var(--color-danger);
+}
+
+.main-content {
+  flex: 1;
+  max-width: 720px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 2rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ═══════════════════════════════════════════════════════
+   Modal
+═══════════════════════════════════════════════════════ */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  padding: 1.5rem;
+}
+
+.modal-box {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 16px;
+  padding: 1.5rem;
+  width: 100%;
+  max-width: 480px;
+  position: relative;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+
+.modal-title {
+  font-family: var(--font-heading);
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0;
+  color: var(--color-text);
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 0.2rem 0.5rem;
+  font-size: 1rem;
+  line-height: 1;
+  border-radius: 6px;
+}
+
+.modal-close:hover:not(:disabled) {
+  background: rgba(159, 177, 194, 0.1);
+  color: var(--color-text);
 }

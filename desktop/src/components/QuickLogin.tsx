@@ -7,7 +7,7 @@ import { SESSION_REGISTRY_ADDRESS, SESSION_REGISTRY_ABI } from "../config/contra
 type LoginStatus = "idle" | "loading" | "success" | "error";
 type SessionStatus = "idle" | "signing" | "pending" | "confirmed" | "error";
 
-export function TestLogin() {
+export function QuickLogin() {
   const [serverUrl, setServerUrl] = useState("http://localhost:3000");
   const [loginStatus, setLoginStatus] = useState<LoginStatus>("idle");
   const [loginResult, setLoginResult] = useState<{
@@ -88,11 +88,9 @@ export function TestLogin() {
     setSessionStatus("signing");
     setSessionError(null);
     try {
-      // Derive a unique 32-byte hash from the challenge nonce
       const hash = keccak256(toHex(loginResult.nonce)) as `0x${string}`;
       setSessionHash(hash);
 
-      // Sign the session hash with the device key — contract verifies ecrecover
       const [r, s, v] = await invoke<[string, string, number]>("sign_session_hash", { hash });
 
       setSessionStatus("pending");
@@ -116,56 +114,37 @@ export function TestLogin() {
   }
 
   const isLoginBusy = loginStatus === "loading";
-  const isSessionBusy = sessionStatus === "signing" || sessionStatus === "pending" || isWritePending || isCreateConfirming;
+  const isSessionBusy =
+    sessionStatus === "signing" || sessionStatus === "pending" || isWritePending || isCreateConfirming;
 
   return (
     <div>
-      {/* ── Step 1: Login ── */}
-      <div className="card">
-        <h3 style={{ marginTop: 0 }}>Step 1 — Authenticate</h3>
-        <p className="muted">
-          Signs a server challenge with this desktop's device key and verifies on-chain.
-        </p>
-        <div className="field">
-          <label>Server URL</label>
-          <input
-            value={serverUrl}
-            onChange={(e) => setServerUrl(e.target.value)}
-            disabled={isLoginBusy}
-            placeholder="http://localhost:3000"
-          />
-        </div>
-        <div className="actions-row">
-          <button onClick={handleLogin} disabled={isLoginBusy}>
-            {isLoginBusy ? "Authenticating..." : "Test Login"}
-          </button>
-        </div>
-        {loginStatus === "success" && loginResult && (
-          <pre style={{
-            marginTop: "0.75rem",
-            background: "#0d2a1f",
-            color: "#4ade80",
-            padding: "0.75rem",
-            borderRadius: "6px",
-            fontSize: "0.85em",
-            overflowX: "auto",
-          }}>
-            {JSON.stringify({ token: loginResult.token, identityId: loginResult.identityId }, null, 2)}
-          </pre>
-        )}
-        {loginStatus === "error" && (
-          <p className="error-text" style={{ marginTop: "0.5rem" }}>{loginError}</p>
-        )}
+      <div className="field">
+        <label>Server URL</label>
+        <input
+          value={serverUrl}
+          onChange={(e) => setServerUrl(e.target.value)}
+          disabled={isLoginBusy}
+          placeholder="http://localhost:3000"
+        />
       </div>
 
-      {/* ── Step 2: Register session on-chain ── */}
-      {loginStatus === "success" && (
-        <div className="card">
-          <h3 style={{ marginTop: 0 }}>Step 2 — Register session on-chain</h3>
-          <p className="muted">
-            Creates an auditable record in the <code>SessionRegistry</code> contract. The device signs
-            the session hash; the wallet submits the transaction.
+      <div className="actions-row" style={{ marginTop: 0, marginBottom: "1rem" }}>
+        <button onClick={handleLogin} disabled={isLoginBusy}>
+          {isLoginBusy ? "Authenticating..." : "Authenticate"}
+        </button>
+      </div>
+
+      {loginStatus === "success" && loginResult && (
+        <div className="card" style={{ marginBottom: "1rem" }}>
+          <span className="status-badge status-badge--active" style={{ marginBottom: "0.5rem", display: "inline-flex" }}>
+            ✓ Authenticated
+          </span>
+          <p className="muted" style={{ margin: "0.4rem 0 0" }}>
+            Identity #{loginResult.identityId} · Token{" "}
+            <code className="address">{loginResult.token.slice(0, 8)}…</code>
           </p>
+
           <div className="actions-row">
             <button
               onClick={handleCreateSession}
@@ -184,27 +163,25 @@ export function TestLogin() {
           </div>
 
           {sessionStatus === "confirmed" && sessionHash && (
-            <div style={{ marginTop: "0.75rem" }}>
-              <pre style={{
-                background: "#0d2a1f",
-                color: "#4ade80",
-                padding: "0.75rem",
-                borderRadius: "6px",
-                fontSize: "0.85em",
-                overflowX: "auto",
-              }}>
-                {JSON.stringify({ sessionHash }, null, 2)}
-              </pre>
-              <p className="muted" style={{ marginTop: "0.5rem" }}>
-                Navigate to <strong>Active sessions</strong> to view and revoke this session.
-              </p>
-            </div>
+            <p className="muted" style={{ marginTop: "0.5rem", marginBottom: 0 }}>
+              Session{" "}
+              <code className="address">
+                {sessionHash.slice(0, 10)}…{sessionHash.slice(-6)}
+              </code>{" "}
+              registered. Check Active Sessions to revoke.
+            </p>
           )}
 
-          {sessionStatus === "error" && (
-            <p className="error-text" style={{ marginTop: "0.5rem" }}>{sessionError}</p>
+          {sessionStatus === "error" && sessionError && (
+            <p className="error-text" style={{ marginTop: "0.5rem", marginBottom: 0 }}>
+              {sessionError}
+            </p>
           )}
         </div>
+      )}
+
+      {loginStatus === "error" && loginError && (
+        <p className="error-text">{loginError}</p>
       )}
     </div>
   );

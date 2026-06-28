@@ -3,75 +3,129 @@ import { invoke } from "@tauri-apps/api/core";
 import { useConnect } from "wagmi";
 import { ledger, setLedgerAccountIndex } from "../connectors/ledger";
 
-// Mensagem mostrada conforme o rótulo de erro que o comando Rust devolve
-// (ver classify_error em desktop/src-tauri/src/ledger.rs).
-const INSTRUCTIONS: Record<string, string> = {
-  not_connected: "Connect your Ledger via USB.",
-  locked: "Unlock your Ledger by entering the PIN using the physical buttons.",
-  wrong_app: "Open the Ethereum app on your Ledger.",
-  // access_denied: device visible but could not open — on Windows may be a
-  // conflict with Ledger Live; on Linux, missing udev rule.
-  access_denied: "Could not access the Ledger. Close Ledger Live if it is open, or check USB permissions (Linux: udev rule).",
-};
+type LedgerPhase = "detecting" | "account-select";
 
-export function ConnectLedger() {
+// Maps the error string from Rust's classify_error to which step is active
+function statusToStep(status: string): number {
+  if (status === "locked") return 1;
+  if (status === "wrong_app") return 2;
+  return 0; // not_connected or anything else
+}
+
+const STEP_LABELS = [
+  "Connect your Ledger via USB",
+  "Unlock with your PIN on the device",
+  "Open the Ethereum app on your Ledger",
+];
+
+export function ConnectLedger({ onBack }: { onBack: () => void }) {
   const { connectAsync } = useConnect();
-  const [polling, setPolling] = useState(false);
+  const [phase, setPhase] = useState<LedgerPhase>("detecting");
   const [status, setStatus] = useState("not_connected");
-  const [accountIndex, setAccountIndex] = useState(0);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [connectError, setConnectError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Start polling on mount
   useEffect(() => {
+    intervalRef.current = setInterval(async () => {
+      try {
+        await invoke<string>("get_ledger_address", { accountIndex: 0 });
+        clearInterval(intervalRef.current!);
+        setPhase("account-select");
+      } catch (e) {
+        setStatus(String(e));
+      }
+    }, 1000);
+
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, []);
 
-  function startPolling() {
-    setStatus("not_connected");
-    setPolling(true);
-
-    intervalRef.current = setInterval(async () => {
-      try {
-        setLedgerAccountIndex(accountIndex);
-        await invoke<string>("get_ledger_address", { accountIndex });
-        if (intervalRef.current) clearInterval(intervalRef.current);
-        await connectAsync({ connector: ledger });
-        setPolling(false);
-      } catch (e) {
-        setStatus(String(e));
-      }
-    }, 1000);
-  }
-
-  function cancelPolling() {
+  function handleBack() {
     if (intervalRef.current) clearInterval(intervalRef.current);
-    setPolling(false);
+    onBack();
   }
 
-  if (polling) {
-    return (
-      <div className="actions-row" style={{ alignItems: "center" }}>
-        <p className="muted" style={{ margin: 0 }}>
-          {INSTRUCTIONS[status] ?? `Waiting for Ledger... (${status})`}
-        </p>
-        <button onClick={cancelPolling}>Cancel</button>
-      </div>
-    );
+  async function handleConnect() {
+    setIsConnecting(true);
+    setConnectError(null);
+    try {
+      setLedgerAccountIndex(selectedIndex);
+      await connectAsync({ connector: ledger });
+    } catch (e) {
+      setIsConnecting(false);
+      setConnectError(String(e));
+    }
   }
+
+  const activeStep = statusToStep(status);
+  const isAccessDenied = status === "access_denied";
 
   return (
-    <div className="actions-row" style={{ alignItems: "center" }}>
-      <select
-        value={accountIndex}
-        onChange={(e) => setAccountIndex(Number(e.target.value))}
-        style={{ padding: "0.25rem 0.5rem" }}
-      >
-        {[0, 1, 2, 3, 4].map((i) => (
-          <option key={i} value={i}>Account {i}</option>
-        ))}
-      </select>
-      <button onClick={startPolling}>Connect Ledger</button>
+    <div className="ledger-connect">
+      <button className="back-btn" onClick={handleBack}>
+        ← Back
+      </button>
+
+      {phase === "detecting" && (
+        <>
+          <h2 className="ledger-connect-title">Connect your Ledger</h2>
+
+          <div className="stepper">
+            {STEP_LABELS.map((label, i) => {
+              const state =
+                i < activeStep ? "done" : i === activeStep ? "active" : "pending";
+              return (
+                <div key={i} className={`step step--${state}`}>
+                  <div className="step-indicator">
+                    {state === "done" ? "✓" : i + 1}
+                  </div>
+                  <span className="step-text">{label}</span>
+                </div>
+              );
+            })}
+          </div>
+
+          {isAccessDenied && (
+            <div className="ledger-error-box">
+              Could not access the Ledger. Close Ledger Live if it is open, or check USB permissions (Linux: udev rule).
+            </div>
+          )}
+        </>
+      )}
+
+      {phase === "account-select" && (
+        <>
+          <h2 className="ledger-connect-title">Select account</h2>
+
+          <div className="account-list">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <button
+                key={i}
+                className={`account-option${selectedIndex === i ? " account-option--selected" : ""}`}
+                onClick={() => setSelectedIndex(i)}
+                disabled={isConnecting}
+              >
+                <div className="account-radio" />
+                Account {i}
+              </button>
+            ))}
+          </div>
+
+          {connectError && (
+            <div className="ledger-error-box" style={{ marginBottom: "1rem" }}>
+              {connectError}
+            </div>
+          )}
+
+          <button onClick={handleConnect} disabled={isConnecting}>
+            {isConnecting ? "Connecting..." : `Connect Account ${selectedIndex}`}
+          </button>
+        </>
+      )}
     </div>
   );
 }
