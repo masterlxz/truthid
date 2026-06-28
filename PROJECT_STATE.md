@@ -493,10 +493,10 @@ Problemas identificados na revisão de arquitetura da Sessão 36 (2026-06-25). N
 
 | # | Arquivo(s) | Problema | O que fazer |
 |---|---|---|---|
-| 1 | `desktop/src/components/ManageDevices.tsx` | Arquivo com 347 linhas mistura 3 responsabilidades: listar devices, revogar, e parear. Se crescer mais, fica difícil de manter. | Separar em `DeviceList.tsx` e `PairDevice.tsx` — `ManageDevices.tsx` fica só como shell que os importa. |
+| ~~1~~ | ~~`desktop/src/components/ManageDevices.tsx`~~ | ~~Arquivo com 347 linhas mistura 3 responsabilidades.~~ | **RESOLVIDO — Sessão 39**. Separado em `DeviceList.tsx` e `PairDevice.tsx`; `ManageDevices.tsx` virou shell de ~90 linhas. |
 | 2 | `mobile/lib/services/blockchain_service.dart` | ABI dos contratos embutida como string JSON literal inline. Se o ABI mudar no contrato, precisa lembrar de atualizar manualmente essa string — sem nenhum aviso de compilação se esquecer. | Importar o ABI diretamente do JSON gerado pelo Foundry (`contracts/out/`) em vez de copiar manualmente. |
 | 3 | `sdk/typescript/src/client.ts:22` | `private publicClient: any` — o `publicClient` da `viem` está tipado como `any`, perdendo toda a type safety da lib para a variável mais usada da classe. | Trocar por `ReturnType<typeof createPublicClient>` ou o tipo correto da `viem`. |
-| 4 | `desktop/src/components/ManageDevices.tsx:133` | `DeviceInfo` type definido localmente dentro do componente. Se outro componente precisar usar esse tipo no futuro, vai ter que duplicar ou reestruturar. | Mover para `desktop/src/types.ts` (criar se não existir). |
+| ~~4~~ | ~~`desktop/src/components/ManageDevices.tsx:133`~~ | ~~`DeviceInfo` type definido localmente.~~ | **RESOLVIDO — Sessão 39**. Movido para `desktop/src/types.ts` (criado). |
 | 5 | Desktop (React geral) | Nenhum `ErrorBoundary` no app. Se um componente lançar uma exceção não tratada em runtime, a UI quebra em branco sem mensagem útil para o usuário. | Adicionar um `ErrorBoundary` simples na raiz do `App.tsx`. |
 | 6 | Desktop (React geral) | Estado todo local via `useState`. Funciona bem agora, mas se precisar compartilhar estado entre componentes não-relacionados (ex: `ActiveSessions` saber que um device foi revogado em `ManageDevices`), vai exigir prop drilling ou refatoração maior. | Sem ação imediata — só avaliar quando surgir a necessidade real. Opções: Zustand (leve) ou React Context. |
 | 7 | Desktop + Mobile (geral) | Zero testes de UI/frontend. Os 120 testes Foundry cobrem os contratos; os 4 scripts E2E cobrem o fluxo de rede. Mas nenhum teste cobre o comportamento dos componentes React ou das telas Flutter. | Adicionar pelo menos testes dos fluxos mais críticos: `PairDevice` (commit-reveal em 2 passos) e `ApprovalScreen` (aprovar/rejeitar login). Framework: Vitest + React Testing Library no desktop, flutter_test no mobile. |
@@ -589,6 +589,7 @@ Website          Relay           Mobile App        Blockchain
   - `mobile/lib/services/device_key_service.dart`: novo método `signHash(Uint8List hash32)` — `personal_sign` sobre 32 bytes, formato que o contrato espera.
   - `mobile/lib/screens/approval_screen.dart`: `_approve()` agora computa `sessionHash = keccak256(utf8.encode(nonce))`, assina com `signHash`, e inclui `sessionSignature` no POST. Backward-compatible: servidores antigos ignoram o campo novo.
 - **Próximo passo**: débitos #8 (redesign UX desktop) ou #9 (stepper visual Ledger).
+- **Também na Sessão 39 (segunda parte)**: débitos #1 e #4 resolvidos — `ManageDevices.tsx` quebrado em `DeviceList.tsx` + `PairDevice.tsx`; `DeviceInfo` movido para `desktop/src/types.ts`.
 
 ### 2026-06-27 — Sessão 38
 
