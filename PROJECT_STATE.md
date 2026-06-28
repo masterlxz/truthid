@@ -494,10 +494,10 @@ Problemas identificados na revisão de arquitetura da Sessão 36 (2026-06-25). N
 | # | Arquivo(s) | Problema | O que fazer |
 |---|---|---|---|
 | ~~1~~ | ~~`desktop/src/components/ManageDevices.tsx`~~ | ~~Arquivo com 347 linhas mistura 3 responsabilidades.~~ | **RESOLVIDO — Sessão 39**. Separado em `DeviceList.tsx` e `PairDevice.tsx`; `ManageDevices.tsx` virou shell de ~90 linhas. |
-| 2 | `mobile/lib/services/blockchain_service.dart` | ABI dos contratos embutida como string JSON literal inline. Se o ABI mudar no contrato, precisa lembrar de atualizar manualmente essa string — sem nenhum aviso de compilação se esquecer. | Importar o ABI diretamente do JSON gerado pelo Foundry (`contracts/out/`) em vez de copiar manualmente. |
-| 3 | `sdk/typescript/src/client.ts:22` | `private publicClient: any` — o `publicClient` da `viem` está tipado como `any`, perdendo toda a type safety da lib para a variável mais usada da classe. | Trocar por `ReturnType<typeof createPublicClient>` ou o tipo correto da `viem`. |
+| ~~2~~ | ~~`mobile/lib/services/blockchain_service.dart`~~ | ~~ABI dos contratos embutida como string JSON literal inline.~~ | **RESOLVIDO — Sessão 41**. ABIs extraídas para `mobile/lib/contracts/abis.dart` como constantes nomeadas (`sessionRegistryAbi`, `deviceRegistryAbi`). `blockchain_service.dart` importa essas constantes. |
+| ~~3~~ | ~~`sdk/typescript/src/client.ts:22`~~ | ~~`private publicClient: any`~~ | **RESOLVIDO — Sessão 41**. Tipado como `ReturnType<typeof createPublicClient>`. `tsc --noEmit` limpo. |
 | ~~4~~ | ~~`desktop/src/components/ManageDevices.tsx:133`~~ | ~~`DeviceInfo` type definido localmente.~~ | **RESOLVIDO — Sessão 39**. Movido para `desktop/src/types.ts` (criado). |
-| 5 | Desktop (React geral) | Nenhum `ErrorBoundary` no app. Se um componente lançar uma exceção não tratada em runtime, a UI quebra em branco sem mensagem útil para o usuário. | Adicionar um `ErrorBoundary` simples na raiz do `App.tsx`. |
+| ~~5~~ | ~~Desktop (React geral)~~ | ~~Nenhum `ErrorBoundary` no app.~~ | **RESOLVIDO — Sessão 41**. `ErrorBoundary` criado em `desktop/src/components/ErrorBoundary.tsx` e adicionado em `main.tsx` envolvendo toda a árvore. Mostra mensagem de erro + botão "Try again" em vez de tela em branco. |
 | 6 | Desktop (React geral) | Estado todo local via `useState`. Funciona bem agora, mas se precisar compartilhar estado entre componentes não-relacionados (ex: `ActiveSessions` saber que um device foi revogado em `ManageDevices`), vai exigir prop drilling ou refatoração maior. | Sem ação imediata — só avaliar quando surgir a necessidade real. Opções: Zustand (leve) ou React Context. |
 | 7 | Desktop + Mobile (geral) | Zero testes de UI/frontend. Os 120 testes Foundry cobrem os contratos; os 4 scripts E2E cobrem o fluxo de rede. Mas nenhum teste cobre o comportamento dos componentes React ou das telas Flutter. | Adicionar pelo menos testes dos fluxos mais críticos: `PairDevice` (commit-reveal em 2 passos) e `ApprovalScreen` (aprovar/rejeitar login). Framework: Vitest + React Testing Library no desktop, flutter_test no mobile. |
 | ~~8~~ | ~~Desktop (UX/layout)~~ | ~~Posição dos botões, organização das telas e fluxos de navegação nunca foram revisados com olhar de produto.~~ | **RESOLVIDO — Sessão 40**. Tela de login full-viewport com ícones de wallet, fluxo Ledger separado em sub-tela, app shell com topbar fixo (`@username` · `↻` · `⎋ Login`), modal de Quick Login, aba "Login test" removida. |
@@ -573,6 +573,14 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-27 — Sessão 41
+
+- **Objetivo**: resolver débitos técnicos #2, #3 e #5.
+- **#2** — ABIs do mobile extraídas de strings inline no `blockchain_service.dart` para constantes nomeadas em `mobile/lib/contracts/abis.dart`. `flutter analyze`: sem erros.
+- **#3** — `publicClient` no SDK TypeScript tipado como `ReturnType<typeof createPublicClient>` (era `any`). `tsc --noEmit`: limpo.
+- **#5** — `ErrorBoundary` adicionado ao desktop (`desktop/src/components/ErrorBoundary.tsx`) e envolvendo toda a árvore em `main.tsx`. `tsc --noEmit`: limpo.
+- **Próximo passo**: débitos #12 e #13, ou débito #7 (testes de UI).
 
 ### 2026-06-27 — Sessão 40
 
