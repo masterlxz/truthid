@@ -81,7 +81,7 @@ void main() {
       await tester.pumpWidget(buildScreen(validPayload));
 
       expect(find.text('Login request received'), findsOneWidget);
-      expect(find.text('example.com'), findsOneWidget);
+      expect(find.text('https://example.com'), findsOneWidget);
       expect(find.text('Approve'), findsOneWidget);
       expect(find.text('Reject'), findsOneWidget);
     });

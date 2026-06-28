@@ -7,6 +7,7 @@ import 'package:web3dart/crypto.dart';
 import 'package:flutter/material.dart';
 
 import '../services/device_key_service.dart';
+import '../services/local_storage_service.dart';
 import '../theme.dart';
 
 // Estados possíveis da tela — do início ao fim do fluxo de login
@@ -44,6 +45,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
   Map<String, dynamic>? _challenge;
   String? _callbackUrl;
   bool _responded = false; // impede enviar duas respostas
+  String? _identityId;
 
   late final DeviceKeyService _keyService;
 
@@ -67,6 +69,10 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
     _challenge = challenge;
     _callbackUrl = callbackUrl;
     _status = _Status.challenge;
+
+    LocalStorageService().getPairedIdentityId().then((id) {
+      if (mounted) setState(() => _identityId = id);
+    });
   }
 
   // ── Envia a resposta direto pro backend do site, via HTTPS ──────────────
@@ -169,7 +175,10 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
   }
 
   Widget _buildChallengeUI() {
-    final origin = _challenge!['origin'] as String? ?? 'unknown site';
+    final uri = Uri.tryParse(_callbackUrl ?? '');
+    final displaySite = uri != null
+        ? '${uri.scheme}://${uri.host}'
+        : (_challenge!['origin'] as String? ?? 'unknown site');
     final issuedAt = _challenge!['issuedAt'] as int?;
     final time = issuedAt != null
         ? TimeOfDay.fromDateTime(
@@ -197,9 +206,13 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
             style: TextStyle(color: AppColors.textMuted),
           ),
           const SizedBox(height: 32),
-          _InfoRow(label: 'Site', value: origin),
+          _InfoRow(label: 'Site', value: displaySite),
           const SizedBox(height: 8),
           _InfoRow(label: 'Time', value: time),
+          if (_identityId != null) ...[
+            const SizedBox(height: 8),
+            _InfoRow(label: 'Signing as', value: 'Identity #$_identityId'),
+          ],
           const Spacer(),
           ElevatedButton.icon(
             onPressed: _approve,

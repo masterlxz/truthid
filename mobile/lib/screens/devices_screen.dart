@@ -92,7 +92,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
                       _pairedIdentityId != null
                           ? Chip(
                               avatar: const Icon(Icons.verified, size: 14, color: AppColors.success),
-                              label: Text('Identidade #$_pairedIdentityId'),
+                              label: Text('Identity #$_pairedIdentityId'),
                               labelStyle: const TextStyle(color: AppColors.success),
                               backgroundColor: AppColors.successBg,
                               padding: EdgeInsets.zero,
@@ -143,8 +143,33 @@ class _DevicesScreenState extends State<DevicesScreen> {
                     const SizedBox(height: 12),
                     TextButton.icon(
                       onPressed: () async {
-                        await _storage.clearPairedIdentity();
-                        _reload();
+                        final confirmed = await showDialog<bool>(
+                          context: context,
+                          builder: (_) => AlertDialog(
+                            title: const Text('Unpair device?'),
+                            content: const Text(
+                              'This will remove the link between this device and your identity. '
+                              'You will need to pair again to use TruthID.',
+                            ),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, false),
+                                child: const Text('Cancel'),
+                              ),
+                              TextButton(
+                                onPressed: () => Navigator.pop(context, true),
+                                child: const Text(
+                                  'Unpair',
+                                  style: TextStyle(color: AppColors.danger),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                        if (confirmed == true) {
+                          await _storage.clearPairedIdentity();
+                          _reload();
+                        }
                       },
                       icon: const Icon(Icons.link_off, size: 18, color: AppColors.danger),
                       label: const Text(

@@ -118,7 +118,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
           Row(
             children: [
               Text(
-                'Identidade #$_pairedIdentityId',
+                'Identity #$_pairedIdentityId',
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const Spacer(),
@@ -260,10 +260,10 @@ class _SessionCard extends StatelessWidget {
   }
 
   String _formatDate(DateTime dt) {
-    final day = dt.day.toString().padLeft(2, '0');
-    final month = dt.month.toString().padLeft(2, '0');
-    final hour = dt.hour.toString().padLeft(2, '0');
-    final min = dt.minute.toString().padLeft(2, '0');
-    return '$day/$month at $hour:$min';
+    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    final h = dt.hour.toString().padLeft(2, '0');
+    final m = dt.minute.toString().padLeft(2, '0');
+    return '${months[dt.month - 1]} ${dt.day} at $h:$m';
   }
 }

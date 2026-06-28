@@ -84,11 +84,11 @@ class _RootScreenState extends State<RootScreen> {
         onTap: (i) => setState(() => _currentIndex = i),
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(Icons.phone_android),
+            icon: Icon(Icons.phonelink_lock),
             label: 'Devices',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.history),
+            icon: Icon(Icons.verified_user),
             label: 'Sessions',
           ),
         ],
