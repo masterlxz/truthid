@@ -157,6 +157,56 @@ Looks up a device's current status on the blockchain.
 const status = await truthid.checkDeviceStatus(devicePubKey);
 ```
 
+---
+
+### `registerSession(params)`
+
+Registers a completed login session on-chain so it appears in the user's TruthID desktop app and can be individually revoked. This is optional — auth still works without it — but enables the user to see and revoke active sessions across all their devices.
+
+**Why a relayer?** The mobile device key never holds ETH — it only signs messages. Gas is paid by a server-side relayer wallet you fund. On Base this costs fractions of a cent per session.
+
+**Parameters** ([`RegisterSessionParams`](#registersessionparams))
+
+| Name | Type | Description |
+|------|------|-------------|
+| `nonce` | `string` | The nonce from the original `AuthChallenge` |
+| `identityId` | `bigint` | From `verifyAuthResponse` result |
+| `devicePubKey` | `string` | From `verifyAuthResponse` result |
+| `sessionSignature` | `string` | The session signature from the phone's `AuthResponse` |
+| `relayerPrivateKey` | `` `0x${string}` `` | Private key of the funded relayer wallet |
+
+**Returns** [`RegisterSessionResult`](#registersessionresult)
+
+```typescript
+// After verifyAuthResponse succeeds:
+if (response.sessionSignature && process.env.RELAYER_PRIVATE_KEY) {
+  try {
+    const { txHash, sessionHash } = await truthid.registerSession({
+      nonce: response.nonce,
+      identityId: result.identityId!,
+      devicePubKey: result.deviceAddress!,
+      sessionSignature: response.sessionSignature,
+      relayerPrivateKey: process.env.RELAYER_PRIVATE_KEY as `0x${string}`,
+    });
+    console.log("Session registered on-chain:", sessionHash);
+  } catch (err) {
+    console.error("Session registration failed (login still succeeded):", err);
+  }
+}
+```
+
+:::tip[Non-blocking]
+`registerSession` failing does not affect the login — wrap it in a try/catch and keep it out of the response path. If the relayer runs out of ETH, auth continues normally.
+:::
+
+**Setup** — fund a relayer wallet with a small amount of ETH on Base (0.01 ETH covers thousands of sessions):
+
+```bash
+RELAYER_PRIVATE_KEY=0x... node server.js
+```
+
+**Mobile compatibility** — `sessionSignature` is only present in TruthID mobile app v1.1+. Older clients don't send it; check for its presence before calling `registerSession`.
+
 ## Types
 
 All of the following are exported from `truthid-sdk`.
@@ -182,8 +232,9 @@ interface AuthChallenge {
 interface AuthResponse {
   approved: boolean;
   nonce: string;
-  signature: string;     // secp256k1 signature, hex ("0x...")
-  deviceAddress: string; // Ethereum address of the device key
+  signature: string;          // secp256k1 signature, hex ("0x...")
+  deviceAddress: string;      // Ethereum address of the device key
+  sessionSignature?: string;  // present in mobile app v1.1+ only
 }
 ```
 
@@ -229,6 +280,27 @@ interface DeviceStatus {
   label?: string;
   identityId?: bigint;
   addedAt?: Date;
+}
+```
+
+#### `RegisterSessionParams`
+
+```typescript
+interface RegisterSessionParams {
+  nonce: string;
+  identityId: bigint;
+  devicePubKey: string;
+  sessionSignature: string;       // from AuthResponse.sessionSignature
+  relayerPrivateKey: `0x${string}`;
+}
+```
+
+#### `RegisterSessionResult`
+
+```typescript
+interface RegisterSessionResult {
+  txHash: `0x${string}`;
+  sessionHash: `0x${string}`; // keccak256(nonce) — the on-chain session identifier
 }
 ```
 

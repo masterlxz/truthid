@@ -261,6 +261,12 @@ truthid = TruthIDClient(network="base-mainnet", rpc_url="https://your-private-rp
 
 Contract addresses for both networks are in [Smart contracts](/docs/intro#smart-contracts-base-mainnet-chain-8453).
 
+## Session registration
+
+On-chain session registration (`registerSession`) is currently available only in the **TypeScript SDK**. The Python SDK does not yet implement this method.
+
+If you need session registration from a Python backend, the recommended approach is to call the TypeScript example server as a sidecar, or wait for a future Python release. See the [TypeScript `registerSession` reference](/docs/sdk/typescript#registersessionparams) for how it works.
+
 ## Next steps
 
 - [Quickstart](/docs/quickstart) — full walkthrough from install to first login

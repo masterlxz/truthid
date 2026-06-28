@@ -186,7 +186,34 @@ end
 
 That's the whole backend integration. Full runnable examples (Express, Flask, Sinatra) with session tokens and a protected route are in the [SDK reference](https://github.com/masterlxz/truthid/blob/main/sdk/README.md#full-examples).
 
-## 5. Test it with a real device
+## 5. Register the session on-chain *(optional, TypeScript only)*
+
+After a successful login, you can register the session on-chain so the user can see it in the TruthID desktop app and revoke it remotely.
+
+```typescript
+// Extend your /auth/verify handler — after verifyAuthResponse succeeds:
+if (response.sessionSignature && process.env.RELAYER_PRIVATE_KEY) {
+  try {
+    await truthid.registerSession({
+      nonce: response.nonce,
+      identityId: result.identityId!,
+      devicePubKey: result.deviceAddress!,
+      sessionSignature: response.sessionSignature,
+      relayerPrivateKey: process.env.RELAYER_PRIVATE_KEY as `0x${string}`,
+    });
+  } catch (err) {
+    console.error("Session registration failed (login still succeeded):", err);
+  }
+}
+```
+
+This requires a funded **relayer wallet** — any Ethereum key with a small amount of ETH on Base (0.01 ETH covers thousands of sessions). Pass it via `RELAYER_PRIVATE_KEY`. If registration fails, the login itself is unaffected.
+
+`sessionSignature` is only sent by TruthID mobile app v1.1+. Older clients skip this step automatically.
+
+See the full [`registerSession` reference](/docs/sdk/typescript#registersessionparams) for details.
+
+## 6. Test it with a real device
 
 To actually scan a QR code and approve a login, you need:
 
