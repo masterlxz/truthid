@@ -22,9 +22,6 @@ RUN apt-get update && apt-get install -y \
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain stable
 ENV PATH="/root/.cargo/bin:${PATH}"
 
-# Instala o Tauri CLI (ferramenta de linha de comando do Tauri)
-RUN cargo install tauri-cli --version "^2" --locked
-
 # libudev-dev + pkg-config: crate `hidapi` (Fase 10, Ledger via USB) usa libudev pra
 # enumerar dispositivos HID no Linux. Numa camada própria, depois do Rust/tauri-cli
 # (que são caros pra rebuildar), pra não invalidar o cache dessas camadas anteriores.
