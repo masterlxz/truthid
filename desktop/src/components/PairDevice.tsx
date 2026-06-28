@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { keccak256, encodePacked, isAddress } from "viem";
 import { DEVICE_REGISTRY_ADDRESS, DEVICE_REGISTRY_ABI } from "../config/contracts";
+import { useWalletModal } from "../contexts/WalletModalContext";
 
 // Este componente:
 // 1. Mostra um campo pra colar o endereço que o celular exibe (tela "Mostrar
@@ -17,7 +18,8 @@ import { DEVICE_REGISTRY_ADDRESS, DEVICE_REGISTRY_ABI } from "../config/contract
 export function PairDevice({ onDeviceRegistered }: {
   onDeviceRegistered: () => void;
 }) {
-  const { address: controllerAddress } = useAccount();
+  const { address: controllerAddress, isConnected } = useAccount();
+  const { openConnectModal } = useWalletModal();
 
   const [isOpen, setIsOpen] = useState(false);
   const [addressInput, setAddressInput] = useState("");
@@ -84,6 +86,7 @@ export function PairDevice({ onDeviceRegistered }: {
   }
 
   function handleRegister() {
+    if (!isConnected) { openConnectModal(); return; }
     if (!controllerAddress || !isAddress(addressInput) || !labelInput) return;
 
     const saltBytes = crypto.getRandomValues(new Uint8Array(32));

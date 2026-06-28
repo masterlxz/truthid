@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  useAccount,
   useReadContract,
   useReadContracts,
   useWriteContract,
@@ -12,12 +13,15 @@ import {
 } from "../config/contracts";
 import type { DeviceInfo } from "../types";
 import { useIdentity } from "../contexts/IdentityContext";
+import { useWalletModal } from "../contexts/WalletModalContext";
 import { DeviceList } from "./DeviceList";
 import { PairDevice } from "./PairDevice";
 import { DesktopDevice } from "./DesktopDevice";
 
 export function ManageDevices() {
   const { username, identityId } = useIdentity();
+  const { isConnected } = useAccount();
+  const { openConnectModal } = useWalletModal();
   const queryClient = useQueryClient();
 
   // ── Leitura 1: buscar lista de pubkeys dos devices desta identidade ───────
@@ -57,6 +61,7 @@ export function ManageDevices() {
     useWaitForTransactionReceipt({ hash: revokeTxHash });
 
   function handleRevoke(pubKey: string) {
+    if (!isConnected) { openConnectModal(); return; }
     setRevokingPubKey(pubKey);
     sendRevoke({
       address: DEVICE_REGISTRY_ADDRESS,

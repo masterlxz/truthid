@@ -11,6 +11,7 @@ import { ledger } from "../connectors/ledger";
 const WALLETCONNECT_PROJECT_ID = "ecf672e1e9d165bb65017b793e80c0af";
 
 export const config = createConfig({
+  storage: null, // don't persist connector state — reconnect is manual
   chains: [base],
   connectors: [
     injected(),

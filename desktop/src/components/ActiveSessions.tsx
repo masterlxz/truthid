@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import {
+  useAccount,
   useReadContract,
   useReadContracts,
   useWriteContract,
@@ -12,9 +13,12 @@ import {
   SESSION_REGISTRY_ABI,
 } from "../config/contracts";
 import { useIdentity } from "../contexts/IdentityContext";
+import { useWalletModal } from "../contexts/WalletModalContext";
 
 export function ActiveSessions() {
   const { username, identityId } = useIdentity();
+  const { isConnected } = useAccount();
+  const { openConnectModal } = useWalletModal();
 
   // ── Leitura 1: lista de hashes de sessão desta identidade ─────────────────
   const { data: sessionHashes, refetch: refetchHashes } = useReadContract({
@@ -76,6 +80,7 @@ export function ActiveSessions() {
     useWaitForTransactionReceipt({ hash: revokeOneTxHash });
 
   function handleRevokeOne(hash: `0x${string}`) {
+    if (!isConnected) { openConnectModal(); return; }
     setRevokingHash(hash);
     sendRevokeOne({
       address: SESSION_REGISTRY_ADDRESS,
@@ -104,6 +109,7 @@ export function ActiveSessions() {
     useWaitForTransactionReceipt({ hash: revokeAllTxHash });
 
   function handleRevokeAll() {
+    if (!isConnected) { openConnectModal(); return; }
     sendRevokeAll({
       address: SESSION_REGISTRY_ADDRESS,
       abi: SESSION_REGISTRY_ABI,

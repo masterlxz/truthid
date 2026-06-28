@@ -9,6 +9,7 @@ import {
 } from "wagmi";
 import { keccak256, encodePacked } from "viem";
 import { DEVICE_REGISTRY_ADDRESS, DEVICE_REGISTRY_ABI } from "../config/contracts";
+import { useWalletModal } from "../contexts/WalletModalContext";
 
 // invoke() é a ponte entre React e Rust.
 // Quando chamamos invoke("get_or_create_device_key"), o Tauri executa a
@@ -18,7 +19,8 @@ import { DEVICE_REGISTRY_ADDRESS, DEVICE_REGISTRY_ABI } from "../config/contract
 export function DesktopDevice({ onRegistered }: { onRegistered: () => void }) {
   const [address, setAddress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { address: controllerAddress } = useAccount();
+  const { address: controllerAddress, isConnected } = useAccount();
+  const { openConnectModal } = useWalletModal();
   const queryClient = useQueryClient();
 
   // Na primeira renderização, pede ao Rust para gerar/recuperar a chave do keyring
@@ -82,6 +84,7 @@ export function DesktopDevice({ onRegistered }: { onRegistered: () => void }) {
   }, [isRegisterSuccess]);
 
   function handleRegister() {
+    if (!isConnected) { openConnectModal(); return; }
     if (!address || !controllerAddress) return;
 
     const saltBytes = crypto.getRandomValues(new Uint8Array(32));

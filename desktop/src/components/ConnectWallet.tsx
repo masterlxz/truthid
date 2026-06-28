@@ -28,7 +28,7 @@ function IconLedger() {
   );
 }
 
-export function ConnectWallet() {
+export function ConnectWallet({ asModal, onClose }: { asModal?: boolean; onClose?: () => void }) {
   const { connect, connectors } = useConnect();
   const [showLedger, setShowLedger] = useState(false);
 
@@ -36,15 +36,18 @@ export function ConnectWallet() {
 
   if (showLedger) {
     return (
-      <div className="wallet-screen">
+      <div className={asModal ? undefined : "wallet-screen"}>
         <ConnectLedger onBack={() => setShowLedger(false)} />
       </div>
     );
   }
 
   return (
-    <div className="wallet-screen">
+    <div className={asModal ? undefined : "wallet-screen"}>
       <div className="wallet-card">
+        {asModal && onClose && (
+          <button className="modal-close" onClick={onClose} style={{ alignSelf: "flex-end" }}>✕</button>
+        )}
         <div className="wallet-screen-header">
           <div className="wallet-screen-logo">
             <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
