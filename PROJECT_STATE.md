@@ -505,7 +505,7 @@ Problemas identificados na revisão de arquitetura da Sessão 36 (2026-06-25). N
 | ~~10~~ | ~~`desktop/src/components/ConnectLedger.tsx`~~ | ~~O seletor de conta da Ledger não mostrava os endereços Ethereum — o usuário não sabia qual índice era o seu.~~ | **RESOLVIDO — Sessão 40 (parte 2)**. Ao entrar na fase `account-select`, busca sequencialmente (HID é serial) os endereços 0–4 via `invoke("get_ledger_address")` e exibe cada um abreviado (`0x1234…abcd`) abaixo do nome da conta. Slots ainda carregando mostram "loading…" sutil. |
 | ~~11~~ | ~~`sdk/typescript/src/`, `sdk/typescript/example/server.js`, `sdk/README.md`~~ | ~~O fluxo de registro de sessão on-chain (`createSession`) está incompleto no SDK.~~ | **RESOLVIDO — Sessão 39**. Ver log da sessão para detalhes. |
 | ~~12~~ | ~~wagmi auto-reconnect~~ | ~~O wagmi reconectava automaticamente o conector Ledger na abertura do app.~~ | **RESOLVIDO — Sessão 41**. `storage: null` no wagmi config (sem persistência de conector). Username salvo em `useStoredUsername` (`localStorage`, chave `truthid:username`). `WalletModalContext` permite qualquer componente abrir o modal de conexão. App shell carrega direto do localStorage; "Disconnect wallet" mantém modo leitura; "Log out" limpa o localStorage. Ações de escrita (revoke/register) abrem o modal se não há wallet conectada. |
-| 13 | Site de documentação web (Fase 8) | O `sdk/README.md` foi atualizado na Sessão 39 com a seção "Session Registration" (padrão relayer, setup do `RELAYER_PRIVATE_KEY`, exemplo de código, nota de compatibilidade), mas o site de documentação web ainda não reflete isso. | Adaptar o conteúdo já escrito no `sdk/README.md → Session Registration` para o site. Tópicos: padrão relayer, como o session hash é derivado (`keccak256(nonce)`), configuração, custo estimado no Base, backward-compat com clientes antigos. |
+| ~~13~~ | ~~Site de documentação web (Fase 8)~~ | ~~`sdk/README.md` atualizado mas site não refletia a seção Session Registration.~~ | **RESOLVIDO — Sessão 42**. `typescript.md`: método `registerSession`, tipos `RegisterSessionParams`/`RegisterSessionResult`, campo `sessionSignature` no `AuthResponse`. `quickstart.mdx`: passo 5 opcional de registro on-chain. `python.md`/`ruby.md`: nota que `registerSession` é TypeScript-only por enquanto. Build do Docusaurus validado sem erros. |
 
 ---
 
@@ -589,6 +589,13 @@ Website          Relay           Mobile App        Blockchain
   - `ManageDevices`, `ActiveSessions`, `PairDevice`, `DesktopDevice`: ações de escrita (`handleRevoke`, `handleRegister`) chamam `openConnectModal()` se wallet não está conectada, em vez de falhar silenciosamente.
 - **Débitos fechados nesta sessão**: #2, #3, #5, #6, #12.
 - **Próximo passo**: débito #13 (site de docs com Session Registration) ou débito #7 (testes de UI).
+
+### 2026-06-28 — Sessão 42
+
+- **Objetivo**: auditoria do site de docs + resolver débito #13.
+- **Auditoria**: site comparado com o código atual. Tudo consistente (endereços, fluxo de auth, contratos, componentes removidos) exceto pelo débito #13 e pela ausência de `registerSession` no Python e Ruby SDKs.
+- **#13** — `docs/docs/sdk/typescript.md`: seção `registerSession()` adicionada (parâmetros, retorno, exemplo, setup do relayer, nota de compatibilidade mobile); `sessionSignature` adicionado ao tipo `AuthResponse`; tipos `RegisterSessionParams` e `RegisterSessionResult` adicionados. `docs/docs/quickstart.mdx`: passo 5 opcional "Register session on-chain" (TypeScript). `docs/docs/sdk/python.md` e `ruby.md`: nota que `registerSession` é TypeScript-only por enquanto, com link para a referência TypeScript. Build do Docusaurus: sem erros.
+- **Próximo passo**: débito #7 (testes de UI) é o único débito aberto. Sem outras pendências identificadas.
 
 ### 2026-06-27 — Sessão 40
 
