@@ -15,7 +15,7 @@ from .contracts import (
     SESSION_REGISTRY_ADDRESSES,
     SESSION_REGISTRY_ABI,
 )
-from .types import AuthChallenge, AuthResponse, DeviceStatus, SessionInfo, VerifyAuthResult
+from .types import AuthChallenge, AuthResponse, DeviceStatus, RegisterSessionResult, SessionInfo, VerifyAuthResult
 
 _RPC_URLS = {
     "base-sepolia": "https://sepolia.base.org",
@@ -106,6 +106,40 @@ class TruthIDClient:
             identity_id=session[0],   # identityId
             device_pub_key=session[1], # devicePubKey
             created_at=created_at,
+        )
+
+    def register_session(
+        self,
+        nonce: str,
+        identity_id: int,
+        device_pub_key: str,
+        session_signature: str,
+        relayer_private_key: str,
+    ) -> RegisterSessionResult:
+        # Derives the same session hash the mobile computed: keccak256(utf8(nonce))
+        session_hash = Web3.keccak(text=nonce)  # returns bytes
+
+        # Splits the compact 65-byte signature into the (r, s, v) the contract expects
+        sig = session_signature.removeprefix("0x")
+        r = bytes.fromhex(sig[0:64])    # bytes32
+        s = bytes.fromhex(sig[64:128])  # bytes32
+        v = int(sig[128:130], 16)       # uint8
+
+        relayer_account = Account.from_key(relayer_private_key)
+        checksum_dev = Web3.to_checksum_address(device_pub_key)
+
+        tx = self._sessions.functions.createSession(
+            session_hash, identity_id, checksum_dev, r, s, v
+        ).build_transaction({
+            "from": relayer_account.address,
+            "nonce": self._w3.eth.get_transaction_count(relayer_account.address),
+        })
+        signed = relayer_account.sign_transaction(tx)
+        tx_hash = self._w3.eth.send_raw_transaction(signed.raw_transaction)
+
+        return RegisterSessionResult(
+            tx_hash="0x" + tx_hash.hex(),
+            session_hash="0x" + session_hash.hex(),
         )
 
     def check_device_status(self, device_pub_key: str) -> DeviceStatus:

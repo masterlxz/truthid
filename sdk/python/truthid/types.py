@@ -16,8 +16,9 @@ class AuthChallenge:
 class AuthResponse:
     approved: bool
     nonce: str
-    signature: str      # secp256k1 signature in hex ("0x...")
-    deviceAddress: str  # Ethereum address derived from the device key
+    signature: str              # secp256k1 signature in hex ("0x...")
+    deviceAddress: str          # Ethereum address derived from the device key
+    sessionSignature: Optional[str] = None  # personal_sign over keccak256(nonce), present when approved
 
 
 @dataclass
@@ -44,3 +45,9 @@ class DeviceStatus:
     label: Optional[str] = None
     identity_id: Optional[int] = None
     added_at: Optional[datetime] = None
+
+
+@dataclass
+class RegisterSessionResult:
+    tx_hash: str      # "0x..." — the transaction submitted to the network
+    session_hash: str # "0x..." — keccak256(nonce), the on-chain session identifier

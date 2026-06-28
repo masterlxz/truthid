@@ -263,9 +263,52 @@ Contract addresses for both networks are in [Smart contracts](/docs/intro#smart-
 
 ## Session registration
 
-On-chain session registration (`registerSession`) is currently available only in the **TypeScript SDK**. The Python SDK does not yet implement this method.
+### `register_session(...)`
 
-If you need session registration from a Python backend, the recommended approach is to call the TypeScript example server as a sidecar, or wait for a future Python release. See the [TypeScript `registerSession` reference](/docs/sdk/typescript#registersessionparams) for how it works.
+Registers a completed login session on-chain so it appears in the user's TruthID desktop app and can be individually revoked. Optional — auth still works without it — but enables the user to see and revoke active sessions.
+
+**Why a relayer?** The mobile device key never holds ETH — it only signs messages. Gas is paid by a server-side relayer wallet you fund. On Base this costs fractions of a cent per session.
+
+**Parameters**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `nonce` | `str` | The nonce from the original `AuthChallenge` |
+| `identity_id` | `int` | From `verify_auth_response` result |
+| `device_pub_key` | `str` | From `verify_auth_response` result |
+| `session_signature` | `str` | The session signature from the phone's response (`sessionSignature`) |
+| `relayer_private_key` | `str` | Private key (`"0x..."`) of the funded relayer wallet |
+
+**Returns** `RegisterSessionResult(tx_hash, session_hash)`
+
+```python
+# After verify_auth_response succeeds:
+session_signature = response_body.get("sessionSignature")
+if session_signature and os.environ.get("RELAYER_PRIVATE_KEY"):
+    try:
+        result = truthid.register_session(
+            nonce=challenge.nonce,
+            identity_id=auth_result.identity_id,
+            device_pub_key=auth_result.device_address,
+            session_signature=session_signature,
+            relayer_private_key=os.environ["RELAYER_PRIVATE_KEY"],
+        )
+        print("Session registered on-chain:", result.session_hash)
+    except Exception as e:
+        print("Session registration failed (login still succeeded):", e)
+```
+
+:::tip[Non-blocking]
+`register_session` failing does not affect the login — wrap it in a try/except and keep it out of the response path. If the relayer runs out of ETH, auth continues normally.
+:::
+
+**Setup** — fund a relayer wallet with a small amount of ETH on Base (0.01 ETH covers thousands of sessions):
+
+```bash
+RELAYER_PRIVATE_KEY=0x... python server.py
+```
+
+**Mobile compatibility** — `sessionSignature` is only present in TruthID mobile app v1.1+. Older clients don't send it; check for its presence before calling `register_session`.
 
 ## Next steps
 

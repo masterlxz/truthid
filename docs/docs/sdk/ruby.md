@@ -245,9 +245,54 @@ Contract addresses for both networks are in [Smart contracts](/docs/intro#smart-
 
 ## Session registration
 
-On-chain session registration (`register_session`) is currently available only in the **TypeScript SDK**. The Ruby SDK does not yet implement this method.
+### `register_session(...)`
 
-If you need session registration from a Ruby backend, the recommended approach is to call the TypeScript example server as a sidecar, or wait for a future Ruby release. See the [TypeScript `registerSession` reference](/docs/sdk/typescript#registersessionparams) for how it works.
+Registers a completed login session on-chain so it appears in the user's TruthID desktop app and can be individually revoked. Optional — auth still works without it — but enables the user to see and revoke active sessions.
+
+**Why a relayer?** The mobile device key never holds ETH — it only signs messages. Gas is paid by a server-side relayer wallet you fund. On Base this costs fractions of a cent per session.
+
+**Parameters**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `nonce:` | `String` | The nonce from the original `AuthChallenge` |
+| `identity_id:` | `Integer` | From `verify_auth_response` result |
+| `device_pub_key:` | `String` | From `verify_auth_response` result |
+| `session_signature:` | `String` | The session signature from the phone's response (`sessionSignature`) |
+| `relayer_private_key:` | `String` | Private key (`"0x..."`) of the funded relayer wallet |
+
+**Returns** `RegisterSessionResult` with `tx_hash` and `session_hash`
+
+```ruby
+# After verify_auth_response succeeds:
+session_signature = response_body["sessionSignature"]
+if session_signature && ENV["RELAYER_PRIVATE_KEY"]
+  begin
+    result = truthid.register_session(
+      nonce:               challenge.nonce,
+      identity_id:         auth_result.identity_id,
+      device_pub_key:      auth_result.device_address,
+      session_signature:   session_signature,
+      relayer_private_key: ENV["RELAYER_PRIVATE_KEY"]
+    )
+    puts "Session registered on-chain: #{result.session_hash}"
+  rescue => e
+    puts "Session registration failed (login still succeeded): #{e.message}"
+  end
+end
+```
+
+:::tip[Non-blocking]
+`register_session` failing does not affect the login — wrap it in a begin/rescue and keep it out of the response path. If the relayer runs out of ETH, auth continues normally.
+:::
+
+**Setup** — fund a relayer wallet with a small amount of ETH on Base (0.01 ETH covers thousands of sessions):
+
+```bash
+RELAYER_PRIVATE_KEY=0x... ruby server.rb
+```
+
+**Mobile compatibility** — `sessionSignature` is only present in TruthID mobile app v1.1+. Older clients don't send it; check for its presence before calling `register_session`.
 
 ## Next steps
 

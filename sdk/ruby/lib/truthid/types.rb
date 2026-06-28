@@ -24,27 +24,30 @@ module TruthID
 
   # AuthResponse é o que chega do mobile (chaves camelCase do JSON mapeadas manualmente)
   class AuthResponse
-    attr_reader :approved, :nonce, :signature, :device_address
+    attr_reader :approved, :nonce, :signature, :device_address, :session_signature
 
-    def initialize(approved:, nonce:, signature:, device_address:)
-      @approved       = approved
-      @nonce          = nonce
-      @signature      = signature
-      @device_address = device_address
+    def initialize(approved:, nonce:, signature:, device_address:, session_signature: nil)
+      @approved          = approved
+      @nonce             = nonce
+      @signature         = signature
+      @device_address    = device_address
+      @session_signature = session_signature
     end
 
     def self.from_hash(h)
       new(
-        approved:       h["approved"],
-        nonce:          h["nonce"],
-        signature:      h["signature"],
-        device_address: h["deviceAddress"]
+        approved:          h["approved"],
+        nonce:             h["nonce"],
+        signature:         h["signature"],
+        device_address:    h["deviceAddress"],
+        session_signature: h["sessionSignature"]
       )
     end
   end
 
   # Tipos de resultado: snake_case, sem necessidade de conversão JSON
-  VerifyAuthResult = Struct.new(:valid, :identity_id, :device_address, :reason, keyword_init: true)
-  SessionInfo      = Struct.new(:exists, :revoked, :identity_id, :device_pub_key, :created_at, keyword_init: true)
-  DeviceStatus     = Struct.new(:exists, :active, :label, :identity_id, :added_at, keyword_init: true)
+  VerifyAuthResult      = Struct.new(:valid, :identity_id, :device_address, :reason, keyword_init: true)
+  SessionInfo           = Struct.new(:exists, :revoked, :identity_id, :device_pub_key, :created_at, keyword_init: true)
+  DeviceStatus          = Struct.new(:exists, :active, :label, :identity_id, :added_at, keyword_init: true)
+  RegisterSessionResult = Struct.new(:tx_hash, :session_hash, keyword_init: true)
 end

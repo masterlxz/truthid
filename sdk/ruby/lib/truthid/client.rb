@@ -100,6 +100,27 @@ module TruthID
       )
     end
 
+    def register_session(nonce:, identity_id:, device_pub_key:, session_signature:, relayer_private_key:)
+      # Deriva o mesmo session hash que o mobile calculou: keccak256(utf8(nonce))
+      session_hash_bytes = Eth::Util.keccak256(nonce)
+
+      # Separa a assinatura compacta de 65 bytes em (r, s, v) que o contrato espera
+      sig     = session_signature.delete_prefix("0x")
+      r_bytes = [sig[0, 64]].pack("H*")    # bytes32
+      s_bytes = [sig[64, 64]].pack("H*")   # bytes32
+      v_int   = sig[128, 2].to_i(16)       # uint8
+
+      key = Eth::Key.new(priv: relayer_private_key.delete_prefix("0x"))
+      tx_hash = @rpc.transact(@sessions, "createSession",
+        session_hash_bytes, identity_id, device_pub_key, r_bytes, s_bytes, v_int,
+        sender_key: key)
+
+      RegisterSessionResult.new(
+        tx_hash:      tx_hash.start_with?("0x") ? tx_hash : "0x#{tx_hash}",
+        session_hash: "0x#{session_hash_bytes.unpack1("H*")}",
+      )
+    end
+
     def check_device_status(device_pub_key)
       device = @rpc.call(@devices, "getDevice", device_pub_key)
       return DeviceStatus.new(exists: false, active: false) unless device[5] # exists
