@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-06-28 (Sessão 43)
+> Última atualização: 2026-06-28 (Sessão 43 — completa)
 
 ---
 
@@ -608,6 +608,18 @@ Website          Relay           Mobile App        Blockchain
   - `test/widget_test.dart` corrigido: labels "Dispositivos"/"Sessões" → "Devices"/"Sessions" (tinham sido renomeados na Sessão 40).
   - **Resultado**: 8/8 passando (`flutter test`).
 - **Infra**: `desktop/Dockerfile` — remoção do `cargo install tauri-cli` (commitado separadamente no início da sessão).
+- **SDK Python** — `register_session` implementado:
+  - `types.py`: novo dataclass `RegisterSessionResult(tx_hash, session_hash)`; `sessionSignature: Optional[str] = None` adicionado em `AuthResponse`.
+  - `client.py`: `register_session(nonce, identity_id, device_pub_key, session_signature, relayer_private_key)` — `Web3.keccak(text=nonce)`, split `(r, s, v)` via `bytes.fromhex`, `build_transaction` → `sign_transaction` → `send_raw_transaction`.
+  - `__init__.py`: `RegisterSessionResult` exportado.
+- **SDK Ruby** — `register_session` implementado:
+  - `types.rb`: `RegisterSessionResult = Struct.new(:tx_hash, :session_hash, ...)`; `session_signature` adicionado em `AuthResponse` (attr + `from_hash` mapeia `"sessionSignature"`).
+  - `client.rb`: `register_session(nonce:, ...)` — `Eth::Util.keccak256(nonce)`, split com `.pack("H*")`, `@rpc.transact(..., sender_key: Eth::Key.new(...))`.
+- **Docs**:
+  - `docs/sdk/python.md` e `ruby.md`: seção `register_session` completa (parâmetros, exemplo, tip non-blocking, setup relayer, nota mobile v1.1+) — remove nota "TypeScript-only".
+  - `docs/quickstart.mdx`: passo 5 sem "TypeScript only" no título; exemplo expandido em tabs TypeScript/Python/Ruby; link de referência aponta para os três SDKs.
+  - Build Docusaurus: sem erros.
+- **Próximo passo**: sem débitos ou itens planejados abertos. Projeto completo.
 
 ### 2026-06-28 — Sessão 42
 
