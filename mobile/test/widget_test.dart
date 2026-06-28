@@ -7,7 +7,7 @@ void main() {
     await tester.pumpWidget(const TruthIDApp());
 
     expect(find.text('TruthID'), findsWidgets);
-    expect(find.text('Dispositivos'), findsOneWidget);
-    expect(find.text('Sessões'), findsOneWidget);
+    expect(find.text('Devices'), findsOneWidget);
+    expect(find.text('Sessions'), findsOneWidget);
   });
 }

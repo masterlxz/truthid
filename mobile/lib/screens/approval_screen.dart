@@ -23,7 +23,16 @@ class ApprovalScreen extends StatefulWidget {
   // do próprio site (sem nenhum servidor do TruthID no meio).
   final Map<String, dynamic> payload;
 
-  const ApprovalScreen({super.key, required this.payload});
+  // Injetáveis para testes — em produção usa os defaults.
+  final DeviceKeyService? keyService;
+  final Future<void> Function(Map<String, dynamic>)? postResponse;
+
+  const ApprovalScreen({
+    super.key,
+    required this.payload,
+    this.keyService,
+    this.postResponse,
+  });
 
   @override
   State<ApprovalScreen> createState() => _ApprovalScreenState();
@@ -36,11 +45,12 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
   String? _callbackUrl;
   bool _responded = false; // impede enviar duas respostas
 
-  final _keyService = DeviceKeyService();
+  late final DeviceKeyService _keyService;
 
   @override
   void initState() {
     super.initState();
+    _keyService = widget.keyService ?? DeviceKeyService();
 
     final callbackUrl = widget.payload['callbackUrl'] as String?;
     final challenge = widget.payload['challenge'] as Map<String, dynamic>?;
@@ -64,6 +74,9 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
   // no meio. Agora vai direto pro callbackUrl que o próprio site escolheu —
   // exatamente o endpoint /auth/verify que os exemplos do SDK já documentam.
   Future<void> _postResponse(Map<String, dynamic> response) async {
+    if (widget.postResponse != null) {
+      return widget.postResponse!(response);
+    }
     final client = HttpClient();
     try {
       final request = await client.postUrl(Uri.parse(_callbackUrl!));
