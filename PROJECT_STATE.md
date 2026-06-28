@@ -582,7 +582,7 @@ O GitHub Actions roda, constrói tudo, cria um release draft. Depois:
 ### Status das etapas
 
 - [ ] 12.1 — Gerar e guardar keystore de assinatura
-- [ ] 12.2 — Criar `build-mobile.yml` com CI de APK
+- [x] 12.2 — Criar `build-mobile.yml` com CI de APK *(implementado na Sessão 45)*
 - [ ] 12.3 — Criar tag `v1.0.0` e publicar release
 - [ ] 12.4 — Atualizar site com links de download
 
@@ -682,6 +682,14 @@ Website          Relay           Mobile App        Blockchain
 | Túnel SSH bloqueado pelo modo automático do Claude Code | Usuário rodou `ssh -R 80:localhost:3000 nokey@localhost.run` no próprio terminal |
 
 **Débitos registrados nesta sessão**: #14 (polling passivo em `DevicesScreen`), #15 (refresh manual em `ShowDeviceQrScreen`), #16 (doação no desktop e mobile).
+
+**Features implementadas (continuação da Sessão 45 — GitHub CI e update checker):**
+
+- **GitHub Actions — CI de APK** (`.github/workflows/build-mobile.yml`): workflow que dispara em tags `v*`. Usa `subosito/flutter-action@v2` com Flutter 3.44.4. Se o secret `KEYSTORE_BASE64` estiver configurado, decodifica a keystore e define as variáveis de assinatura antes do build. Roda `flutter build apk --release`. Faz upload do APK para o GitHub Release draft via `softprops/action-gh-release@v2`. Sem secrets configurados ainda — build funciona com debug key como fallback.
+- **Signing config Android** (`mobile/android/app/build.gradle.kts`): `signingConfigs { create("release") }` lê `KEYSTORE_PATH`, `KEYSTORE_PASSWORD`, `KEY_ALIAS`, `KEY_PASSWORD` de variáveis de ambiente. Release build usa config de release se `KEYSTORE_PATH` presente, senão usa debug key. Permite builds locais sem configuração e builds CI com assinatura correta.
+- **Update checker — desktop** (`desktop/src/hooks/useUpdateCheck.ts`, `App.tsx`, `vite.config.ts`): versão atual injetada em build time via `define: { __APP_VERSION__: pkg.version }` no Vite. Hook `useUpdateCheck()` busca `api.github.com/repos/masterlxz/truthid/releases/latest` no mount, compara semver. Se há versão mais nova, `App.tsx` exibe banner dismissível com link de download (botão ✕ para fechar). TypeScript: `declare const __APP_VERSION__: string` em `vite-env.d.ts`.
+- **Update checker — mobile** (`mobile/lib/main.dart`, `pubspec.yaml`, `AndroidManifest.xml`): constante `_kAppVersion = '1.0.0'` hardcoded. `_checkForUpdate()` chamado no `initState` via `HttpClient` (já disponível no projeto). Semver comparison com `_isNewer()`. Widget `_UpdateBanner` com ícone de update, texto com versão, botão "Download" (`url_launcher`) e botão ✕. Adicionado `url_launcher: ^6.3.0` no `pubspec.yaml`. Query `https` scheme adicionada ao `AndroidManifest.xml` (obrigatório Android 11+ para `launchUrl` abrir browser). `flutter analyze`: sem issues. `flutter test`: 8/8 passando.
+- **Commit**: `97d1cd9` — `feat: session 45 — @username display, FAB nav, GitHub CI, update checker`.
 
 ---
 
