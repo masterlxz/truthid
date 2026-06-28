@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-06-27 (Sessão 38)
+> Última atualização: 2026-06-28 (Sessão 43)
 
 ---
 
@@ -499,7 +499,7 @@ Problemas identificados na revisão de arquitetura da Sessão 36 (2026-06-25). N
 | ~~4~~ | ~~`desktop/src/components/ManageDevices.tsx:133`~~ | ~~`DeviceInfo` type definido localmente.~~ | **RESOLVIDO — Sessão 39**. Movido para `desktop/src/types.ts` (criado). |
 | ~~5~~ | ~~Desktop (React geral)~~ | ~~Nenhum `ErrorBoundary` no app.~~ | **RESOLVIDO — Sessão 41**. `ErrorBoundary` criado em `desktop/src/components/ErrorBoundary.tsx` e adicionado em `main.tsx` envolvendo toda a árvore. Mostra mensagem de erro + botão "Try again" em vez de tela em branco. |
 | ~~6~~ | ~~Desktop (React geral)~~ | ~~Estado todo local via `useState`, sem estado compartilhado.~~ | **RESOLVIDO — Sessão 41**. `IdentityContext` criado em `desktop/src/contexts/IdentityContext.tsx` com `{ username, identityId }`. `ManageDevices` e `ActiveSessions` eliminaram o prop `username` e a chamada duplicada `getIdentity(username)` — usam `useIdentity()`. Novos componentes que precisarem de identidade já têm o hook disponível. |
-| 7 | Desktop + Mobile (geral) | Zero testes de UI/frontend. Os 120 testes Foundry cobrem os contratos; os 4 scripts E2E cobrem o fluxo de rede. Mas nenhum teste cobre o comportamento dos componentes React ou das telas Flutter. | Adicionar pelo menos testes dos fluxos mais críticos: `PairDevice` (commit-reveal em 2 passos) e `ApprovalScreen` (aprovar/rejeitar login). Framework: Vitest + React Testing Library no desktop, flutter_test no mobile. |
+| ~~7~~ | ~~Desktop + Mobile (geral)~~ | ~~Zero testes de UI/frontend.~~ | **RESOLVIDO — Sessão 43**. Desktop: Vitest + RTL — 9 testes em `PairDevice` (abertura do form, validação de endereço, fluxo sem/com wallet, commitDevice). Mobile: flutter_test + mocktail — 7 testes em `ApprovalScreen` (QR inválido, UI do challenge, approve, reject, proteção contra dupla resposta). `ApprovalScreen` refatorado para injetar `keyService` e `postResponse` opcionais. `widget_test.dart` corrigido (labels PT→EN). |
 | ~~8~~ | ~~Desktop (UX/layout)~~ | ~~Posição dos botões, organização das telas e fluxos de navegação nunca foram revisados com olhar de produto.~~ | **RESOLVIDO — Sessão 40**. Tela de login full-viewport com ícones de wallet, fluxo Ledger separado em sub-tela, app shell com topbar fixo (`@username` · `↻` · `⎋ Login`), modal de Quick Login, aba "Login test" removida. |
 | ~~9~~ | ~~`desktop/src/components/ConnectLedger.tsx`~~ | ~~Tela de espera da Ledger exibia só texto puro, sem hierarquia visual.~~ | **RESOLVIDO — Sessão 40** (junto com o #8). Stepper visual de 3 passos em `ConnectLedger.tsx`: conectar USB → desbloquear PIN → abrir app Ethereum. Passo ativo destacado em ciano, passos anteriores em verde ✓, posteriores em cinza. |
 | ~~10~~ | ~~`desktop/src/components/ConnectLedger.tsx`~~ | ~~O seletor de conta da Ledger não mostrava os endereços Ethereum — o usuário não sabia qual índice era o seu.~~ | **RESOLVIDO — Sessão 40 (parte 2)**. Ao entrar na fase `account-select`, busca sequencialmente (HID é serial) os endereços 0–4 via `invoke("get_ledger_address")` e exibe cada um abreviado (`0x1234…abcd`) abaixo do nome da conta. Slots ainda carregando mostram "loading…" sutil. |
@@ -589,6 +589,25 @@ Website          Relay           Mobile App        Blockchain
   - `ManageDevices`, `ActiveSessions`, `PairDevice`, `DesktopDevice`: ações de escrita (`handleRevoke`, `handleRegister`) chamam `openConnectModal()` se wallet não está conectada, em vez de falhar silenciosamente.
 - **Débitos fechados nesta sessão**: #2, #3, #5, #6, #12.
 - **Próximo passo**: débito #13 (site de docs com Session Registration) ou débito #7 (testes de UI).
+
+### 2026-06-28 — Sessão 43
+
+- **Objetivo**: resolver débito #7 — testes de UI (desktop React + mobile Flutter).
+- **Desktop** — Vitest + React Testing Library:
+  - Instalado: `vitest`, `@testing-library/react`, `@testing-library/user-event`, `@testing-library/jest-dom`, `jsdom`, `@testing-library/dom`.
+  - `vitest.config.ts` criado (environment jsdom, globals, setupFiles).
+  - `src/test/setup.ts`: importa `@testing-library/jest-dom`.
+  - `src/components/__tests__/PairDevice.test.tsx`: 9 testes — form fechado no início, abre ao clicar, botão Register disabled sem campos, erro de endereço inválido, botão habilitado com inputs válidos, Cancel fecha, sem wallet abre modal, com wallet chama `commitDevice`.
+  - Todos os wagmi hooks mockados via `vi.mock`; endereços usam apenas dígitos hex para passar validação EIP-55 do viem.
+  - **Resultado**: 9/9 passando (`npm test`).
+- **Mobile** — flutter_test + mocktail:
+  - `pubspec.yaml`: adicionado `mocktail: ^0.3.0` (dev_dependencies).
+  - `ApprovalScreen` refatorado: `keyService` e `postResponse` agora são parâmetros opcionais do widget (injeção de dependências sem quebrar a API de produção).
+  - `test/screens/approval_screen_test.dart`: 7 testes — 3 erros de QR inválido, UI do challenge com site name, approve (assina + posta + verifica mocks), reject (sem assinatura), proteção contra dupla resposta.
+  - Timer de 800ms (`Future.delayed`) gerenciado com `pump(1000ms)` explícito após `pumpAndSettle` para evitar "pending timer" assertion do framework.
+  - `test/widget_test.dart` corrigido: labels "Dispositivos"/"Sessões" → "Devices"/"Sessions" (tinham sido renomeados na Sessão 40).
+  - **Resultado**: 8/8 passando (`flutter test`).
+- **Infra**: `desktop/Dockerfile` — remoção do `cargo install tauri-cli` (commitado separadamente no início da sessão).
 
 ### 2026-06-28 — Sessão 42
 
