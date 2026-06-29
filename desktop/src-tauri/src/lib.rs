@@ -130,6 +130,30 @@ fn sign_session_hash(hash: String) -> Result<(String, String, u8), String> {
     Ok((r, s, v))
 }
 
+/// Lista todas as entradas do vault local (decifrado em memória).
+#[tauri::command]
+fn vault_list_entries() -> Result<Vec<vault::VaultEntry>, String> {
+    Ok(vault::load()?.entries)
+}
+
+/// Cria ou atualiza uma entrada do vault.
+/// Se `entry.id` estiver vazio, gera um novo id. Persiste em disco.
+#[tauri::command]
+fn vault_upsert_entry(entry: vault::VaultEntry) -> Result<vault::VaultEntry, String> {
+    let mut v = vault::load()?;
+    let saved = v.upsert(entry);
+    vault::save(&v)?;
+    Ok(saved)
+}
+
+/// Remove uma entrada do vault pelo id. Persiste em disco.
+#[tauri::command]
+fn vault_delete_entry(id: String) -> Result<(), String> {
+    let mut v = vault::load()?;
+    v.delete(&id);
+    vault::save(&v)
+}
+
 /// Cifra dados com AES-256-GCM usando a chave do vault derivada do device.
 /// Entrada: plaintext em Base64. Saída: blob cifrado em Base64 (nonce+cipher+tag).
 #[tauri::command]
@@ -188,6 +212,9 @@ pub fn run() {
             get_or_create_device_key,
             sign_challenge,
             sign_session_hash,
+            vault_list_entries,
+            vault_upsert_entry,
+            vault_delete_entry,
             vault_encrypt,
             vault_decrypt,
             ledger::is_ledger_connected,

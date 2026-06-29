@@ -2,11 +2,126 @@ use aes_gcm::{
     aead::{Aead, AeadCore, KeyInit, OsRng},
     Aes256Gcm, Key, Nonce,
 };
+use rand::RngCore;
+use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 use crate::derive_vault_key;
 
-// Formato do blob: nonce(12) || ciphertext+tag(n+16)
-// O nonce é gerado aleatoriamente a cada chamada — nunca reutilizado.
+// ---------------------------------------------------------------------------
+// Tipos de dados
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub(crate) struct VaultEntry {
+    pub id: String,
+    pub site: String,
+    pub url: String,
+    pub username: String,
+    pub password: String,
+    pub notes: String,
+    pub profile: String,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+#[derive(Serialize, Deserialize, Default, Debug)]
+pub(crate) struct Vault {
+    pub version: u64,
+    pub entries: Vec<VaultEntry>,
+}
+
+impl Vault {
+    // Cria (id vazio) ou atualiza (id existente) uma entrada.
+    // Incrementa version e atualiza updated_at em qualquer caso.
+    pub(crate) fn upsert(&mut self, mut entry: VaultEntry) -> VaultEntry {
+        let now = now_secs();
+        self.version += 1;
+
+        if entry.id.is_empty() {
+            // Nova entrada
+            entry.id = new_id();
+            entry.created_at = now;
+            entry.updated_at = now;
+            self.entries.push(entry.clone());
+        } else if let Some(existing) = self.entries.iter_mut().find(|e| e.id == entry.id) {
+            // Atualização: preserva created_at, renova updated_at
+            entry.created_at = existing.created_at;
+            entry.updated_at = now;
+            *existing = entry.clone();
+        } else {
+            // id fornecido mas não encontrado — trata como nova entrada com esse id
+            entry.created_at = now;
+            entry.updated_at = now;
+            self.entries.push(entry.clone());
+        }
+
+        entry
+    }
+
+    // Remove entrada pelo id. Retorna true se encontrou e removeu.
+    pub(crate) fn delete(&mut self, id: &str) -> bool {
+        let before = self.entries.len();
+        self.entries.retain(|e| e.id != id);
+        let removed = self.entries.len() < before;
+        if removed {
+            self.version += 1;
+        }
+        removed
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Helpers internos
+// ---------------------------------------------------------------------------
+
+fn new_id() -> String {
+    let mut bytes = [0u8; 16];
+    rand::rngs::OsRng.fill_bytes(&mut bytes);
+    hex::encode(bytes)
+}
+
+fn now_secs() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs()
+}
+
+// ---------------------------------------------------------------------------
+// I/O em disco
+// ---------------------------------------------------------------------------
+
+fn vault_path() -> Result<PathBuf, String> {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let dir = std::path::Path::new(&home).join(".truthid");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join("vault.enc"))
+}
+
+// Lê o arquivo cifrado e desserializa o vault.
+// Se o arquivo não existe ainda, retorna Vault::default() (primeiro uso).
+pub(crate) fn load() -> Result<Vault, String> {
+    let path = vault_path()?;
+    if !path.exists() {
+        return Ok(Vault::default());
+    }
+    let blob = std::fs::read(&path).map_err(|e| e.to_string())?;
+    let json = decrypt(&blob)?;
+    serde_json::from_slice(&json).map_err(|e| e.to_string())
+}
+
+// Serializa o vault, cifra e escreve em disco.
+pub(crate) fn save(vault: &Vault) -> Result<(), String> {
+    let json = serde_json::to_vec(vault).map_err(|e| e.to_string())?;
+    let blob = encrypt(&json)?;
+    let path = vault_path()?;
+    std::fs::write(&path, blob).map_err(|e| e.to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Cifra / decifra — formato: nonce(12) || ciphertext+tag(n+16)
+// ---------------------------------------------------------------------------
 
 pub(crate) fn encrypt(plaintext: &[u8]) -> Result<Vec<u8>, String> {
     let key_bytes = derive_vault_key()?;
@@ -25,7 +140,6 @@ pub(crate) fn encrypt(plaintext: &[u8]) -> Result<Vec<u8>, String> {
 }
 
 pub(crate) fn decrypt(blob: &[u8]) -> Result<Vec<u8>, String> {
-    // mínimo: 12 bytes de nonce + 16 bytes de tag GCM
     if blob.len() < 28 {
         return Err("vault blob too short".to_string());
     }
@@ -39,9 +153,15 @@ pub(crate) fn decrypt(blob: &[u8]) -> Result<Vec<u8>, String> {
         .map_err(|_| "vault decrypt failed — blob corrupted or wrong key".to_string())
 }
 
+// ---------------------------------------------------------------------------
+// Testes
+// ---------------------------------------------------------------------------
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // --- testes de cifra (13.3) ---
 
     #[test]
     fn roundtrip_empty() {
@@ -62,9 +182,7 @@ mod tests {
     fn different_nonce_each_call() {
         let blob1 = encrypt(b"same").unwrap();
         let blob2 = encrypt(b"same").unwrap();
-        // Blobs distintos (nonce aleatório), mesmo plaintext
         assert_ne!(blob1, blob2);
-        // Mas ambos decifram corretamente
         assert_eq!(decrypt(&blob1).unwrap(), b"same");
         assert_eq!(decrypt(&blob2).unwrap(), b"same");
     }
@@ -72,12 +190,106 @@ mod tests {
     #[test]
     fn tampered_blob_fails() {
         let mut blob = encrypt(b"sensitive").unwrap();
-        blob[15] ^= 0xFF; // corrompe um byte
+        blob[15] ^= 0xFF;
         assert!(decrypt(&blob).is_err());
     }
 
     #[test]
     fn blob_too_short_fails() {
         assert!(decrypt(&[0u8; 10]).is_err());
+    }
+
+    // --- testes de CRUD in-memory (13.4) ---
+
+    fn make_entry(id: &str, site: &str) -> VaultEntry {
+        VaultEntry {
+            id: id.to_string(),
+            site: site.to_string(),
+            url: String::new(),
+            username: "user".to_string(),
+            password: "pass".to_string(),
+            notes: String::new(),
+            profile: String::new(),
+            created_at: 0,
+            updated_at: 0,
+        }
+    }
+
+    #[test]
+    fn upsert_new_entry_generates_id_and_timestamps() {
+        let mut vault = Vault::default();
+        let entry = make_entry("", "github.com");
+        let saved = vault.upsert(entry);
+
+        assert!(!saved.id.is_empty(), "id deve ser gerado");
+        assert!(saved.created_at > 0);
+        assert!(saved.updated_at > 0);
+        assert_eq!(vault.entries.len(), 1);
+        assert_eq!(vault.version, 1);
+    }
+
+    #[test]
+    fn upsert_existing_id_updates_and_preserves_created_at() {
+        let mut vault = Vault::default();
+        let first = vault.upsert(make_entry("", "github.com"));
+        let created_at = first.created_at;
+
+        // Aguarda 1s para updated_at ser diferente (timestamps em segundos)
+        std::thread::sleep(std::time::Duration::from_secs(1));
+
+        let mut updated = first.clone();
+        updated.site = "gitlab.com".to_string();
+        let saved = vault.upsert(updated);
+
+        assert_eq!(saved.id, first.id);
+        assert_eq!(saved.created_at, created_at, "created_at deve ser preservado");
+        assert!(saved.updated_at > created_at, "updated_at deve ser renovado");
+        assert_eq!(saved.site, "gitlab.com");
+        assert_eq!(vault.entries.len(), 1);
+        assert_eq!(vault.version, 2);
+    }
+
+    #[test]
+    fn upsert_unknown_id_creates_new_entry_with_that_id() {
+        let mut vault = Vault::default();
+        let entry = make_entry("custom-id-abc", "example.com");
+        let saved = vault.upsert(entry);
+
+        assert_eq!(saved.id, "custom-id-abc");
+        assert_eq!(vault.entries.len(), 1);
+    }
+
+    #[test]
+    fn delete_existing_entry_returns_true() {
+        let mut vault = Vault::default();
+        let entry = vault.upsert(make_entry("", "github.com"));
+        let removed = vault.delete(&entry.id);
+
+        assert!(removed);
+        assert!(vault.entries.is_empty());
+        assert_eq!(vault.version, 2); // 1 do upsert + 1 do delete
+    }
+
+    #[test]
+    fn delete_nonexistent_id_returns_false() {
+        let mut vault = Vault::default();
+        let removed = vault.delete("id-inexistente");
+        assert!(!removed);
+        assert_eq!(vault.version, 0); // version não muda
+    }
+
+    #[test]
+    fn multiple_entries_preserved() {
+        let mut vault = Vault::default();
+        let a = vault.upsert(make_entry("", "github.com"));
+        let b = vault.upsert(make_entry("", "google.com"));
+        vault.upsert(make_entry("", "notion.so"));
+
+        assert_eq!(vault.entries.len(), 3);
+
+        vault.delete(&b.id);
+        assert_eq!(vault.entries.len(), 2);
+        assert!(vault.entries.iter().any(|e| e.id == a.id));
+        assert!(!vault.entries.iter().any(|e| e.id == b.id));
     }
 }

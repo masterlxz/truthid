@@ -39,6 +39,7 @@ dependencies:
   url_launcher: ^6.3.0
   crypto: ^3.0.3
   cryptography: ^2.7.0
+  path_provider: ^2.1.0
 
 dev_dependencies:
   flutter_test:

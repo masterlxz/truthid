@@ -786,7 +786,7 @@ O usuário configura: `{ name, endpoint_url, api_key }` — o app não precisa s
 - [x] 13.1 — Contrato `VaultRegistry` (hash/CID + timestamp, ligado ao `DeviceRegistry`) *(Sessão 49 — contrato em `contracts/src/VaultRegistry.sol`, 12 testes passando, script de deploy em `contracts/script/DeployVaultRegistry.s.sol`; ainda não deployado na mainnet)*
 - [x] 13.2 — Derivação de chave HKDF no Desktop (Rust) e Mobile (Dart) *(Sessão 49 — `derive_vault_key()` interno em `desktop/src-tauri/src/lib.rs` usando `hkdf`+`sha2`; `VaultKeyService` em `mobile/lib/services/vault_key_service.dart` com HKDF-SHA256 puro; 5 testes Dart passando)*
 - [x] 13.3 — Cifra/decifra local do vault (AES-256-GCM) *(Sessão 50 — `vault.rs` em `desktop/src-tauri/src/vault.rs` com `encrypt`/`decrypt` + 5 testes Rust; `VaultCipherService` em `mobile/lib/services/vault_cipher_service.dart` + 8 testes Dart; Tauri commands `vault_encrypt`/`vault_decrypt` via Base64; formato do blob: nonce(12) || ciphertext || tag(16))*
-- [ ] 13.4 — CRUD local de entradas do vault (site, usuário, senha, notas, perfil)
+- [x] 13.4 — CRUD local de entradas do vault (site, usuário, senha, notas, perfil) *(Sessão 50 — structs `VaultEntry`+`Vault` + métodos `upsert`/`delete` + `load`/`save` em `desktop/src-tauri/src/vault.rs`; Tauri commands `vault_list_entries`/`vault_upsert_entry`/`vault_delete_entry`; 11 testes Rust passando. `VaultEntry`+`VaultRepository` em `mobile/lib/services/vault_repository.dart` com `path_provider`; 11 testes Dart passando. Formato JSON compartilhado: `{version, entries[]}`, blob cifrado em `$HOME/.truthid/vault.enc` no desktop e `{docs}/vault.enc` no mobile)*
 - [ ] 13.5 — Botão "Enviar" com batching + upload multi-pin (2+ provedores externos)
 - [ ] 13.6 — Configuração de provedores de pin: UI de adicionar/remover provedores (endpoint + API key), suporte à IPFS Pinning Service API como interface única (cobre terceiros como Pinata/Filebase/4EVERLAND e self-hosted via Kubo local), guia de setup do Kubo no app, health-check periódico por provedor + alerta na UI
 - [ ] 13.7 — UI Desktop: tela de gerenciamento do vault, permissão `canWriteVault` por Device
@@ -915,7 +915,21 @@ Website          Relay           Mobile App        Blockchain
 
 **Verificação**: `cargo test vault` (Docker) → 5/5; `flutter test test/services/vault_cipher_service_test.dart` (Docker) → 8/8.
 
-- **Próximo passo**: 13.4 — CRUD local de entradas do vault (site, usuário, senha, notas, perfil).
+- **Próximo passo**: ~~13.4~~ — concluída na Sessão 50.
+
+### 2026-06-29 — Sessão 50 (continuação)
+
+- **Objetivo**: Fase 13.4 — CRUD local de entradas do vault.
+
+**O que foi feito**:
+
+- **13.4 — CRUD local**: Desktop: structs `VaultEntry` (id, site, url, username, password, notes, profile, created_at, updated_at) e `Vault` (version, entries) com `#[derive(Serialize, Deserialize)]`; `impl Vault { upsert, delete }`; funções `load()`/`save()` que cifram/decifram via `vault::encrypt`/`decrypt` e persistem em `$HOME/.truthid/vault.enc`; geração de ID via `rand::OsRng` + `hex::encode` (sem dependência nova); três novos Tauri commands (`vault_list_entries`, `vault_upsert_entry`, `vault_delete_entry`) registrados em `lib.rs`; 11 testes Rust passando (6 de CRUD + 5 de cifra do 13.3). Mobile: classe `VaultEntry` com `fromJson`/`toJson`/`copyWith`; `VaultRepository` com `listEntries`/`addEntry`/`updateEntry`/`deleteEntry`; persistência via `path_provider` + `VaultCipherService`; cipher `_FakeCipherService` no-op para testes; `path_provider: ^2.1.0` adicionado ao `pubspec.yaml`; 11 testes Dart passando.
+
+- **Formato JSON do vault** (idêntico nas duas plataformas): `{"version": N, "entries": [...]}` — o mesmo blob que vai ao IPFS em 13.5.
+
+**Verificação**: `cargo test vault` (Docker) → 11/11; `flutter test test/services/vault_repository_test.dart` (Docker) → 11/11.
+
+- **Próximo passo**: 13.5 — botão "Enviar" com batching + upload multi-pin (IPFS Pinning Service API).
 
 ### 2026-06-29 — Sessão 48
 
