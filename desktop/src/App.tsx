@@ -134,7 +134,7 @@ function App() {
             <button
               className="topbar-btn"
               onClick={() => setDonateOpen(true)}
-              title="Support TruthID"
+              title="Donate to TruthID"
             >
               ♥
             </button>
@@ -235,7 +235,7 @@ function App() {
           <div className="modal-overlay" onClick={() => setDonateOpen(false)}>
             <div className="modal-box" onClick={(e) => e.stopPropagation()}>
               <div className="modal-header">
-                <h2 className="modal-title">Support TruthID</h2>
+                <h2 className="modal-title">Donate to TruthID</h2>
                 <button className="modal-close" onClick={() => setDonateOpen(false)}>✕</button>
               </div>
               <DonateModal />

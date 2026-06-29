@@ -18,10 +18,10 @@ export default function Donate(): ReactNode {
 
   return (
     <Layout
-      title="Support TruthID"
-      description="Support TruthID development with a crypto donation.">
+      title="Donate to TruthID"
+      description="Donate to TruthID development with a crypto donation.">
       <main style={{ maxWidth: 480, margin: '4rem auto', padding: '0 1.5rem', textAlign: 'center' }}>
-        <h1>Support TruthID</h1>
+        <h1>Donate to TruthID</h1>
         <p style={{ color: 'var(--ifm-color-emphasis-700)', marginBottom: '2rem' }}>
           TruthID is open source and free — no subscriptions, no ads, no venture capital.
           If it saves you time or inspires you, a small tip helps keep the project going.
