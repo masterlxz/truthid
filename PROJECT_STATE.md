@@ -507,7 +507,7 @@ Problemas identificados na revisão de arquitetura da Sessão 36 (2026-06-25). N
 | ~~12~~ | ~~wagmi auto-reconnect~~ | ~~O wagmi reconectava automaticamente o conector Ledger na abertura do app.~~ | **RESOLVIDO — Sessão 41**. `storage: null` no wagmi config (sem persistência de conector). Username salvo em `useStoredUsername` (`localStorage`, chave `truthid:username`). `WalletModalContext` permite qualquer componente abrir o modal de conexão. App shell carrega direto do localStorage; "Disconnect wallet" mantém modo leitura; "Log out" limpa o localStorage. Ações de escrita (revoke/register) abrem o modal se não há wallet conectada. |
 | ~~13~~ | ~~Site de documentação web (Fase 8)~~ | ~~`sdk/README.md` atualizado mas site não refletia a seção Session Registration.~~ | **RESOLVIDO — Sessão 42**. `typescript.md`: método `registerSession`, tipos `RegisterSessionParams`/`RegisterSessionResult`, campo `sessionSignature` no `AuthResponse`. `quickstart.mdx`: passo 5 opcional de registro on-chain. `python.md`/`ruby.md`: nota que `registerSession` é TypeScript-only por enquanto. Build do Docusaurus validado sem erros. |
 | ~~14~~ | ~~`mobile/lib/screens/devices_screen.dart`~~ | ~~`DevicesScreen` não detecta automaticamente que o device foi registrado on-chain — só checa no `_reload()` manual ou pull-to-refresh.~~ | **RESOLVIDO — Sessão 46**. `_reload()` chama `_blockchain.getDevice(address)` on-chain em toda execução (abertura da tela e pull-to-refresh). Auto-descobre pareamento se `identityId == null` em storage. Detecta revogação e limpa storage automaticamente. Botão "Show QR to pair" agora condicional (`_pairedIdentityId == null`) — some quando pareado, reaparece se revogado. Dica "Pull down to check if already paired" adicionada ao card de info. |
-| 15 | `mobile/lib/screens/show_device_qr_screen.dart` | `ShowDeviceQrScreen` tem polling automático a cada 3s, mas se a rede cair pontualmente e o timer perder a confirmação, o usuário não tem como forçar uma nova tentativa sem fechar e reabrir a tela. | Adicionar botão "Refresh" (ou `TextButton`) abaixo do spinner "Waiting for the computer to register…" que chame `_checkIfRegistered(_address!)` manualmente. |
+| ~~15~~ | ~~`mobile/lib/screens/show_device_qr_screen.dart`~~ | ~~`ShowDeviceQrScreen` tem polling automático a cada 3s, mas se a rede cair pontualmente e o timer perder a confirmação, o usuário não tem como forçar uma nova tentativa sem fechar e reabrir a tela.~~ | **RESOLVIDO — Sessão 46**. Botão "Check now" adicionado abaixo do spinner em `_buildQrUI()`. Estado `_isChecking` desabilita o botão durante a verificação e exibe "Checking...". `SessionsScreen._load()` também enriquecido com verificação on-chain completa: auto-descobre pareamento se `identityId` ausente em storage; detecta revogação e limpa storage. Padrão idêntico ao #14. |
 | 16 | Desktop (`App.tsx`, AppBar) + Mobile (`main.dart`, `_NavTab`) | Não existe nenhum mecanismo de doação no app. O projeto é open source, self-hostable e sem monetização — uma forma de doação (link para OpenCollective, GitHub Sponsors ou endereço ETH) ajudaria a sustentar o desenvolvimento. | Desktop: adicionar link de doação no topbar ou menu do app. Mobile: adicionar na tela de configurações (ainda inexistente) ou como item no bottom sheet. Em ambos: abrir browser/deep link. Endereço ETH do projeto ou página de GitHub Sponsors. |
 
 ---
@@ -657,17 +657,27 @@ Website          Relay           Mobile App        Blockchain
 
 ### 2026-06-28 — Sessão 46
 
-- **Objetivo**: resolver débito #14 — `DevicesScreen` não detectava pareamento feito fora da tela de QR.
+- **Objetivo**: resolver débitos #14 e #15 — verificação on-chain passiva em todas as telas e refresh manual na tela de QR.
 
-**Mudanças em `mobile/lib/screens/devices_screen.dart`:**
+**Mudanças em `mobile/lib/screens/devices_screen.dart` (débito #14):**
 
 - **`_reload()` enriquecido com checagem on-chain**: adicionado `BlockchainService` como dependência. `_reload()` agora sempre chama `_blockchain.getDevice(address)` (leitura gratuita via `eth_call`). Cobre três casos: (1) auto-descoberta — se device registrado on-chain mas `identityId` não está em storage, salva e busca username em background; (2) detecção de revogação — se device revogado ou removido, limpa storage automaticamente (`clearPairedIdentity()`); (3) estado normal — device ativo e storage já preenchido, sem mudança.
 - **Botão "Show QR to pair" agora condicional**: movido para dentro do bloco `if (_pairedIdentityId == null)`, junto com o card de dica. Some quando o device está pareado e ativo; reaparece se revogado ou não registrado.
-- **Dica visual**: texto "Pull down to check if already paired." adicionado abaixo das instruções no card de info — orienta o usuário a fazer pull-to-refresh após parear fora da tela de QR.
+- **Dica visual**: texto "Pull down to check if already paired." adicionado abaixo das instruções no card de info.
+
+**Mudanças em `mobile/lib/screens/show_device_qr_screen.dart` (débito #15):**
+
+- **Botão "Check now"**: adicionado `TextButton.icon` com `Icons.refresh` abaixo do spinner em `_buildQrUI()`. Chama `_checkIfRegistered(_address!)` imediatamente ao tocar.
+- **Estado `_isChecking`**: desabilita o botão durante a verificação e troca o label para "Checking..." — evita cliques duplicados e dá feedback visual.
+
+**Mudanças em `mobile/lib/screens/sessions_screen.dart` (complemento ao #15):**
+
+- **`_load()` enriquecido**: mesmo padrão do `DevicesScreen` — chama `getDevice()` on-chain em toda execução. Auto-descobre pareamento se `identityId` ausente; detecta revogação e limpa storage. `RefreshIndicator` já existente cobre o pull-to-refresh automaticamente.
+
 - **`flutter analyze`**: sem issues. **`flutter test`**: 8/8 passando.
 
-- **Débito fechado**: #14.
-- **Próximo passo**: débito #15 (refresh manual em `ShowDeviceQrScreen`) ou #16 (doação).
+- **Débitos fechados**: #14, #15.
+- **Próximo passo**: débito #16 (doação no desktop e mobile).
 
 ### 2026-06-28 — Sessão 45
 

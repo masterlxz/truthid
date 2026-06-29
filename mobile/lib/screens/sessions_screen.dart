@@ -36,9 +36,31 @@ class _SessionsScreenState extends State<SessionsScreen> {
       _error = null;
     });
 
-    final identityId = await _storage.getPairedIdentityId();
     final address = await _keyService.getDeviceAddress();
-    final username = await _storage.getPairedUsername();
+    var identityId = await _storage.getPairedIdentityId();
+    var username = await _storage.getPairedUsername();
+
+    // Checar on-chain em toda execução — detecta auto-descoberta e revogação
+    final device = await _blockchain.getDevice(address);
+
+    if (device != null && !device.revoked) {
+      if (identityId == null) {
+        // Auto-descoberta: device registrado on-chain mas não salvo localmente
+        identityId = device.identityId.toString();
+        await _storage.savePairedIdentity(identityId);
+        _blockchain.getUsernameForIdentity(device.identityId).then((u) {
+          if (u != null) {
+            _storage.savePairedUsername(u);
+            if (mounted) setState(() => _pairedUsername = u);
+          }
+        });
+      }
+    } else if (identityId != null) {
+      // Device revogado ou removido — limpar storage
+      await _storage.clearPairedIdentity();
+      identityId = null;
+      username = null;
+    }
 
     if (identityId == null) {
       if (mounted) {

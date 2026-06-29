@@ -34,6 +34,7 @@ class _ShowDeviceQrScreenState extends State<ShowDeviceQrScreen> {
   String? _address;
   Timer? _pollTimer;
   bool _confirmed = false;
+  bool _isChecking = false;
 
   @override
   void initState() {
@@ -54,9 +55,14 @@ class _ShowDeviceQrScreenState extends State<ShowDeviceQrScreen> {
 
   Future<void> _checkIfRegistered(String address) async {
     if (_confirmed) return;
+    if (mounted) setState(() => _isChecking = true);
 
     final device = await _blockchain.getDevice(address);
-    if (device == null || device.revoked) return;
+
+    if (device == null || device.revoked) {
+      if (mounted) setState(() => _isChecking = false);
+      return;
+    }
 
     _pollTimer?.cancel();
     await _storage.savePairedIdentity(device.identityId.toString());
@@ -138,6 +144,12 @@ class _ShowDeviceQrScreenState extends State<ShowDeviceQrScreen> {
           'Waiting for the computer to register this device...',
           textAlign: TextAlign.center,
           style: TextStyle(color: AppColors.textMuted),
+        ),
+        const SizedBox(height: 8),
+        TextButton.icon(
+          onPressed: _isChecking ? null : () => _checkIfRegistered(_address!),
+          icon: const Icon(Icons.refresh, size: 16),
+          label: Text(_isChecking ? 'Checking...' : 'Check now'),
         ),
       ],
     );
