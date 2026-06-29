@@ -644,3 +644,21 @@ code, .address {
   color: var(--color-text);
   background: rgba(255, 255, 255, 0.05);
 }
+
+/* ── Donate modal ─────────────────────────────────────────────────────────── */
+.donate-qr-wrapper {
+  display: flex;
+  justify-content: center;
+  padding: 1rem;
+  background: #fff;
+  border-radius: 12px;
+  margin-bottom: 0.25rem;
+}
+
+.donate-address {
+  word-break: break-all;
+  font-family: 'SF Mono', 'Menlo', monospace;
+  font-size: 0.78em;
+  color: var(--color-text-muted);
+  text-align: center;
+}

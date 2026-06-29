@@ -1,6 +1,9 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'screens/approval_screen.dart';
 import 'screens/devices_screen.dart';
@@ -9,6 +12,7 @@ import 'screens/sessions_screen.dart';
 import 'theme.dart';
 
 const _kAppVersion = '1.0.0';
+const _kDonateAddress = '0xB54fe9909D76d98e87a9fD76bDB5C69fABe10265';
 const _kReleasesUrl =
     'https://api.github.com/repos/masterlxz/truthid/releases/latest';
 
@@ -83,6 +87,36 @@ class _RootScreenState extends State<RootScreen> {
     }
   }
 
+  void _showDonationSheet() {
+    var copied = false;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setSheetState) {
+          return _DonationSheet(
+            copied: copied,
+            onCopy: () async {
+              await Clipboard.setData(
+                const ClipboardData(text: _kDonateAddress),
+              );
+              setSheetState(() => copied = true);
+              Future.delayed(
+                const Duration(seconds: 2),
+                () {
+                  if (ctx.mounted) setSheetState(() => copied = false);
+                },
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> _openScanner() async {
     final payload = await Navigator.of(context).push<Map<String, dynamic>>(
       MaterialPageRoute(builder: (_) => const ScanScreen()),
@@ -105,7 +139,16 @@ class _RootScreenState extends State<RootScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('TruthID')),
+      appBar: AppBar(
+        title: const Text('TruthID'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.favorite_border),
+            tooltip: 'Support TruthID',
+            onPressed: _showDonationSheet,
+          ),
+        ],
+      ),
       body: Column(
         children: [
           if (_updateVersion != null && !_updateDismissed)
@@ -185,6 +228,90 @@ class _NavTab extends StatelessWidget {
             Text(label, style: TextStyle(color: color, fontSize: 11)),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _DonationSheet extends StatelessWidget {
+  final bool copied;
+  final VoidCallback onCopy;
+
+  const _DonationSheet({required this.copied, required this.onCopy});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: AppColors.border,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(height: 20),
+          Text(
+            'Support TruthID',
+            style: TextStyle(
+              fontFamily: 'SpaceGrotesk',
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: AppColors.textPrimary,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'TruthID is open source and free.\nIf it helps you, consider sending a tip.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: AppColors.textMuted,
+              fontSize: 13,
+            ),
+          ),
+          const SizedBox(height: 20),
+          Container(
+            color: Colors.white,
+            padding: const EdgeInsets.all(12),
+            child: QrImageView(
+              data: 'ethereum:$_kDonateAddress',
+              size: 180,
+              eyeStyle: const QrEyeStyle(
+                eyeShape: QrEyeShape.square,
+                color: Colors.black,
+              ),
+              dataModuleStyle: const QrDataModuleStyle(
+                dataModuleShape: QrDataModuleShape.square,
+                color: Colors.black,
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          SelectableText(
+            _kDonateAddress,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontFamily: 'monospace',
+              fontSize: 11,
+              color: AppColors.textMuted,
+            ),
+          ),
+          const SizedBox(height: 14),
+          ElevatedButton.icon(
+            onPressed: onCopy,
+            icon: Icon(copied ? Icons.check : Icons.copy, size: 18),
+            label: Text(copied ? 'Copied!' : 'Copy address'),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            'Any EVM chain · 0.001 ETH suggested',
+            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+          ),
+        ],
       ),
     );
   }

@@ -109,6 +109,10 @@ const config: Config = {
               label: 'GitHub',
               href: 'https://github.com/masterlxz/truthid',
             },
+            {
+              label: '♥ Support',
+              to: '/donate',
+            },
           ],
         },
       ],

@@ -7,6 +7,7 @@ import { CreateIdentity } from "./components/CreateIdentity";
 import { ManageDevices } from "./components/ManageDevices";
 import { ActiveSessions } from "./components/ActiveSessions";
 import { QuickLogin } from "./components/QuickLogin";
+import { DonateModal } from "./components/DonateModal";
 import { IdentityProvider } from "./contexts/IdentityContext";
 import { WalletModalContext } from "./contexts/WalletModalContext";
 import { useStoredUsername } from "./hooks/useStoredUsername";
@@ -42,6 +43,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<Tab>("devices");
   const [loginOpen, setLoginOpen] = useState(false);
   const [connectModalOpen, setConnectModalOpen] = useState(false);
+  const [donateOpen, setDonateOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const { username: storedUsername, save: saveUsername, clear: clearUsername } = useStoredUsername();
@@ -129,6 +131,13 @@ function App() {
                 Connect wallet
               </button>
             )}
+            <button
+              className="topbar-btn"
+              onClick={() => setDonateOpen(true)}
+              title="Support TruthID"
+            >
+              ♥
+            </button>
             <button
               className="topbar-btn topbar-btn-danger"
               onClick={handleLogout}
@@ -218,6 +227,18 @@ function App() {
           <div className="modal-overlay" onClick={() => setConnectModalOpen(false)}>
             <div className="modal-box" onClick={(e) => e.stopPropagation()}>
               <ConnectWallet asModal onClose={() => setConnectModalOpen(false)} />
+            </div>
+          </div>
+        )}
+
+        {donateOpen && (
+          <div className="modal-overlay" onClick={() => setDonateOpen(false)}>
+            <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+              <div className="modal-header">
+                <h2 className="modal-title">Support TruthID</h2>
+                <button className="modal-close" onClick={() => setDonateOpen(false)}>✕</button>
+              </div>
+              <DonateModal />
             </div>
           </div>
         )}
