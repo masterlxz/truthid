@@ -4066,11 +4066,13 @@ version = "0.1.0"
 dependencies = [
  "hex",
  "hidapi",
+ "hkdf",
  "k256",
  "keyring",
  "rand",
  "serde",
  "serde_json",
+ "sha2",
  "sha3",
  "tauri",
  "tauri-build",

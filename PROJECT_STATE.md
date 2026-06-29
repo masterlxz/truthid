@@ -768,8 +768,8 @@ Conteúdo sem pin no IPFS não desaparece instantaneamente. A remoção depende 
 
 #### Status das etapas
 
-- [ ] 13.1 — Contrato `VaultRegistry` (hash/CID + timestamp, ligado ao `DeviceRegistry`)
-- [ ] 13.2 — Derivação de chave HKDF no Desktop (Rust) e Mobile (Dart)
+- [x] 13.1 — Contrato `VaultRegistry` (hash/CID + timestamp, ligado ao `DeviceRegistry`) *(Sessão 49 — contrato em `contracts/src/VaultRegistry.sol`, 12 testes passando, script de deploy em `contracts/script/DeployVaultRegistry.s.sol`; ainda não deployado na mainnet)*
+- [x] 13.2 — Derivação de chave HKDF no Desktop (Rust) e Mobile (Dart) *(Sessão 49 — `derive_vault_key()` interno em `desktop/src-tauri/src/lib.rs` usando `hkdf`+`sha2`; `VaultKeyService` em `mobile/lib/services/vault_key_service.dart` com HKDF-SHA256 puro; 5 testes Dart passando)*
 - [ ] 13.3 — Cifra/decifra local do vault (AES-256-GCM ou XChaCha20-Poly1305)
 - [ ] 13.4 — CRUD local de entradas do vault (site, usuário, senha, notas, perfil)
 - [ ] 13.5 — Botão "Enviar" com batching + upload multi-pin (2+ provedores externos)
@@ -873,6 +873,20 @@ Website          Relay           Mobile App        Blockchain
 
 - **Débitos fechados**: #16 (último débito — tabela de débitos totalmente limpa).
 - **Próximo passo**: ~~Fase 12~~ — concluída na Sessão 48. TruthID v1.0.0 publicado.
+
+### 2026-06-29 — Sessão 49
+
+- **Objetivo**: Iniciar Fase 13 (TruthID Vault) — etapas 13.1 e 13.2.
+
+**O que foi feito**:
+
+- Título do app corrigido para "TruthID" em todas as plataformas: `desktop/src-tauri/tauri.conf.json` (`productName` + `windows[0].title`), `mobile/android/app/src/main/AndroidManifest.xml` (`android:label`), `mobile/web/index.html` (`<title>` + `apple-mobile-web-app-title`), `mobile/ios/Runner/Info.plist` (`CFBundleDisplayName` + `CFBundleName`).
+- **13.1 — `VaultRegistry`**: contrato Solidity em `contracts/src/VaultRegistry.sol`. Guarda `identityId → { cid, contentHash, updatedAt, version }` — apenas a referência ao blob cifrado no IPFS, nunca o conteúdo. Funções: `updateVault` (só o controller da identidade), `getVault`, `getVaultHistory`, `hasVault`. 12 testes Forge passando. Script de deploy em `contracts/script/DeployVaultRegistry.s.sol` apontado para Base Mainnet — deploy pendente para quando cifra/decifra estiver pronta.
+- **13.2 — HKDF**: Desktop: adicionados `hkdf = "0.12"` e `sha2 = "0.10"` ao `Cargo.toml`; função `pub(crate) derive_vault_key()` em `lib.rs` — deriva 32 bytes via HKDF-SHA256 (RFC 5869) a partir da chave privada do device, nunca exposta como comando Tauri. Mobile: adicionado `package:crypto ^3.0.3` ao `pubspec.yaml`; `DeviceKeyService` ganhou `getPrivateKeyBytes()`; novo `VaultKeyService` em `mobile/lib/services/vault_key_service.dart` com implementação HKDF manual (Extract + Expand); 5 testes Dart passando.
+
+**Verificação**: `forge test --match-contract VaultRegistryTest` → 12/12; `flutter test test/services/vault_key_service_test.dart` → 5/5.
+
+- **Próximo passo**: 13.3 — cifra/decifra local do vault com AES-256-GCM.
 
 ### 2026-06-29 — Sessão 48
 

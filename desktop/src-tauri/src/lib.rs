@@ -1,6 +1,8 @@
+use hkdf::Hkdf;
 use k256::ecdsa::SigningKey;
 use keyring::Entry;
 use rand::rngs::OsRng;
+use sha2::Sha256;
 use sha3::{Digest, Keccak256};
 
 mod ledger;
@@ -49,6 +51,25 @@ fn get_device_key_hex() -> Result<String, String> {
     }
 
     Ok(hex)
+}
+
+/// Deriva a chave de criptografia do vault a partir da chave privada do device.
+///
+/// Usa HKDF-SHA256 (RFC 5869). A chave privada do device é o IKM; o resultado
+/// é uma chave AES-256 de 32 bytes usada apenas para cifrar o vault — nunca
+/// para assinar nada. Isolamento por propósito: mudar `info` geraria uma chave
+/// completamente diferente, mesmo com o mesmo device.
+///
+/// Nunca exposta via `#[tauri::command]` — fica em memória no processo Rust.
+pub(crate) fn derive_vault_key() -> Result<[u8; 32], String> {
+    let priv_hex = get_device_key_hex()?;
+    let priv_bytes = hex::decode(&priv_hex).map_err(|e| e.to_string())?;
+
+    let hk = Hkdf::<Sha256>::new(Some(b"TruthID"), &priv_bytes);
+    let mut okm = [0u8; 32];
+    hk.expand(b"vault-key-v1", &mut okm)
+        .map_err(|_| "HKDF expand failed".to_string())?;
+    Ok(okm)
 }
 
 /// Retorna o endereço Ethereum da chave pública deste desktop.

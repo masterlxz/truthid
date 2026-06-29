@@ -22,6 +22,11 @@ class DeviceKeyService {
     return key;
   }
 
+  Future<Uint8List> getPrivateKeyBytes() async {
+    final key = await _getOrCreateKey();
+    return key.privateKey;
+  }
+
   Future<String> getDeviceAddress() async {
     final key = await _getOrCreateKey();
     return key.address.hexEip55;
