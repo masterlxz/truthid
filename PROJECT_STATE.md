@@ -67,6 +67,8 @@ Fase 8 — Documentação Web       [x] Concluída
 Fase 9 — Identidade Visual: Mobile & Desktop  [x] Concluída
 Fase 10 — Ledger via USB (Rust/hidapi)         [x] Concluída
 Fase 11 — Teste E2E Prático (login, sessão, revogação) [x] Concluída
+Fase 12 — Publicação & Release (v1.0.0)        [x] Concluída
+Fase 13 — TruthID Vault (gerenciador de senhas) [ ] Planejada
 ```
 
 ---
@@ -587,6 +589,194 @@ O GitHub Actions roda, constrói tudo, cria um release draft. Depois:
 - [x] 12.4 — Atualizar site com links de download *(Sessão 48 — seção "Download" adicionada à landing page com fetch dinâmico da GitHub API `releases/latest`)*
 
 **Fase 12 concluída. TruthID v1.0.0 publicado.**
+
+---
+
+### Fase 13 — TruthID Vault (gerenciador de senhas)
+
+**O que é**: módulo opcional de gerenciamento de senhas (estilo Bitwarden), construído sobre a mesma identidade on-chain do TruthID core. Não é um produto separado — é uma extensão que reaproveita o `DeviceRegistry` existente como camada de autorização.
+
+**Nota de escopo**: o `CONTEXT.md` (PRD) listava "Password manager" em *Non Goals*. Decisão consciente de expandir o escopo — não de ignorar o documento. O `CONTEXT.md` foi atualizado para refletir essa expansão (ver seção "Non Goals").
+
+**Motivação**:
+1. Bridge entre "mundo de hoje, cheio de senha" e o objetivo final do TruthID (eliminar senha por completo) — enquanto sites de terceiros não adotam login sem senha, o usuário ainda precisa gerenciar senhas.
+2. Tem valor de uso pessoal standalone mesmo sem nenhuma adoção externa do protocolo de auth — dogfooding real do `DeviceRegistry`/Keystore que já existe.
+3. Reaproveita a mesma identidade, os mesmos dispositivos confiáveis e a mesma filosofia de segurança (chave privada nunca sai do device) — não é um produto do zero.
+
+**Decisão de escopo de código**: Vault deve ser um módulo separado (pasta própria, ex. `vault/`), nunca misturado ao código do core de autenticação. Deve poder ser abandonado ou cindido em outro projeto sem afetar o TruthID auth.
+
+---
+
+#### O que vai on-chain vs. o que não vai
+
+| Dado | Vai on-chain? | Onde fica |
+|---|---|---|
+| Conteúdo do vault (senhas, notas) | **Nunca** | Local no device, cifrado |
+| Hash/CID da versão atual do vault | Sim | Novo contrato (`VaultRegistry`) |
+| Chave de decriptação do vault | **Nunca** | Derivada localmente, nunca persistida em claro |
+| Lista de devices autorizados a decifrar | Sim (já existe) | `DeviceRegistry` |
+
+---
+
+#### Arquitetura de criptografia
+
+```
+Device autoriza via assinatura (mesma chave do Keystore/Secure Enclave/TPM
+                                 já usada pro login)
+            |
+            v
+HKDF deriva chave de criptografia do vault a partir da chave privada do device
+            |
+            v
+Chave decifra o vault local (AES-256-GCM ou XChaCha20-Poly1305)
+            |
+            v
+Vault em claro, em memória, nunca persistido sem cifrar
+```
+
+**Sem master password.** A chave vem da posse do device (já provada on-chain), não de algo que o usuário "sabe".
+
+**Múltiplos devices**: cada device tem sua própria chave derivada. O vault é cifrado com uma chave simétrica própria do vault (não derivada de nenhum device específico); essa chave é compartilhada entre os devices do usuário apenas no momento do pareamento, pelo mesmo canal já usado para registrar um novo Device — nunca via pin/chain.
+
+---
+
+#### Hierarquia de confiança: Devices vs. sessões de extensão
+
+```
+Desktop (root/controller)
+   │
+   ├── controla quais Devices são confiáveis      (já existe: DeviceRegistry)
+   ├── controla TODAS as senhas (CRUD completo no vault)
+   ├── pode revogar qualquer Device, em qualquer momento
+   ├── concede/revoga permissão de escrita por Device (granular, não binário)
+   │
+   └── Mobile  (Device confiável, registrado on-chain)
+          │
+          ├── lê o vault (subconjunto ou completo, depende de permissão)
+          ├── pode ESCREVER no vault apenas se o Desktop autorizou
+          │     (permissão explícita — não decorre automaticamente de "ser
+          │     um device confiável")
+          │
+          └── Extensão de navegador  (sessão efêmera — NÃO é um Device)
+                 │
+                 ├── nasce de um QR scan feito pelo Mobile
+                 ├── recebe só o subconjunto de senhas do perfil ativo
+                 │     no momento do scan (ex: "Trabalho")
+                 ├── vive só durante a sessão (fecha aba/browser = some)
+                 ├── nunca persiste nada em disco
+                 └── nunca é registrada on-chain
+```
+
+**Por que a extensão NÃO é um "Device" no `DeviceRegistry`**: um Device confiável carrega permissão estrutural persistente. A extensão deve ter exatamente o oposto — confiança mínima, vida curta, escopo estreito (só o que o Mobile decidiu mostrar). Tratá-la como Device daria a ela, por construção, mais poder do que o desenho pretende. Além disso, sessões efêmeras não precisam de gas para existir — registrá-las on-chain seria custo desnecessário para algo que já nasce temporário.
+
+**Permissão granular por Device**: `canWriteVault` (bool, ou enum `read` / `read_write`) por Device, configurável apenas pelo Desktop. Decisão de implementação aberta: campo on-chain (no `DeviceRegistry` ou no novo `VaultRegistry`) vs. estado local controlado só pelo Desktop — como não há terceiros desconfiados, local é provavelmente suficiente e mais barato.
+
+**Perfis (Trabalho / Casa / outros)**: metadado local de cada entrada do vault (tag), não algo on-chain. O Mobile decide, no momento do scan do QR da extensão, qual perfil está ativo e filtra o payload antes de enviar. v1 usa perfis fixos pré-definidos.
+
+**Revogação em cascata**: revogar um Device (ex: Mobile perdido) via Desktop precisa invalidar em cascata qualquer sessão de extensão que aquele Device tenha aberto. O Desktop precisa manter localmente o registro de qual Device originou qual sessão ativa, para conseguir notificar/expirar essas sessões no momento da revogação.
+
+**Fluxo da sessão de extensão**:
+1. Usuário abre a extensão no browser → ela exibe um QR code (challenge efêmero, mesmo padrão do QR de login do TruthID core).
+2. Mobile escaneia, usuário escolhe/confirma o perfil ativo.
+3. Mobile filtra o vault local pelo perfil escolhido e envia o subconjunto direto pra extensão via canal P2P efêmero (ex: WebRTC).
+4. Extensão guarda esse subconjunto **em memória apenas**, pelo tempo da sessão do browser. Faz autofill nos campos da página.
+5. Fechar a aba/browser, ou expirar um timeout configurável, destrói a sessão. Reabrir exige novo scan.
+
+**Confirmado**: o canal P2P efêmero (Mobile→Extensão) é mantido — entrega um payload já filtrado, não sincroniza estado de vault entre devices. É o mesmo padrão do canal P2P de login via QR já em produção. A remoção de P2P aplica-se **apenas** ao mecanismo de sincronizar o conteúdo do vault inteiro entre Desktop e Mobile (esse passou a ser via pin).
+
+**Nota de implementação**: como não há mais P2P nem handshake direto entre devices para sincronizar o conteúdo do vault, a complexidade de implementação cai bastante — não é preciso WebRTC, descoberta de peer, nem re-criptografia por device de destino para o fluxo Desktop/Mobile de sync. Isso é diferente do canal P2P efêmero do login via QR (já em produção) e do fluxo Mobile→Extensão (ambos mantidos, entregam payload já pronto/filtrado).
+
+---
+
+#### Fluxo de sincronização (Desktop ↔ Mobile)
+
+**Decisão final**: P2P direto entre devices foi **removido do desenho**. O mecanismo de disponibilidade é apenas: edição local → botão "Enviar" → pinning (IPFS).
+
+**Botão "Enviar" (batching de updates)**:
+1. Empacotar todas as mudanças acumuladas num único novo blob cifrado.
+2. Subir esse blob para os serviços de pinning configurados.
+3. Disparar **uma única transação** on-chain atualizando a referência (hash/CID) no `VaultRegistry`.
+
+Reduz custo de "1 transação por senha trocada" para "1 transação por sessão de edição".
+
+**Pinning (IPFS) — mecanismo principal e contínuo de disponibilidade**:
+
+Conteúdo sem pin no IPFS não desaparece instantaneamente. A remoção depende do garbage collection de cada nó (sem TTL universal — pode levar de horas a semanas, dependendo de quantos nós têm cópia em cache). Isso dá folga de tempo entre o usuário apertar "Enviar" e o pin se completar, mas **não é motivo para pular o health-check** — sem prazo previsível, a única forma confiável de saber se o vault ainda está seguro é checar ativamente.
+
+- **Multi-pin por padrão**: app já vem configurado para subir o blob em 2 provedores externos ao mesmo tempo (ex. Filebase + Pinata), ambos no tier gratuito.
+- **Zero-config para quem não quer se preocupar**: usuário configura API keys uma vez na configuração inicial; todo "Enviar" sobe automaticamente.
+- **Custo real de pinning**: provedores como Filebase e 4EVERLAND oferecem 5GB grátis, Pinata oferece 1GB + 10GB de bandwidth + 500 arquivos grátis — qualquer tier gratuito cobre o uso de uma vida inteira de vault de senhas.
+- **Self-host como opção avançada**: script/guia fornecido pelo app, não como requisito.
+- **Health-check periódico**: verificação automática de que os pins configurados ainda estão ativos; alerta se algum caiu.
+- **Aviso de risco na UI** caso o usuário desative todos os pins: descrever a incerteza real ("sem pin ativo, o conteúdo pode se tornar inacessível em algum momento, sem aviso prévio") em vez de um prazo fixo inventado.
+- **O que o provedor de pin vê**: apenas o blob cifrado + metadados. Nunca a chave, nunca o conteúdo em claro — deixar isso explícito na UI.
+
+---
+
+#### Alternativas descartadas
+
+| Alternativa | Por que foi descartada |
+|---|---|
+| Vault cifrado direto on-chain | Custo de gas por update, latência, exposição pública permanente mesmo cifrado (risco de quebra futura de criptografia), sem possibilidade de remoção retroativa |
+| IPFS sem pinning como mecanismo primário (posição intermediária descartada no meio da discussão) | A objeção original era achar que IPFS sem pinning desaparece "na hora"; isso foi corrigido (sem TTL universal, leva de horas a semanas). A decisão final adotou IPFS **com** pinning como mecanismo principal — não mais como algo a evitar |
+| P2P direto entre Desktop/Mobile para sync do vault inteiro | Proposto inicialmente para evitar dependência externa, mas o usuário decidiu simplificar: exigir pelo menos um device online era fricção real demais e o custo de pinning externo (efetivamente zero, tiers gratuitos cobrem o caso de uso) não justificava manter dois caminhos de sync. **Escopo da remoção**: só o P2P de sync do vault. O P2P efêmero do login via QR e do fluxo Mobile→Extensão foram mantidos — são canais de entrega de payload pronto, não de sincronização de estado |
+| Master password digitada pelo usuário | Reintroduz exatamente o problema que o TruthID existe para eliminar |
+| L2 Ethereum genérica para sync ("gas é barato") | Confunde "posso pagar o custo" com "o problema exige essa ferramenta" — sincronizar dados entre os próprios dispositivos do usuário não é um problema de consenso público; disponibilidade do vault ficaria acoplada ao uptime/congestionamento da rede e ao preço do gas sem necessidade técnica real |
+
+---
+
+#### O que é aproveitável do código já existente
+
+- **`DeviceRegistry`**: fonte de verdade de quais Devices são confiáveis. Vault não precisa de sistema de confiança paralelo.
+- **Padrão hash-only on-chain do `SessionRegistry`**: mesmo princípio vira o desenho do `VaultRegistry` (guardar referência, nunca conteúdo).
+- **Padrão QR + transporte direto sem servidor**, já implementado para login (QR contém challenge, resposta vai direto via HTTPS/P2P, sem relay do TruthID no meio): é o mesmo padrão que resolve a extensão de navegador — QR como veículo de "iniciar canal efêmero", sem reinventar transporte novo.
+- **Padrão de pareamento via QR mostrado pelo device que tem a informação** (decisão já tomada para mobile↔desktop): mesma lógica aplicada à extensão — quem **PRECISA** receber dado mostra o QR; quem **TEM** o dado lê e envia.
+- **Geração/armazenamento de chave no Keystore/Secure Enclave (mobile) e TPM/Keyring (desktop)**, já implementado para a device key de auth: a mesma chave (ou derivada via HKDF) é a base da criptografia do vault — não precisa de um segundo sistema de gestão de chave.
+- **Commit-reveal do `registerDevice`**: não se aplica diretamente ao Vault, mas é o tipo de padrão de segurança (mitigar front-running) que vale revisar se o `VaultRegistry` ganhar alguma função pública sensível a ordem de transações.
+
+#### O que é novo (não existe ainda)
+
+- Contrato `VaultRegistry` (hash/CID atual + timestamp de última atualização).
+- Derivação de chave local via HKDF a partir da chave do device.
+- Cifra/decifra local do vault (formato: site, usuário, senha, notas, tag de perfil).
+- Lógica de batching de updates locais + botão "Enviar".
+- Integração multi-pin: upload automático para 2+ provedores externos a cada "Enviar".
+- Fluxo de configuração inicial de API keys dos provedores de pin.
+- Health-check periódico de pin + alerta na UI.
+- Textos de aviso de risco (cenário "sem nenhum pin ativo").
+- Self-host de pinning como opção avançada (script/guia), não como requisito.
+- Permissão `canWriteVault` por Device.
+- Extensão de navegador "burra" (sem storage próprio) + lógica de sessão efêmera em memória no lado da extensão.
+- Tela no Mobile de seleção/confirmação de perfil antes do scan da extensão.
+- Registro local (no Desktop) de qual Device originou qual sessão de extensão (para revogação em cascata).
+- Canal P2P efêmero Mobile→Extensão para entregar o subconjunto de senhas já filtrado por perfil (mantido — mesmo padrão do login via QR já em produção).
+
+#### Não-escopo explícito (por agora)
+
+- Autofill nativo via Credential Provider Extension (iOS) / Autofill Framework (Android).
+- Native messaging host entre extensão e app desktop.
+- Import/export de outros password managers.
+- Compartilhamento de credenciais entre identidades diferentes (multi-usuário/empresa).
+- Qualquer flow que exija o usuário digitar uma senha mestre.
+- Perfis ad-hoc por site (v1 usa perfis fixos pré-definidos).
+
+#### Ordem sugerida de implementação
+
+1. **Núcleo Desktop + Mobile**: `VaultRegistry`, derivação de chave (HKDF), cifra/decifra local, botão "Enviar" com batching.
+2. **Multi-pin automático**: configuração inicial de API keys (2+ provedores externos), upload automático a cada "Enviar", health-check periódico, textos de aviso de risco. Self-host como opção avançada depois.
+3. **Extensão de navegador**: QR de sessão, seleção de perfil no Mobile, canal P2P efêmero de entrega do payload filtrado (mesmo padrão do login via QR), revogação em cascata.
+
+#### Status das etapas
+
+- [ ] 13.1 — Contrato `VaultRegistry` (hash/CID + timestamp, ligado ao `DeviceRegistry`)
+- [ ] 13.2 — Derivação de chave HKDF no Desktop (Rust) e Mobile (Dart)
+- [ ] 13.3 — Cifra/decifra local do vault (AES-256-GCM ou XChaCha20-Poly1305)
+- [ ] 13.4 — CRUD local de entradas do vault (site, usuário, senha, notas, perfil)
+- [ ] 13.5 — Botão "Enviar" com batching + upload multi-pin (2+ provedores externos)
+- [ ] 13.6 — Configuração inicial de API keys + health-check periódico de pins
+- [ ] 13.7 — UI Desktop: tela de gerenciamento do vault, permissão `canWriteVault` por Device
+- [ ] 13.8 — UI Mobile: leitura do vault, tela de perfil para scan da extensão
+- [ ] 13.9 — Extensão de navegador: sessão efêmera, autofill, revogação em cascata
 
 ---
 

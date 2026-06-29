@@ -14,9 +14,9 @@ The system prioritizes:
 * Open source architecture
 * Blockchain as source of truth
 
-The project is NOT a password manager, NFT marketplace or crypto wallet.
+The project is NOT an NFT marketplace or crypto wallet.
 
-The project only focuses on authentication and identity management.
+The core focus is authentication and identity management. A password manager extension (TruthID Vault) was added as an optional module — see Non Goals for details.
 
 ---
 
@@ -373,7 +373,7 @@ Recommended timelock:
 
 The following are explicitly out of scope:
 
-* Password manager
+* ~~Password manager~~ — **scope expanded**: TruthID Vault (optional password manager module) was added in Phase 13. It is built on top of the existing `DeviceRegistry` and does not change the core auth protocol. See `PROJECT_STATE.md` Phase 13 for full design.
 * Token creation
 * Governance token
 * NFT marketplace
@@ -381,7 +381,7 @@ The following are explicitly out of scope:
 * Cryptocurrency exchange
 * Social network
 
-TruthID focuses exclusively on decentralized authentication.
+TruthID focuses on decentralized authentication and identity management. The Vault module extends this to bridge the gap while third-party sites haven't adopted passwordless login yet.
 
 ---
 
