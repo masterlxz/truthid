@@ -770,7 +770,7 @@ Conteúdo sem pin no IPFS não desaparece instantaneamente. A remoção depende 
 
 - [x] 13.1 — Contrato `VaultRegistry` (hash/CID + timestamp, ligado ao `DeviceRegistry`) *(Sessão 49 — contrato em `contracts/src/VaultRegistry.sol`, 12 testes passando, script de deploy em `contracts/script/DeployVaultRegistry.s.sol`; ainda não deployado na mainnet)*
 - [x] 13.2 — Derivação de chave HKDF no Desktop (Rust) e Mobile (Dart) *(Sessão 49 — `derive_vault_key()` interno em `desktop/src-tauri/src/lib.rs` usando `hkdf`+`sha2`; `VaultKeyService` em `mobile/lib/services/vault_key_service.dart` com HKDF-SHA256 puro; 5 testes Dart passando)*
-- [ ] 13.3 — Cifra/decifra local do vault (AES-256-GCM ou XChaCha20-Poly1305)
+- [x] 13.3 — Cifra/decifra local do vault (AES-256-GCM) *(Sessão 50 — `vault.rs` em `desktop/src-tauri/src/vault.rs` com `encrypt`/`decrypt` + 5 testes Rust; `VaultCipherService` em `mobile/lib/services/vault_cipher_service.dart` + 8 testes Dart; Tauri commands `vault_encrypt`/`vault_decrypt` via Base64; formato do blob: nonce(12) || ciphertext || tag(16))*
 - [ ] 13.4 — CRUD local de entradas do vault (site, usuário, senha, notas, perfil)
 - [ ] 13.5 — Botão "Enviar" com batching + upload multi-pin (2+ provedores externos)
 - [ ] 13.6 — Configuração inicial de API keys + health-check periódico de pins
@@ -886,7 +886,21 @@ Website          Relay           Mobile App        Blockchain
 
 **Verificação**: `forge test --match-contract VaultRegistryTest` → 12/12; `flutter test test/services/vault_key_service_test.dart` → 5/5.
 
-- **Próximo passo**: 13.3 — cifra/decifra local do vault com AES-256-GCM.
+- **Próximo passo**: ~~13.3~~ — concluída na Sessão 50.
+
+### 2026-06-29 — Sessão 50
+
+- **Objetivo**: Fase 13.3 — cifra/decifra local do vault com AES-256-GCM.
+
+**O que foi feito**:
+
+- **13.3 — AES-256-GCM**: Desktop: adicionados `aes-gcm = "0.10"` e `base64 = "0.22"` ao `Cargo.toml`; novo módulo `desktop/src-tauri/src/vault.rs` com `pub(crate) fn encrypt(plaintext: &[u8])` e `pub(crate) fn decrypt(blob: &[u8])`; dois Tauri commands `vault_encrypt`/`vault_decrypt` (entrada/saída em Base64) registrados em `lib.rs`; 5 testes Rust passando. Mobile: adicionado `cryptography: ^2.7.0` ao `pubspec.yaml`; novo `VaultCipherService` em `mobile/lib/services/vault_cipher_service.dart` usando `AesGcm.with256bits()` do pacote `cryptography`; 8 testes Dart passando.
+
+- **Formato do blob** (idêntico em ambas as plataformas): `nonce(12 bytes) || ciphertext || tag(16 bytes)`. Nonce gerado aleatoriamente por encrypt — cifrar o mesmo plaintext duas vezes produz blobs distintos.
+
+**Verificação**: `cargo test vault` (Docker) → 5/5; `flutter test test/services/vault_cipher_service_test.dart` (Docker) → 8/8.
+
+- **Próximo passo**: 13.4 — CRUD local de entradas do vault (site, usuário, senha, notas, perfil).
 
 ### 2026-06-29 — Sessão 48
 

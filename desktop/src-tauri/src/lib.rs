@@ -6,6 +6,7 @@ use sha2::Sha256;
 use sha3::{Digest, Keccak256};
 
 mod ledger;
+mod vault;
 
 const SERVICE: &str = "truthid";
 const ACCOUNT: &str = "device-private-key";
@@ -129,6 +130,26 @@ fn sign_session_hash(hash: String) -> Result<(String, String, u8), String> {
     Ok((r, s, v))
 }
 
+/// Cifra dados com AES-256-GCM usando a chave do vault derivada do device.
+/// Entrada: plaintext em Base64. Saída: blob cifrado em Base64 (nonce+cipher+tag).
+#[tauri::command]
+fn vault_encrypt(plaintext_b64: String) -> Result<String, String> {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    let plaintext = STANDARD.decode(&plaintext_b64).map_err(|e| e.to_string())?;
+    let blob = vault::encrypt(&plaintext)?;
+    Ok(STANDARD.encode(blob))
+}
+
+/// Decifra um blob gerado por vault_encrypt.
+/// Entrada: blob em Base64. Saída: plaintext em Base64.
+#[tauri::command]
+fn vault_decrypt(blob_b64: String) -> Result<String, String> {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    let blob = STANDARD.decode(&blob_b64).map_err(|e| e.to_string())?;
+    let plaintext = vault::decrypt(&blob)?;
+    Ok(STANDARD.encode(plaintext))
+}
+
 /// Signs a challenge with this desktop's private key.
 /// Returns the signature in Ethereum format: 0x + r (32 bytes) + s (32 bytes) + v (1 byte).
 #[tauri::command]
@@ -167,6 +188,8 @@ pub fn run() {
             get_or_create_device_key,
             sign_challenge,
             sign_session_hash,
+            vault_encrypt,
+            vault_decrypt,
             ledger::is_ledger_connected,
             ledger::get_ledger_address,
             ledger::sign_ledger_transaction
