@@ -506,7 +506,7 @@ Problemas identificados na revisão de arquitetura da Sessão 36 (2026-06-25). N
 | ~~11~~ | ~~`sdk/typescript/src/`, `sdk/typescript/example/server.js`, `sdk/README.md`~~ | ~~O fluxo de registro de sessão on-chain (`createSession`) está incompleto no SDK.~~ | **RESOLVIDO — Sessão 39**. Ver log da sessão para detalhes. |
 | ~~12~~ | ~~wagmi auto-reconnect~~ | ~~O wagmi reconectava automaticamente o conector Ledger na abertura do app.~~ | **RESOLVIDO — Sessão 41**. `storage: null` no wagmi config (sem persistência de conector). Username salvo em `useStoredUsername` (`localStorage`, chave `truthid:username`). `WalletModalContext` permite qualquer componente abrir o modal de conexão. App shell carrega direto do localStorage; "Disconnect wallet" mantém modo leitura; "Log out" limpa o localStorage. Ações de escrita (revoke/register) abrem o modal se não há wallet conectada. |
 | ~~13~~ | ~~Site de documentação web (Fase 8)~~ | ~~`sdk/README.md` atualizado mas site não refletia a seção Session Registration.~~ | **RESOLVIDO — Sessão 42**. `typescript.md`: método `registerSession`, tipos `RegisterSessionParams`/`RegisterSessionResult`, campo `sessionSignature` no `AuthResponse`. `quickstart.mdx`: passo 5 opcional de registro on-chain. `python.md`/`ruby.md`: nota que `registerSession` é TypeScript-only por enquanto. Build do Docusaurus validado sem erros. |
-| 14 | `mobile/lib/screens/devices_screen.dart` | `DevicesScreen` não detecta automaticamente que o device foi registrado on-chain — só checa no `_reload()` manual ou pull-to-refresh. Se o usuário pareou colando o endereço no desktop (sem abrir a tela de QR), precisa fazer pull-to-refresh pra ver o status atualizado. Pior: se simplesmente navegar pelas abas sem nunca fazer pull, nunca vê o pareamento. | Adicionar polling passivo em `DevicesScreen` quando `_pairedIdentityId == null`: checar `_blockchain.getDevice(_deviceAddress)` a cada ~5s e chamar `_reload()` se retornar `exists && !revoked`. Cancelar o timer quando `_pairedIdentityId != null` ou ao fazer `dispose()`. |
+| ~~14~~ | ~~`mobile/lib/screens/devices_screen.dart`~~ | ~~`DevicesScreen` não detecta automaticamente que o device foi registrado on-chain — só checa no `_reload()` manual ou pull-to-refresh.~~ | **RESOLVIDO — Sessão 46**. `_reload()` chama `_blockchain.getDevice(address)` on-chain em toda execução (abertura da tela e pull-to-refresh). Auto-descobre pareamento se `identityId == null` em storage. Detecta revogação e limpa storage automaticamente. Botão "Show QR to pair" agora condicional (`_pairedIdentityId == null`) — some quando pareado, reaparece se revogado. Dica "Pull down to check if already paired" adicionada ao card de info. |
 | 15 | `mobile/lib/screens/show_device_qr_screen.dart` | `ShowDeviceQrScreen` tem polling automático a cada 3s, mas se a rede cair pontualmente e o timer perder a confirmação, o usuário não tem como forçar uma nova tentativa sem fechar e reabrir a tela. | Adicionar botão "Refresh" (ou `TextButton`) abaixo do spinner "Waiting for the computer to register…" que chame `_checkIfRegistered(_address!)` manualmente. |
 | 16 | Desktop (`App.tsx`, AppBar) + Mobile (`main.dart`, `_NavTab`) | Não existe nenhum mecanismo de doação no app. O projeto é open source, self-hostable e sem monetização — uma forma de doação (link para OpenCollective, GitHub Sponsors ou endereço ETH) ajudaria a sustentar o desenvolvimento. | Desktop: adicionar link de doação no topbar ou menu do app. Mobile: adicionar na tela de configurações (ainda inexistente) ou como item no bottom sheet. Em ambos: abrir browser/deep link. Endereço ETH do projeto ou página de GitHub Sponsors. |
 
@@ -654,6 +654,20 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-28 — Sessão 46
+
+- **Objetivo**: resolver débito #14 — `DevicesScreen` não detectava pareamento feito fora da tela de QR.
+
+**Mudanças em `mobile/lib/screens/devices_screen.dart`:**
+
+- **`_reload()` enriquecido com checagem on-chain**: adicionado `BlockchainService` como dependência. `_reload()` agora sempre chama `_blockchain.getDevice(address)` (leitura gratuita via `eth_call`). Cobre três casos: (1) auto-descoberta — se device registrado on-chain mas `identityId` não está em storage, salva e busca username em background; (2) detecção de revogação — se device revogado ou removido, limpa storage automaticamente (`clearPairedIdentity()`); (3) estado normal — device ativo e storage já preenchido, sem mudança.
+- **Botão "Show QR to pair" agora condicional**: movido para dentro do bloco `if (_pairedIdentityId == null)`, junto com o card de dica. Some quando o device está pareado e ativo; reaparece se revogado ou não registrado.
+- **Dica visual**: texto "Pull down to check if already paired." adicionado abaixo das instruções no card de info — orienta o usuário a fazer pull-to-refresh após parear fora da tela de QR.
+- **`flutter analyze`**: sem issues. **`flutter test`**: 8/8 passando.
+
+- **Débito fechado**: #14.
+- **Próximo passo**: débito #15 (refresh manual em `ShowDeviceQrScreen`) ou #16 (doação).
 
 ### 2026-06-28 — Sessão 45
 

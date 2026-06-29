@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../services/blockchain_service.dart';
 import '../services/device_key_service.dart';
 import '../services/local_storage_service.dart';
 import '../theme.dart';
@@ -15,6 +16,7 @@ class DevicesScreen extends StatefulWidget {
 class _DevicesScreenState extends State<DevicesScreen> {
   final _keyService = DeviceKeyService();
   final _storage = LocalStorageService();
+  final _blockchain = BlockchainService();
 
   String? _deviceAddress;
   String? _pairedIdentityId;
@@ -31,8 +33,29 @@ class _DevicesScreenState extends State<DevicesScreen> {
     setState(() => _isLoading = true);
 
     final address = await _keyService.getDeviceAddress();
-    final identityId = await _storage.getPairedIdentityId();
-    final username = await _storage.getPairedUsername();
+    var identityId = await _storage.getPairedIdentityId();
+    var username = await _storage.getPairedUsername();
+
+    final device = await _blockchain.getDevice(address);
+
+    if (device != null && !device.revoked) {
+      if (identityId == null) {
+        // Auto-descoberta: device registrado on-chain mas não salvo localmente
+        identityId = device.identityId.toString();
+        await _storage.savePairedIdentity(identityId);
+        _blockchain.getUsernameForIdentity(device.identityId).then((u) {
+          if (u != null) {
+            _storage.savePairedUsername(u);
+            if (mounted) setState(() => _pairedUsername = u);
+          }
+        });
+      }
+    } else if (identityId != null) {
+      // Device revogado ou removido — limpar storage
+      await _storage.clearPairedIdentity();
+      identityId = null;
+      username = null;
+    }
 
     if (!mounted) return;
     setState(() {
@@ -202,32 +225,40 @@ class _DevicesScreenState extends State<DevicesScreen> {
                     Icon(Icons.info_outline, color: AppColors.info, size: 18),
                     SizedBox(width: 8),
                     Expanded(
-                      child: Text(
-                        'Tap the button below to show a QR code with this '
-                        'device address. Scan that QR (or paste the address) '
-                        'in the desktop app to register it.',
-                        style: TextStyle(fontSize: 13, color: AppColors.info),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Tap the button below to show a QR code with this '
+                            'device address. Scan that QR (or paste the address) '
+                            'in the desktop app to register it.',
+                            style: TextStyle(fontSize: 13, color: AppColors.info),
+                          ),
+                          SizedBox(height: 6),
+                          Text(
+                            'Pull down to check if already paired.',
+                            style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
               ),
             ),
-          ],
-
-          // ── Botão de pareamento ──────────────────────────────────────────
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: _openPairing,
-              icon: const Icon(Icons.qr_code),
-              label: const Text('Show QR to pair'),
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: 16),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _openPairing,
+                icon: const Icon(Icons.qr_code),
+                label: const Text('Show QR to pair'),
+                style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
               ),
             ),
-          ),
+          ],
         ],
       ),
     );
