@@ -703,13 +703,28 @@ Reduz custo de "1 transação por senha trocada" para "1 transação por sessão
 
 Conteúdo sem pin no IPFS não desaparece instantaneamente. A remoção depende do garbage collection de cada nó (sem TTL universal — pode levar de horas a semanas, dependendo de quantos nós têm cópia em cache). Isso dá folga de tempo entre o usuário apertar "Enviar" e o pin se completar, mas **não é motivo para pular o health-check** — sem prazo previsível, a única forma confiável de saber se o vault ainda está seguro é checar ativamente.
 
-- **Multi-pin por padrão**: app já vem configurado para subir o blob em 2 provedores externos ao mesmo tempo (ex. Filebase + Pinata), ambos no tier gratuito.
-- **Zero-config para quem não quer se preocupar**: usuário configura API keys uma vez na configuração inicial; todo "Enviar" sobe automaticamente.
-- **Custo real de pinning**: provedores como Filebase e 4EVERLAND oferecem 5GB grátis, Pinata oferece 1GB + 10GB de bandwidth + 500 arquivos grátis — qualquer tier gratuito cobre o uso de uma vida inteira de vault de senhas.
-- **Self-host como opção avançada**: script/guia fornecido pelo app, não como requisito.
-- **Health-check periódico**: verificação automática de que os pins configurados ainda estão ativos; alerta se algum caiu.
-- **Aviso de risco na UI** caso o usuário desative todos os pins: descrever a incerteza real ("sem pin ativo, o conteúdo pode se tornar inacessível em algum momento, sem aviso prévio") em vez de um prazo fixo inventado.
-- **O que o provedor de pin vê**: apenas o blob cifrado + metadados. Nunca a chave, nunca o conteúdo em claro — deixar isso explícito na UI.
+**Abstração de pinning — IPFS Pinning Service API (spec padrão)**:
+
+O app integra com **uma única interface**: a [IPFS Pinning Service API](https://ipfs.github.io/pinning-services-api-spec/) — spec REST padrão do ecossistema IPFS. Qualquer provedor que implemente essa spec funciona automaticamente, sem código específico por provedor. Isso cobre:
+
+| Opção | Endpoint | Configuração |
+|---|---|---|
+| Pinata | `https://api.pinata.cloud/psa` | API key gerada no painel |
+| Filebase | `https://api.filebase.io/v1/ipfs` | API key gerada no painel |
+| 4EVERLAND | `https://ipfs.4everland.xyz/psa` | API key gerada no painel |
+| Infura | `https://ipfs.infura.io:5001` | Project ID + Secret |
+| **Self-hosted (Kubo)** | `http://localhost:5001/api/v0` | Node local — zero custo externo |
+| Qualquer outro | URL customizada | API key customizada |
+
+O usuário configura: `{ name, endpoint_url, api_key }` — o app não precisa saber qual provedor é. O self-hosted funciona da mesma forma que os externos: basta apontar para o node Kubo local.
+
+- **Multi-pin por padrão**: cada "Enviar" sobe o blob simultaneamente em todos os provedores configurados (mínimo recomendado: 2). Se um cair, os outros garantem disponibilidade.
+- **Zero-config para quem não quer se preocupar**: usuário configura API keys uma vez na configuração inicial (13.6); todo "Enviar" sobe automaticamente.
+- **Custo real de pinning externo**: Filebase e 4EVERLAND oferecem 5GB grátis; Pinata oferece 1GB + 10GB de bandwidth + 500 arquivos grátis — qualquer tier gratuito cobre uma vida inteira de vault de senhas.
+- **Self-host com Kubo**: usuário instala o Kubo (node IPFS de referência, ~50MB), habilita a Pinning Service API (`ipfs config --json Pinning.RemoteServices ...`), aponta o app para `http://localhost:5001`. Nenhum custo externo, nenhum dado sai do computador. O app vai fornecer guia de setup com os comandos exatos (13.6).
+- **Health-check periódico**: verificação automática de que os pins em todos os provedores configurados ainda estão ativos; alerta individual por provedor se algum caiu.
+- **Aviso de risco na UI** caso nenhum pin esteja ativo: descrever a incerteza real ("sem pin ativo, o conteúdo pode se tornar inacessível em algum momento, sem aviso prévio") em vez de um prazo fixo inventado.
+- **O que o provedor de pin vê**: apenas o blob cifrado + o CID. Nunca a chave, nunca o conteúdo em claro — deixar isso explícito na UI.
 
 ---
 
@@ -773,7 +788,7 @@ Conteúdo sem pin no IPFS não desaparece instantaneamente. A remoção depende 
 - [x] 13.3 — Cifra/decifra local do vault (AES-256-GCM) *(Sessão 50 — `vault.rs` em `desktop/src-tauri/src/vault.rs` com `encrypt`/`decrypt` + 5 testes Rust; `VaultCipherService` em `mobile/lib/services/vault_cipher_service.dart` + 8 testes Dart; Tauri commands `vault_encrypt`/`vault_decrypt` via Base64; formato do blob: nonce(12) || ciphertext || tag(16))*
 - [ ] 13.4 — CRUD local de entradas do vault (site, usuário, senha, notas, perfil)
 - [ ] 13.5 — Botão "Enviar" com batching + upload multi-pin (2+ provedores externos)
-- [ ] 13.6 — Configuração inicial de API keys + health-check periódico de pins
+- [ ] 13.6 — Configuração de provedores de pin: UI de adicionar/remover provedores (endpoint + API key), suporte à IPFS Pinning Service API como interface única (cobre terceiros como Pinata/Filebase/4EVERLAND e self-hosted via Kubo local), guia de setup do Kubo no app, health-check periódico por provedor + alerta na UI
 - [ ] 13.7 — UI Desktop: tela de gerenciamento do vault, permissão `canWriteVault` por Device
 - [ ] 13.8 — UI Mobile: leitura do vault, tela de perfil para scan da extensão
 - [ ] 13.9 — Extensão de navegador: sessão efêmera, autofill, revogação em cascata
