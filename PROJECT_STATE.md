@@ -583,10 +583,10 @@ O GitHub Actions roda, constrói tudo, cria um release draft. Depois:
 
 - [x] 12.1 — Gerar e guardar keystore de assinatura *(Sessão 47 — keystore gerada, 4 GitHub Secrets configurados, CI de release validado)*
 - [x] 12.2 — Criar `build-mobile.yml` com CI de APK *(implementado na Sessão 45)*
-- [ ] 12.3 — Criar tag `v1.0.0` e publicar release
-- [ ] 12.4 — Atualizar site com links de download
+- [x] 12.3 — Criar tag `v1.0.0` e publicar release *(Sessão 48 — tag criada, CI gerou 8 artefatos: .deb, AppImage, .rpm, .msi, .exe, .dmg, .app.tar.gz, .apk; release publicado no GitHub)*
+- [x] 12.4 — Atualizar site com links de download *(Sessão 48 — seção "Download" adicionada à landing page com fetch dinâmico da GitHub API `releases/latest`)*
 
-**Pré-requisito**: ~~resolver débitos #14, #15, #16 antes de criar o tag de release~~ — todos os débitos resolvidos. Pode criar o tag.
+**Fase 12 concluída. TruthID v1.0.0 publicado.**
 
 ---
 
@@ -682,7 +682,25 @@ Website          Relay           Mobile App        Blockchain
 **Verificação**: `flutter analyze` → `No issues found!`; `flutter test` → 8/8; `npm run build` (docs) → success.
 
 - **Débitos fechados**: #16 (último débito — tabela de débitos totalmente limpa).
-- **Próximo passo**: Fase 12 — gerar keystore (12.1) e publicar o release v1.0.0 (12.3).
+- **Próximo passo**: ~~Fase 12~~ — concluída na Sessão 48. TruthID v1.0.0 publicado.
+
+### 2026-06-29 — Sessão 48
+
+- **Objetivo**: Fase 12.3 e 12.4 — publicar o release v1.0.0 e atualizar o site de docs.
+
+**O que foi feito**:
+
+- Bump de versão: `desktop/package.json` e `desktop/src-tauri/tauri.conf.json` atualizados de `0.1.0` para `1.0.0`.
+- Fix de CI: `desktop/tsconfig.json` — adicionado `exclude` para arquivos de teste (`src/**/__tests__/**`, `*.test.ts`, `*.test.tsx`), que estavam sendo incluídos no `tsc` de produção e causando erro de tipo com mocks do vitest.
+- Tag `v1.0.0` criada e publicada. CI gerou 8 artefatos: `app-release.apk`, `.deb`, `.AppImage`, `.rpm`, `.msi`, `.exe`, `.dmg`, `.app.tar.gz`.
+- Release publicado manualmente no GitHub a partir do draft gerado pelo CI.
+- `docs/src/pages/index.tsx`: novo componente `DownloadSection` que faz fetch de `api.github.com/repos/masterlxz/truthid/releases/latest` e renderiza botões de download por plataforma (Android, Linux, Windows, macOS) sem necessidade de atualizar o site a cada release.
+- `docs/src/pages/index.module.css`: estilos para `.downloadSection`, `.downloadGrid`, `.downloadBtn`.
+
+**Verificação**: build do Docusaurus (`npm run build`) passou sem erros; CI desktop + mobile: ambos `success`.
+
+- **Fase concluída**: 12 (todas as etapas — 12.1, 12.2, 12.3, 12.4).
+- **Próximo passo**: projeto v1.0.0 publicado. Sem etapas obrigatórias pendentes.
 
 ### 2026-06-28 — Sessão 46
 
