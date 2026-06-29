@@ -581,7 +581,7 @@ O GitHub Actions roda, constrói tudo, cria um release draft. Depois:
 
 ### Status das etapas
 
-- [ ] 12.1 — Gerar e guardar keystore de assinatura
+- [x] 12.1 — Gerar e guardar keystore de assinatura *(Sessão 47 — keystore gerada, 4 GitHub Secrets configurados, CI de release validado)*
 - [x] 12.2 — Criar `build-mobile.yml` com CI de APK *(implementado na Sessão 45)*
 - [ ] 12.3 — Criar tag `v1.0.0` e publicar release
 - [ ] 12.4 — Atualizar site com links de download
