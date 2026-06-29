@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-06-28 (Sessão 45 — completa)
+> Última atualização: 2026-06-29 (Sessão 47 — débito #16 resolvido)
 
 ---
 
@@ -508,7 +508,7 @@ Problemas identificados na revisão de arquitetura da Sessão 36 (2026-06-25). N
 | ~~13~~ | ~~Site de documentação web (Fase 8)~~ | ~~`sdk/README.md` atualizado mas site não refletia a seção Session Registration.~~ | **RESOLVIDO — Sessão 42**. `typescript.md`: método `registerSession`, tipos `RegisterSessionParams`/`RegisterSessionResult`, campo `sessionSignature` no `AuthResponse`. `quickstart.mdx`: passo 5 opcional de registro on-chain. `python.md`/`ruby.md`: nota que `registerSession` é TypeScript-only por enquanto. Build do Docusaurus validado sem erros. |
 | ~~14~~ | ~~`mobile/lib/screens/devices_screen.dart`~~ | ~~`DevicesScreen` não detecta automaticamente que o device foi registrado on-chain — só checa no `_reload()` manual ou pull-to-refresh.~~ | **RESOLVIDO — Sessão 46**. `_reload()` chama `_blockchain.getDevice(address)` on-chain em toda execução (abertura da tela e pull-to-refresh). Auto-descobre pareamento se `identityId == null` em storage. Detecta revogação e limpa storage automaticamente. Botão "Show QR to pair" agora condicional (`_pairedIdentityId == null`) — some quando pareado, reaparece se revogado. Dica "Pull down to check if already paired" adicionada ao card de info. |
 | ~~15~~ | ~~`mobile/lib/screens/show_device_qr_screen.dart`~~ | ~~`ShowDeviceQrScreen` tem polling automático a cada 3s, mas se a rede cair pontualmente e o timer perder a confirmação, o usuário não tem como forçar uma nova tentativa sem fechar e reabrir a tela.~~ | **RESOLVIDO — Sessão 46**. Botão "Check now" adicionado abaixo do spinner em `_buildQrUI()`. Estado `_isChecking` desabilita o botão durante a verificação e exibe "Checking...". `SessionsScreen._load()` também enriquecido com verificação on-chain completa: auto-descobre pareamento se `identityId` ausente em storage; detecta revogação e limpa storage. Padrão idêntico ao #14. |
-| 16 | Desktop (`App.tsx`, AppBar) + Mobile (`main.dart`, `_NavTab`) | Não existe nenhum mecanismo de doação no app. O projeto é open source, self-hostable e sem monetização — uma forma de doação (link para OpenCollective, GitHub Sponsors ou endereço ETH) ajudaria a sustentar o desenvolvimento. | Desktop: adicionar link de doação no topbar ou menu do app. Mobile: adicionar na tela de configurações (ainda inexistente) ou como item no bottom sheet. Em ambos: abrir browser/deep link. Endereço ETH do projeto ou página de GitHub Sponsors. |
+| ~~16~~ | ~~Desktop (`App.tsx`, AppBar) + Mobile (`main.dart`, `_NavTab`)~~ | ~~Não existe nenhum mecanismo de doação no app.~~ | **RESOLVIDO — Sessão 47**. Botão ♥ no topbar do desktop abre modal com QR code EIP-681 + botão copiar (`qrcode.react`). Ícone ♥ no AppBar do mobile abre bottom sheet com mesmo conteúdo (`qr_flutter` já disponível). Página `/donate` adicionada ao site de docs (Docusaurus) com QR code + copiar; link "♥ Support" adicionado ao footer. Endereço: `0xB54fe9909D76d98e87a9fD76bDB5C69fABe10265` (deployer, já público on-chain). |
 
 ---
 
@@ -586,7 +586,7 @@ O GitHub Actions roda, constrói tudo, cria um release draft. Depois:
 - [ ] 12.3 — Criar tag `v1.0.0` e publicar release
 - [ ] 12.4 — Atualizar site com links de download
 
-**Pré-requisito**: resolver débitos #14, #15, #16 antes de criar o tag de release.
+**Pré-requisito**: ~~resolver débitos #14, #15, #16 antes de criar o tag de release~~ — todos os débitos resolvidos. Pode criar o tag.
 
 ---
 
@@ -654,6 +654,35 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-29 — Sessão 47
+
+- **Objetivo**: resolver débito #16 — botão de doação em cripto.
+
+**Abordagem escolhida**: endereço ETH + QR code (EIP-681) + botão copiar. Sem terceiros, sem JavaScript externo — QR gerado localmente em cada plataforma.
+
+**Desktop** (`desktop/src/components/DonateModal.tsx`, `App.tsx`, `App.css`):
+- Nova dependência: `qrcode.react` adicionada ao `package.json`.
+- `DonateModal.tsx`: componente presentacional com `<QRCodeSVG>` (data=`ethereum:0xB54...`, fundo branco explícito para legibilidade no tema dark), endereço em `<code>`, botão "Copy address" com feedback "Copied!" por 2s via `navigator.clipboard.writeText()`.
+- Botão `♥` adicionado ao `topbar-right` em `App.tsx` → abre modal com o padrão já existente (`.modal-overlay` → `.modal-box` → `DonateModal`).
+- CSS: 2 classes novas (`.donate-qr-wrapper`, `.donate-address`).
+
+**Mobile** (`mobile/lib/main.dart`):
+- Sem nova dependência (`qr_flutter: ^4.1.0` já disponível, `Clipboard` built-in de `flutter/services.dart`).
+- `IconButton(Icons.favorite_border)` adicionado nas `actions` do `AppBar`.
+- `_showDonationSheet()` usa `showModalBottomSheet` + `StatefulBuilder` (variável `copied` no escopo de fechamento para não resetar a cada rebuild).
+- `_DonationSheet`: handle bar, título, `QrImageView` com fundo branco, `SelectableText` com endereço, `ElevatedButton.icon` copiar, hint de valor sugerido.
+
+**Docs** (`docs/src/pages/donate.tsx`, `docs/docusaurus.config.ts`):
+- Nova dependência: `qrcode.react` adicionada ao `docs/package.json`.
+- Página `/donate` em React (Docusaurus suporta páginas em `src/pages/`): layout padrão + QR code + endereço + botão copiar com estado `copied`.
+- Link "♥ Support" adicionado ao footer ("More") em `docusaurus.config.ts`.
+- `npm run build` do Docusaurus: sucesso sem erros.
+
+**Verificação**: `flutter analyze` → `No issues found!`; `flutter test` → 8/8; `npm run build` (docs) → success.
+
+- **Débitos fechados**: #16 (último débito — tabela de débitos totalmente limpa).
+- **Próximo passo**: Fase 12 — gerar keystore (12.1) e publicar o release v1.0.0 (12.3).
 
 ### 2026-06-28 — Sessão 46
 
