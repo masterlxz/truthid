@@ -1,4 +1,5 @@
 import type {ReactNode} from 'react';
+import {useState, useEffect} from 'react';
 import clsx from 'clsx';
 import Link from '@docusaurus/Link';
 import useDocusaurusContext from '@docusaurus/useDocusaurusContext';
@@ -31,6 +32,62 @@ function HomepageHeader() {
         </div>
       </div>
     </header>
+  );
+}
+
+type Asset = {name: string; browser_download_url: string};
+
+const PLATFORM_MAP: {match: RegExp; label: string; sub: string}[] = [
+  {match: /\.apk$/,        label: 'Android',  sub: 'APK'},
+  {match: /\.deb$/,        label: 'Linux',     sub: '.deb'},
+  {match: /AppImage$/,     label: 'Linux',     sub: 'AppImage'},
+  {match: /x64-setup\.exe$/, label: 'Windows', sub: 'Installer'},
+  {match: /\.msi$/,        label: 'Windows',   sub: 'MSI'},
+  {match: /aarch64\.dmg$/, label: 'macOS',     sub: 'Apple Silicon'},
+  {match: /x64\.dmg$/,     label: 'macOS',     sub: 'Intel'},
+];
+
+function DownloadSection() {
+  const [assets, setAssets] = useState<Asset[]>([]);
+  const [tag, setTag] = useState('');
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    fetch('https://api.github.com/repos/masterlxz/truthid/releases/latest')
+      .then(r => r.json())
+      .then(data => {
+        setTag(data.tag_name ?? '');
+        setAssets(data.assets ?? []);
+      })
+      .catch(() => setError(true));
+  }, []);
+
+  const mapped = assets
+    .map(a => {
+      const p = PLATFORM_MAP.find(p => p.match.test(a.name));
+      return p ? {label: p.label, sub: p.sub, url: a.browser_download_url} : null;
+    })
+    .filter(Boolean);
+
+  if (error || (!assets.length && tag === '')) return null;
+
+  return (
+    <section className={styles.downloadSection}>
+      <div className="container">
+        <Heading as="h2">Download {tag}</Heading>
+        <div className={styles.downloadGrid}>
+          {mapped.map((a, i) => (
+            <a key={i} href={a!.url} className={styles.downloadBtn}>
+              <span className={styles.downloadBtnPlatform}>{a!.label}</span>
+              <span>{a!.sub}</span>
+            </a>
+          ))}
+        </div>
+        <p className={styles.downloadNote}>
+          Android: enable <em>Install from unknown sources</em> before installing the APK.
+        </p>
+      </div>
+    </section>
   );
 }
 
@@ -74,6 +131,7 @@ export default function Home(): ReactNode {
       description="Decentralized authentication. No passwords, no servers.">
       <HomepageHeader />
       <main>
+        <DownloadSection />
         <HowItWorks />
         <HomepageFeatures />
       </main>
