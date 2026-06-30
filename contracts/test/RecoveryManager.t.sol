@@ -34,10 +34,10 @@ contract RecoveryManagerTest is Test {
         identityRegistry.setRecoveryManager(address(recoveryManager));
 
         vm.prank(alice);
-        identityRegistry.createIdentity("alice.id"); // identityId = 1
+        identityRegistry.createIdentity("alice.id", alice); // identityId = 1
 
         vm.prank(bob);
-        identityRegistry.createIdentity("bob.id"); // identityId = 2
+        identityRegistry.createIdentity("bob.id", bob); // identityId = 2
     }
 
     // Atalho: configura guardians 3-de-5 para alice

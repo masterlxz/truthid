@@ -23,7 +23,7 @@ contract IdentityRegistryTest is Test {
     function test_CreateIdentity_Success() public {
         // vm.prank: "finge" que a próxima chamada vem do endereço alice
         vm.prank(alice);
-        uint256 id = registry.createIdentity("alice.id");
+        uint256 id = registry.createIdentity("alice.id", alice);
 
         assertEq(id, 1); // primeiro ID deve ser 1
 
@@ -39,15 +39,15 @@ contract IdentityRegistryTest is Test {
         emit IdentityRegistry.IdentityCreated(1, "alice.id", alice);
 
         vm.prank(alice);
-        registry.createIdentity("alice.id");
+        registry.createIdentity("alice.id", alice);
     }
 
     function test_CreateIdentity_IncrementsId() public {
         vm.prank(alice);
-        registry.createIdentity("alice.id");
+        registry.createIdentity("alice.id", alice);
 
         vm.prank(bob);
-        uint256 bobId = registry.createIdentity("bob.id");
+        uint256 bobId = registry.createIdentity("bob.id", bob);
 
         assertEq(bobId, 2);
         assertEq(registry.totalIdentities(), 2);
@@ -55,10 +55,24 @@ contract IdentityRegistryTest is Test {
 
     function test_CreateIdentity_MapsControllerToUsername() public {
         vm.prank(alice);
-        registry.createIdentity("alice.id");
+        registry.createIdentity("alice.id", alice);
 
         string memory found = registry.getUsernameByController(alice);
         assertEq(found, "alice.id");
+    }
+
+    // O controller pode ser qualquer endereço — tipicamente uma smart account
+    // pré-computada via CREATE2. O caller (alice) paga o gas sem virar controller.
+    function test_CreateIdentity_ControllerCanDifferFromCaller() public {
+        address smartAccount = makeAddr("smartAccount");
+
+        vm.prank(alice); // alice paga o gas, smart account vira controller
+        registry.createIdentity("alice.id", smartAccount);
+
+        IdentityRegistry.Identity memory identity = registry.getIdentity("alice.id");
+        assertEq(identity.controller, smartAccount);
+        assertEq(registry.getUsernameByController(smartAccount), "alice.id");
+        assertEq(registry.getUsernameByController(alice), ""); // alice NÃO é o controller
     }
 
     // -----------------------------------------------------------------
@@ -68,7 +82,7 @@ contract IdentityRegistryTest is Test {
     function test_Revert_EmptyUsername() public {
         vm.prank(alice);
         vm.expectRevert(IdentityRegistry.InvalidUsername.selector);
-        registry.createIdentity("");
+        registry.createIdentity("", alice);
     }
 
     function test_Revert_UsernameTooLong() public {
@@ -76,24 +90,24 @@ contract IdentityRegistryTest is Test {
         string memory long = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
         vm.prank(alice);
         vm.expectRevert(IdentityRegistry.InvalidUsername.selector);
-        registry.createIdentity(long);
+        registry.createIdentity(long, alice);
     }
 
     function test_Revert_UsernameWithUppercase() public {
         vm.prank(alice);
         vm.expectRevert(IdentityRegistry.InvalidUsername.selector);
-        registry.createIdentity("Alice.id");
+        registry.createIdentity("Alice.id", alice);
     }
 
     function test_Revert_UsernameWithSpace() public {
         vm.prank(alice);
         vm.expectRevert(IdentityRegistry.InvalidUsername.selector);
-        registry.createIdentity("alice id");
+        registry.createIdentity("alice id", alice);
     }
 
     function test_ValidUsername_WithDotAndHyphen() public {
         vm.prank(alice);
-        uint256 id = registry.createIdentity("alice-123.id");
+        uint256 id = registry.createIdentity("alice-123.id", alice);
         assertEq(id, 1);
     }
 
@@ -103,20 +117,25 @@ contract IdentityRegistryTest is Test {
 
     function test_Revert_UsernameTaken() public {
         vm.prank(alice);
-        registry.createIdentity("alice.id");
+        registry.createIdentity("alice.id", alice);
 
         vm.prank(bob);
         vm.expectRevert(abi.encodeWithSelector(IdentityRegistry.UsernameTaken.selector, "alice.id"));
-        registry.createIdentity("alice.id");
+        registry.createIdentity("alice.id", bob);
     }
 
     function test_Revert_AddressAlreadyHasIdentity() public {
         vm.prank(alice);
-        registry.createIdentity("alice.id");
+        registry.createIdentity("alice.id", alice);
 
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(IdentityRegistry.AddressAlreadyHasIdentity.selector, alice));
-        registry.createIdentity("alice2.id");
+        registry.createIdentity("alice2.id", alice); // mesmo controller → falha
+    }
+
+    function test_Revert_CreateIdentity_ZeroController() public {
+        vm.expectRevert(IdentityRegistry.InvalidNewController.selector);
+        registry.createIdentity("alice.id", address(0));
     }
 
     function test_Revert_GetNonexistentIdentity() public {
@@ -130,7 +149,7 @@ contract IdentityRegistryTest is Test {
 
     function test_TransferController_Success() public {
         vm.prank(alice);
-        registry.createIdentity("alice.id");
+        registry.createIdentity("alice.id", alice);
 
         vm.prank(alice);
         registry.transferController("alice.id", bob);
@@ -143,7 +162,7 @@ contract IdentityRegistryTest is Test {
 
     function test_TransferController_EmitsEvent() public {
         vm.prank(alice);
-        registry.createIdentity("alice.id");
+        registry.createIdentity("alice.id", alice);
 
         vm.prank(alice);
         vm.expectEmit(false, true, true, true);
@@ -153,7 +172,7 @@ contract IdentityRegistryTest is Test {
 
     function test_Revert_TransferController_NotController() public {
         vm.prank(alice);
-        registry.createIdentity("alice.id");
+        registry.createIdentity("alice.id", alice);
 
         vm.prank(bob); // bob tenta transferir, mas não é o controller
         vm.expectRevert(abi.encodeWithSelector(IdentityRegistry.NotController.selector, bob, "alice.id"));
@@ -162,10 +181,10 @@ contract IdentityRegistryTest is Test {
 
     function test_Revert_TransferController_NewControllerAlreadyHasIdentity() public {
         vm.prank(alice);
-        registry.createIdentity("alice.id");
+        registry.createIdentity("alice.id", alice);
 
         vm.prank(bob);
-        registry.createIdentity("bob.id");
+        registry.createIdentity("bob.id", bob);
 
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(IdentityRegistry.AddressAlreadyHasIdentity.selector, bob));
@@ -174,7 +193,7 @@ contract IdentityRegistryTest is Test {
 
     function test_Revert_TransferController_ToZeroAddress() public {
         vm.prank(alice);
-        registry.createIdentity("alice.id");
+        registry.createIdentity("alice.id", alice);
 
         vm.prank(alice);
         vm.expectRevert(IdentityRegistry.InvalidNewController.selector);
@@ -212,7 +231,7 @@ contract IdentityRegistryTest is Test {
         assertFalse(registry.isUsernameTaken("alice.id"));
 
         vm.prank(alice);
-        registry.createIdentity("alice.id");
+        registry.createIdentity("alice.id", alice);
 
         assertTrue(registry.isUsernameTaken("alice.id"));
     }

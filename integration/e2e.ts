@@ -180,7 +180,7 @@ async function main() {
     address: identityAddress,
     abi: identityArtifact.abi,
     functionName: "createIdentity",
-    args: ["alice"],
+    args: ["alice", alice.address],
   });
   await publicClient.waitForTransactionReceipt({ hash: createIdentityTx });
 

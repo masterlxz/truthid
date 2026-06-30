@@ -74,15 +74,18 @@ contract IdentityRegistry {
     // Funções de escrita (modificam o estado → custam gas)
     // -------------------------------------------------------------------------
 
-    /// Cria uma nova identidade. O chamador da função se torna o controller.
-    function createIdentity(string calldata username) external returns (uint256 id) {
+    /// Cria uma nova identidade. O `controller` (quem vai controlar a identidade) pode ser
+    /// qualquer endereço — tipicamente uma smart account pré-computada via CREATE2.
+    /// O chamador (msg.sender) paga o gas mas não precisa ser o controller.
+    function createIdentity(string calldata username, address controller) external returns (uint256 id) {
         _validateUsername(username);
+        if (controller == address(0)) revert InvalidNewController();
 
         if (_identityByUsername[username].exists) {
             revert UsernameTaken(username);
         }
-        if (bytes(_usernameByController[msg.sender]).length > 0) {
-            revert AddressAlreadyHasIdentity(msg.sender);
+        if (bytes(_usernameByController[controller]).length > 0) {
+            revert AddressAlreadyHasIdentity(controller);
         }
 
         id = ++_nextId;
@@ -90,13 +93,13 @@ contract IdentityRegistry {
         _identityByUsername[username] = Identity({
             id: id,
             username: username,
-            controller: msg.sender,
+            controller: controller,
             exists: true
         });
 
-        _usernameByController[msg.sender] = username;
+        _usernameByController[controller] = username;
 
-        emit IdentityCreated(id, username, msg.sender);
+        emit IdentityCreated(id, username, controller);
     }
 
     /// Transfere o controle da identidade para outra carteira.

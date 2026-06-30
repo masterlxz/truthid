@@ -35,10 +35,10 @@ contract SessionRegistryTest is Test {
         sessionRegistry = new SessionRegistry(address(identityRegistry), address(deviceRegistry));
 
         vm.prank(alice);
-        identityRegistry.createIdentity("alice.id"); // identityId = 1
+        identityRegistry.createIdentity("alice.id", alice); // identityId = 1
 
         vm.prank(bob);
-        identityRegistry.createIdentity("bob.id"); // identityId = 2
+        identityRegistry.createIdentity("bob.id", bob); // identityId = 2
 
         (aliceDevice, aliceDeviceKey) = makeAddrAndKey("alice-device");
         (bobDevice, bobDeviceKey) = makeAddrAndKey("bob-device");

@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-06-29 (Sessão 47 — débito #16 resolvido)
+> Última atualização: 2026-06-30 (Sessão 52 — design Smart Account / ERC-4337 travado)
 
 ---
 
@@ -68,7 +68,8 @@ Fase 9 — Identidade Visual: Mobile & Desktop  [x] Concluída
 Fase 10 — Ledger via USB (Rust/hidapi)         [x] Concluída
 Fase 11 — Teste E2E Prático (login, sessão, revogação) [x] Concluída
 Fase 12 — Publicação & Release (v1.0.0)        [x] Concluída
-Fase 13 — TruthID Vault (gerenciador de senhas) [ ] Planejada
+Fase 13 — TruthID Vault (gerenciador de senhas) [~] Em andamento (13.1–13.7 ✓, 13.8–13.9 pendentes)
+Fase 14 — Smart Account (ERC-4337, Self-Funded)  [ ] Planejada
 ```
 
 ---
@@ -486,6 +487,11 @@ Desktop app                    Servidor exemplo (Express local)         Blockcha
 | Endereços de contrato nos SDKs (multi-rede) | Endereço fixo único vs mapa por rede | **Mapa por rede** ✓ — decidido na Sessão 26. Os 3 SDKs já tinham um parâmetro `network` desde a Fase 5, mas os endereços eram fixos (só Sepolia); completar o design original em vez de descartá-lo. Python/Ruby agora default para `"base-mainnet"`; TypeScript continua exigindo `network` explícito (sem default) |
 | Domínio do site de docs (Fase 8) | Domínio próprio (ex: truthid.dev) vs subdomínio grátis do GitHub Pages | **GitHub Pages grátis** ✓ — decidido na Sessão 31. Usuário ainda não tem domínio próprio registrado; `masterlxz.github.io/truthid` configurado no `docusaurus.config.ts` (etapa 8.1). Dá pra trocar pra domínio próprio depois (basta um arquivo `CNAME` em `docs/static/` + DNS) sem precisar redeployar nada além disso |
 | Conexão com Ledger (desktop) | USB direto via Rust (`hidapi`+APDU) vs documentar Ledger Live via WalletConnect (sem código novo) vs deixar de lado | **USB direto via Rust** ✓ — decidido na Sessão 34. WebHID/WebUSB confirmados ausentes no WebKitGTK (Sessão 33) — só dá pra fazer via comando Tauri em Rust, mesmo padrão de `get_or_create_device_key`/`sign_challenge` (etapa 3.7). Ver Fase 10 |
+| Controller da identidade | EOA do Ledger vs smart account pré-computada via CREATE2 | **Smart account via CREATE2** ✓ — Sessão 52. `createIdentity` passa a aceitar `address controller` explícito. Ledger paga as 3 txs iniciais como EOA (createIdentity + deploy + fund). Depois é só chave de assinatura. Ver Fase 14 |
+| Gas das operações do usuário | Dev mantém hot wallet (relayer) vs Paymaster centralizado vs auto-financiamento via EntryPoint | **Auto-financiamento via EntryPoint** ✓ — Sessão 52. Sem Paymaster, sem hot wallet do dev. Smart account deposita ETH no EntryPoint e paga bundler diretamente. Open source: cada deployment é independente, sem operador central. Ver Fase 14 |
+| Base da smart account | Safe / Coinbase Smart Wallet / SimpleAccount / custom | **Fork do SimpleAccount** ✓ — Sessão 52. Referência do ERC-4337, ECDSA secp256k1 (Ledger-native), CREATE2 via factory, ~150 linhas, sem dependências extras além do EntryPoint já deployado na Base |
+| Permissões na smart account | Uma tier única vs duas tiers (owner/devices) | **Duas tiers** ✓ — Sessão 52. Ledger = owner (assina tudo, inclusive DeviceRegistry). Devices (celular, etc.) = signers autorizados, bloqueados de chamar DeviceRegistry. Smart account mantém lista interna própria (não consulta DeviceRegistry em `validateUserOp` — evita restrições de storage cross-contract do ERC-4337). |
+| Recovery com saldo zero na smart account | Aceitar perda do saldo vs `emergencyWithdraw` | **`emergencyWithdraw`** ✓ — Sessão 52. Função na smart account chamável só pelo RecoveryManager, migra o saldo para a nova smart account durante a recovery. Recovery da identidade (via RecoveryManager → IdentityRegistry) nunca depende do saldo da smart account. |
 
 ---
 
@@ -795,6 +801,69 @@ O usuário configura: `{ name, endpoint_url, api_key }` — o app não precisa s
 
 ---
 
+### Fase 14 — Smart Account (ERC-4337, Self-Funded)
+
+**Objetivo**: substituir o EOA como controller da identidade por uma smart account ERC-4337. O usuário paga o próprio gás do celular sem precisar de wallet conectada. Nenhum dev/operador precisa manter hot wallet.
+
+**Motivações**:
+1. Celular (device key no Secure Enclave) assina UserOps localmente — sem MetaMask, sem wallet. Bundler público submete. Smart account paga do próprio saldo.
+2. Projeto open source sem operador central: elimina o relayer/hot wallet que hoje é responsabilidade de quem deploya.
+
+**Decisões travadas** (Sessão 52):
+- Smart account base: fork do `SimpleAccount` (eth-infinitism, ERC-4337, ECDSA secp256k1)
+- Sem Paymaster: auto-financiamento via depósito da smart account no EntryPoint
+- Ledger = owner (assina qualquer UserOp). Devices = signers autorizados (bloqueados de chamar DeviceRegistry)
+- Smart account mantém lista interna própria de devices autorizados (não consulta DeviceRegistry em `validateUserOp`)
+- `createIdentity` passa a aceitar `address controller` explícito (endereço CREATE2 pré-computado)
+- `emergencyWithdraw(address recipient)` na smart account, chamável só pelo RecoveryManager
+
+**Regra de gas**: todo gas (mesmo de UserOps assinadas pelo Ledger) é debitado da smart account. O Ledger nunca precisa de ETH após o setup inicial.
+
+**Setup inicial (único momento em que o Ledger age como EOA)**:
+1. Ledger paga `createIdentity(username, smartAccountAddress)` — endereço pré-computado via CREATE2
+2. Ledger deploya `TruthIDAccountFactory.deploy(ledgerAddress)` — smart account nasce no endereço previsto
+3. Ledger transfere ETH para a smart account
+
+A partir daí: Ledger assina UserOps off-chain → bundler submete → smart account paga.
+
+**Nota de sequência**: a Fase 14 deve ser implementada **antes** das etapas 13.8 e 13.9 (Vault mobile e extensão), pois a 13.8 usa o fluxo de assinatura mobile que a 14 altera. Implementar na ordem 13.8 → 14 geraria retrabalho.
+
+#### Etapas
+
+- [x] 14.1 — Atualizar `IdentityRegistry.createIdentity` para aceitar `address controller` explícito (em vez de `msg.sender`). Atualizar validação e testes. *(Sessão 52 — 134 testes passando, `tsc --noEmit` limpo. Novo teste `test_CreateIdentity_ControllerCanDifferFromCaller` valida o caso smart account. Desktop passa `address` conectado como controller por ora — será substituído pelo endereço CREATE2 na etapa 14.7)*
+- [ ] 14.2 — Implementar `TruthIDAccount.sol` (fork do SimpleAccount):
+  - `address public owner` (Ledger)
+  - `mapping(address => bool) public authorizedDevices`
+  - `validateUserOp`: se signer == owner → libera tudo; se signer é device autorizado → bloqueia chamadas ao `DeviceRegistry`; senão rejeita
+  - `addDevice(address device)` / `removeDevice(address device)` — só owner
+  - Integração com EntryPoint já deployado na Base
+- [ ] 14.3 — Adicionar `emergencyWithdraw(address recipient)` ao `TruthIDAccount.sol`, chamável só pelo `RecoveryManager` (armazenado como imutável no construtor, mesmo padrão do `owner`)
+- [ ] 14.4 — Implementar `TruthIDAccountFactory.sol` com CREATE2 determinístico (salt = hash da chave pública do Ledger). Função `getAddress(address ledgerKey)` para pré-computar o endereço sem deployar.
+- [ ] 14.5 — Testes Foundry: `TruthIDAccount` (validateUserOp com ambos os tiers, addDevice/removeDevice, emergencyWithdraw, bloqueio de DeviceRegistry por device) + `TruthIDAccountFactory` (endereço determinístico, idempotência do deploy)
+- [ ] 14.6 — Utilitário off-chain (viem): função `computeSmartAccountAddress(ledgerAddress, factoryAddress)` que replica o CREATE2 off-chain. Integrado ao Desktop (Rust ou TS, a definir).
+- [ ] 14.7 — Desktop: atualizar fluxo de criação de identidade
+  - Pré-computar endereço da smart account via `TruthIDAccountFactory.getAddress`
+  - Chamar `IdentityRegistry.createIdentity(username, smartAccountAddress)` — Ledger paga como EOA
+  - Deployar smart account via factory — Ledger paga como EOA
+  - Transferir ETH para a smart account — Ledger paga como EOA
+  - Exibir instrução clara: "estas 3 transações são pagas pela Ledger uma única vez"
+- [ ] 14.8 — Desktop + Mobile: sincronizar lista de signers da smart account com o DeviceRegistry. Ao registrar device no DeviceRegistry → `TruthIDAccount.addDevice`. Ao revogar → `TruthIDAccount.removeDevice`. Ambas assinadas pelo Ledger (UserOp, gás da smart account).
+- [ ] 14.9 — Mobile: atualizar fluxo de assinatura de transações (ex: `createSession`) para UserOps
+  - Construir calldata para o contrato alvo
+  - Montar UserOp (nonce via EntryPoint, gas limits estimados via bundler API)
+  - Assinar UserOp hash com a device key (Secure Enclave)
+  - Submeter ao bundler público (ex: `eth_sendUserOperation` via Alchemy/Pimlico)
+  - Remove dependência do padrão relayer (Sessão 39) para o Mobile — sem `RELAYER_PRIVATE_KEY` necessário
+- [ ] 14.10 — Dashboard da smart account no Desktop (tab dedicada):
+  - Saldo atual de ETH
+  - Histórico de operações com custo por tipo (sessão, registro de device, vault)
+  - Botão "Depositar" (mostra endereço + QR)
+  - Botão "Sacar" (transfere ETH para endereço informado, assinado pelo Ledger)
+- [ ] 14.11 — Deploy em Base Mainnet: `TruthIDAccount` (implementation) + `TruthIDAccountFactory`. Atualizar endereços em `contracts.ts`, mobile e SDKs.
+- [ ] 14.12 — Atualizar site de docs: nova página explicando o modelo de smart account, custo de setup, como financiar.
+
+---
+
 ## Roadmap de Evoluções Planejadas
 
 ### Sinalização sem servidor — IMPLEMENTADO (Sessão 26, continuação)
@@ -859,6 +928,41 @@ Website          Relay           Mobile App        Blockchain
 ---
 
 ## Log de Sessões
+
+### 2026-06-30 — Sessão 52
+
+- **Objetivo**: debate de arquitetura sobre Smart Account / ERC-4337 — leitura do `PROJECT_STATE_UPDATE_smart_account_paymaster.md` (Downloads) e resolução dos 4 problemas identificados.
+
+**Contexto**: o documento de entrada levantava a vontade de eliminar hot wallet do dev e deixar o usuário bancar o próprio gás. Não era decisão travada — era brainstorm. Claude Code analisou os contratos existentes antes de debater.
+
+**Problema 1 — `msg.sender` como controller**:
+- Todos os contratos usam `msg.sender` como controller. No ERC-4337, quem chama é a smart account, não o EOA.
+- Decisão: `createIdentity` aceita `address controller` explícito (CREATE2 pré-computado). Único contrato a mudar.
+- DeviceRegistry e SessionRegistry ficam sem mudança — quando chamados pela smart account, `msg.sender` == smart account == controller registrado. Tudo alinha.
+
+**Problema 2 — Bootstrap (ovo-e-galinha)**:
+- Resolvido pelo CREATE2: smart account é pré-computada antes de existir. Ledger paga as 3 txs iniciais como EOA puro (createIdentity + deploy + fund). Após isso, só assina.
+
+**Problema 3 — Permissões e DeviceRegistry**:
+- Só o Ledger pode registrar/revogar devices. Devices do dia a dia (celular) têm permissões limitadas.
+- Implementação: smart account com dois tiers (owner = Ledger / devices = lista interna). `validateUserOp` bloqueia chamadas ao DeviceRegistry quando signer é device.
+- Lista interna própria (não consulta DeviceRegistry em validação) — evita restrições de cross-contract storage do ERC-4337.
+- Todo gas (mesmo de UserOps do Ledger) debitado da smart account. Ledger nunca precisa de ETH após setup.
+
+**Problema 4 — Recovery com saldo zero**:
+- Recovery da identidade: RecoveryManager chama `IdentityRegistry.recoverController` diretamente. Guardiões pagam como EOAs. Zero bloqueio independente do saldo.
+- ETH parado na smart account antiga: `emergencyWithdraw(address recipient)` na smart account, chamável só pelo RecoveryManager, migra saldo para nova smart account.
+
+**Paymaster descartado**: projeto é open source, sem operador central. Auto-financiamento via EntryPoint é suficiente.
+
+**Base da smart account**: fork do SimpleAccount (eth-infinitism) — referência ERC-4337, ECDSA secp256k1 (Ledger-native), CREATE2 via factory, ~150 linhas, sem dependências extras.
+
+**Nota de sequência**: Fase 14 deve ser implementada antes das etapas 13.8 e 13.9 do Vault para evitar retrabalho no fluxo de assinatura mobile.
+
+- **Resultado**: Fase 14 planejada com 12 etapas. Todas as decisões de arquitetura travadas.
+- **Próximo passo**: iniciar 14.1 (atualizar `createIdentity`) ou concluir 13.8/13.9 primeiro (não recomendado — ver nota de sequência).
+
+---
 
 ### 2026-06-29 — Sessão 47
 

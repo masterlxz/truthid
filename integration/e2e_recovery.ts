@@ -169,7 +169,7 @@ async function main() {
   // Alice cria a identidade "alice"
   const createTx = await wallet(alice).writeContract({
     address: identityAddr, abi: identityArtifact.abi,
-    functionName: "createIdentity", args: ["alice"],
+    functionName: "createIdentity", args: ["alice", alice.address],
   });
   await publicClient.waitForTransactionReceipt({ hash: createTx });
   pass(`Identidade "alice" criada — controller: ${alice.address}`);

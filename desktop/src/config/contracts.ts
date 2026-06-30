@@ -5,7 +5,10 @@ export const IDENTITY_REGISTRY_ABI = [
   {
     type: "function",
     name: "createIdentity",
-    inputs: [{ name: "username", type: "string" }],
+    inputs: [
+      { name: "username", type: "string" },
+      { name: "controller", type: "address" },
+    ],
     outputs: [{ name: "id", type: "uint256" }],
     stateMutability: "nonpayable",
   },

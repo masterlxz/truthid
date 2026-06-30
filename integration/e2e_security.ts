@@ -211,7 +211,7 @@ async function main() {
   await publicClient.waitForTransactionReceipt({
     hash: await aliceWallet.writeContract({
       address: identityAddr, abi: identityArtifact.abi,
-      functionName: "createIdentity", args: ["alice"],
+      functionName: "createIdentity", args: ["alice", alice.address],
     }),
   });
 

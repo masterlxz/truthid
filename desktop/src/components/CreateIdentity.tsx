@@ -54,11 +54,14 @@ export function CreateIdentity() {
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    // Por ora passa o endereço conectado como controller (comportamento idêntico
+    // ao anterior). Na etapa 14.7 isso será substituído pelo endereço CREATE2
+    // da smart account pré-computada.
     writeContract({
       address: IDENTITY_REGISTRY_ADDRESS,
       abi: IDENTITY_REGISTRY_ABI,
       functionName: "createIdentity",
-      args: [username],
+      args: [username, address!],
     });
   }
 

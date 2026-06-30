@@ -28,10 +28,10 @@ contract DeviceRegistryTest is Test {
         deviceRegistry = new DeviceRegistry(address(identityRegistry));
 
         vm.prank(alice);
-        identityRegistry.createIdentity("alice.id"); // identityId = 1
+        identityRegistry.createIdentity("alice.id", alice); // identityId = 1
 
         vm.prank(bob);
-        identityRegistry.createIdentity("bob.id"); // identityId = 2
+        identityRegistry.createIdentity("bob.id", bob); // identityId = 2
     }
 
     // Atalho: faz o fluxo completo commit → (1 bloco depois) → registerDevice
