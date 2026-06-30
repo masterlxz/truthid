@@ -203,3 +203,56 @@ export const SESSION_REGISTRY_ABI = [
     ],
   },
 ] as const;
+
+// TODO: atualizar após deploy do VaultRegistry na Base Mainnet
+export const VAULT_REGISTRY_ADDRESS =
+  "0x0000000000000000000000000000000000000000" as const;
+
+export const VAULT_REGISTRY_ABI = [
+  {
+    type: "function",
+    name: "updateVault",
+    inputs: [
+      { name: "cid", type: "string" },
+      { name: "contentHash", type: "bytes32" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "hasVault",
+    inputs: [{ name: "identityId", type: "uint256" }],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getVault",
+    inputs: [{ name: "identityId", type: "uint256" }],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        components: [
+          { name: "cid", type: "string" },
+          { name: "contentHash", type: "bytes32" },
+          { name: "updatedAt", type: "uint256" },
+          { name: "version", type: "uint256" },
+          { name: "exists", type: "bool" },
+        ],
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "event",
+    name: "VaultUpdated",
+    inputs: [
+      { name: "identityId", type: "uint256", indexed: true },
+      { name: "cid", type: "string", indexed: false },
+      { name: "contentHash", type: "bytes32", indexed: true },
+      { name: "version", type: "uint256", indexed: false },
+    ],
+  },
+] as const;

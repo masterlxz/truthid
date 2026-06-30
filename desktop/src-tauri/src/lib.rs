@@ -5,7 +5,9 @@ use rand::rngs::OsRng;
 use sha2::Sha256;
 use sha3::{Digest, Keccak256};
 
+mod ipfs;
 mod ledger;
+mod permissions;
 mod vault;
 
 const SERVICE: &str = "truthid";
@@ -164,6 +166,58 @@ fn vault_encrypt(plaintext_b64: String) -> Result<String, String> {
     Ok(STANDARD.encode(blob))
 }
 
+/// Publica o vault local no IPFS (upload multi-pin) e retorna o CID e o
+/// content hash (keccak256) para o frontend registrar no VaultRegistry.
+/// Requer ao menos um provider `kind = "kubo"` configurado.
+#[tauri::command]
+async fn vault_publish() -> Result<ipfs::PinResult, String> {
+    let path = vault::vault_path()?;
+    if !path.exists() {
+        return Err("vault ainda não existe — adicione ao menos uma entrada antes de publicar".to_string());
+    }
+    let encrypted_blob = std::fs::read(&path).map_err(|e| e.to_string())?;
+    let providers = ipfs::load_providers();
+    if providers.is_empty() {
+        return Err("nenhum provider de pinning configurado — use vault_set_providers primeiro".to_string());
+    }
+    let result = ipfs::pin_vault(&encrypted_blob, &providers).await?;
+    // Registra a versão atual como publicada
+    let v = vault::load()?;
+    vault::mark_published(v.version)?;
+    Ok(result)
+}
+
+/// Quantas edições locais ainda não foram publicadas no IPFS.
+/// 0 = vault está em sync com o último "Enviar".
+#[tauri::command]
+fn vault_pending_changes() -> Result<u64, String> {
+    vault::pending_changes()
+}
+
+/// Retorna a lista de providers de pinning configurados.
+#[tauri::command]
+fn vault_get_providers() -> Result<Vec<ipfs::PinningProvider>, String> {
+    Ok(ipfs::load_providers())
+}
+
+/// Salva a lista de providers de pinning.
+#[tauri::command]
+fn vault_set_providers(providers: Vec<ipfs::PinningProvider>) -> Result<(), String> {
+    ipfs::save_providers(&providers)
+}
+
+/// Retorna a permissão canWriteVault de cada device registrado localmente.
+#[tauri::command]
+fn vault_get_device_permissions() -> Result<Vec<permissions::DeviceVaultPermission>, String> {
+    Ok(permissions::load())
+}
+
+/// Define ou atualiza a permissão canWriteVault de um device (por pubKey).
+#[tauri::command]
+fn vault_set_device_permission(pub_key: String, can_write: bool) -> Result<(), String> {
+    permissions::set(&pub_key, can_write)
+}
+
 /// Decifra um blob gerado por vault_encrypt.
 /// Entrada: blob em Base64. Saída: plaintext em Base64.
 #[tauri::command]
@@ -217,6 +271,12 @@ pub fn run() {
             vault_delete_entry,
             vault_encrypt,
             vault_decrypt,
+            vault_publish,
+            vault_pending_changes,
+            vault_get_providers,
+            vault_set_providers,
+            vault_get_device_permissions,
+            vault_set_device_permission,
             ledger::is_ledger_connected,
             ledger::get_ledger_address,
             ledger::sign_ledger_transaction

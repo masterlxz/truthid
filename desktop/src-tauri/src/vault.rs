@@ -20,7 +20,12 @@ pub(crate) struct VaultEntry {
     pub username: String,
     pub password: String,
     pub notes: String,
-    pub profile: String,
+    /// Lista de grupos a que esta entrada pertence (ex: ["Trabalho", "Casa"]).
+    #[serde(default)]
+    pub profiles: Vec<String>,
+    /// Campo legado — só lido na desserialização para migração. Nunca escrito.
+    #[serde(default, skip_serializing)]
+    profile: String,
     pub created_at: u64,
     pub updated_at: u64,
 }
@@ -92,7 +97,7 @@ fn now_secs() -> u64 {
 // I/O em disco
 // ---------------------------------------------------------------------------
 
-fn vault_path() -> Result<PathBuf, String> {
+pub(crate) fn vault_path() -> Result<PathBuf, String> {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
     let dir = std::path::Path::new(&home).join(".truthid");
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -108,7 +113,14 @@ pub(crate) fn load() -> Result<Vault, String> {
     }
     let blob = std::fs::read(&path).map_err(|e| e.to_string())?;
     let json = decrypt(&blob)?;
-    serde_json::from_slice(&json).map_err(|e| e.to_string())
+    let mut vault: Vault = serde_json::from_slice(&json).map_err(|e| e.to_string())?;
+    // Migração: vaults antigos tinham campo "profile" (string única) em vez de "profiles".
+    for entry in &mut vault.entries {
+        if entry.profiles.is_empty() && !entry.profile.is_empty() {
+            entry.profiles = vec![std::mem::take(&mut entry.profile)];
+        }
+    }
+    Ok(vault)
 }
 
 // Serializa o vault, cifra e escreve em disco.
@@ -151,6 +163,40 @@ pub(crate) fn decrypt(blob: &[u8]) -> Result<Vec<u8>, String> {
     cipher
         .decrypt(nonce, &blob[12..])
         .map_err(|_| "vault decrypt failed — blob corrupted or wrong key".to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Publicação — rastreia versão publicada vs. versão local
+// ---------------------------------------------------------------------------
+
+fn meta_path() -> Result<PathBuf, String> {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let dir = std::path::Path::new(&home).join(".truthid");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join("vault.meta.json"))
+}
+
+/// Persiste a versão do vault que acabou de ser publicada no IPFS.
+pub(crate) fn mark_published(version: u64) -> Result<(), String> {
+    let path = meta_path()?;
+    let meta = serde_json::json!({ "last_published_version": version });
+    std::fs::write(&path, serde_json::to_string(&meta).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())
+}
+
+/// Retorna quantas versões do vault ainda não foram publicadas no IPFS.
+/// 0 = nada pendente.
+pub(crate) fn pending_changes() -> Result<u64, String> {
+    let vault = load()?;
+    let path = meta_path()?;
+    let last = if path.exists() {
+        let raw = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        let val: serde_json::Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+        val["last_published_version"].as_u64().unwrap_or(0)
+    } else {
+        0
+    };
+    Ok(vault.version.saturating_sub(last))
 }
 
 // ---------------------------------------------------------------------------
@@ -209,6 +255,7 @@ mod tests {
             username: "user".to_string(),
             password: "pass".to_string(),
             notes: String::new(),
+            profiles: vec![],
             profile: String::new(),
             created_at: 0,
             updated_at: 0,

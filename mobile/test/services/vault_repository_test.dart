@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -167,7 +168,44 @@ void main() {
 
       expect(entry.url, '');
       expect(entry.notes, '');
-      expect(entry.profile, '');
+      expect(entry.profiles, isEmpty);
+    });
+
+    test('profiles suporta múltiplos grupos', () async {
+      final entry = await repo.addEntry(
+        site: 'github.com',
+        username: 'fab',
+        password: 'x',
+        profiles: ['Trabalho', 'Pessoal'],
+      );
+
+      expect(entry.profiles, containsAll(['Trabalho', 'Pessoal']));
+      expect(entry.profiles, hasLength(2));
+    });
+
+    test('migração: formato antigo com "profile" é convertido para "profiles"', () async {
+      // Simula vault salvo com formato antigo (profile como string única)
+      final oldJson = jsonEncode({
+        'version': 1,
+        'entries': [
+          {
+            'id': 'abc123',
+            'site': 'github.com',
+            'url': '',
+            'username': 'fab',
+            'password': 'pass',
+            'notes': '',
+            'profile': 'Trabalho',
+            'created_at': 1700000000,
+            'updated_at': 1700000000,
+          }
+        ],
+      });
+      await File(vaultPath).writeAsBytes(Uint8List.fromList(utf8.encode(oldJson)));
+
+      final entries = await repo.listEntries();
+      expect(entries, hasLength(1));
+      expect(entries.first.profiles, equals(['Trabalho']));
     });
   });
 }

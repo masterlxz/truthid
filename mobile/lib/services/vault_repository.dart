@@ -18,7 +18,8 @@ class VaultEntry {
   final String username;
   final String password;
   final String notes;
-  final String profile;
+  /// Lista de grupos a que esta entrada pertence (ex: ["Trabalho", "Casa"]).
+  final List<String> profiles;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -29,28 +30,38 @@ class VaultEntry {
     required this.username,
     required this.password,
     required this.notes,
-    required this.profile,
+    this.profiles = const [],
     required this.createdAt,
     required this.updatedAt,
   });
 
-  factory VaultEntry.fromJson(Map<String, dynamic> json) => VaultEntry(
-        id: json['id'] as String,
-        site: json['site'] as String,
-        url: json['url'] as String,
-        username: json['username'] as String,
-        password: json['password'] as String,
-        notes: json['notes'] as String,
-        profile: json['profile'] as String,
-        createdAt: DateTime.fromMillisecondsSinceEpoch(
-          (json['created_at'] as int) * 1000,
-          isUtc: true,
-        ),
-        updatedAt: DateTime.fromMillisecondsSinceEpoch(
-          (json['updated_at'] as int) * 1000,
-          isUtc: true,
-        ),
-      );
+  factory VaultEntry.fromJson(Map<String, dynamic> json) {
+    // Migração: formato antigo tinha "profile" (string); novo tem "profiles" (lista).
+    List<String> profiles;
+    if (json['profiles'] != null) {
+      profiles = List<String>.from(json['profiles'] as List);
+    } else {
+      final old = json['profile'] as String? ?? '';
+      profiles = old.isNotEmpty ? [old] : [];
+    }
+    return VaultEntry(
+      id: json['id'] as String,
+      site: json['site'] as String,
+      url: json['url'] as String,
+      username: json['username'] as String,
+      password: json['password'] as String,
+      notes: json['notes'] as String,
+      profiles: profiles,
+      createdAt: DateTime.fromMillisecondsSinceEpoch(
+        (json['created_at'] as int) * 1000,
+        isUtc: true,
+      ),
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(
+        (json['updated_at'] as int) * 1000,
+        isUtc: true,
+      ),
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -59,7 +70,7 @@ class VaultEntry {
         'username': username,
         'password': password,
         'notes': notes,
-        'profile': profile,
+        'profiles': profiles,
         'created_at': createdAt.millisecondsSinceEpoch ~/ 1000,
         'updated_at': updatedAt.millisecondsSinceEpoch ~/ 1000,
       };
@@ -70,7 +81,7 @@ class VaultEntry {
     String? username,
     String? password,
     String? notes,
-    String? profile,
+    List<String>? profiles,
   }) =>
       VaultEntry(
         id: id,
@@ -79,7 +90,7 @@ class VaultEntry {
         username: username ?? this.username,
         password: password ?? this.password,
         notes: notes ?? this.notes,
-        profile: profile ?? this.profile,
+        profiles: profiles ?? this.profiles,
         createdAt: createdAt,
         updatedAt: DateTime.now().toUtc(),
       );
@@ -119,7 +130,7 @@ class VaultRepository {
     required String username,
     required String password,
     String notes = '',
-    String profile = '',
+    List<String> profiles = const [],
   }) async {
     final data = await _load();
     final now = DateTime.now().toUtc();
@@ -130,7 +141,7 @@ class VaultRepository {
       username: username,
       password: password,
       notes: notes,
-      profile: profile,
+      profiles: profiles,
       createdAt: now,
       updatedAt: now,
     );

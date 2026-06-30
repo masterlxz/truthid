@@ -8,6 +8,7 @@ import { ManageDevices } from "./components/ManageDevices";
 import { ActiveSessions } from "./components/ActiveSessions";
 import { QuickLogin } from "./components/QuickLogin";
 import { DonateModal } from "./components/DonateModal";
+import { VaultManagement } from "./components/VaultManagement";
 import { IdentityProvider } from "./contexts/IdentityContext";
 import { WalletModalContext } from "./contexts/WalletModalContext";
 import { useStoredUsername } from "./hooks/useStoredUsername";
@@ -15,7 +16,7 @@ import { useUpdateCheck } from "./hooks/useUpdateCheck";
 import { IDENTITY_REGISTRY_ADDRESS, IDENTITY_REGISTRY_ABI } from "./config/contracts";
 import "./App.css";
 
-type Tab = "devices" | "sessions";
+type Tab = "devices" | "sessions" | "vault";
 
 function LogoIcon() {
   return (
@@ -203,10 +204,17 @@ function App() {
                 >
                   Active Sessions
                 </button>
+                <button
+                  onClick={() => setActiveTab("vault")}
+                  disabled={activeTab === "vault"}
+                >
+                  Vault
+                </button>
               </nav>
 
               {activeTab === "devices" && <ManageDevices />}
               {activeTab === "sessions" && <ActiveSessions />}
+              {activeTab === "vault" && <VaultManagement />}
             </IdentityProvider>
           )}
         </main>

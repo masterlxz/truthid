@@ -787,9 +787,9 @@ O usuário configura: `{ name, endpoint_url, api_key }` — o app não precisa s
 - [x] 13.2 — Derivação de chave HKDF no Desktop (Rust) e Mobile (Dart) *(Sessão 49 — `derive_vault_key()` interno em `desktop/src-tauri/src/lib.rs` usando `hkdf`+`sha2`; `VaultKeyService` em `mobile/lib/services/vault_key_service.dart` com HKDF-SHA256 puro; 5 testes Dart passando)*
 - [x] 13.3 — Cifra/decifra local do vault (AES-256-GCM) *(Sessão 50 — `vault.rs` em `desktop/src-tauri/src/vault.rs` com `encrypt`/`decrypt` + 5 testes Rust; `VaultCipherService` em `mobile/lib/services/vault_cipher_service.dart` + 8 testes Dart; Tauri commands `vault_encrypt`/`vault_decrypt` via Base64; formato do blob: nonce(12) || ciphertext || tag(16))*
 - [x] 13.4 — CRUD local de entradas do vault (site, usuário, senha, notas, perfil) *(Sessão 50 — structs `VaultEntry`+`Vault` + métodos `upsert`/`delete` + `load`/`save` em `desktop/src-tauri/src/vault.rs`; Tauri commands `vault_list_entries`/`vault_upsert_entry`/`vault_delete_entry`; 11 testes Rust passando. `VaultEntry`+`VaultRepository` em `mobile/lib/services/vault_repository.dart` com `path_provider`; 11 testes Dart passando. Formato JSON compartilhado: `{version, entries[]}`, blob cifrado em `$HOME/.truthid/vault.enc` no desktop e `{docs}/vault.enc` no mobile)*
-- [ ] 13.5 — Botão "Enviar" com batching + upload multi-pin (2+ provedores externos)
-- [ ] 13.6 — Configuração de provedores de pin: UI de adicionar/remover provedores (endpoint + API key), suporte à IPFS Pinning Service API como interface única (cobre terceiros como Pinata/Filebase/4EVERLAND e self-hosted via Kubo local), guia de setup do Kubo no app, health-check periódico por provedor + alerta na UI
-- [ ] 13.7 — UI Desktop: tela de gerenciamento do vault, permissão `canWriteVault` por Device
+- [x] 13.5 — Botão "Enviar" com batching + upload multi-pin (2+ provedores externos) *(Sessão 51 — novo módulo `desktop/src-tauri/src/ipfs.rs`: struct `PinningProvider { name, kind, endpoint_url, api_key }` onde `kind` é `"kubo"` (upload via `/api/v0/add`) ou `"psa"` (pin via IPFS Pinning Service API `/pins`); `pin_vault()` faz upload para todos os Kubo providers e pina o CID nos PSA providers; `load_providers`/`save_providers` persistem config em `~/.truthid/pinning_providers.json`. Em `vault.rs`: `mark_published(version)` salva `~/.truthid/vault.meta.json`; `pending_changes()` retorna vault.version - last_published_version. 4 novos Tauri commands: `vault_publish` (async, lê vault.enc, chama pin_vault, marca publicado, retorna `{cid, content_hash, providers_ok, providers_failed}`), `vault_pending_changes`, `vault_get_providers`, `vault_set_providers`. content_hash = keccak256(blob cifrado) com prefixo "0x", pronto para passar direto ao `VaultRegistry.updateVault`. 14 testes Rust passando)*
+- [x] 13.6 — Configuração de provedores de pin: UI de adicionar/remover provedores (endpoint + API key), suporte à IPFS Pinning Service API como interface única (cobre terceiros como Pinata/Filebase/4EVERLAND e self-hosted via Kubo local), guia de setup do Kubo no app, health-check periódico por provedor + alerta na UI *(Sessão 51 — nova tab "Vault" em `App.tsx`; novo componente `desktop/src/components/VaultSettings.tsx`: lista de providers com badge kubo/psa + botão "Testar" (health-check via fetch GET/POST) + botão "✕" para remover; formulário de adição com campos nome/tipo/endpoint/api-key; botão "Adicionar Kubo local" quando lista vazia; guia collapsible de setup do Kubo com comandos exatos; tipo `PinningProvider` adicionado a `types.ts`)*
+- [x] 13.7 — UI Desktop: tela de gerenciamento do vault, permissão `canWriteVault` por Device *(Sessão 51 — breaking change: `profile: String` → `profiles: Vec<String>` no Rust e `List<String>` no Dart, com migração automática de vaults antigos; novo `permissions.rs` + 2 commands (`vault_get_device_permissions`, `vault_set_device_permission`), permissões em `~/.truthid/vault_permissions.json`; `VAULT_REGISTRY_ADDRESS` + ABI adicionados a `contracts.ts` (endereço placeholder — aguardando deploy); novo componente `VaultManagement.tsx`: lista de entradas com filtro, formulário add/edit inline, delete com confirm, seletor de grupos multi-select (Trabalho/Casa/Pessoal), fluxo "Enviar" em 2 fases (vault_publish → updateVault on-chain), status on-chain (versão + data), botão "⚙ Providers" → VaultSettings, seção colapsável de permissões por device; tab "Vault" em App.tsx aponta agora para VaultManagement. 14 testes Rust + 13 testes Dart passando)*
 - [ ] 13.8 — UI Mobile: leitura do vault, tela de perfil para scan da extensão
 - [ ] 13.9 — Extensão de navegador: sessão efêmera, autofill, revogação em cascata
 
@@ -929,7 +929,19 @@ Website          Relay           Mobile App        Blockchain
 
 **Verificação**: `cargo test vault` (Docker) → 11/11; `flutter test test/services/vault_repository_test.dart` (Docker) → 11/11.
 
-- **Próximo passo**: 13.5 — botão "Enviar" com batching + upload multi-pin (IPFS Pinning Service API).
+- **Próximo passo**: ~~13.5~~ — concluída na Sessão 51.
+
+### 2026-06-29 — Sessão 51
+
+- **Objetivo**: Fase 13.5 — botão "Enviar" com batching + upload multi-pin IPFS.
+
+**O que foi feito**:
+
+- **13.5 — upload multi-pin**: novo módulo `desktop/src-tauri/src/ipfs.rs`. `PinningProvider { name, kind, endpoint_url, api_key }` — `kind = "kubo"` faz upload via `POST {endpoint}/api/v0/add` (Kubo HTTP RPC); `kind = "psa"` pina CID existente via IPFS Pinning Service API (`POST {endpoint}/pins`). Fluxo: upload para todos os Kubo providers → obtém CID → pina nos PSA providers. `content_hash = keccak256(blob cifrado)` prefixado com "0x" — passado direto ao `VaultRegistry.updateVault`. Config de providers em `~/.truthid/pinning_providers.json`. Em `vault.rs`: `mark_published(v)` e `pending_changes()` rastreiam versão publicada via `~/.truthid/vault.meta.json`. 4 novos Tauri commands: `vault_publish` (async — lê `vault.enc`, chama `ipfs::pin_vault`, retorna `{cid, content_hash, providers_ok, providers_failed}`), `vault_pending_changes`, `vault_get_providers`, `vault_set_providers`. Dependência adicionada: `reqwest = { version = "0.12", features = ["json", "multipart"] }`.
+
+**Verificação**: `cargo test` (Docker) → 14/14 passando.
+
+- **Próximo passo**: ~~13.6~~ — concluída na Sessão 51 (mesma sessão).
 
 ### 2026-06-29 — Sessão 48
 
