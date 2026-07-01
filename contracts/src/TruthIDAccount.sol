@@ -65,8 +65,14 @@ contract TruthIDAccount {
     // este contrato não usa dependências externas, replicamos manualmente.
     // Vale o custo (~100 gas): diferente do SessionRegistry (que só faz
     // bookkeeping de hash já commitado), esta conta custodia fundos direto.
+    //
+    // Valor achado incompleto (faltava o último dígito hex, `0` no final)
+    // numa sessão anterior — reduzia o limiar de n/2 pra n/32, rejeitando
+    // ~97% das assinaturas canônicas válidas (owner e device). Corrigido ao
+    // escrever os testes do débito #18: o caminho feliz de `executeBatch`
+    // falhava mesmo com assinatura correta, o que expôs o dígito faltante.
     uint256 internal constant _SECP256K1N_DIV_2 =
-        0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A;
+        0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0;
 
     // -------------------------------------------------------------------------
     // Estado
@@ -332,19 +338,46 @@ contract TruthIDAccount {
         }
 
         if (selector == this.executeBatch.selector) {
-            // Decodifica só o primeiro elemento do tuple (`dest[]`) — o
-            // primeiro word do calldata é sempre o offset desse elemento,
-            // independente de quantos parâmetros dinâmicos vêm depois.
-            // Evita copiar `value[]`/`func[]` pra memória, que não são
-            // usados aqui.
-            (address[] memory dest) = abi.decode(callData[4:], (address[]));
-            for (uint256 i = 0; i < dest.length; i++) {
-                if (!_isDestAllowed(dest[i])) return false;
+            // O seletor bater com `executeBatch` não garante que o resto do
+            // calldata seja um ABI válido pra essa assinatura — um device
+            // malicioso pode mandar o seletor certo seguido de lixo/dado
+            // truncado. `abi.decode` reverte nesse caso, e um revert aqui
+            // propagaria pra fora de `validateUserOp`, violando a regra do
+            // ERC-4337 de que falha de validação deve ser sinalizada via
+            // SIG_VALIDATION_FAILED, nunca por revert (débito #18, ver
+            // PROJECT_STATE.md). Por isso o decode roda numa auto-chamada
+            // externa (`_decodeExecuteBatchDest`) envolvida em `try/catch`:
+            // isso intercepta qualquer revert/panic do `abi.decode` (offset
+            // fora dos limites, length absurdo etc.) e vira `false` aqui,
+            // em vez de subir. Custo extra de um STATICCALL só neste ramo
+            // (signer de tier device — menos comum que owner, que já
+            // retorna antes de chegar aqui em `_validateSignature`).
+            try this._decodeExecuteBatchDest(callData) returns (address[] memory dest) {
+                for (uint256 i = 0; i < dest.length; i++) {
+                    if (!_isDestAllowed(dest[i])) return false;
+                }
+                return true;
+            } catch {
+                return false;
             }
-            return true;
         }
 
         return false;
+    }
+
+    // `external` (não `internal`) só pra viabilizar o `try/catch` acima —
+    // try/catch em Solidity só funciona em cima de chamadas externas.
+    // `pure` porque opera só sobre o `callData` recebido, sem ler estado;
+    // precisa ser `view` ou `pure` pra poder ser chamada via `this.xxx()`
+    // de dentro de uma função `view`. Não é pensada pra uso externo de
+    // verdade (daí o prefixo `_`), mas por ser `pure` e não acessar nenhum
+    // estado sensível, expô-la no ABI não abre superfície de ataque nova.
+    function _decodeExecuteBatchDest(bytes calldata callData)
+        external
+        pure
+        returns (address[] memory dest)
+    {
+        dest = abi.decode(callData[4:], (address[]));
     }
 
     function _isDestAllowed(address dest) internal view returns (bool) {

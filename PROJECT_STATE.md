@@ -89,8 +89,9 @@ durante a própria correção, uma tentativa de otimização introduziu um bug n
 mascarados numa extração via assembly) que só foi pego numa releitura cuidadosa antes do
 commit. Contratos on-chain não têm "hotfix" depois de deployados na mainnet — o custo de
 revisar demais é só tempo; o custo de revisar de menos pode ser fundos ou identidades
-perdidos permanentemente. Ver também os débitos #17 e #18 (abertos, não bloqueiam o
-progresso mas devem ser resolvidos ou conscientemente aceitos antes do release).
+perdidos permanentemente. Ver também o débito #17 (aberto, não bloqueia o
+progresso mas deve ser resolvido ou conscientemente aceito antes do release) — #18 e o
+#20 (achado na mesma correção) já foram resolvidos na Sessão 55.
 
 ---
 
@@ -538,8 +539,9 @@ Problemas identificados na revisão de arquitetura da Sessão 36 (2026-06-25). N
 | ~~15~~ | ~~`mobile/lib/screens/show_device_qr_screen.dart`~~ | ~~`ShowDeviceQrScreen` tem polling automático a cada 3s, mas se a rede cair pontualmente e o timer perder a confirmação, o usuário não tem como forçar uma nova tentativa sem fechar e reabrir a tela.~~ | **RESOLVIDO — Sessão 46**. Botão "Check now" adicionado abaixo do spinner em `_buildQrUI()`. Estado `_isChecking` desabilita o botão durante a verificação e exibe "Checking...". `SessionsScreen._load()` também enriquecido com verificação on-chain completa: auto-descobre pareamento se `identityId` ausente em storage; detecta revogação e limpa storage. Padrão idêntico ao #14. |
 | ~~16~~ | ~~Desktop (`App.tsx`, AppBar) + Mobile (`main.dart`, `_NavTab`)~~ | ~~Não existe nenhum mecanismo de doação no app.~~ | **RESOLVIDO — Sessão 47**. Botão ♥ no topbar do desktop abre modal com QR code EIP-681 + botão copiar (`qrcode.react`). Ícone ♥ no AppBar do mobile abre bottom sheet com mesmo conteúdo (`qr_flutter` já disponível). Página `/donate` adicionada ao site de docs (Docusaurus) com QR code + copiar; link "♥ Support" adicionado ao footer. Endereço: `0xB54fe9909D76d98e87a9fD76bDB5C69fABe10265` (deployer, já público on-chain). |
 | 17 | `contracts/src/IdentityRegistry.sol:80` | `createIdentity(username, controller)` não verifica se `msg.sender` tem qualquer autorização sobre o `controller` informado. Achado (CONFIRMED) no `/code-review` da Sessão 53, rodado sobre o diff da 14.1+14.2. Permite squatting/griefing: qualquer um pode "ocupar" um endereço alheio (inclusive o CREATE2 pré-computado de uma smart account que ainda vai ser deployada) chamando `createIdentity` primeiro, bloqueando o dono legítimo com `AddressAlreadyHasIdentity`. Recuperável (o dono, uma vez com controle do endereço, pode chamar `transferController` pra liberar e tentar de novo), mas é uma DoS/griefing gratuita para o atacante. | Decisão de design pendente do dono do projeto — opções: (a) exigir uma assinatura do `controller` provando consentimento (mais forte, mas complica o fluxo de smart account pré-deploy, que ainda não existe pra assinar nada); (b) esquema commit-reveal como o `registerDevice` já usa; (c) aceitar o risco como está (griefing é recuperável, não é perda permanente de fundos/identidade). Nenhuma teve endosso ainda. |
-| 18 | `contracts/src/TruthIDAccount.sol` | `_isDeviceCallAllowed` retorna via `abi.decode`, que pode reverter (em vez de retornar `SIG_VALIDATION_FAILED` de forma limpa) se um signer de tier device mandar `callData` com o seletor certo mas payload truncado/malformado. Achado (PLAUSIBLE) no `/code-review` da Sessão 53. | Baixa prioridade — impacto limitado porque bundlers pré-simulam off-chain (`eth_call` a `simulateValidation`) antes de incluir a UserOp num batch, então um revert aqui só exclui a UserOp da simulação, resultado prático semelhante a `SIG_VALIDATION_FAILED`. Revisitar se algum dia isso rodar sem bundler pré-simulando. |
+| ~~18~~ | ~~`contracts/src/TruthIDAccount.sol`~~ | ~~`_isDeviceCallAllowed` retorna via `abi.decode`, que pode reverter (em vez de retornar `SIG_VALIDATION_FAILED` de forma limpa) se um signer de tier device mandar `callData` com o seletor certo mas payload truncado/malformado. Achado (PLAUSIBLE) no `/code-review` da Sessão 53.~~ | **RESOLVIDO — Sessão 55**. Decode movido pra função nova `_decodeExecuteBatchDest` (`external pure`), chamada via `try/catch` em vez de `abi.decode` direto — qualquer revert/panic do decode vira `false` (→ `SIG_VALIDATION_FAILED`) em vez de propagar. Evitou reintroduzir assembly manual na área que já causou o bug do débito relacionado à máscara (item 4 do review da Sessão 53). Testes novos em `contracts/test/TruthIDAccount.t.sol` (não existia antes). |
 | 19 | `contracts/src/RecoveryManager.sol` | Etapa 14.3 (Sessão 54) adicionou `emergencyWithdraw(address recipient)` na `TruthIDAccount`, chamável só pelo `RecoveryManager` — mas nada no `RecoveryManager.sol` de fato chama essa função (`executeRecovery` só invoca `IdentityRegistry.recoverController`, não rastreia endereço de smart account nenhum). A função fica funcional mas inalcançável até essa conexão ser feita. | Decisão de design pendente: como o `RecoveryManager` vai descobrir o endereço da smart account antiga (hoje só disponível via evento `ControllerTransferred` do `IdentityRegistry`, não em storage) e como/quando invocar `emergencyWithdraw` (dentro do próprio `executeRecovery`, ou uma função separada chamada depois). Nenhuma das etapas 14.4–14.12 do roadmap cobre isso explicitamente — vale decidir se é uma etapa nova ou parte da 14.8 (sync de devices/smart account). |
+| ~~20~~ | ~~`contracts/src/TruthIDAccount.sol:69`~~ | ~~A constante `_SECP256K1N_DIV_2` (limiar low-s, EIP-2) tinha 1 dígito hex a menos (`...681B20A` em vez de `...681B20A0`), fazendo o valor real ser `n/32` em vez de `n/2` — rejeitava ~97% das assinaturas canônicas válidas como `SIG_VALIDATION_FAILED`, afetando owner e devices igualmente (checagem roda antes de identificar quem assinou). Introduzido junto com a 14.2 (Sessão 53), nunca pego porque não havia teste de caminho feliz pra `TruthIDAccount` até agora.~~ | **RESOLVIDO — Sessão 55**. Achado ao escrever o teste de regressão do débito #18 (caminho feliz de `executeBatch` falhava mesmo com assinatura correta). Corrigido adicionando o `0` faltante; valor conferido matematicamente (`== n // 2`) antes de commitar. |
 
 ---
 
@@ -1031,6 +1033,23 @@ Website          Relay           Mobile App        Blockchain
 **Gap identificado e registrado (não resolvido nesta sessão)**: nada em `RecoveryManager.sol` chama `emergencyWithdraw` ainda — a função fica funcional mas inalcançável até uma etapa futura conectar os dois lados (o `RecoveryManager` também não rastreia endereço de smart account nenhum hoje, só teria acesso ao endereço do controller antigo via o evento `ControllerTransferred` do `IdentityRegistry`). Nenhuma das etapas 14.4–14.12 do roadmap cobre essa conexão explicitamente. Registrado como débito #19 na tabela de Débitos Técnicos de Arquitetura — decisão de design pendente do dono do projeto sobre quando/como resolver.
 
 - **Resultado**: 14.3 concluída.
+- **Próximo passo**: 14.4 — `TruthIDAccountFactory.sol` com CREATE2 determinístico.
+
+---
+
+### 2026-06-30 — Sessão 55
+
+- **Objetivo**: resolver débito #18 — `_isDeviceCallAllowed` podia reverter em vez de retornar `SIG_VALIDATION_FAILED` de forma limpa em `executeBatch` malformado.
+
+`abi.decode(callData[4:], (address[]))` movido pra uma função nova `_decodeExecuteBatchDest` (`external pure`), chamada via `try this._decodeExecuteBatchDest(callData) returns (...) { ... } catch { return false; }`. Qualquer revert/panic do decode passa a virar `false` em vez de propagar pra fora de `validateUserOp`. Escolhida em vez de reimplementar o decode manualmente em assembly com bounds-checks porque essa mesma função já causou um bug real de máscara uma vez (item 4 do review da Sessão 53) — `try/catch` reaproveita o `abi.decode` já correto no caminho feliz, sem introduzir aritmética ABI nova pra errar. Custo extra de um STATICCALL só no caminho device+`executeBatch` (menos comum que owner).
+
+Criado `contracts/test/TruthIDAccount.t.sol` do zero (não existia nenhum teste pra esse contrato) — escopo restrito ao débito #18, não é suíte geral: 3 testes (calldata malformado retorna `1` sem reverter; destino permitido retorna `0`; destino bloqueado retorna `1`, garantindo que o `try/catch` não afrouxou `_isDestAllowed`).
+
+**Bug crítico achado ao escrever o teste do caminho feliz** (não relacionado ao débito #18): o teste falhava mesmo com assinatura correta. Causa raiz: `_SECP256K1N_DIV_2` (introduzida na 14.2, Sessão 53) tinha 1 dígito hex a menos (`...681B20A` em vez de `...681B20A0`), fazendo o limiar real ser `n/32` em vez de `n/2` — rejeitava ~97% das assinaturas canônicas válidas como `SIG_VALIDATION_FAILED`, afetando owner e devices igualmente (a checagem roda antes de identificar quem assinou). Nunca foi pego porque não havia teste de caminho feliz pra `TruthIDAccount` até agora. Corrigido (dígito `0` adicionado) e conferido matematicamente (`== n // 2` via Python) antes de commitar. Registrado como débito #20 na tabela — já resolvido na mesma sessão.
+
+`forge fmt --check`/`forge build`/`forge test` limpos: 137 testes passando (134 pré-existentes + 3 novos).
+
+- **Débitos fechados**: #18, #20 (achado e resolvido na mesma sessão).
 - **Próximo passo**: 14.4 — `TruthIDAccountFactory.sol` com CREATE2 determinístico.
 
 ---
