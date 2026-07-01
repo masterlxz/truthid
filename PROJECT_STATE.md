@@ -74,6 +74,26 @@ Fase 14 — Smart Account (ERC-4337, Self-Funded)  [~] Em andamento (14.1–14.2
 
 ---
 
+## Checklist antes do próximo release oficial
+
+**Rodar `/code-review` (considerar `ultra`) sobre `contracts/` inteiro** antes de publicar
+qualquer versão que inclua a Fase 13 (Vault) ou a Fase 14 (Smart Account) em produção —
+não só revisar arquivo por arquivo conforme escrito, mas uma passada final olhando os
+contratos como um todo (interações entre `IdentityRegistry`/`DeviceRegistry`/
+`RecoveryManager`/`TruthIDAccount`/`VaultRegistry`).
+
+**Por quê**: motivado pela Sessão 53 — o `/code-review` rodado sobre um único contrato
+recém-escrito (`TruthIDAccount.sol`) já achou uma falha crítica (device sequestrando a
+identidade via `IdentityRegistry`/`RecoveryManager`, ver débito resolvido na Sessão 53) e,
+durante a própria correção, uma tentativa de otimização introduziu um bug novo (bits não
+mascarados numa extração via assembly) que só foi pego numa releitura cuidadosa antes do
+commit. Contratos on-chain não têm "hotfix" depois de deployados na mainnet — o custo de
+revisar demais é só tempo; o custo de revisar de menos pode ser fundos ou identidades
+perdidos permanentemente. Ver também os débitos #17 e #18 (abertos, não bloqueiam o
+progresso mas devem ser resolvidos ou conscientemente aceitos antes do release).
+
+---
+
 ## Fases Detalhadas
 
 ### Fase 1 — Smart Contracts
@@ -517,6 +537,8 @@ Problemas identificados na revisão de arquitetura da Sessão 36 (2026-06-25). N
 | ~~14~~ | ~~`mobile/lib/screens/devices_screen.dart`~~ | ~~`DevicesScreen` não detecta automaticamente que o device foi registrado on-chain — só checa no `_reload()` manual ou pull-to-refresh.~~ | **RESOLVIDO — Sessão 46**. `_reload()` chama `_blockchain.getDevice(address)` on-chain em toda execução (abertura da tela e pull-to-refresh). Auto-descobre pareamento se `identityId == null` em storage. Detecta revogação e limpa storage automaticamente. Botão "Show QR to pair" agora condicional (`_pairedIdentityId == null`) — some quando pareado, reaparece se revogado. Dica "Pull down to check if already paired" adicionada ao card de info. |
 | ~~15~~ | ~~`mobile/lib/screens/show_device_qr_screen.dart`~~ | ~~`ShowDeviceQrScreen` tem polling automático a cada 3s, mas se a rede cair pontualmente e o timer perder a confirmação, o usuário não tem como forçar uma nova tentativa sem fechar e reabrir a tela.~~ | **RESOLVIDO — Sessão 46**. Botão "Check now" adicionado abaixo do spinner em `_buildQrUI()`. Estado `_isChecking` desabilita o botão durante a verificação e exibe "Checking...". `SessionsScreen._load()` também enriquecido com verificação on-chain completa: auto-descobre pareamento se `identityId` ausente em storage; detecta revogação e limpa storage. Padrão idêntico ao #14. |
 | ~~16~~ | ~~Desktop (`App.tsx`, AppBar) + Mobile (`main.dart`, `_NavTab`)~~ | ~~Não existe nenhum mecanismo de doação no app.~~ | **RESOLVIDO — Sessão 47**. Botão ♥ no topbar do desktop abre modal com QR code EIP-681 + botão copiar (`qrcode.react`). Ícone ♥ no AppBar do mobile abre bottom sheet com mesmo conteúdo (`qr_flutter` já disponível). Página `/donate` adicionada ao site de docs (Docusaurus) com QR code + copiar; link "♥ Support" adicionado ao footer. Endereço: `0xB54fe9909D76d98e87a9fD76bDB5C69fABe10265` (deployer, já público on-chain). |
+| 17 | `contracts/src/IdentityRegistry.sol:80` | `createIdentity(username, controller)` não verifica se `msg.sender` tem qualquer autorização sobre o `controller` informado. Achado (CONFIRMED) no `/code-review` da Sessão 53, rodado sobre o diff da 14.1+14.2. Permite squatting/griefing: qualquer um pode "ocupar" um endereço alheio (inclusive o CREATE2 pré-computado de uma smart account que ainda vai ser deployada) chamando `createIdentity` primeiro, bloqueando o dono legítimo com `AddressAlreadyHasIdentity`. Recuperável (o dono, uma vez com controle do endereço, pode chamar `transferController` pra liberar e tentar de novo), mas é uma DoS/griefing gratuita para o atacante. | Decisão de design pendente do dono do projeto — opções: (a) exigir uma assinatura do `controller` provando consentimento (mais forte, mas complica o fluxo de smart account pré-deploy, que ainda não existe pra assinar nada); (b) esquema commit-reveal como o `registerDevice` já usa; (c) aceitar o risco como está (griefing é recuperável, não é perda permanente de fundos/identidade). Nenhuma teve endosso ainda. |
+| 18 | `contracts/src/TruthIDAccount.sol` | `_isDeviceCallAllowed` retorna via `abi.decode`, que pode reverter (em vez de retornar `SIG_VALIDATION_FAILED` de forma limpa) se um signer de tier device mandar `callData` com o seletor certo mas payload truncado/malformado. Achado (PLAUSIBLE) no `/code-review` da Sessão 53. | Baixa prioridade — impacto limitado porque bundlers pré-simulam off-chain (`eth_call` a `simulateValidation`) antes de incluir a UserOp num batch, então um revert aqui só exclui a UserOp da simulação, resultado prático semelhante a `SIG_VALIDATION_FAILED`. Revisitar se algum dia isso rodar sem bundler pré-simulando. |
 
 ---
 
@@ -830,7 +852,7 @@ A partir daí: Ledger assina UserOps off-chain → bundler submete → smart acc
 
 #### Etapas
 
-- [x] 14.1 — Atualizar `IdentityRegistry.createIdentity` para aceitar `address controller` explícito (em vez de `msg.sender`). Atualizar validação e testes. *(Sessão 52 — 134 testes passando, `tsc --noEmit` limpo. Novo teste `test_CreateIdentity_ControllerCanDifferFromCaller` valida o caso smart account. Desktop passa `address` conectado como controller por ora — será substituído pelo endereço CREATE2 na etapa 14.7)*
+- [x] 14.1 — Atualizar `IdentityRegistry.createIdentity` para aceitar `address controller` explícito (em vez de `msg.sender`). Atualizar validação e testes. *(Sessão 52 — 134 testes passando, `tsc --noEmit` limpo. Novo teste `test_CreateIdentity_ControllerCanDifferFromCaller` valida o caso smart account. Desktop passa `address` conectado como controller por ora — será substituído pelo endereço CREATE2 na etapa 14.7. **Gap de segurança aberto, achado no `/code-review` da Sessão 53**: `createIdentity` não valida que `msg.sender` tem autorização sobre o `controller` informado — qualquer um pode "ocupar" um endereço alheio (inclusive o CREATE2 pré-computado de uma smart account futura) chamando `createIdentity` primeiro, bloqueando o dono legítimo com `AddressAlreadyHasIdentity` até ele mesmo liberar via `transferController`. Confirmado, não corrigido — ver débito #17 na tabela de Débitos Técnicos de Arquitetura.)*
 - [x] 14.2 — Implementar `TruthIDAccount.sol` (fork do SimpleAccount):
   - `address public owner` (Ledger)
   - `mapping(address => bool) public authorizedDevices`
@@ -983,7 +1005,18 @@ Website          Relay           Mobile App        Blockchain
 - `_isDeviceCallAllowed`/`_isDestAllowed`: only-allow-list de seletor (`execute`/`executeBatch`) + bloqueio de destino para signers de tier device.
 - `forge build`: compila limpo. `forge fmt --check`: sem alterações necessárias. `forge test`: 134 testes existentes continuam passando (nenhum teste novo nesta etapa — são a 14.5).
 
-- **Resultado**: 14.2 concluída.
+**`/code-review` (high effort) rodado sobre o diff da 14.1+14.2 antes do commit — 8 achados, ranqueados por severidade:**
+
+1. **[CONFIRMED, corrigido nesta sessão]** `_isDestAllowed` só negava `deviceRegistry`/`address(this)` — device conseguia sequestrar a identidade via `IdentityRegistry.transferController` ou reconfigurar guardiões via `RecoveryManager.configureGuardians`. Corrigido com o mapping `blockedForDevices` extensível (ver acima).
+2. **[CONFIRMED, aberto]** `IdentityRegistry.createIdentity` (14.1, já commitado antes desta sessão) aceita `controller` arbitrário sem checar autorização — squatting/griefing de endereço alheio. Registrado como débito #17 na tabela de Débitos Técnicos de Arquitetura.
+3. **[PLAUSIBLE, aberto]** `_isDeviceCallAllowed` pode reverter (via `abi.decode`) em vez de retornar `SIG_VALIDATION_FAILED` de forma limpa se o calldata vier malformado. Registrado como débito #18. Impacto baixo (bundlers pré-simulam).
+4. **[PLAUSIBLE, corrigido]** `abi.decode` gastava gas decodificando `value`/`func` não usados em `_isDeviceCallAllowed`. Otimizado com leitura direta de calldata (`execute`) e decode parcial do primeiro elemento do tuple (`executeBatch`). A correção introduziu um bug próprio — bits superiores não mascarados na extração via assembly, o que reabriria o bypass do bloqueio de auto-chamada com calldata malicioso; identificado e corrigido (máscara explícita) antes do commit.
+5. **[PLAUSIBLE, aceito como está]** `address(this)` como chamador autorizado de `execute`/`executeBatch` é generalidade não estritamente necessária hoje (só `addDevice`/`removeDevice` usam esse caminho) — mantido por simplicidade de ter um único gate `_requireAuthorized` para as 4 funções, em vez de dois gates distintos.
+6. **[PLAUSIBLE, parcialmente aberto]** Padrão `ecrecover` + prefixo `"\x19Ethereum Signed Message:\n32"` duplicado do `SessionRegistry.sol`, com a checagem low-s presente só na `TruthIDAccount`. Mesmo débito já citado acima (backport da checagem low-s pro `SessionRegistry`).
+7. **[PLAUSIBLE, resolvido com comentário]** Captura de `success` no pagamento do prefund parecia código morto — na verdade é proposital (silencia o linter `unchecked-call` do `forge build`); comentário reescrito pra deixar isso explícito em vez de remover a linha (tentativa de remover reintroduziu o warning do linter).
+8. **[PLAUSIBLE, corrigido]** `executeBatch` tinha um atalho de array `value` vazio (= todas as chamadas sem ETH) que exigia uma checagem e um ternário extras. Simplificado: agora exige `value.length == dest.length` sempre.
+
+- **Resultado**: 14.2 concluída, com a correção de segurança do achado #1 já commitada (`5396b16`).
 - **Próximo passo**: 14.3 — `emergencyWithdraw(address recipient)` na `TruthIDAccount`, chamável só pelo `RecoveryManager`.
 
 ---
