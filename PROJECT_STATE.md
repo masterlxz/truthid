@@ -69,7 +69,7 @@ Fase 10 — Ledger via USB (Rust/hidapi)         [x] Concluída
 Fase 11 — Teste E2E Prático (login, sessão, revogação) [x] Concluída
 Fase 12 — Publicação & Release (v1.0.0)        [x] Concluída
 Fase 13 — TruthID Vault (gerenciador de senhas) [~] Em andamento (13.1–13.7 ✓, 13.8–13.9 pendentes)
-Fase 14 — Smart Account (ERC-4337, Self-Funded)  [ ] Planejada
+Fase 14 — Smart Account (ERC-4337, Self-Funded)  [~] Em andamento (14.1–14.2 ✓, 14.3–14.12 pendentes)
 ```
 
 ---
@@ -831,12 +831,14 @@ A partir daí: Ledger assina UserOps off-chain → bundler submete → smart acc
 #### Etapas
 
 - [x] 14.1 — Atualizar `IdentityRegistry.createIdentity` para aceitar `address controller` explícito (em vez de `msg.sender`). Atualizar validação e testes. *(Sessão 52 — 134 testes passando, `tsc --noEmit` limpo. Novo teste `test_CreateIdentity_ControllerCanDifferFromCaller` valida o caso smart account. Desktop passa `address` conectado como controller por ora — será substituído pelo endereço CREATE2 na etapa 14.7)*
-- [ ] 14.2 — Implementar `TruthIDAccount.sol` (fork do SimpleAccount):
+- [x] 14.2 — Implementar `TruthIDAccount.sol` (fork do SimpleAccount):
   - `address public owner` (Ledger)
   - `mapping(address => bool) public authorizedDevices`
   - `validateUserOp`: se signer == owner → libera tudo; se signer é device autorizado → bloqueia chamadas ao `DeviceRegistry`; senão rejeita
   - `addDevice(address device)` / `removeDevice(address device)` — só owner
   - Integração com EntryPoint já deployado na Base
+  *(Sessão 53 — EntryPoint v0.7 (`PackedUserOperation`), zero imports/dependências, `forge build` e os 134 testes existentes passam. Checagem de malleability (low-s) adicionada manualmente no `ecrecover`, já que não há OpenZeppelin. Sem `addDeposit`/`getDeposit` — só `receive()` + pagamento just-in-time do prefund, suficiente pro padrão v0.7. Gap de segurança fechado: device autorizado não pode se autopromover via auto-chamada `execute(address(this), 0, addDevice(...))` — `validateUserOp` bloqueia, pra signers de tier device, qualquer `execute`/`executeBatch` cujo destino seja `address(this)` ou um destino bloqueado.
+  **Correção pós-`/code-review`, mesma sessão**: o achado mais crítico do review apontou que a restrição original só bloqueava `deviceRegistry`/`address(this)` — um device continuava livre pra chamar `IdentityRegistry.transferController` (sequestro de identidade) ou `RecoveryManager.configureGuardians` (troca de guardiões), furando o próprio propósito do tier restrito. Corrigido substituindo a comparação de 2 endereços `immutable` por um mapping `blockedForDevices` semeado no constructor com `deviceRegistry`/`identityRegistry`/`recoveryManager`, extensível pelo owner via `blockDestinationForDevices`/`unblockDestinationForDevices` (sem precisar reimplantar a conta pra cada contrato privilegiado que surgir em fases futuras — a conta não tem proxy). `address(this)` continua checado à parte, fora do mapping, pra nunca poder ser desbloqueado. Também corrigidas 3 limpezas triviais sinalizadas no mesmo review (captura morta de `success`, atalho desnecessário do array `value` vazio em `executeBatch`, `abi.decode` decodificando campos não usados em `_isDeviceCallAllowed`) — na correção da última, uma extração via assembly introduzida por engano deixou de mascarar os bits superiores da palavra de calldata (risco de bypass do bloqueio de auto-chamada com calldata malicioso "sujo"); corrigido com uma máscara explícita antes de virar código commitado. Constructor de `TruthIDAccount` agora recebe `identityRegistry_`/`recoveryManager_` além dos parâmetros anteriores — a etapa 14.4 (factory) precisa passá-los. Débito aberto: considerar backport da checagem low-s pro `SessionRegistry.sol` por consistência.)*
 - [ ] 14.3 — Adicionar `emergencyWithdraw(address recipient)` ao `TruthIDAccount.sol`, chamável só pelo `RecoveryManager` (armazenado como imutável no construtor, mesmo padrão do `owner`)
 - [ ] 14.4 — Implementar `TruthIDAccountFactory.sol` com CREATE2 determinístico (salt = hash da chave pública do Ledger). Função `getAddress(address ledgerKey)` para pré-computar o endereço sem deployar.
 - [ ] 14.5 — Testes Foundry: `TruthIDAccount` (validateUserOp com ambos os tiers, addDevice/removeDevice, emergencyWithdraw, bloqueio de DeviceRegistry por device) + `TruthIDAccountFactory` (endereço determinístico, idempotência do deploy)
@@ -961,6 +963,28 @@ Website          Relay           Mobile App        Blockchain
 
 - **Resultado**: Fase 14 planejada com 12 etapas. Todas as decisões de arquitetura travadas.
 - **Próximo passo**: iniciar 14.1 (atualizar `createIdentity`) ou concluir 13.8/13.9 primeiro (não recomendado — ver nota de sequência).
+
+---
+
+### 2026-06-30 — Sessão 53
+
+- **Objetivo**: Fase 14, etapa 14.2 — implementar `TruthIDAccount.sol`.
+
+**Decisões tomadas nesta sessão** (faltavam na Sessão 52):
+- **EntryPoint v0.7** (`PackedUserOperation`), não v0.6 nem v0.8 — padrão mais maduro/suportado por bundlers públicos hoje. Trocar de versão depois (se necessário) segue o mesmo caminho que recovery social já usa (`emergencyWithdraw` + `transferController` pra smart account nova), sem exigir upgradeability/proxy — confirmado com o dono do projeto que essa migração é aceitável.
+- **Checagem de malleability (low-s, EIP-2)** no `ecrecover` manual — o `SimpleAccount` original ganha de graça via OpenZeppelin; como não há essa dependência aqui, foi replicada manualmente (~100 gas a mais). Débito aberto: considerar o mesmo backport pro `SessionRegistry.sol`, que hoje faz `ecrecover` cru sem essa checagem.
+- **Sem `addDeposit`/`getDeposit`** — só `receive()` + pagamento just-in-time do prefund. Suficiente e correto pro padrão ERC-4337 v0.7 (que verifica saldo recebido durante `validateUserOp`, não um ledger de depósito separado). Dashboard da 14.10 pode ler `address(this).balance` direto.
+
+**Gap de segurança identificado e fechado** (via agente de planejamento que estressou o design antes da implementação): um device autorizado poderia se autopromover mandando `execute(address(this), 0, abi.encodeCall(addDevice, (atacante)))` — auto-chamada que faz `addDevice` enxergar `msg.sender == address(this)`. Fechado bloqueando, em `validateUserOp` para signers de tier device, qualquer `execute`/`executeBatch` cujo destino seja `deviceRegistry` OU `address(this)`. Como consequência, `addDevice`/`removeDevice` aceitam três chamadores (`owner`, `entryPoint`, `address(this)`) — os três só são alcançáveis quando o signer da UserOp original era o owner.
+
+**Implementação** (`contracts/src/TruthIDAccount.sol`, arquivo novo, zero imports):
+- `struct PackedUserOperation` declarada no escopo do arquivo (não importada).
+- `validateUserOp`, `execute`/`executeBatch`, `addDevice`/`removeDevice`, `receive()`.
+- `_isDeviceCallAllowed`/`_isDestAllowed`: only-allow-list de seletor (`execute`/`executeBatch`) + bloqueio de destino para signers de tier device.
+- `forge build`: compila limpo. `forge fmt --check`: sem alterações necessárias. `forge test`: 134 testes existentes continuam passando (nenhum teste novo nesta etapa — são a 14.5).
+
+- **Resultado**: 14.2 concluída.
+- **Próximo passo**: 14.3 — `emergencyWithdraw(address recipient)` na `TruthIDAccount`, chamável só pelo `RecoveryManager`.
 
 ---
 
