@@ -26,6 +26,12 @@ struct PackedUserOperation {
 //     `execute`/`executeBatch`, e nunca mirando um destino bloqueado (ver
 //     `blockedForDevices`) nem a própria smart account.
 //
+// Uma terceira autoridade, à parte dos dois tiers de signer: o
+// RecoveryManager pode chamar `emergencyWithdraw` pra resgatar o saldo da
+// conta durante um recovery social, sem depender de UserOp nem do owner
+// (que pode já estar comprometido/inacessível — é o próprio motivo do
+// recovery).
+//
 // Por que bloquear destino == address(this) para devices, e não só
 // destino == deviceRegistry? Sem isso, um device autorizado poderia mandar
 // `execute(address(this), 0, abi.encodeCall(addDevice, (atacante)))` — uma
@@ -88,6 +94,7 @@ contract TruthIDAccount {
     event DeviceRemoved(address indexed device);
     event DestinationBlockedForDevices(address indexed dest);
     event DestinationUnblockedForDevices(address indexed dest);
+    event EmergencyWithdraw(address indexed recipient, uint256 amount);
 
     // -------------------------------------------------------------------------
     // Erros customizados
@@ -101,6 +108,8 @@ contract TruthIDAccount {
     error DeviceNotAuthorized(address device);
     error ArrayLengthMismatch();
     error InvalidSignatureLength();
+    error NotRecoveryManager();
+    error InvalidRecipient();
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -226,6 +235,21 @@ contract TruthIDAccount {
         _requireAuthorized();
         blockedForDevices[dest] = false;
         emit DestinationUnblockedForDevices(dest);
+    }
+
+    /// Resgate de emergência: transfere todo o saldo da conta pra
+    /// `recipient` — pensado pro RecoveryManager mover fundos "encalhados"
+    /// pra uma smart account nova durante um recovery social (ver Fase 14,
+    /// Sessão 52, "Recovery com saldo zero"). Só o RecoveryManager pode
+    /// chamar, nunca o owner ou um device: essa função existe justamente
+    /// pro caso em que o owner já perdeu acesso — é o próprio motivo do
+    /// recovery, então a autorização não pode depender dele.
+    function emergencyWithdraw(address recipient) external {
+        if (msg.sender != recoveryManager) revert NotRecoveryManager();
+        if (recipient == address(0)) revert InvalidRecipient();
+        uint256 amount = address(this).balance;
+        _call(recipient, amount, "");
+        emit EmergencyWithdraw(recipient, amount);
     }
 
     // -------------------------------------------------------------------------
