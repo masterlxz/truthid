@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-02 (Sessão 58 — Fase 14.5: suíte de testes Foundry da TruthIDAccount/Factory concluída, 191 testes passando)
+> Última atualização: 2026-07-02 (Sessão 59 — Fase 14.6: utilitário off-chain computeSmartAccountAddress concluído, 21 testes desktop passando)
 
 ---
 
@@ -551,6 +551,22 @@ Problemas identificados na revisão de arquitetura da Sessão 36 (2026-06-25). N
 
 ---
 
+## Pendências de Deploy (constantes placeholder no código)
+
+Endereços de contrato que estão com placeholder `0x0` no código e precisam ser atualizados após o deploy em mainnet. **A fonte da verdade dessas pendências é esta seção, NÃO comentários no código.**
+
+| # | Constante | Arquivo | Valor atual | Deploy previsto | Etapa |
+|---|---|---|---|---|---|
+| 1 | `TRUTHID_ACCOUNT_FACTORY_ADDRESS` | `desktop/src/config/truthidAccount.ts` | `0x00...00` | Deploy do `TruthIDAccountFactory` | 14.11 |
+| 2 | `VAULT_REGISTRY_ADDRESS` | `desktop/src/config/contracts.ts` | `0x00...00` | Deploy do `VaultRegistry` | 13.x (ainda não deployado) |
+
+Ao fazer o deploy, atualizar:
+1. A constante no código com o novo endereço
+2. Esta tabela (remover a linha ou marcar como concluída)
+3. Os endereços também precisam ser propagados para `mobile/lib/services/blockchain_service.dart` e `sdk/typescript/src/contracts.ts`
+
+---
+
 ## Fase 12 — Publicação & Release (próxima grande etapa)
 
 **Objetivo**: empacotar tudo, assinar os binários e publicar o primeiro release público — desktop + mobile — via GitHub Releases, de forma que qualquer pessoa possa baixar e instalar.
@@ -880,7 +896,7 @@ A partir daí: Ledger assina UserOps off-chain → bundler submete → smart acc
   - **`/code-review` (Sessão 57)**: nenhum bug de correção/segurança encontrado no código novo (matemática do CREATE2, ordem dos argumentos do constructor e idempotência conferidas). 6 nits de gas/limpeza registrados como débitos #21–#26 na tabela de Débitos Técnicos de Arquitetura; nenhum bloqueante pro commit.
   - **Próximo passo**: 14.5 — expandir testes gerais da `TruthIDAccount` (caminhos felizes de owner e device, `addDevice`/`removeDevice`, `emergencyWithdraw`) e da factory; ou 14.6 — utilitário off-chain de `computeSmartAccountAddress`.
 - [x] 14.5 — Testes Foundry: `TruthIDAccount` (validateUserOp com ambos os tiers, addDevice/removeDevice, emergencyWithdraw, bloqueio de DeviceRegistry por device) + `TruthIDAccountFactory` (endereço determinístico, idempotência do deploy) *(Sessão 58 — `TruthIDAccount.t.sol` expandido de 3 para 44 testes; `TruthIDAccountFactory.t.sol` de 10 para 13. Total do projeto: 191 testes. Ver detalhes na Sessão 58 do Log de Sessões.)*
-- [ ] 14.6 — Utilitário off-chain (viem): função `computeSmartAccountAddress(ledgerAddress, factoryAddress)` que replica o CREATE2 off-chain. Integrado ao Desktop (Rust ou TS, a definir).
+- [x] 14.6 — Utilitário off-chain (viem): função `computeSmartAccountAddress(ledgerAddress, factoryAddress)` que replica o CREATE2 off-chain. Integrado ao Desktop (Rust ou TS, a definir). *(Sessão 59 — implementado em TS com viem; `computeSmartAccountAddress()` async (lê immutables da factory via multicall) e `computeSmartAccountAddressSync()` para uso offline/pré-deploy; `TRUTHID_ACCOUNT_CREATION_CODE` extraído do artefato forge e hardcoded em `desktop/src/config/truthidAccount.ts`; 12 testes vitest passando; `tsc --noEmit` limpo. Total: 21 testes desktop passando.)*
 - [ ] 14.7 — Desktop: atualizar fluxo de criação de identidade
   - Pré-computar endereço da smart account via `TruthIDAccountFactory.getAddress`
   - Chamar `IdentityRegistry.createIdentity(username, smartAccountAddress)` — Ledger paga como EOA
@@ -2341,6 +2357,29 @@ Criado `contracts/test/TruthIDAccount.t.sol` do zero (não existia nenhum teste 
 **Débitos técnicos**: nenhum novo aberto. Os débitos #17 (`createIdentity` sem validação de autorização sobre `controller`) e #19 (`RecoveryManager` não chama `emergencyWithdraw`) continuam pendentes e devem ser decididos antes de qualquer deploy em mainnet.
 
 **Próximo passo**: 14.5 — expandir testes gerais da `TruthIDAccount` e da factory; ou 14.6 — utilitário off-chain `computeSmartAccountAddress`.
+
+---
+
+### 2026-07-02 — Sessão 59
+
+- **Objetivo**: Fase 14, etapa 14.6 — utilitário off-chain `computeSmartAccountAddress`.
+
+**O que foi feito**:
+
+Três arquivos novos + um arquivo modificado:
+
+- **`desktop/src/config/truthidAccount.ts`** (novo): constantes `TRUTHID_ACCOUNT_CREATION_CODE` (bytecode de criação do `TruthIDAccount.sol`, 9.185 bytes extraídos do artefato forge `contracts/out/TruthIDAccount.sol/TruthIDAccount.json` → campo `bytecode.object`), `TRUTHID_ACCOUNT_FACTORY_ADDRESS` (placeholder `0x0` — será preenchido após deploy da factory em 14.11), e `ENTRY_POINT_V07` (`0x0000000071727De22E5E9d8BAf0edAc6f37da032` — endereço oficial CREATE2-salt-zero do ERC-4337, idêntico em todas as chains EVM).
+
+- **`desktop/src/utils/computeSmartAccountAddress.ts`** (novo): função principal que replica a matemática do `TruthIDAccountFactory.getAddress()` em TypeScript/viem. Dois modos: (1) **async com publicClient** — lê os 4 immutables da factory via `multicall` (4 `eth_call` em uma única request, sem gas); (2) **sync com valores explícitos** (`computeSmartAccountAddressSync`) — recebe `entryPoint`/`deviceRegistry`/`identityRegistry`/`recoveryManager` direto, útil para uso offline ou pré-deploy da factory. Algoritmo: `salt = keccak256(ledgerAddress)` (equivale a `abi.encodePacked(address)` do Solidity) → `constructorArgs = encodeAbiParameters(address×5)` → `initCode = concat(creationCode, constructorArgs)` → `initCodeHash = keccak256(initCode)` → `address = slice(keccak256(concat(0xFF, factory, salt, initCodeHash)), 12)` com checksum EIP-55 via `getAddress()`.
+
+- **`desktop/src/utils/__tests__/computeSmartAccountAddress.test.ts`** (novo): 12 testes cobrindo: endereço válido não-zero, determinismo, diferenciação por owner/factory/immutable, checksum EIP-55, formato do salt e do creationCode, reprodutibilidade em 10 chamadas consecutivas. Usa `makeAddr()` (replicação do helper do Foundry em TypeScript via `keccak256(toBytes(label))`) para endereços determinísticos.
+
+**Verificação**: `npx tsc --noEmit` limpo; `npx vitest run` → 21/21 passando (12 novos + 9 existentes do PairDevice).
+
+**Decisão de design**: implementação em TypeScript (viem), não em Rust. Motivo: a função é puramente matemática (sem segredos, sem hardware), e o viem já tem todas as primitivas necessárias (`keccak256`, `encodeAbiParameters`, `concat`, `slice`, `getAddress`) — zero dependências novas. Rust exigiria adicionar `ethers-core` ou `alloy-sol-types` para ABI encoding.
+
+- **Resultado**: 14.6 concluída.
+- **Próximo passo**: 14.7 — Desktop: atualizar fluxo de criação de identidade para usar smart account (pré-computar endereço → `createIdentity` com controller explícito → deployar factory → transferir ETH).
 
 ---
 

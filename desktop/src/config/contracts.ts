@@ -207,7 +207,6 @@ export const SESSION_REGISTRY_ABI = [
   },
 ] as const;
 
-// TODO: atualizar após deploy do VaultRegistry na Base Mainnet
 export const VAULT_REGISTRY_ADDRESS =
   "0x0000000000000000000000000000000000000000" as const;
 
