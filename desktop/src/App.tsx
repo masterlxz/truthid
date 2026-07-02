@@ -1,7 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useAccount, useReadContract, useSwitchChain, useDisconnect } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
 import { base } from "wagmi/chains";
+import type { Address } from "viem";
 import { ConnectWallet } from "./components/ConnectWallet";
 import { CreateIdentity } from "./components/CreateIdentity";
 import { ManageDevices } from "./components/ManageDevices";
@@ -14,6 +15,11 @@ import { WalletModalContext } from "./contexts/WalletModalContext";
 import { useStoredUsername } from "./hooks/useStoredUsername";
 import { useUpdateCheck } from "./hooks/useUpdateCheck";
 import { IDENTITY_REGISTRY_ADDRESS, IDENTITY_REGISTRY_ABI } from "./config/contracts";
+import {
+  TRUTHID_ACCOUNT_FACTORY_ADDRESS,
+  FACTORY_IMMUTABLES,
+} from "./config/truthidAccount";
+import { computeSmartAccountAddressSync } from "./utils/computeSmartAccountAddress";
 import "./App.css";
 
 type Tab = "devices" | "sessions" | "vault";
@@ -54,6 +60,19 @@ function App() {
   const isWrongNetwork = isConnected && chainId !== base.id;
   const { switchChain, isPending: isSwitching } = useSwitchChain();
 
+  const smartAccountAddress = useMemo<Address | null>(() => {
+    if (!address) return null;
+    try {
+      return computeSmartAccountAddressSync(
+        address,
+        TRUTHID_ACCOUNT_FACTORY_ADDRESS,
+        FACTORY_IMMUTABLES,
+      );
+    } catch {
+      return null;
+    }
+  }, [address]);
+
   const {
     data: onChainUsername,
     isLoading: isLoadingUsername,
@@ -64,8 +83,8 @@ function App() {
     address: IDENTITY_REGISTRY_ADDRESS,
     abi: IDENTITY_REGISTRY_ABI,
     functionName: "getUsernameByController",
-    args: [address!],
-    query: { enabled: !!address && !isWrongNetwork },
+    args: smartAccountAddress ? [smartAccountAddress] : undefined,
+    query: { enabled: !!smartAccountAddress && !isWrongNetwork },
   });
 
   // Save on-chain verified username to localStorage whenever we read it
@@ -185,8 +204,8 @@ function App() {
           )}
 
           {/* First-time user: connected, no on-chain identity, nothing in localStorage */}
-          {isConnected && !isWrongNetwork && !isLoadingIdentity && !onChainUsername && !storedUsername && (
-            <CreateIdentity />
+          {isConnected && !isWrongNetwork && !isLoadingIdentity && !onChainUsername && !storedUsername && smartAccountAddress && (
+            <CreateIdentity smartAccountAddress={smartAccountAddress} />
           )}
 
           {displayUsername && (

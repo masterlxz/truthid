@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-02 (Sessão 59 — Fase 14.6: utilitário off-chain computeSmartAccountAddress concluído, 21 testes desktop passando)
+> Última atualização: 2026-07-02 (Sessão 60 — Fase 14.7: fluxo de criação de identidade com smart account concluído; factory deployada na Base Mainnet e Base Sepolia)
 
 ---
 
@@ -69,7 +69,7 @@ Fase 10 — Ledger via USB (Rust/hidapi)         [x] Concluída
 Fase 11 — Teste E2E Prático (login, sessão, revogação) [x] Concluída
 Fase 12 — Publicação & Release (v1.0.0)        [x] Concluída
 Fase 13 — TruthID Vault (gerenciador de senhas) [~] Em andamento (13.1–13.7 ✓, 13.8–13.9 pendentes)
-Fase 14 — Smart Account (ERC-4337, Self-Funded)  [~] Em andamento (14.1–14.5 ✓, 14.6–14.12 pendentes)
+Fase 14 — Smart Account (ERC-4337, Self-Funded)  [~] Em andamento (14.1–14.7 ✓, 14.8–14.12 pendentes)
 ```
 
 ---
@@ -557,7 +557,8 @@ Endereços de contrato que estão com placeholder `0x0` no código e precisam se
 
 | # | Constante | Arquivo | Valor atual | Deploy previsto | Etapa |
 |---|---|---|---|---|---|
-| 1 | `TRUTHID_ACCOUNT_FACTORY_ADDRESS` | `desktop/src/config/truthidAccount.ts` | `0x00...00` | Deploy do `TruthIDAccountFactory` | 14.11 |
+| 1 | `TRUTHID_ACCOUNT_FACTORY_ADDRESS` | `desktop/src/config/truthidAccount.ts` | `0x062c577C26067d04bBEEaa953F8E7675fF4849ab` | ✅ Deployado na Base Mainnet | 14.7 |
+| 1b | (Sepolia) | `desktop/src/config/truthidAccount.ts` (comentário) | `0xbf097EC74d0Cc9b16D3d94EaCa62060d89A63b17` | ✅ Deployado na Base Sepolia | 14.7 |
 | 2 | `VAULT_REGISTRY_ADDRESS` | `desktop/src/config/contracts.ts` | `0x00...00` | Deploy do `VaultRegistry` | 13.x (ainda não deployado) |
 
 Ao fazer o deploy, atualizar:
@@ -897,12 +898,17 @@ A partir daí: Ledger assina UserOps off-chain → bundler submete → smart acc
   - **Próximo passo**: 14.5 — expandir testes gerais da `TruthIDAccount` (caminhos felizes de owner e device, `addDevice`/`removeDevice`, `emergencyWithdraw`) e da factory; ou 14.6 — utilitário off-chain de `computeSmartAccountAddress`.
 - [x] 14.5 — Testes Foundry: `TruthIDAccount` (validateUserOp com ambos os tiers, addDevice/removeDevice, emergencyWithdraw, bloqueio de DeviceRegistry por device) + `TruthIDAccountFactory` (endereço determinístico, idempotência do deploy) *(Sessão 58 — `TruthIDAccount.t.sol` expandido de 3 para 44 testes; `TruthIDAccountFactory.t.sol` de 10 para 13. Total do projeto: 191 testes. Ver detalhes na Sessão 58 do Log de Sessões.)*
 - [x] 14.6 — Utilitário off-chain (viem): função `computeSmartAccountAddress(ledgerAddress, factoryAddress)` que replica o CREATE2 off-chain. Integrado ao Desktop (Rust ou TS, a definir). *(Sessão 59 — implementado em TS com viem; `computeSmartAccountAddress()` async (lê immutables da factory via multicall) e `computeSmartAccountAddressSync()` para uso offline/pré-deploy; `TRUTHID_ACCOUNT_CREATION_CODE` extraído do artefato forge e hardcoded em `desktop/src/config/truthidAccount.ts`; 12 testes vitest passando; `tsc --noEmit` limpo. Total: 21 testes desktop passando.)*
-- [ ] 14.7 — Desktop: atualizar fluxo de criação de identidade
-  - Pré-computar endereço da smart account via `TruthIDAccountFactory.getAddress`
-  - Chamar `IdentityRegistry.createIdentity(username, smartAccountAddress)` — Ledger paga como EOA
-  - Deployar smart account via factory — Ledger paga como EOA
-  - Transferir ETH para a smart account — Ledger paga como EOA
-  - Exibir instrução clara: "estas 3 transações são pagas pela Ledger uma única vez"
+- [x] 14.7 — Desktop: atualizar fluxo de criação de identidade *(Sessão 60)*
+  - Pré-computar endereço da smart account via `computeSmartAccountAddressSync()` (CREATE2 off-chain)
+  - `CreateIdentity.tsx` reescrito com fluxo de 3 transações sequenciais e barra de progresso
+  - Tx 1: `IdentityRegistry.createIdentity(username, smartAccountAddress)` — Ledger paga como EOA
+  - Tx 2: `TruthIDAccountFactory.createAccount(ledgerAddress)` — Ledger paga como EOA
+  - Tx 3: `sendTransaction({ to: smartAccountAddress, value })` — Ledger paga como EOA
+  - `App.tsx`: `getUsernameByController` consulta pelo `smartAccountAddress` (não mais pelo EOA)
+  - Input de funding inicial (default 0.001 ETH) no form de criação
+  - **Factory deployada**: Base Sepolia `0xbf097EC74d0Cc9b16D3d94EaCa62060d89A63b17` + Base Mainnet `0x062c577C26067d04bBEEaa953F8E7675fF4849ab`
+  - **Script de deploy**: `DeployFactory.s.sol` criado (deploya só a factory, usando contratos existentes)
+  - **Resultado**: `forge build` + `forge test` (191) + `npx tsc --noEmit` + `npm test` (21) — tudo limpo
 - [ ] 14.8 — Desktop + Mobile: sincronizar lista de signers da smart account com o DeviceRegistry. Ao registrar device no DeviceRegistry → `TruthIDAccount.addDevice`. Ao revogar → `TruthIDAccount.removeDevice`. Ambas assinadas pelo Ledger (UserOp, gás da smart account).
 - [ ] 14.9 — Mobile: atualizar fluxo de assinatura de transações (ex: `createSession`) para UserOps
   - Construir calldata para o contrato alvo
@@ -2379,7 +2385,33 @@ Três arquivos novos + um arquivo modificado:
 **Decisão de design**: implementação em TypeScript (viem), não em Rust. Motivo: a função é puramente matemática (sem segredos, sem hardware), e o viem já tem todas as primitivas necessárias (`keccak256`, `encodeAbiParameters`, `concat`, `slice`, `getAddress`) — zero dependências novas. Rust exigiria adicionar `ethers-core` ou `alloy-sol-types` para ABI encoding.
 
 - **Resultado**: 14.6 concluída.
-- **Próximo passo**: 14.7 — Desktop: atualizar fluxo de criação de identidade para usar smart account (pré-computar endereço → `createIdentity` com controller explícito → deployar factory → transferir ETH).
+- **Próximo passo**: 14.7 — Desktop: atualizar fluxo de criação de identidade para usar smart account.
+
+---
+
+### 2026-07-02 — Sessão 60
+
+- **Objetivo**: Fase 14, etapa 14.7 — atualizar fluxo de criação de identidade no Desktop para usar smart account (CREATE2) + deployar a factory na Base Sepolia e Base Mainnet.
+
+**O que foi feito**:
+
+**Bloco A — Deploy da factory:**
+
+- **`contracts/script/DeployFactory.s.sol`** (novo): script que deploya apenas o `TruthIDAccountFactory`, recebendo os endereços dos contratos existentes via variáveis de ambiente (`DEVICE_REGISTRY`, `IDENTITY_REGISTRY`, `RECOVERY_MANAGER`). Não redeploya os contratos que já estão na chain.
+- **Base Sepolia** (chain 84532): factory deployada em `0xbf097EC74d0Cc9b16D3d94EaCa62060d89A63b17`. ETH obtido via Google faucet (Sepolia L1) + bridge `depositETH` direto no `L1StandardBridge` (`0xfd0Bf71F60660E2f608ed56e1659C450eB113120`) via `cast send --ledger`.
+- **Base Mainnet** (chain 8453): factory deployada em `0x062c577C26067d04bBEEaa953F8E7675fF4849ab` via Ledger conta 1 (`m/44'/60'/1'/0/0`).
+
+**Bloco B — Desktop: fluxo de criação de identidade:**
+
+- **`desktop/src/config/truthidAccount.ts`** (modificado): `TRUTHID_ACCOUNT_FACTORY_ADDRESS` atualizado com o endereço da mainnet. `FACTORY_IMMUTABLES` adicionado com entryPoint/deviceRegistry/identityRegistry/recoveryManager (mainnet). Endereços da Sepolia documentados em comentário para devs.
+- **`desktop/src/config/contracts.ts`** (modificado): ABI da `TruthIDAccountFactory` adicionada (`createAccount`, `getAddress`). Re-exporta `FACTORY_ADDRESS` do `truthidAccount.ts`.
+- **`desktop/src/components/CreateIdentity.tsx`** (reescrito): fluxo de 3 transações sequenciais com barra de progresso visual (✓/●/○ por etapa). Tx 1: `createIdentity(username, smartAccountAddress)`. Tx 2: `factory.createAccount(ledgerAddress)`. Tx 3: `sendTransaction({ to: smartAccountAddress, value })`. Input de funding inicial (default 0.001 ETH). As 3 txs auto-encadeiam via `useEffect` observando `isSuccess` de cada uma. Mensagem explicativa: "Your Ledger pays gas one time only."
+- **`desktop/src/App.tsx`** (modificado): `smartAccountAddress` pré-computado via `useMemo` usando `computeSmartAccountAddressSync()` + `FACTORY_IMMUTABLES`. `getUsernameByController` consulta pelo `smartAccountAddress` (não mais pelo EOA da Ledger). `CreateIdentity` recebe `smartAccountAddress` como prop.
+
+**Verificação**: `forge build` + `forge test` (191) limpos. `npx tsc --noEmit` limpo. `npm test` → 21/21 passando.
+
+- **Resultado**: 14.7 concluída.
+- **Próximo passo**: 14.8 — Desktop + Mobile: sincronizar lista de signers da smart account com o DeviceRegistry (addDevice/removeDevice).
 
 ---
 

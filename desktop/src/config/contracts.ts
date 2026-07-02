@@ -258,3 +258,24 @@ export const VAULT_REGISTRY_ABI = [
     ],
   },
 ] as const;
+
+// ─── TruthIDAccountFactory ────────────────────────────────────────────────────
+
+export { TRUTHID_ACCOUNT_FACTORY_ADDRESS as FACTORY_ADDRESS } from "./truthidAccount";
+
+export const FACTORY_ABI = [
+  {
+    type: "function",
+    name: "createAccount",
+    inputs: [{ name: "owner_", type: "address" }],
+    outputs: [{ name: "ret", type: "address" }],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "getAddress",
+    inputs: [{ name: "owner_", type: "address" }],
+    outputs: [{ name: "", type: "address" }],
+    stateMutability: "view",
+  },
+] as const;
