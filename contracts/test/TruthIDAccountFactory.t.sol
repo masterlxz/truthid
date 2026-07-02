@@ -171,4 +171,53 @@ contract TruthIDAccountFactoryTest is Test {
         // A conta sabe quem e o owner.
         assertEq(account.owner(), owner);
     }
+
+    // -------------------------------------------------------------------------
+    // Endereco previsto deve ser nao-zero ANTES de qualquer deploy —
+    // pre-requisito do caso de uso real da factory: prever o endereco pra
+    // registrar no IdentityRegistry antes de deployar a conta.
+    // -------------------------------------------------------------------------
+
+    function test_GetAddress_BeforeDeploy_NonZeroAddress() public {
+        address predicted = factory.getAddress(owner);
+
+        assertTrue(predicted != address(0), "predicted address must be non-zero");
+        // Ainda nao deployada — extcodesize deve ser zero.
+        uint256 codeSize;
+        assembly {
+            codeSize := extcodesize(predicted)
+        }
+        assertEq(codeSize, 0, "no code should exist before deploy");
+    }
+
+    // -------------------------------------------------------------------------
+    // createAccount(address(0)) deve propagar o revert de InvalidDevice do
+    // constructor da TruthIDAccount (owner == 0).
+    // -------------------------------------------------------------------------
+
+    function test_Revert_CreateAccount_ZeroOwner() public {
+        // O revert vem de dentro do CREATE2: o constructor da account
+        // rejeita qualquer arg zero com InvalidConstructorArgs (check
+        // generico no topo do constructor, antes de qualquer outra logica).
+        vm.expectRevert(TruthIDAccount.InvalidConstructorArgs.selector);
+        factory.createAccount(address(0));
+    }
+
+    // -------------------------------------------------------------------------
+    // Determinismo temporal: chamar getAddress 2x retorna o mesmo valor.
+    // (Trivial, mas trava o contrato de CREATE2 — o endereco depende so de
+    //  salt + initCodeHash + factory, nao de estado mutavel.)
+    // -------------------------------------------------------------------------
+
+    function test_GetAddress_SameOwner_SameAddress_AcrossTime() public {
+        address predicted1 = factory.getAddress(owner);
+
+        // Acao intermediaria que NAO afeta o endereco previsto (deploy de
+        // outro owner). Se o endereco do primeiro owner mudasse apos essa
+        // acao, estariamos em frente a um bug grave de CREATE2.
+        factory.createAccount(owner2);
+
+        address predicted2 = factory.getAddress(owner);
+        assertEq(predicted1, predicted2);
+    }
 }
