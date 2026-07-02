@@ -6,6 +6,7 @@ import {Vm} from "forge-std/Vm.sol";
 import {TruthIDAccountFactory} from "../src/TruthIDAccountFactory.sol";
 import {TruthIDAccount, PackedUserOperation} from "../src/TruthIDAccount.sol";
 import {IdentityRegistry} from "../src/IdentityRegistry.sol";
+import {ENTRY_POINT_V07} from "../src/ERC4337Constants.sol";
 
 // Cobertura da factory deterministica (CREATE2) da Fase 14.4.
 //
@@ -15,8 +16,6 @@ import {IdentityRegistry} from "../src/IdentityRegistry.sol";
 //   - parametros da conta criada
 //   - dinamica "ovo-e-galinha" com IdentityRegistry
 contract TruthIDAccountFactoryTest is Test {
-    address internal constant ENTRY_POINT_V07 = 0x0000000071727De22E5E9d8BAf0edAc6f37da032;
-
     TruthIDAccountFactory internal factory;
     IdentityRegistry internal identityRegistry;
 
@@ -48,10 +47,8 @@ contract TruthIDAccountFactoryTest is Test {
     // -------------------------------------------------------------------------
 
     function test_GetAddress_EqualsDeployedAddress() public {
-        address predicted = factory.getAddress(owner);
-        TruthIDAccount account = factory.createAccount(owner);
+        TruthIDAccount account = _predictAndCreate(owner);
 
-        assertEq(address(account), predicted);
         assertTrue(address(account) != address(0));
     }
 
@@ -71,15 +68,10 @@ contract TruthIDAccountFactoryTest is Test {
 
     function test_CreateAccount_SecondCall_ReturnsExistingAccount() public {
         TruthIDAccount first = factory.createAccount(owner);
-        uint256 firstCodeSize;
-        assembly {
-            firstCodeSize := extcodesize(first)
-        }
-
         TruthIDAccount second = factory.createAccount(owner);
 
         assertEq(address(first), address(second));
-        assertGt(firstCodeSize, 0);
+        assertGt(address(first).code.length, 0);
     }
 
     function test_CreateAccount_SecondCall_DoesNotEmitAgain() public {
@@ -102,16 +94,9 @@ contract TruthIDAccountFactoryTest is Test {
     // -------------------------------------------------------------------------
 
     function test_DifferentOwners_DifferentAddresses() public {
-        address predicted1 = factory.getAddress(owner);
-        address predicted2 = factory.getAddress(owner2);
+        TruthIDAccount account1 = _predictAndCreate(owner);
+        TruthIDAccount account2 = _predictAndCreate(owner2);
 
-        assertTrue(predicted1 != predicted2);
-
-        TruthIDAccount account1 = factory.createAccount(owner);
-        TruthIDAccount account2 = factory.createAccount(owner2);
-
-        assertEq(address(account1), predicted1);
-        assertEq(address(account2), predicted2);
         assertTrue(address(account1) != address(account2));
     }
 
@@ -120,26 +105,26 @@ contract TruthIDAccountFactoryTest is Test {
     // -------------------------------------------------------------------------
 
     function test_Revert_Constructor_ZeroAddress_EntryPoint() public {
-        vm.expectRevert(TruthIDAccountFactory.InvalidEntryPoint.selector);
+        vm.expectRevert(TruthIDAccountFactory.InvalidConstructorArgs.selector);
         new TruthIDAccountFactory(
             address(0), deviceRegistry, address(identityRegistry), recoveryManager
         );
     }
 
     function test_Revert_Constructor_ZeroAddress_DeviceRegistry() public {
-        vm.expectRevert(TruthIDAccountFactory.InvalidDeviceRegistry.selector);
+        vm.expectRevert(TruthIDAccountFactory.InvalidConstructorArgs.selector);
         new TruthIDAccountFactory(
             ENTRY_POINT_V07, address(0), address(identityRegistry), recoveryManager
         );
     }
 
     function test_Revert_Constructor_ZeroAddress_IdentityRegistry() public {
-        vm.expectRevert(TruthIDAccountFactory.InvalidIdentityRegistry.selector);
+        vm.expectRevert(TruthIDAccountFactory.InvalidConstructorArgs.selector);
         new TruthIDAccountFactory(ENTRY_POINT_V07, deviceRegistry, address(0), recoveryManager);
     }
 
     function test_Revert_Constructor_ZeroAddress_RecoveryManager() public {
-        vm.expectRevert(TruthIDAccountFactory.InvalidRecoveryManager.selector);
+        vm.expectRevert(TruthIDAccountFactory.InvalidConstructorArgs.selector);
         new TruthIDAccountFactory(
             ENTRY_POINT_V07, deviceRegistry, address(identityRegistry), address(0)
         );
@@ -182,12 +167,8 @@ contract TruthIDAccountFactoryTest is Test {
         address predicted = factory.getAddress(owner);
 
         assertTrue(predicted != address(0), "predicted address must be non-zero");
-        // Ainda nao deployada — extcodesize deve ser zero.
-        uint256 codeSize;
-        assembly {
-            codeSize := extcodesize(predicted)
-        }
-        assertEq(codeSize, 0, "no code should exist before deploy");
+        // Ainda nao deployada.
+        assertEq(predicted.code.length, 0, "no code should exist before deploy");
     }
 
     // -------------------------------------------------------------------------

@@ -24,12 +24,14 @@ contract TruthIDAccountFactory {
     address public immutable identityRegistry;
     address public immutable recoveryManager;
 
+    // Registro das contas ja deployadas por owner. Curto-circuita o caminho
+    // idempotente de createAccount/getAddress sem precisar recalcular o
+    // initCodeHash (que copia o creation code inteiro da TruthIDAccount).
+    mapping(address => address) public accounts;
+
     event AccountCreated(address indexed account, address indexed owner);
 
-    error InvalidEntryPoint();
-    error InvalidDeviceRegistry();
-    error InvalidIdentityRegistry();
-    error InvalidRecoveryManager();
+    error InvalidConstructorArgs();
 
     constructor(
         address entryPoint_,
@@ -37,10 +39,12 @@ contract TruthIDAccountFactory {
         address identityRegistry_,
         address recoveryManager_
     ) {
-        if (entryPoint_ == address(0)) revert InvalidEntryPoint();
-        if (deviceRegistry_ == address(0)) revert InvalidDeviceRegistry();
-        if (identityRegistry_ == address(0)) revert InvalidIdentityRegistry();
-        if (recoveryManager_ == address(0)) revert InvalidRecoveryManager();
+        if (
+            entryPoint_ == address(0) || deviceRegistry_ == address(0)
+                || identityRegistry_ == address(0) || recoveryManager_ == address(0)
+        ) {
+            revert InvalidConstructorArgs();
+        }
 
         entryPoint = entryPoint_;
         deviceRegistry = deviceRegistry_;
@@ -51,31 +55,37 @@ contract TruthIDAccountFactory {
     /// Cria uma TruthIDAccount para o owner fornecido. Se ja existir uma
     /// conta nesse endereco, retorna-a sem tentar recriar.
     function createAccount(address owner_) external returns (TruthIDAccount ret) {
-        address predicted = getAddress(owner_);
-
-        uint256 codeSize;
-        assembly {
-            codeSize := extcodesize(predicted)
+        address existing = accounts[owner_];
+        if (existing != address(0)) {
+            return TruthIDAccount(payable(existing));
         }
 
-        if (codeSize > 0) {
-            return TruthIDAccount(payable(predicted));
-        }
+        bytes32 salt = _salt(owner_);
+        address predicted = _computeAddress(salt, owner_);
 
-        ret = new TruthIDAccount{salt: _salt(owner_)}(
+        ret = new TruthIDAccount{salt: salt}(
             entryPoint, deviceRegistry, identityRegistry, recoveryManager, owner_
         );
 
         // Sanity check: CREATE2 deve nos dar exatamente o endereco previsto.
         assert(address(ret) == predicted);
 
+        accounts[owner_] = address(ret);
+
         emit AccountCreated(address(ret), owner_);
     }
 
     /// Calcula o endereco futuro da conta para um owner, antes de deployar.
     function getAddress(address owner_) public view returns (address) {
-        bytes32 salt = _salt(owner_);
+        address existing = accounts[owner_];
+        if (existing != address(0)) {
+            return existing;
+        }
 
+        return _computeAddress(_salt(owner_), owner_);
+    }
+
+    function _computeAddress(bytes32 salt, address owner_) internal view returns (address) {
         // init code = creationCode do contrato concatenado com os argumentos
         // do constructor ABI-encoded. Esse e o hash usado pelo CREATE2.
         bytes memory initCode = abi.encodePacked(
