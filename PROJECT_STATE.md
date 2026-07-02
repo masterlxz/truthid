@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-06-30 (Sessão 52 — design Smart Account / ERC-4337 travado)
+> Última atualização: 2026-07-02 (Sessão 58 — Fase 14.5: suíte de testes Foundry da TruthIDAccount/Factory concluída, 191 testes passando)
 
 ---
 
@@ -69,7 +69,7 @@ Fase 10 — Ledger via USB (Rust/hidapi)         [x] Concluída
 Fase 11 — Teste E2E Prático (login, sessão, revogação) [x] Concluída
 Fase 12 — Publicação & Release (v1.0.0)        [x] Concluída
 Fase 13 — TruthID Vault (gerenciador de senhas) [~] Em andamento (13.1–13.7 ✓, 13.8–13.9 pendentes)
-Fase 14 — Smart Account (ERC-4337, Self-Funded)  [~] Em andamento (14.1–14.4 ✓, 14.5–14.12 pendentes)
+Fase 14 — Smart Account (ERC-4337, Self-Funded)  [~] Em andamento (14.1–14.5 ✓, 14.6–14.12 pendentes)
 ```
 
 ---
@@ -879,7 +879,7 @@ A partir daí: Ledger assina UserOps off-chain → bundler submete → smart acc
   - **Resultado**: `forge build`, `forge test` e `forge fmt` nos arquivos novos estão limpos; total de testes sobe de 137 para **147** (10 novos da factory + 3 existentes de `TruthIDAccount.t.sol`).
   - **`/code-review` (Sessão 57)**: nenhum bug de correção/segurança encontrado no código novo (matemática do CREATE2, ordem dos argumentos do constructor e idempotência conferidas). 6 nits de gas/limpeza registrados como débitos #21–#26 na tabela de Débitos Técnicos de Arquitetura; nenhum bloqueante pro commit.
   - **Próximo passo**: 14.5 — expandir testes gerais da `TruthIDAccount` (caminhos felizes de owner e device, `addDevice`/`removeDevice`, `emergencyWithdraw`) e da factory; ou 14.6 — utilitário off-chain de `computeSmartAccountAddress`.
-- [ ] 14.5 — Testes Foundry: `TruthIDAccount` (validateUserOp com ambos os tiers, addDevice/removeDevice, emergencyWithdraw, bloqueio de DeviceRegistry por device) + `TruthIDAccountFactory` (endereço determinístico, idempotência do deploy)
+- [x] 14.5 — Testes Foundry: `TruthIDAccount` (validateUserOp com ambos os tiers, addDevice/removeDevice, emergencyWithdraw, bloqueio de DeviceRegistry por device) + `TruthIDAccountFactory` (endereço determinístico, idempotência do deploy) *(Sessão 58 — `TruthIDAccount.t.sol` expandido de 3 para 44 testes; `TruthIDAccountFactory.t.sol` de 10 para 13. Total do projeto: 191 testes. Ver detalhes na Sessão 58 do Log de Sessões.)*
 - [ ] 14.6 — Utilitário off-chain (viem): função `computeSmartAccountAddress(ledgerAddress, factoryAddress)` que replica o CREATE2 off-chain. Integrado ao Desktop (Rust ou TS, a definir).
 - [ ] 14.7 — Desktop: atualizar fluxo de criação de identidade
   - Pré-computar endereço da smart account via `TruthIDAccountFactory.getAddress`
@@ -2341,6 +2341,36 @@ Criado `contracts/test/TruthIDAccount.t.sol` do zero (não existia nenhum teste 
 **Débitos técnicos**: nenhum novo aberto. Os débitos #17 (`createIdentity` sem validação de autorização sobre `controller`) e #19 (`RecoveryManager` não chama `emergencyWithdraw`) continuam pendentes e devem ser decididos antes de qualquer deploy em mainnet.
 
 **Próximo passo**: 14.5 — expandir testes gerais da `TruthIDAccount` e da factory; ou 14.6 — utilitário off-chain `computeSmartAccountAddress`.
+
+---
+
+### 2026-07-02 — Sessão 58
+
+- **Objetivo**: Fase 14, etapa 14.5 — expandir a suíte de testes Foundry da `TruthIDAccount` (hoje só 3 testes narrow do débito #18) e preencher lacunas na `TruthIDAccountFactory` (hoje 10 testes, focados em CREATE2/idempotência).
+
+**Bloco A — `TruthIDAccountFactory.t.sol`** (10 → 13 testes): 3 testes novos preenchendo lacunas identificadas no planejamento — `test_GetAddress_BeforeDeploy_NonZeroAddress` (confirma que `getAddress` retorna endereço não-zero e sem código *antes* de qualquer deploy — o pré-requisito real do fluxo "ovo-e-galinha"), `test_Revert_CreateAccount_ZeroOwner` (`createAccount(address(0))` propaga o revert do constructor da `TruthIDAccount`) e `test_GetAddress_SameOwner_SameAddress_AcrossTime` (determinismo: uma ação intermediária — deploy de outro owner — não muda o endereço previsto do primeiro). **Achado ao escrever o teste de owner zero**: a expectativa inicial era `TruthIDAccount.InvalidDevice` (erro usado em `addDevice`); o teste revelou que o revert real é `InvalidConstructorArgs` (checagem genérica de endereço zero no topo do constructor) — corrigido antes de comitar.
+
+**Bloco B — `TruthIDAccount.t.sol`** (3 → 44 testes): arquivo reescrito do zero mantendo os 3 testes originais do débito #18 como regressão (seção B5), organizado em 8 blocos:
+- **B1** Constructor (5 reverts de endereço zero, 1 por parâmetro) + `test_Constructor_SeedsBlockedForDevices` (confirma que `deviceRegistry`/`identityRegistry`/`recoveryManager` já nascem bloqueados — trava a correção do achado crítico #1 da Sessão 53).
+- **B2** `addDevice`/`removeDevice`: caminho feliz + eventos, todos os reverts (`NotAuthorized`, `InvalidDevice` nos 2 ramos, `DeviceAlreadyAuthorized`, `DeviceNotAuthorized`).
+- **B3** `blockDestinationForDevices`/`unblockDestinationForDevices`: eventos, efeito real sobre `validateUserOp` (device perde/recupera acesso a um destino), access control.
+- **B4** `validateUserOp` tier owner: caminho feliz mirando um destino normalmente bloqueado (prova que a restrição de tier não se aplica ao owner), assinatura non-canônica rejeitada (regressão do débito #20), signer desconhecido rejeitado, revert se chamado fora do EntryPoint.
+- **B5** `validateUserOp` tier device: destino permitido, os 3 destinos bloqueados por padrão (1 teste por destino), auto-chamada a `address(this)` (achado crítico #1 da Sessão 53), `executeBatch` com 1 destino bloqueado no meio falha o lote inteiro (fail-closed — documentado como decisão de design existente, não alterada), seletor fora de `execute`/`executeBatch` rejeitado, calldata curto (<4 bytes) rejeitado, signer não cadastrado em `authorizedDevices` rejeitado.
+- **B6** `emergencyWithdraw`: transferência do saldo total pelo RecoveryManager + evento; reverts para owner (decisão deliberada — a função existe justamente para quando o owner já não tem mais acesso), endereço aleatório e `recipient` zero.
+- **B7** `execute`/`executeBatch` como camada de execução (não validação): chamada real a um `MockTarget` novo (contrato mínimo criado no próprio arquivo de teste, só para registrar chamadas), tanto via owner quanto via EntryPoint — documentado explicitamente que a restrição de tier vive só em `validateUserOp`, não em `execute` em si (quem chama `execute` direto não passa pela checagem de destino de novo). Revert para chamador não autorizado, `ArrayLengthMismatch`, batch com múltiplas chamadas.
+- **B8** `receive()`: aceita ETH direto, sem revert.
+
+**Bug de teste pego e corrigido antes do commit** (não é bug de contrato): o teste `test_BlockDestination_EmitsEvent_AndBansDeviceCalls` inicialmente usava um helper `_validate(callData, signature)` que derivava o `userOpHash` internamente a partir de `keccak256(abi.encode(callData, signature, block.timestamp))` — mas a assinatura já tinha sido gerada por `_sign(deviceKey, userOpHash)` contra um hash *diferente* (`keccak256("op-block-test")`). O teste passava, mas por acidente: falhava por "signer não reconhecido" (hash não corresponde à assinatura), não pela verificação de destino bloqueado que o teste dizia estar validando. Identificado ao revisar por que havia um helper (`_validate`) declarado e usado uma única vez, fora do padrão dos outros 43 testes (que sempre assinam o mesmo `userOpHash` que constroem a `PackedUserOperation`). Corrigido removendo o helper e reescrevendo o teste no mesmo padrão dos demais — passou a validar de fato o bloqueio de destino.
+
+**Decisões de escopo confirmadas antes de codar** (não são débitos, ficam registradas para não serem revisitadas sem necessidade):
+- Nenhum teste de integração real com o EntryPoint v0.7 oficial (fork de rede ou deploy do contrato real) — fora do escopo de "testes unitários"; cabe na 14.7/14.9.
+- `executeBatch` fail-closed (1 destino bloqueado invalida o lote inteiro) foi apenas documentado em teste, não alterado.
+- Débitos #21–#26 (nits de gas/limpeza da Sessão 57) não foram tocados nesta sessão — são mudanças em contrato de produção, não em testes.
+
+**Verificação**: `forge build` limpo (só warnings pré-existentes em outros arquivos). `forge test` → **191 testes passando** (147 anteriores + 44 novos na `TruthIDAccount` + 3 novos na `TruthIDAccountFactory` − os 3 já existentes que ficaram embutidos na contagem de 44). `forge fmt --check` limpo nos dois arquivos (após uma passada de `forge fmt` para ajustar quebras de linha).
+
+- **Débitos**: nenhum novo aberto. #17, #19, #25 continuam pendentes (decisões de design, não bugs).
+- **Próximo passo**: 14.6 — utilitário off-chain (viem) `computeSmartAccountAddress(ledgerAddress, factoryAddress)`, a integrar ao Desktop.
 
 ---
 
