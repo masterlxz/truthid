@@ -5,14 +5,17 @@ import {Test} from "forge-std/Test.sol";
 import {IdentityRegistry} from "../src/IdentityRegistry.sol";
 import {DeviceRegistry} from "../src/DeviceRegistry.sol";
 import {SessionRegistry} from "../src/SessionRegistry.sol";
+import {IdentityConsentHelper} from "./IdentityConsentHelper.sol";
 
-contract SessionRegistryTest is Test {
+contract SessionRegistryTest is Test, IdentityConsentHelper {
     IdentityRegistry public identityRegistry;
     DeviceRegistry public deviceRegistry;
     SessionRegistry public sessionRegistry;
 
-    address public alice = makeAddr("alice");
-    address public bob = makeAddr("bob");
+    address public alice;
+    uint256 aliceKey;
+    address public bob;
+    uint256 bobKey;
     address public charlie = makeAddr("charlie"); // nunca cria identidade
 
     // Precisamos da chave PRIVADA dos devices (não só do endereço) para
@@ -30,15 +33,18 @@ contract SessionRegistryTest is Test {
     bytes32 constant SALT = keccak256("test-salt");
 
     function setUp() public {
+        (alice, aliceKey) = makeAddrAndKey("alice");
+        (bob, bobKey) = makeAddrAndKey("bob");
+
         identityRegistry = new IdentityRegistry();
         deviceRegistry = new DeviceRegistry(address(identityRegistry));
         sessionRegistry = new SessionRegistry(address(identityRegistry), address(deviceRegistry));
 
         vm.prank(alice);
-        identityRegistry.createIdentity("alice.id", alice); // identityId = 1
+        _createIdentity(identityRegistry, aliceKey, "alice.id"); // identityId = 1
 
         vm.prank(bob);
-        identityRegistry.createIdentity("bob.id", bob); // identityId = 2
+        _createIdentity(identityRegistry, bobKey, "bob.id"); // identityId = 2
 
         (aliceDevice, aliceDeviceKey) = makeAddrAndKey("alice-device");
         (bobDevice, bobDeviceKey) = makeAddrAndKey("bob-device");
@@ -48,7 +54,9 @@ contract SessionRegistryTest is Test {
     }
 
     // Atalho: registra um device via commit-reveal (igual DeviceRegistry.t.sol)
-    function _registerDevice(address controller, address devicePubKey, string memory label) internal {
+    function _registerDevice(address controller, address devicePubKey, string memory label)
+        internal
+    {
         bytes32 commitment = keccak256(abi.encodePacked(devicePubKey, SALT, controller));
 
         vm.prank(controller);
@@ -64,10 +72,15 @@ contract SessionRegistryTest is Test {
     // contrato espera — prefixo "\x19Ethereum Signed Message:\n32") e chama
     // createSession. Quem efetivamente SUBMETE a transação é quem estiver
     // sob `vm.prank` no momento da chamada — fica a critério de cada teste.
-    function _createSession(uint256 devicePrivateKey, bytes32 hash, uint256 identityId, address devicePubKey)
-        internal
-    {
-        bytes32 ethSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", hash));
+    function _createSession(
+        uint256 devicePrivateKey,
+        bytes32 hash,
+        uint256 identityId,
+        address devicePubKey
+    ) internal {
+        bytes32 ethSignedHash = keccak256(
+            abi.encodePacked("\x19Ethereum Signed Message:\n32", hash)
+        );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(devicePrivateKey, ethSignedHash);
         sessionRegistry.createSession(hash, identityId, devicePubKey, r, s, v);
     }
@@ -111,14 +124,17 @@ contract SessionRegistryTest is Test {
     function test_CreateSession_HashDuplicado_Reverte() public {
         _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
 
-        vm.expectRevert(abi.encodeWithSelector(SessionRegistry.SessionAlreadyExists.selector, sessionA));
+        vm.expectRevert(
+            abi.encodeWithSelector(SessionRegistry.SessionAlreadyExists.selector, sessionA)
+        );
         _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
     }
 
     function test_Revert_CreateSession_InvalidSignature() public {
         // Assinado pela chave do BOB, mas alegando ser o device da alice —
         // sem a chave privada certa, ecrecover nunca devolve aliceDevice.
-        bytes32 ethSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", sessionA));
+        bytes32 ethSignedHash =
+            keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", sessionA));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(bobDeviceKey, ethSignedHash);
 
         vm.expectRevert(SessionRegistry.InvalidSessionSignature.selector);
@@ -144,9 +160,7 @@ contract SessionRegistryTest is Test {
     function test_Revert_CreateSession_UnknownDevice() public {
         (address ghostDevice, uint256 ghostKey) = makeAddrAndKey("ghost-device");
 
-        vm.expectRevert(
-            abi.encodeWithSelector(DeviceRegistry.DeviceNotFound.selector, ghostDevice)
-        );
+        vm.expectRevert(abi.encodeWithSelector(DeviceRegistry.DeviceNotFound.selector, ghostDevice));
         _createSession(ghostKey, sessionA, 1, ghostDevice);
     }
 
@@ -215,7 +229,9 @@ contract SessionRegistryTest is Test {
         sessionRegistry.revokeSession(sessionA);
 
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(SessionRegistry.SessionAlreadyRevoked.selector, sessionA));
+        vm.expectRevert(
+            abi.encodeWithSelector(SessionRegistry.SessionAlreadyRevoked.selector, sessionA)
+        );
         sessionRegistry.revokeSession(sessionA);
     }
 
@@ -244,7 +260,9 @@ contract SessionRegistryTest is Test {
 
         // sessionA já está revogada pelo revokeAllSessions
         vm.prank(alice);
-        vm.expectRevert(abi.encodeWithSelector(SessionRegistry.SessionAlreadyRevoked.selector, sessionA));
+        vm.expectRevert(
+            abi.encodeWithSelector(SessionRegistry.SessionAlreadyRevoked.selector, sessionA)
+        );
         sessionRegistry.revokeSession(sessionA);
     }
 

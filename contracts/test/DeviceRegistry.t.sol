@@ -4,13 +4,16 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {IdentityRegistry} from "../src/IdentityRegistry.sol";
 import {DeviceRegistry} from "../src/DeviceRegistry.sol";
+import {IdentityConsentHelper} from "./IdentityConsentHelper.sol";
 
-contract DeviceRegistryTest is Test {
+contract DeviceRegistryTest is Test, IdentityConsentHelper {
     IdentityRegistry public identityRegistry;
     DeviceRegistry public deviceRegistry;
 
-    address public alice = makeAddr("alice");
-    address public bob = makeAddr("bob");
+    address public alice;
+    uint256 aliceKey;
+    address public bob;
+    uint256 bobKey;
     address public charlie = makeAddr("charlie"); // nunca cria identidade
 
     // Endereços simulando chaves públicas de devices
@@ -24,18 +27,23 @@ contract DeviceRegistryTest is Test {
 
     // setUp() roda antes de cada teste — estado isolado por teste
     function setUp() public {
+        (alice, aliceKey) = makeAddrAndKey("alice");
+        (bob, bobKey) = makeAddrAndKey("bob");
+
         identityRegistry = new IdentityRegistry();
         deviceRegistry = new DeviceRegistry(address(identityRegistry));
 
         vm.prank(alice);
-        identityRegistry.createIdentity("alice.id", alice); // identityId = 1
+        _createIdentity(identityRegistry, aliceKey, "alice.id"); // identityId = 1
 
         vm.prank(bob);
-        identityRegistry.createIdentity("bob.id", bob); // identityId = 2
+        _createIdentity(identityRegistry, bobKey, "bob.id"); // identityId = 2
     }
 
     // Atalho: faz o fluxo completo commit → (1 bloco depois) → registerDevice
-    function _registerDevice(address controller, address devicePubKey, string memory label) internal {
+    function _registerDevice(address controller, address devicePubKey, string memory label)
+        internal
+    {
         bytes32 commitment = keccak256(abi.encodePacked(devicePubKey, SALT, controller));
 
         vm.prank(controller);

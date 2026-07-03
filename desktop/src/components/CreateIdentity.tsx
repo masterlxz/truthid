@@ -2,18 +2,21 @@ import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useAccount,
+  useChainId,
   useReadContract,
   useWriteContract,
   useWaitForTransactionReceipt,
   useSendTransaction,
+  useSignMessage,
 } from "wagmi";
-import { type Address, parseEther } from "viem";
+import { type Address, hexToSignature, parseEther } from "viem";
 import {
   IDENTITY_REGISTRY_ADDRESS,
   IDENTITY_REGISTRY_ABI,
   FACTORY_ADDRESS,
   FACTORY_ABI,
 } from "../config/contracts";
+import { buildIdentityConsentHash } from "../utils/buildIdentityConsentHash";
 
 const USERNAME_REGEX = /^[a-z0-9.\-]{1,64}$/;
 
@@ -22,8 +25,9 @@ const DEFAULT_FUNDING_ETH = "0.001";
 export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: Address }) {
   const [username, setUsername] = useState("");
   const [fundingEth, setFundingEth] = useState(DEFAULT_FUNDING_ETH);
-  const [step, setStep] = useState<0 | 1 | 2 | 3>(0);
+  const [step, setStep] = useState<0 | 1 | 2 | 3 | 4>(0);
   const { address } = useAccount();
+  const chainId = useChainId();
 
   const queryClient = useQueryClient();
 
@@ -41,6 +45,18 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
     args: [username],
     query: { enabled: username.length > 0 },
   });
+
+  // Step 1 — sign consent (debt #17): proves the wallet that will own the
+  // smart account authorizes this exact (username, controller) pairing,
+  // before createIdentity is called. Works with any connector — Ledger,
+  // WalletConnect, or injected.
+  const {
+    signMessage: signConsent,
+    data: consentSignature,
+    isPending: signPending,
+    isError: signError,
+    error: signErr,
+  } = useSignMessage();
 
   const {
     writeContract: createIdentity,
@@ -81,15 +97,19 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
     isSuccess: tx3Success,
   } = useWaitForTransactionReceipt({ hash: tx3Hash });
 
-  const overallError = tx1Err ?? tx2Err ?? tx3Err;
-  const hasError = tx1Error || tx2Error || tx3Error;
+  const overallError = signErr ?? tx1Err ?? tx2Err ?? tx3Err;
+  const hasError = signError || tx1Error || tx2Error || tx3Error;
 
   useEffect(() => {
-    if (tx1Success) setStep(2);
+    if (consentSignature) setStep(2);
+  }, [consentSignature]);
+
+  useEffect(() => {
+    if (tx1Success) setStep(3);
   }, [tx1Success]);
 
   useEffect(() => {
-    if (tx2Success) setStep(3);
+    if (tx2Success) setStep(4);
   }, [tx2Success]);
 
   useEffect(() => {
@@ -97,7 +117,20 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
   }, [tx3Success, tx1Success, queryClient]);
 
   useEffect(() => {
-    if (tx1Success && step === 2 && !tx2Hash && !tx2Pending && !tx2Confirming) {
+    if (consentSignature && step === 2 && !tx1Hash && !tx1Pending && !tx1Confirming) {
+      const { r, s, v } = hexToSignature(consentSignature);
+      if (v === undefined) throw new Error("Unexpected consent signature format.");
+      createIdentity({
+        address: IDENTITY_REGISTRY_ADDRESS,
+        abi: IDENTITY_REGISTRY_ABI,
+        functionName: "createIdentity",
+        args: [username, smartAccountAddress, Number(v), r, s],
+      });
+    }
+  }, [consentSignature, step, tx1Hash, tx1Pending, tx1Confirming, createIdentity, username, smartAccountAddress]);
+
+  useEffect(() => {
+    if (tx1Success && step === 3 && !tx2Hash && !tx2Pending && !tx2Confirming) {
       deployAccount({
         address: FACTORY_ADDRESS,
         abi: FACTORY_ABI,
@@ -108,7 +141,7 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
   }, [tx1Success, step, tx2Hash, tx2Pending, tx2Confirming, deployAccount, address]);
 
   useEffect(() => {
-    if (tx2Success && step === 3 && !tx3Hash && !tx3Pending && !tx3Confirming) {
+    if (tx2Success && step === 4 && !tx3Hash && !tx3Pending && !tx3Confirming) {
       const value = (() => {
         try {
           return parseEther(fundingEth);
@@ -123,12 +156,13 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setStep(1);
-    createIdentity({
-      address: IDENTITY_REGISTRY_ADDRESS,
-      abi: IDENTITY_REGISTRY_ABI,
-      functionName: "createIdentity",
-      args: [username, smartAccountAddress],
+    const consentHash = buildIdentityConsentHash({
+      chainId,
+      identityRegistryAddress: IDENTITY_REGISTRY_ADDRESS,
+      username,
+      controller: smartAccountAddress,
     });
+    signConsent({ message: { raw: consentHash } });
   }
 
   const isValidFormat = USERNAME_REGEX.test(username);
@@ -140,7 +174,8 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
     }
   })();
 
-  const isFormPending = tx1Pending || tx1Confirming || tx2Pending || tx2Confirming || tx3Pending || tx3Confirming;
+  const isFormPending =
+    signPending || tx1Pending || tx1Confirming || tx2Pending || tx2Confirming || tx3Pending || tx3Confirming;
   const canSubmit = step === 0 && isValidFormat && !isTaken && !isFormPending && isFundingValid;
 
   if (existingUsername) {
@@ -165,9 +200,10 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
   }
 
   const steps = [
-    { num: 1, label: "Creating identity on-chain", active: step >= 1, done: step > 1 || tx1Success },
-    { num: 2, label: "Deploying smart account", active: step >= 2, done: step > 2 || tx2Success },
-    { num: 3, label: "Funding smart account", active: step >= 3, done: tx3Success },
+    { num: 1, label: "Signing consent", active: step >= 1, done: step > 1 || !!consentSignature },
+    { num: 2, label: "Creating identity on-chain", active: step >= 2, done: step > 2 || tx1Success },
+    { num: 3, label: "Deploying smart account", active: step >= 3, done: step > 3 || tx2Success },
+    { num: 4, label: "Funding smart account", active: step >= 4, done: tx3Success },
   ];
 
   return (
@@ -209,7 +245,7 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
       )}
 
       <div className="muted" style={{ marginTop: "0.75rem", fontSize: "0.85rem", lineHeight: "1.5" }}>
-        This setup uses 3 transactions. Your Ledger pays gas one time only.
+        This setup uses a signature plus 3 transactions. Your Ledger pays gas one time only.
         After setup, your smart account pays its own gas for all future operations.
       </div>
 
@@ -236,8 +272,8 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
       {hasError && (
         <p className="error-text" style={{ marginTop: "0.5rem" }}>
           {overallError?.message?.includes("rejected_by_user")
-            ? "Transaction rejected on Ledger."
-            : `Error: ${overallError?.message?.split("\n")[0] ?? "transaction failed"}`}
+            ? "Rejected on Ledger."
+            : `Error: ${overallError?.message?.split("\n")[0] ?? "operation failed"}`}
         </p>
       )}
 
@@ -249,19 +285,25 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
 
       {step === 1 && (
         <button type="button" disabled>
-          {tx1Pending ? "Confirm tx 1/3 in wallet..." : tx1Confirming ? "Waiting for confirmation..." : "Step 1/3"}
+          {signPending ? "Confirm signature on Ledger..." : "Step 1/4"}
         </button>
       )}
 
       {step === 2 && (
         <button type="button" disabled>
-          {tx2Pending ? "Confirm tx 2/3 in wallet..." : tx2Confirming ? "Waiting for confirmation..." : "Step 2/3"}
+          {tx1Pending ? "Confirm tx 2/4 in wallet..." : tx1Confirming ? "Waiting for confirmation..." : "Step 2/4"}
         </button>
       )}
 
       {step === 3 && (
         <button type="button" disabled>
-          {tx3Pending ? "Confirm tx 3/3 in wallet..." : tx3Confirming ? "Waiting for confirmation..." : "Step 3/3"}
+          {tx2Pending ? "Confirm tx 3/4 in wallet..." : tx2Confirming ? "Waiting for confirmation..." : "Step 3/4"}
+        </button>
+      )}
+
+      {step === 4 && (
+        <button type="button" disabled>
+          {tx3Pending ? "Confirm tx 4/4 in wallet..." : tx3Confirming ? "Waiting for confirmation..." : "Step 4/4"}
         </button>
       )}
     </form>

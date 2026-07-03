@@ -4,14 +4,17 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {IdentityRegistry} from "../src/IdentityRegistry.sol";
 import {RecoveryManager} from "../src/RecoveryManager.sol";
+import {IdentityConsentHelper} from "./IdentityConsentHelper.sol";
 
-contract RecoveryManagerTest is Test {
+contract RecoveryManagerTest is Test, IdentityConsentHelper {
     IdentityRegistry public identityRegistry;
     RecoveryManager public recoveryManager;
 
     // Donos de identidades
-    address public alice = makeAddr("alice");
-    address public bob = makeAddr("bob");
+    address public alice;
+    uint256 aliceKey;
+    address public bob;
+    uint256 bobKey;
 
     // Guardians da identidade da alice (3-de-5)
     address public guardian1 = makeAddr("guardian1");
@@ -27,6 +30,9 @@ contract RecoveryManagerTest is Test {
 
     // setUp() roda antes de cada teste — estado completamente isolado
     function setUp() public {
+        (alice, aliceKey) = makeAddrAndKey("alice");
+        (bob, bobKey) = makeAddrAndKey("bob");
+
         identityRegistry = new IdentityRegistry();
         recoveryManager = new RecoveryManager(address(identityRegistry));
 
@@ -34,10 +40,10 @@ contract RecoveryManagerTest is Test {
         identityRegistry.setRecoveryManager(address(recoveryManager));
 
         vm.prank(alice);
-        identityRegistry.createIdentity("alice.id", alice); // identityId = 1
+        _createIdentity(identityRegistry, aliceKey, "alice.id"); // identityId = 1
 
         vm.prank(bob);
-        identityRegistry.createIdentity("bob.id", bob); // identityId = 2
+        _createIdentity(identityRegistry, bobKey, "bob.id"); // identityId = 2
     }
 
     // Atalho: configura guardians 3-de-5 para alice
@@ -101,7 +107,8 @@ contract RecoveryManagerTest is Test {
     function test_ConfigureGuardians_Success() public {
         _configureAliceGuardians();
 
-        (address[] memory guardians, uint256 threshold) = recoveryManager.getGuardianConfig("alice.id");
+        (address[] memory guardians, uint256 threshold) =
+            recoveryManager.getGuardianConfig("alice.id");
         assertEq(guardians.length, 5);
         assertEq(threshold, 3);
     }
@@ -175,9 +182,7 @@ contract RecoveryManagerTest is Test {
         }
 
         vm.prank(alice);
-        vm.expectRevert(
-            abi.encodeWithSelector(RecoveryManager.TooManyGuardians.selector, 21, 20)
-        );
+        vm.expectRevert(abi.encodeWithSelector(RecoveryManager.TooManyGuardians.selector, 21, 20));
         recoveryManager.configureGuardians("alice.id", guardians, 1);
     }
 
@@ -272,9 +277,7 @@ contract RecoveryManagerTest is Test {
     function test_Revert_ProposeRecovery_GuardiansNotConfigured() public {
         // Alice não configurou guardians ainda
         vm.prank(guardian1);
-        vm.expectRevert(
-            abi.encodeWithSelector(RecoveryManager.GuardiansNotConfigured.selector, 1)
-        );
+        vm.expectRevert(abi.encodeWithSelector(RecoveryManager.GuardiansNotConfigured.selector, 1));
         recoveryManager.proposeRecovery("alice.id", aliceNewWallet);
     }
 
@@ -283,9 +286,7 @@ contract RecoveryManagerTest is Test {
         _propose();
 
         vm.prank(guardian2);
-        vm.expectRevert(
-            abi.encodeWithSelector(RecoveryManager.ProposalAlreadyExists.selector, 1)
-        );
+        vm.expectRevert(abi.encodeWithSelector(RecoveryManager.ProposalAlreadyExists.selector, 1));
         recoveryManager.proposeRecovery("alice.id", aliceNewWallet);
     }
 
@@ -353,9 +354,7 @@ contract RecoveryManagerTest is Test {
         _configureAliceGuardians();
 
         vm.prank(guardian1);
-        vm.expectRevert(
-            abi.encodeWithSelector(RecoveryManager.NoActiveProposal.selector, 1)
-        );
+        vm.expectRevert(abi.encodeWithSelector(RecoveryManager.NoActiveProposal.selector, 1));
         recoveryManager.approveRecovery("alice.id");
     }
 
@@ -367,9 +366,7 @@ contract RecoveryManagerTest is Test {
         recoveryManager.approveRecovery("alice.id");
 
         vm.prank(guardian1);
-        vm.expectRevert(
-            abi.encodeWithSelector(RecoveryManager.AlreadyApproved.selector, guardian1)
-        );
+        vm.expectRevert(abi.encodeWithSelector(RecoveryManager.AlreadyApproved.selector, guardian1));
         recoveryManager.approveRecovery("alice.id");
     }
 
@@ -428,16 +425,15 @@ contract RecoveryManagerTest is Test {
         recoveryManager.executeRecovery("alice.id");
 
         // A configuração de guardians foi zerada
-        (address[] memory guardians, uint256 threshold) = recoveryManager.getGuardianConfig("alice.id");
+        (address[] memory guardians, uint256 threshold) =
+            recoveryManager.getGuardianConfig("alice.id");
         assertEq(guardians.length, 0);
         assertEq(threshold, 0);
 
         // guardian1 (que era guardian da alice) não consegue mais propor —
         // identidade agora não tem guardians configurados
         vm.prank(guardian1);
-        vm.expectRevert(
-            abi.encodeWithSelector(RecoveryManager.GuardiansNotConfigured.selector, 1)
-        );
+        vm.expectRevert(abi.encodeWithSelector(RecoveryManager.GuardiansNotConfigured.selector, 1));
         recoveryManager.proposeRecovery("alice.id", stranger);
     }
 
@@ -456,9 +452,7 @@ contract RecoveryManagerTest is Test {
         recoveryManager.approveRecovery("alice.id");
 
         vm.warp(block.timestamp + 7 days + 1);
-        vm.expectRevert(
-            abi.encodeWithSelector(RecoveryManager.ThresholdNotReached.selector, 2, 3)
-        );
+        vm.expectRevert(abi.encodeWithSelector(RecoveryManager.ThresholdNotReached.selector, 2, 3));
         recoveryManager.executeRecovery("alice.id");
     }
 
@@ -482,9 +476,7 @@ contract RecoveryManagerTest is Test {
     function test_Revert_ExecuteRecovery_NoActiveProposal() public {
         _configureAliceGuardians();
 
-        vm.expectRevert(
-            abi.encodeWithSelector(RecoveryManager.NoActiveProposal.selector, 1)
-        );
+        vm.expectRevert(abi.encodeWithSelector(RecoveryManager.NoActiveProposal.selector, 1));
         recoveryManager.executeRecovery("alice.id");
     }
 
@@ -551,9 +543,7 @@ contract RecoveryManagerTest is Test {
         _configureAliceGuardians();
 
         vm.prank(alice);
-        vm.expectRevert(
-            abi.encodeWithSelector(RecoveryManager.NoActiveProposal.selector, 1)
-        );
+        vm.expectRevert(abi.encodeWithSelector(RecoveryManager.NoActiveProposal.selector, 1));
         recoveryManager.cancelRecovery("alice.id");
     }
 

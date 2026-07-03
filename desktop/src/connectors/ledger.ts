@@ -66,6 +66,23 @@ function unsupported(method: string) {
   };
 }
 
+/// Assina uma mensagem via `personal_sign` (EIP-191) com a Ledger — usado
+/// pelo consentimento de `createIdentity` (débito #17). `messageHex` chega
+/// já em hex vindo do `request()` abaixo (viem já normaliza string/`{raw}`
+/// pra hex antes de montar a chamada `personal_sign`, então não precisa de
+/// normalização adicional aqui). O retorno do lado Rust já vem no formato
+/// "0x" + r + s + v — o mesmo formato que `personal_sign` deve devolver.
+async function signPersonalMessage(messageHex: Hex): Promise<Hex> {
+  try {
+    return (await invoke<string>("sign_ledger_personal_message", {
+      messageHex,
+      accountIndex: cachedAccountIndex,
+    })) as Hex;
+  } catch (e) {
+    throw toError(e);
+  }
+}
+
 export const ledger = createConnector((config) => ({
   id: LEDGER_CONNECTOR_ID,
   name: "Ledger",
@@ -144,6 +161,10 @@ export const ledger = createConnector((config) => ({
           if (!cachedAddress) throw new Error("Ledger not connected.");
           if (!transport) throw new Error(`No RPC transport configured for chain ${chain.id}.`);
 
+          // `signMessage`/`signTypedData` aqui não têm relação com o método
+          // "personal_sign" tratado abaixo — este `toAccount` é usado só
+          // internamente pra montar o `walletClient.sendTransaction`, que
+          // nunca invoca assinatura de mensagem.
           const account = toAccount({
             address: cachedAddress,
             signMessage: unsupported("personal_sign"),
@@ -153,6 +174,16 @@ export const ledger = createConnector((config) => ({
           const client = createWalletClient({ account, chain, transport });
           const [tx] = (params ?? [{}]) as [Parameters<typeof client.sendTransaction>[0]];
           return await client.sendTransaction(tx);
+        }
+
+        // personal_sign (EIP-191) — usado pelo consentimento de
+        // createIdentity (débito #17), via wagmi's useSignMessage(). params
+        // = [messageHex, address]; viem já normaliza qualquer `message`
+        // (string UTF-8 ou `{ raw }`) pra hex antes de chamar `request`.
+        if (method === "personal_sign") {
+          if (!cachedAddress) throw new Error("Ledger not connected.");
+          const [messageHex] = (params ?? []) as [Hex];
+          return await signPersonalMessage(messageHex);
         }
 
         // Encaminha eth_estimateGas, eth_getTransactionCount, eth_call, etc.

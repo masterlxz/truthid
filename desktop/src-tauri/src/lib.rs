@@ -279,7 +279,8 @@ pub fn run() {
             vault_set_device_permission,
             ledger::is_ledger_connected,
             ledger::get_ledger_address,
-            ledger::sign_ledger_transaction
+            ledger::sign_ledger_transaction,
+            ledger::sign_ledger_personal_message
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

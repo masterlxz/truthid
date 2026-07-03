@@ -7,6 +7,7 @@ import {TruthIDAccountFactory} from "../src/TruthIDAccountFactory.sol";
 import {TruthIDAccount, PackedUserOperation} from "../src/TruthIDAccount.sol";
 import {IdentityRegistry} from "../src/IdentityRegistry.sol";
 import {ENTRY_POINT_V07} from "../src/ERC4337Constants.sol";
+import {IdentityConsentHelper} from "./IdentityConsentHelper.sol";
 
 // Cobertura da factory deterministica (CREATE2) da Fase 14.4.
 //
@@ -15,21 +16,30 @@ import {ENTRY_POINT_V07} from "../src/ERC4337Constants.sol";
 //   - idempotencia do createAccount
 //   - parametros da conta criada
 //   - dinamica "ovo-e-galinha" com IdentityRegistry
-contract TruthIDAccountFactoryTest is Test {
+contract TruthIDAccountFactoryTest is Test, IdentityConsentHelper {
     TruthIDAccountFactory internal factory;
     IdentityRegistry internal identityRegistry;
 
     address internal deviceRegistry = makeAddr("deviceRegistry");
     address internal recoveryManager = makeAddr("recoveryManager");
-    address internal owner = makeAddr("owner");
-    address internal owner2 = makeAddr("owner2");
+    address internal owner;
+    uint256 internal ownerKey;
+    address internal owner2;
+    uint256 internal owner2Key;
 
     function setUp() public {
+        (owner, ownerKey) = makeAddrAndKey("owner");
+        (owner2, owner2Key) = makeAddrAndKey("owner2");
+
         identityRegistry = new IdentityRegistry();
 
         factory = new TruthIDAccountFactory(
             ENTRY_POINT_V07, deviceRegistry, address(identityRegistry), recoveryManager
         );
+
+        // Precisa saber sobre a factory pra validar consentimento de
+        // controllers do tipo smart account pré-deploy (débito #17).
+        identityRegistry.setFactory(address(factory));
     }
 
     // -------------------------------------------------------------------------
@@ -137,9 +147,13 @@ contract TruthIDAccountFactoryTest is Test {
     function test_IdentityCreationBeforeDeploy_MatchesPredictedAddress() public {
         address predictedAccount = factory.getAddress(owner);
 
-        // 1. Ledger (owner) paga a identidade apontando para o endereco previsto.
+        // 1. Ledger (owner) assina o consentimento (debito #17) e paga a
+        // identidade apontando para o endereco previsto.
+        (uint8 v, bytes32 r, bytes32 s) =
+            _signConsent(identityRegistry, ownerKey, "masterlxz.id", predictedAccount);
         vm.prank(owner);
-        uint256 identityId = identityRegistry.createIdentity("masterlxz.id", predictedAccount);
+        uint256 identityId =
+            identityRegistry.createIdentity("masterlxz.id", predictedAccount, v, r, s);
 
         // sanity: controller registrado e realmente o endereco previsto.
         IdentityRegistry.Identity memory identity = identityRegistry.getIdentity("masterlxz.id");

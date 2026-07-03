@@ -322,3 +322,77 @@ pub fn sign_ledger_transaction(unsigned_tx_hex: String, account_index: u32) -> R
 
     parse_sign_tx_response(&last_response)
 }
+
+// --- Comando "assinar mensagem pessoal" do app Ethereum da Ledger ---
+//
+// SIGN_PERSONAL_MESSAGE (INS 0x08) — usado pelo consentimento de
+// createIdentity (débito #17 do IdentityRegistry). A Ledger recebe os bytes
+// crus da mensagem (no nosso caso, um hash de 32 bytes calculado no
+// frontend, não texto UTF-8), aplica o prefixo
+// "\x19Ethereum Signed Message:\n{len}" por conta própria e assina o
+// resultado — exatamente o formato que `IdentityRegistry.createIdentity`
+// espera do lado on-chain, então não há risco de descompasso entre o que a
+// Ledger assina e o que o contrato verifica.
+
+const INS_SIGN_PERSONAL_MESSAGE: u8 = 0x08;
+
+/// Mesmo esquema de fatiamento de `build_sign_tx_apdus`, mudando só o
+/// cabeçalho do 1º APDU: em vez de ir direto pros bytes (RLP de uma
+/// transação já é auto-descritivo), leva também 4 bytes big-endian com o
+/// tamanho total da mensagem — o app Ethereum exige isso porque uma
+/// mensagem pessoal arbitrária não tem como "saber" o próprio tamanho
+/// sozinha.
+fn build_sign_personal_message_apdus(message: &[u8], account_index: u32) -> Vec<Vec<u8>> {
+    let path = encode_derivation_path(account_index);
+    let mut apdus = Vec::new();
+    let mut offset = 0;
+    let mut first = true;
+
+    while first || offset < message.len() {
+        let header_len = if first { path.len() + 4 } else { 0 };
+        let chunk_len = (SIGN_CHUNK_SIZE - header_len).min(message.len() - offset);
+
+        let mut data = Vec::with_capacity(header_len + chunk_len);
+        if first {
+            data.extend_from_slice(&path);
+            data.extend_from_slice(&(message.len() as u32).to_be_bytes());
+        }
+        data.extend_from_slice(&message[offset..offset + chunk_len]);
+
+        let p1 = if first { P1_FIRST_CHUNK } else { P1_FOLLOWING_CHUNK };
+        let mut apdu = vec![ETH_CLA, INS_SIGN_PERSONAL_MESSAGE, p1, NO_P2, data.len() as u8];
+        apdu.extend_from_slice(&data);
+        apdus.push(apdu);
+
+        offset += chunk_len;
+        first = false;
+    }
+
+    apdus
+}
+
+/// Assina uma mensagem pessoal (EIP-191 `personal_sign`) com a chave da
+/// Ledger (mesma conta/caminho do `get_ledger_address`). `message_hex` vem
+/// do lado TypeScript como bytes crus em hex (no nosso caso, o hash de 32
+/// bytes do consentimento de `createIdentity` — não uma string UTF-8), com
+/// ou sem prefixo "0x". Resposta e rótulos de erro no mesmo formato de
+/// `sign_ledger_transaction`.
+#[tauri::command]
+pub fn sign_ledger_personal_message(message_hex: String, account_index: u32) -> Result<String, String> {
+    let message =
+        hex::decode(message_hex.trim_start_matches("0x")).map_err(|e| e.to_string())?;
+
+    let api = HidApi::new().map_err(|e| e.to_string())?;
+    let device = open_ledger_device(&api).map_err(|_| "not_connected".to_string())?;
+
+    let mut last_response = Vec::new();
+    for apdu in build_sign_personal_message_apdus(&message, account_index) {
+        let response = send_apdu(&device, &apdu, 120_000)?;
+        last_response = check_status(response).map_err(|sw| match sw {
+            0x6985 | 0x6750 => "rejected_by_user".to_string(),
+            _ => classify_error(sw),
+        })?;
+    }
+
+    parse_sign_tx_response(&last_response)
+}

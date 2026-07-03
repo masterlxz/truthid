@@ -8,6 +8,9 @@ export const IDENTITY_REGISTRY_ABI = [
     inputs: [
       { name: "username", type: "string" },
       { name: "controller", type: "address" },
+      { name: "v", type: "uint8" },
+      { name: "r", type: "bytes32" },
+      { name: "s", type: "bytes32" },
     ],
     outputs: [{ name: "id", type: "uint256" }],
     stateMutability: "nonpayable",

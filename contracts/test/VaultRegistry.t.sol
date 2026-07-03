@@ -5,14 +5,17 @@ import {Test} from "forge-std/Test.sol";
 import {IdentityRegistry} from "../src/IdentityRegistry.sol";
 import {DeviceRegistry} from "../src/DeviceRegistry.sol";
 import {VaultRegistry} from "../src/VaultRegistry.sol";
+import {IdentityConsentHelper} from "./IdentityConsentHelper.sol";
 
-contract VaultRegistryTest is Test {
+contract VaultRegistryTest is Test, IdentityConsentHelper {
     IdentityRegistry public identityRegistry;
     DeviceRegistry public deviceRegistry;
     VaultRegistry public vaultRegistry;
 
-    address public alice = makeAddr("alice");
-    address public bob = makeAddr("bob");
+    address public alice;
+    uint256 aliceKey;
+    address public bob;
+    uint256 bobKey;
     address public charlie = makeAddr("charlie"); // nunca cria identidade
 
     bytes32 constant SALT = keccak256("test-salt");
@@ -24,15 +27,18 @@ contract VaultRegistryTest is Test {
     bytes32 constant HASH_V2 = keccak256("vault-content-v2");
 
     function setUp() public {
+        (alice, aliceKey) = makeAddrAndKey("alice");
+        (bob, bobKey) = makeAddrAndKey("bob");
+
         identityRegistry = new IdentityRegistry();
         deviceRegistry = new DeviceRegistry(address(identityRegistry));
         vaultRegistry = new VaultRegistry(address(identityRegistry), address(deviceRegistry));
 
         vm.prank(alice);
-        identityRegistry.createIdentity("alice.id", alice); // identityId = 1
+        _createIdentity(identityRegistry, aliceKey, "alice.id"); // identityId = 1
 
         vm.prank(bob);
-        identityRegistry.createIdentity("bob.id", bob); // identityId = 2
+        _createIdentity(identityRegistry, bobKey, "bob.id"); // identityId = 2
     }
 
     // -------------------------------------------------------------------------

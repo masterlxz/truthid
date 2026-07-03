@@ -27,6 +27,10 @@ contract Deploy is Script {
             address(recoveryManager)
         );
 
+        // Débito #17: registra a factory no IdentityRegistry pra validar
+        // consentimento de controllers do tipo smart account pré-deploy.
+        identityRegistry.setFactory(address(factory));
+
         vm.stopBroadcast();
 
         console.log("IdentityRegistry        :", address(identityRegistry));
