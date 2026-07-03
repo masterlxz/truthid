@@ -149,7 +149,14 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
           return parseEther(DEFAULT_FUNDING_ETH);
         }
       })();
-      fundAccount({ to: smartAccountAddress, value });
+      // Explicit gas instead of relying on auto-estimation: `smartAccountAddress`
+      // was deployed by tx2 just moments earlier, and estimating gas for a
+      // transfer to it can race a public RPC node that hasn't caught up with
+      // the new contract code yet — silently underestimating as a plain EOA
+      // transfer (21000) instead of a call into `receive()` (~21220 measured).
+      // The account's `receive()` is a trivial empty function, so a small
+      // fixed margin above the measured cost is safe.
+      fundAccount({ to: smartAccountAddress, value, gas: 30_000n });
     }
   }, [tx2Success, step, tx3Hash, tx3Pending, tx3Confirming, fundAccount, smartAccountAddress, fundingEth]);
 
