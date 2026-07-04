@@ -11,7 +11,7 @@ import 'package:truthid_mobile/utils/user_operation.dart';
 // pra garantir que a implementação Dart bate byte a byte com a fórmula que o
 // EntryPoint on-chain usa. Ver Sessão de Fase 14.9.2 no PROJECT_STATE.md pro
 // script usado pra gerar estes hashes.
-const _entryPoint = '0x0000000071727De22E5E9d8BAf0edAc6f37da032';
+const _entryPoint = entryPointV07Address;
 
 Uint8List _bytes(String hex) => hexToBytes(hex);
 

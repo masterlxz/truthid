@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-04 (Sessão 64 — etapa 14.9.2: encoding de `PackedUserOperation` e `userOpHash` em Dart)
+> Última atualização: 2026-07-04 (Sessão 65 — etapa 14.9.3: cliente HTTP do bundler Pimlico em Dart)
 
 ---
 
@@ -913,7 +913,7 @@ A partir daí: Ledger assina UserOps off-chain → bundler submete → smart acc
 - [ ] 14.9 — Mobile: atualizar fluxo de assinatura de transações (ex: `createSession`) para UserOps. **Quebrada em mini-etapas (Sessão 63) porque é bem mais pesada que a 14.8** — o celular é signer tier "device", não `owner`, então não tem o atalho de transação direta que a 14.8 usou; é obrigatório passar pela UserOperation de verdade via um bundler. Cada sub-etapa abaixo deve caber numa sessão pequena.
   - [x] 14.9.1 — Decidido: **Pimlico**. *(Sessão 63 — bundler "puro" sem exigir o paymaster deles (não usamos), suporta Base Mainnet e Base Sepolia, tier gratuito, software do bundler é open source (`alto`) — dá pra self-host no futuro sem depender deles. Decisão de design registrada: a URL do bundler deve ser **configurável** no mobile, não hardcoded — mesmo padrão do fallback de RPCs em `wagmi.ts` no desktop. Isso mantém aberta a porta pra quem quiser rodar o próprio bundler/nó um dia, sem exigir isso de todo mundo agora. Falta: dono do projeto criar conta em dashboard.pimlico.io e gerar a API key (ação de conta, fora do escopo de código) — pode ser feito quando conveniente, não bloqueia 14.9.2. Onde/como guardar a chave (arquivo local gitignored vs `--dart-define`) fica pra quando a 14.9.3 (cliente do bundler) for implementada de fato.)*
   - [x] 14.9.2 — Implementar em Dart (mobile) o encoding de `PackedUserOperation` + o cálculo do `userOpHash` (EIP-4337 v0.7). Funções puras, sem rede. Testar contra vetores conhecidos (dá pra gerar um "gabarito" usando `viem/account-abstraction` no desktop/Node e comparar byte a byte). *(Sessão 64 — `mobile/lib/utils/user_operation.dart`, testado contra 5 vetores gerados com `viem/account-abstraction` no Node do desktop, byte a byte. Ver Log de Sessões, Sessão 64.)*
-  - [ ] 14.9.3 — Cliente HTTP do bundler em Dart: `eth_estimateUserOperationGas`, `eth_sendUserOperation`, `eth_getUserOperationReceipt`. Só chamadas JSON-RPC, sem lógica de assinatura ainda.
+  - [x] 14.9.3 — Cliente HTTP do bundler em Dart: `eth_estimateUserOperationGas`, `eth_sendUserOperation`, `eth_getUserOperationReceipt`. Só chamadas JSON-RPC, sem lógica de assinatura ainda. *(Sessão 65 — `mobile/lib/services/pimlico_bundler_client.dart`. Ver Log de Sessões, Sessão 65.)*
   - [ ] 14.9.4 — Assinar o `userOpHash` com a device key (Secure Enclave) e montar a assinatura no formato que `TruthIDAccount._validateSignature` espera (mesmo padrão `personal_sign`/r-s-v já usado hoje em `device_key_service.dart:signHash`).
   - [ ] 14.9.5 — Integrar tudo no fluxo real do `createSession`: construir calldata → montar UserOp → assinar → estimar gas → enviar → aguardar recibo. Ponta a ponta no app mobile, substituindo o fluxo atual (mobile assina, desktop/relayer submete).
   - [ ] 14.9.6 — Testar de ponta a ponta em Sepolia com a identidade/smart account de teste; remover a dependência de `RELAYER_PRIVATE_KEY` nos lugares que hoje existem só por causa do mobile (SDK/docs, se aplicável).
@@ -2590,6 +2590,26 @@ Config do desktop revertida de volta pra Sepolia→Mainnet antes desse redeploy 
 
 - **Débitos**: nenhum novo.
 - **Próximo passo**: 14.9.3 — cliente HTTP do bundler em Dart (`eth_estimateUserOperationGas`, `eth_sendUserOperation`, `eth_getUserOperationReceipt`), só chamadas JSON-RPC, sem lógica de assinatura ainda.
+
+---
+
+### 2026-07-04 — Sessão 65
+
+- **Objetivo**: etapa 14.9.3 — cliente HTTP do bundler Pimlico em Dart (`eth_estimateUserOperationGas`, `eth_sendUserOperation`, `eth_getUserOperationReceipt`), só chamadas JSON-RPC, sem lógica de assinatura (isso é a 14.9.4).
+
+**Achado que redesenhou o escopo**: o formato que o bundler espera via JSON-RPC (confirmado lendo `viem/account-abstraction/utils/formatters/userOperationRequest.js`) é **diferente** do `PackedUserOperation` já implementado na 14.9.2 — no wire v0.7, `factory`/`factoryData` e os 4 campos de paymaster (`paymaster`/`paymasterVerificationGasLimit`/`paymasterPostOpGasLimit`/`paymasterData`) ficam **separados**, não fundidos em `initCode`/`paymasterAndData` como no struct on-chain. Não dava pra reaproveitar `toPackedUserOperation()` — precisou de um serializador próprio (`_userOperationToRpc`).
+
+**Novo arquivo `mobile/lib/services/pimlico_bundler_client.dart`**:
+- `pimlicoBundlerUrl({apiKey, network})` — helper de conveniência pra montar a URL (`https://api.pimlico.io/v2/$network/rpc?apikey=$apiKey`), sem valor default de `network` (o app ainda não tem conceito de chain selecionável — decisão deliberada de não embutir uma suposição implícita).
+- `JsonRpcTransport` — classe (não `typedef` de função) que isola a parte de HTTP cru, espelhando o `dart:io HttpClient` já usado em `BlockchainService._ethCall`. Usar classe em vez de função solta foi escolha deliberada pra bater com o único padrão de DI/mock já estabelecido no repo (`VaultKeyService`/`MockDeviceKeyService`), em vez de introduzir um idioma novo só pra este arquivo.
+- `_userOperationToRpc` — serializa `UserOperationV07` pro formato hex-string do bundler. Ponto de atenção real (evitado): os campos de gas/fee/nonce são **sempre** incluídos, mesmo quando zero — só `factory`/`factoryData` e o grupo de paymaster são condicionais, e a condição certa é **presença do endereço**, não "valor diferente de zero" (gating por valor teria sido um bug sutil, já que `UserOperationV07` não distingue "não setado" de "zero" nesses campos).
+- `UserOperationGasEstimate` e `UserOperationReceipt` — classes de resultado mínimas (só os campos que algo vai consumir depois; não modela o tx receipt/logs completo). `getUserOperationReceipt` devolve `null` quando a UserOp ainda não foi minerada — único dos 3 métodos cujo `result` pode vir `null` sem vir acompanhado de `error`, então precisa de checagem explícita antes do cast pra `Map`.
+- `PimlicoBundlerClient` — as 3 chamadas, `entryPoint` default pro endereço padrão do EntryPoint v0.7 (constante `entryPointV07Address`, extraída pra `user_operation.dart` nesta sessão pra não duplicar o literal que já existia hardcoded no teste da 14.9.2).
+
+**Verificação**: `flutter analyze` limpo (mesmos 2 avisos pré-existentes de sempre, não tocados). 12 testes novos em `mobile/test/services/pimlico_bundler_client_test.dart` (`mocktail`, mesmo padrão de `vault_key_service_test.dart`/`approval_screen_test.dart`) cobrindo serialização (3 casos: sem factory/paymaster, com factory, com paymaster — inclusive confirmando que as chaves condicionais ficam **ausentes**, não zeradas, quando não aplicável), parsing de resposta dos 3 métodos, o caso `null` do receipt pendente, e propagação de erro. `flutter test` completo (54 testes) sem regressão. **Checagem cruzada** (mesmo espírito da 14.9.2): rodei o `formatUserOperationRequest` real do viem em Node, dentro de `desktop/`, com os mesmos valores dos fixtures de teste (casos com factory e com paymaster) — bateu campo a campo com a saída do `_userOperationToRpc` em Dart, sem nenhuma discrepância.
+
+- **Débitos**: nenhum novo.
+- **Próximo passo**: 14.9.4 — assinar o `userOpHash` com a device key (Secure Enclave) e montar a assinatura no formato que `TruthIDAccount._validateSignature` espera.
 
 ---
 

@@ -3,6 +3,9 @@ import 'dart:typed_data';
 import 'package:web3dart/crypto.dart';
 import 'package:web3dart/web3dart.dart' show EthereumAddress;
 
+// Endereço padrão do EntryPoint v0.7 (eth-infinitism) — mesmo em todas as chains.
+const entryPointV07Address = '0x0000000071727De22E5E9d8BAf0edAc6f37da032';
+
 // User Operation ERC-4337 v0.7, na forma "não empacotada" usada pelos
 // métodos JSON-RPC do bundler (eth_sendUserOperation, eth_estimateUserOperationGas)
 // — espelha o tipo `UserOperation` do viem para entryPointVersion "0.7"
