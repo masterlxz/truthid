@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:web3dart/crypto.dart';
 import 'package:web3dart/web3dart.dart';
 import '../contracts/abis.dart';
+import '../utils/user_operation.dart' show entryPointV07Address;
 
 // Dados de uma sessão retornados pelo contrato
 class SessionInfo {
@@ -39,6 +40,15 @@ class DeviceInfo {
   });
 }
 
+// Dados de uma identidade retornados pelo IdentityRegistry — usado pela 14.9.5
+// pra resolver o endereço da smart account (controller) que assina a UserOp.
+class IdentityInfo {
+  final BigInt id;
+  final EthereumAddress controller;
+
+  const IdentityInfo({required this.id, required this.controller});
+}
+
 class BlockchainService {
   static const _rpcUrl = 'https://mainnet.base.org';
   static const _sessionRegistryAddress =
@@ -48,6 +58,14 @@ class BlockchainService {
   static const _identityRegistryAddress =
       '0x056b826e8E31F1dCD95886571e92CA206cFB6337';
 
+  // Exposto publicamente — a 14.9.5 (SessionCreator) precisa deste endereço
+  // como `dest` da chamada `TruthIDAccount.execute`.
+  static const sessionRegistryAddress = _sessionRegistryAddress;
+
+  // Único RPC configurado hoje é Base Mainnet (ver _rpcUrl acima) — por isso
+  // um único chainId fixo, em vez de um mapa rede→chainId que nada usaria.
+  static final chainId = BigInt.from(8453);
+
   static final _sessionContract = DeployedContract(
     ContractAbi.fromJson(sessionRegistryAbi, 'SessionRegistry'),
     EthereumAddress.fromHex(_sessionRegistryAddress),
@@ -56,6 +74,16 @@ class BlockchainService {
   static final _deviceContract = DeployedContract(
     ContractAbi.fromJson(deviceRegistryAbi, 'DeviceRegistry'),
     EthereumAddress.fromHex(_deviceRegistryAddress),
+  );
+
+  static final _identityContract = DeployedContract(
+    ContractAbi.fromJson(identityRegistryAbi, 'IdentityRegistry'),
+    EthereumAddress.fromHex(_identityRegistryAddress),
+  );
+
+  static final _entryPointContract = DeployedContract(
+    ContractAbi.fromJson(entryPointAbi, 'EntryPoint'),
+    EthereumAddress.fromHex(entryPointV07Address),
   );
 
   // Faz uma leitura (eth_call) no contrato e retorna os valores decodificados.
@@ -225,5 +253,38 @@ class BlockchainService {
     } catch (_) {
       return null;
     }
+  }
+
+  // Resolve o controller (endereço da smart account, desde o débito #17) e o
+  // identityId on-chain de uma identidade pelo @username — fonte de verdade
+  // usada pela 14.9.5 pra saber quem é o `sender` da UserOperation.
+  Future<IdentityInfo?> getIdentityByUsername(String username) async {
+    try {
+      final fn = _identityContract.function('getIdentity');
+      final result = await _ethCall(_identityRegistryAddress, fn, [username]);
+      final tuple = result[0] as List<dynamic>;
+      final exists = tuple[3] as bool;
+      if (!exists) return null;
+
+      return IdentityInfo(
+        id: tuple[0] as BigInt,
+        controller: tuple[2] as EthereumAddress,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // Lê o nonce atual da smart account no EntryPoint (key=0 — nonce
+  // sequencial simples, sem canais paralelos). Usado pela 14.9.5 antes de
+  // montar uma UserOperation nova.
+  Future<BigInt> getSmartAccountNonce(EthereumAddress sender) async {
+    final fn = _entryPointContract.function('getNonce');
+    final result = await _ethCall(
+      entryPointV07Address,
+      fn,
+      [sender, BigInt.zero],
+    );
+    return result[0] as BigInt;
   }
 }

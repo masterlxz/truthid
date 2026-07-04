@@ -220,6 +220,50 @@ void main() {
     });
   });
 
+  group('getUserOperationGasPrice', () {
+    test('parseia o tier "fast" da resposta', () async {
+      when(() => mockTransport.call(
+              any(), 'pimlico_getUserOperationGasPrice', any()))
+          .thenAnswer((_) async => {
+                'slow': {
+                  'maxFeePerGas': '0x3b9aca00',
+                  'maxPriorityFeePerGas': '0x3b9aca00',
+                },
+                'standard': {
+                  'maxFeePerGas': '0x59682f00',
+                  'maxPriorityFeePerGas': '0x59682f00',
+                },
+                'fast': {
+                  'maxFeePerGas': '0x77359400',
+                  'maxPriorityFeePerGas': '0x77359400',
+                },
+              });
+
+      final gasPrice = await client.getUserOperationGasPrice();
+
+      expect(gasPrice.maxFeePerGas, BigInt.from(2000000000));
+      expect(gasPrice.maxPriorityFeePerGas, BigInt.from(2000000000));
+
+      final captured = verify(() => mockTransport.call(
+            captureAny(),
+            captureAny(),
+            captureAny(),
+          )).captured;
+      expect(captured[1], 'pimlico_getUserOperationGasPrice');
+      expect(captured[2], <dynamic>[]);
+    });
+
+    test('propaga erro do transporte', () async {
+      when(() => mockTransport.call(any(), any(), any()))
+          .thenThrow(Exception('RPC error: boom'));
+
+      expect(
+        () => client.getUserOperationGasPrice(),
+        throwsException,
+      );
+    });
+  });
+
   group('sendUserOperation', () {
     test('devolve o userOpHash', () async {
       when(() => mockTransport.call(any(), 'eth_sendUserOperation', any()))

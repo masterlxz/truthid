@@ -1,0 +1,162 @@
+import 'dart:typed_data';
+
+import 'package:web3dart/crypto.dart';
+import 'package:web3dart/web3dart.dart';
+
+import '../contracts/abis.dart';
+import '../utils/user_operation.dart';
+import 'blockchain_service.dart';
+import 'device_key_service.dart';
+import 'pimlico_bundler_client.dart';
+import 'user_operation_signer.dart';
+
+// Resultado de uma submissão bem-sucedida. `transactionHash` fica null se o
+// bundler ainda não confirmou a UserOperation dentro do timeout de polling —
+// a UserOp já foi aceita e vai ser minerada de qualquer forma, então isso não
+// é um erro, só uma confirmação que não chegou a tempo.
+class SessionCreationResult {
+  final String userOpHash;
+  final String? transactionHash;
+
+  const SessionCreationResult({
+    required this.userOpHash,
+    this.transactionHash,
+  });
+}
+
+({Uint8List r, Uint8List s, int v}) _splitSignature(String signatureHex) {
+  final bytes = hexToBytes(signatureHex);
+  assert(
+    bytes.length == 65,
+    'assinatura de sessão deveria ter 65 bytes (r||s||v), recebeu ${bytes.length}',
+  );
+  return (
+    r: Uint8List.fromList(bytes.sublist(0, 32)),
+    s: Uint8List.fromList(bytes.sublist(32, 64)),
+    v: bytes[64],
+  );
+}
+
+// Constrói, assina e envia a UserOperation que chama
+// `SessionRegistry.createSession` através da smart account do usuário
+// (etapa 14.9.5 — fecha o ciclo aberto na 14.9.1). Antes desta etapa, o
+// mobile só assinava o session hash e delegava a submissão a um relayer
+// server-side (ver sdk/*/registerSession); agora o próprio device, como
+// signer tier "device", monta e envia a UserOp via bundler — a smart
+// account paga o próprio gas, sem paymaster (decisão de design do projeto).
+class SessionCreator {
+  final BlockchainService _blockchainService;
+  final PimlicoBundlerClient _bundlerClient;
+  final DeviceKeyService _deviceKeyService;
+  final EthereumAddress _entryPoint;
+  final BigInt _chainId;
+  final Duration _receiptPollInterval;
+  final int _receiptPollMaxAttempts;
+
+  static final _sessionRegistryContract = DeployedContract(
+    ContractAbi.fromJson(sessionRegistryAbi, 'SessionRegistry'),
+    EthereumAddress.fromHex(BlockchainService.sessionRegistryAddress),
+  );
+
+  static final _truthidAccountAbiParsed =
+      ContractAbi.fromJson(truthidAccountAbi, 'TruthIDAccount');
+
+  // Polling do recibo: 30 tentativas de 2s (~60s) por padrão — generoso o
+  // bastante pra um bloco confirmar em L2 sem travar o app indefinidamente.
+  // Configurável pra permitir testes rápidos (intervalo mínimo/poucas tentativas).
+  SessionCreator({
+    required PimlicoBundlerClient bundlerClient,
+    BlockchainService? blockchainService,
+    DeviceKeyService? deviceKeyService,
+    EthereumAddress? entryPoint,
+    BigInt? chainId,
+    Duration receiptPollInterval = const Duration(seconds: 2),
+    int receiptPollMaxAttempts = 30,
+  })  : _bundlerClient = bundlerClient,
+        _blockchainService = blockchainService ?? BlockchainService(),
+        _deviceKeyService = deviceKeyService ?? DeviceKeyService(),
+        _entryPoint = entryPoint ?? EthereumAddress.fromHex(entryPointV07Address),
+        _chainId = chainId ?? BlockchainService.chainId,
+        _receiptPollInterval = receiptPollInterval,
+        _receiptPollMaxAttempts = receiptPollMaxAttempts;
+
+  Future<SessionCreationResult> createSession({
+    required BigInt identityId,
+    required EthereumAddress smartAccountAddress,
+    required Uint8List sessionHash,
+    required EthereumAddress devicePubKey,
+    required String sessionSignatureHex,
+  }) async {
+    final sig = _splitSignature(sessionSignatureHex);
+
+    final createSessionCallData =
+        _sessionRegistryContract.function('createSession').encodeCall([
+      sessionHash,
+      identityId,
+      devicePubKey,
+      sig.r,
+      sig.s,
+      BigInt.from(sig.v), // web3dart codifica todo "uintN" como BigInt, mesmo uint8
+    ]);
+
+    // DeployedContract aqui só serve pra alcançar a função pelo ABI — o
+    // endereço de destino real (`dest`) é passado explicitamente abaixo, já
+    // que o `sender`/smart account varia por identidade.
+    final truthidAccount = DeployedContract(
+      _truthidAccountAbiParsed,
+      smartAccountAddress,
+    );
+    final executeCallData = truthidAccount.function('execute').encodeCall([
+      EthereumAddress.fromHex(BlockchainService.sessionRegistryAddress),
+      BigInt.zero,
+      createSessionCallData,
+    ]);
+
+    final nonce =
+        await _blockchainService.getSmartAccountNonce(smartAccountAddress);
+    final gasPrice = await _bundlerClient.getUserOperationGasPrice();
+
+    var userOp = UserOperationV07(
+      sender: smartAccountAddress,
+      nonce: nonce,
+      callData: executeCallData,
+      callGasLimit: BigInt.zero,
+      verificationGasLimit: BigInt.zero,
+      preVerificationGas: BigInt.zero,
+      maxFeePerGas: gasPrice.maxFeePerGas,
+      maxPriorityFeePerGas: gasPrice.maxPriorityFeePerGas,
+      signature: Uint8List(65), // placeholder — só a estimativa de gas usa isto
+    );
+
+    final estimate = await _bundlerClient.estimateUserOperationGas(userOp);
+    userOp = userOp.copyWith(
+      callGasLimit: estimate.callGasLimit,
+      verificationGasLimit: estimate.verificationGasLimit,
+      preVerificationGas: estimate.preVerificationGas,
+    );
+
+    final signedOp = await signUserOperation(
+      userOperation: userOp,
+      entryPoint: _entryPoint,
+      chainId: _chainId,
+      deviceKeyService: _deviceKeyService,
+    );
+
+    final userOpHash = await _bundlerClient.sendUserOperation(signedOp);
+    final receipt = await _waitForReceipt(userOpHash);
+
+    return SessionCreationResult(
+      userOpHash: userOpHash,
+      transactionHash: receipt?.transactionHash,
+    );
+  }
+
+  Future<UserOperationReceipt?> _waitForReceipt(String userOpHash) async {
+    for (var attempt = 0; attempt < _receiptPollMaxAttempts; attempt++) {
+      final receipt = await _bundlerClient.getUserOperationReceipt(userOpHash);
+      if (receipt != null) return receipt;
+      await Future.delayed(_receiptPollInterval);
+    }
+    return null;
+  }
+}

@@ -118,6 +118,29 @@ class UserOperationGasEstimate {
   }
 }
 
+// Faixa de preço de gas sugerida pelo bundler (pimlico_getUserOperationGasPrice)
+// — método específico da Pimlico, não faz parte do padrão ERC-4337. O bundler
+// devolve 3 tiers (slow/standard/fast); usamos sempre "fast" pra minimizar o
+// risco de a UserOp ficar presa no mempool por taxa baixa.
+class UserOperationGasPrice {
+  final BigInt maxFeePerGas;
+  final BigInt maxPriorityFeePerGas;
+
+  const UserOperationGasPrice({
+    required this.maxFeePerGas,
+    required this.maxPriorityFeePerGas,
+  });
+
+  factory UserOperationGasPrice._fromRpc(Map<String, dynamic> json) {
+    final fast = json['fast'] as Map<String, dynamic>;
+    return UserOperationGasPrice(
+      maxFeePerGas: _hexToBigInt(fast['maxFeePerGas'] as String),
+      maxPriorityFeePerGas:
+          _hexToBigInt(fast['maxPriorityFeePerGas'] as String),
+    );
+  }
+}
+
 // Recibo devolvido por eth_getUserOperationReceipt — só os campos que o app
 // consome hoje (não modela o tx receipt/logs completos, que ninguém usa ainda).
 class UserOperationReceipt {
@@ -147,9 +170,9 @@ class UserOperationReceipt {
   }
 }
 
-// Cliente JSON-RPC do bundler Pimlico (ERC-4337 v0.7) — só as 3 chamadas de
-// estimativa/envio/consulta de UserOperation. Sem lógica de assinatura
-// (etapa 14.9.4) nem integração no fluxo real (etapa 14.9.5).
+// Cliente JSON-RPC do bundler Pimlico (ERC-4337 v0.7): estimativa/preço de
+// gas/envio/consulta de UserOperation. A integração no fluxo real de
+// createSession (SessionCreator) é a etapa 14.9.5.
 class PimlicoBundlerClient {
   final Uri bundlerUrl;
   final EthereumAddress entryPoint;
@@ -171,6 +194,12 @@ class PimlicoBundlerClient {
       [_userOperationToRpc(op), entryPoint.hexEip55],
     );
     return UserOperationGasEstimate._fromRpc(result as Map<String, dynamic>);
+  }
+
+  Future<UserOperationGasPrice> getUserOperationGasPrice() async {
+    final result =
+        await _transport.call(bundlerUrl, 'pimlico_getUserOperationGasPrice', []);
+    return UserOperationGasPrice._fromRpc(result as Map<String, dynamic>);
   }
 
   Future<String> sendUserOperation(UserOperationV07 op) async {

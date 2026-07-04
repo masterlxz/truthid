@@ -3,30 +3,73 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:web3dart/web3dart.dart' show EthereumAddress;
 
 import 'package:truthid_mobile/screens/approval_screen.dart';
+import 'package:truthid_mobile/services/blockchain_service.dart';
 import 'package:truthid_mobile/services/device_key_service.dart';
+import 'package:truthid_mobile/services/local_storage_service.dart';
+import 'package:truthid_mobile/services/session_creator.dart';
 
 class MockDeviceKeyService extends Mock implements DeviceKeyService {}
 
+class MockBlockchainService extends Mock implements BlockchainService {}
+
+class MockSessionCreator extends Mock implements SessionCreator {}
+
+class MockLocalStorageService extends Mock implements LocalStorageService {}
+
 void main() {
   late MockDeviceKeyService mockKeyService;
+  late MockBlockchainService mockBlockchainService;
+  late MockSessionCreator mockSessionCreator;
+  late MockLocalStorageService mockLocalStorageService;
   late List<Map<String, dynamic>> capturedResponses;
+
+  final smartAccountAddress = EthereumAddress.fromHex(
+      '0xabababababababababababababababababababab');
 
   setUpAll(() {
     registerFallbackValue(Uint8List(0));
+    registerFallbackValue(BigInt.zero);
+    registerFallbackValue(
+        EthereumAddress.fromHex('0x0000000000000000000000000000000000000000'));
   });
 
   setUp(() {
     mockKeyService = MockDeviceKeyService();
+    mockBlockchainService = MockBlockchainService();
+    mockSessionCreator = MockSessionCreator();
+    mockLocalStorageService = MockLocalStorageService();
     capturedResponses = [];
 
     when(() => mockKeyService.signChallenge(any()))
         .thenAnswer((_) async => '0xabc123sig');
     when(() => mockKeyService.getDeviceAddress())
-        .thenAnswer((_) async => '0xDeviceAddress');
+        .thenAnswer((_) async => '0x1234567890123456789012345678901234567890');
     when(() => mockKeyService.signHash(any()))
         .thenAnswer((_) async => '0xsessionSig');
+
+    // Cenário padrão: device já pareado com uma identidade que existe on-chain.
+    when(() => mockLocalStorageService.getPairedIdentityId())
+        .thenAnswer((_) async => '1');
+    when(() => mockLocalStorageService.getPairedUsername())
+        .thenAnswer((_) async => 'alice');
+    when(() => mockBlockchainService.getIdentityByUsername('alice'))
+        .thenAnswer((_) async => IdentityInfo(
+              id: BigInt.one,
+              controller: smartAccountAddress,
+            ));
+    when(() => mockSessionCreator.createSession(
+          identityId: any(named: 'identityId'),
+          smartAccountAddress: any(named: 'smartAccountAddress'),
+          sessionHash: any(named: 'sessionHash'),
+          devicePubKey: any(named: 'devicePubKey'),
+          sessionSignatureHex: any(named: 'sessionSignatureHex'),
+        )).thenAnswer((_) async => const SessionCreationResult(
+          userOpHash: '0xUserOpHashXYZ',
+          transactionHash: '0xTxHash',
+        ));
   });
 
   Widget buildScreen(Map<String, dynamic> payload) {
@@ -34,6 +77,9 @@ void main() {
       home: ApprovalScreen(
         payload: payload,
         keyService: mockKeyService,
+        blockchainService: mockBlockchainService,
+        sessionCreator: mockSessionCreator,
+        localStorageService: mockLocalStorageService,
         postResponse: (r) async => capturedResponses.add(r),
       ),
     );
@@ -88,8 +134,11 @@ void main() {
   });
 
   group('approve flow', () {
-    testWidgets('signs the challenge and posts an approved response', (tester) async {
+    testWidgets(
+        'signs the challenge, creates the session on-chain and posts an approved response',
+        (tester) async {
       await tester.pumpWidget(buildScreen(validPayload));
+      await tester.pump(); // resolve LocalStorageService futures (identity pareada)
 
       await tester.tap(find.text('Approve'));
       // pumpAndSettle resolve os futures de mock (microtasks) e renderiza "done"
@@ -105,10 +154,88 @@ void main() {
       verify(() => mockKeyService.signChallenge(any())).called(1);
       verify(() => mockKeyService.getDeviceAddress()).called(1);
       verify(() => mockKeyService.signHash(any())).called(1);
+      verify(() => mockBlockchainService.getIdentityByUsername('alice'))
+          .called(1);
+      verify(() => mockSessionCreator.createSession(
+            identityId: BigInt.one,
+            smartAccountAddress: smartAccountAddress,
+            sessionHash: any(named: 'sessionHash'),
+            devicePubKey: EthereumAddress.fromHex(
+                '0x1234567890123456789012345678901234567890'),
+            sessionSignatureHex: '0xsessionSig',
+          )).called(1);
 
       // Avança além dos 800ms do Future.delayed para que o timer não fique
       // pendente quando o framework desmontar a árvore de widgets.
       await tester.pump(const Duration(milliseconds: 1000));
+    });
+
+    testWidgets(
+        'shows an error and never posts if the device is not paired with any identity',
+        (tester) async {
+      when(() => mockLocalStorageService.getPairedUsername())
+          .thenAnswer((_) async => null);
+
+      await tester.pumpWidget(buildScreen(validPayload));
+      await tester.pump();
+
+      await tester.tap(find.text('Approve'));
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.error_outline), findsOneWidget);
+      expect(capturedResponses, isEmpty);
+      verifyNever(() => mockSessionCreator.createSession(
+            identityId: any(named: 'identityId'),
+            smartAccountAddress: any(named: 'smartAccountAddress'),
+            sessionHash: any(named: 'sessionHash'),
+            devicePubKey: any(named: 'devicePubKey'),
+            sessionSignatureHex: any(named: 'sessionSignatureHex'),
+          ));
+    });
+
+    testWidgets(
+        'shows an error and never posts if the identity cannot be resolved on-chain',
+        (tester) async {
+      when(() => mockBlockchainService.getIdentityByUsername('alice'))
+          .thenAnswer((_) async => null);
+
+      await tester.pumpWidget(buildScreen(validPayload));
+      await tester.pump();
+
+      await tester.tap(find.text('Approve'));
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.error_outline), findsOneWidget);
+      expect(capturedResponses, isEmpty);
+      verifyNever(() => mockSessionCreator.createSession(
+            identityId: any(named: 'identityId'),
+            smartAccountAddress: any(named: 'smartAccountAddress'),
+            sessionHash: any(named: 'sessionHash'),
+            devicePubKey: any(named: 'devicePubKey'),
+            sessionSignatureHex: any(named: 'sessionSignatureHex'),
+          ));
+    });
+
+    testWidgets(
+        'shows an error and never notifies the website if on-chain session creation fails',
+        (tester) async {
+      when(() => mockSessionCreator.createSession(
+            identityId: any(named: 'identityId'),
+            smartAccountAddress: any(named: 'smartAccountAddress'),
+            sessionHash: any(named: 'sessionHash'),
+            devicePubKey: any(named: 'devicePubKey'),
+            sessionSignatureHex: any(named: 'sessionSignatureHex'),
+          )).thenThrow(Exception('insufficient funds for gas'));
+
+      await tester.pumpWidget(buildScreen(validPayload));
+      await tester.pump();
+
+      await tester.tap(find.text('Approve'));
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.error_outline), findsOneWidget);
+      expect(find.textContaining('enough ETH'), findsOneWidget);
+      expect(capturedResponses, isEmpty);
     });
   });
 

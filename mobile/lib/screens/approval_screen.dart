@@ -3,18 +3,24 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:web3dart/crypto.dart';
+import 'package:web3dart/web3dart.dart' show EthereumAddress;
 
 import 'package:flutter/material.dart';
 
+import '../config/secrets.dart';
+import '../services/blockchain_service.dart';
 import '../services/device_key_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/pimlico_bundler_client.dart';
+import '../services/session_creator.dart';
 import '../theme.dart';
 
 // Estados possíveis da tela — do início ao fim do fluxo de login
 enum _Status {
-  challenge,   // challenge lido do QR — mostrando UI de aprovar/recusar
-  done,        // usuário respondeu — resposta enviada
-  error,       // algo deu errado
+  challenge, // challenge lido do QR — mostrando UI de aprovar/recusar
+  submitting, // aprovado — criando a sessão on-chain via UserOperation
+  done, // sessão criada e site notificado
+  error, // algo deu errado
 }
 
 class ApprovalScreen extends StatefulWidget {
@@ -26,12 +32,18 @@ class ApprovalScreen extends StatefulWidget {
 
   // Injetáveis para testes — em produção usa os defaults.
   final DeviceKeyService? keyService;
+  final BlockchainService? blockchainService;
+  final SessionCreator? sessionCreator;
+  final LocalStorageService? localStorageService;
   final Future<void> Function(Map<String, dynamic>)? postResponse;
 
   const ApprovalScreen({
     super.key,
     required this.payload,
     this.keyService,
+    this.blockchainService,
+    this.sessionCreator,
+    this.localStorageService,
     this.postResponse,
   });
 
@@ -46,13 +58,31 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
   String? _callbackUrl;
   bool _responded = false; // impede enviar duas respostas
   String? _identityId;
+  String? _username;
 
   late final DeviceKeyService _keyService;
+  late final BlockchainService _blockchainService;
+  late final SessionCreator _sessionCreator;
+  late final LocalStorageService _localStorageService;
 
   @override
   void initState() {
     super.initState();
     _keyService = widget.keyService ?? DeviceKeyService();
+    _blockchainService = widget.blockchainService ?? BlockchainService();
+    _localStorageService = widget.localStorageService ?? LocalStorageService();
+    _sessionCreator =
+        widget.sessionCreator ??
+        SessionCreator(
+          blockchainService: _blockchainService,
+          deviceKeyService: _keyService,
+          bundlerClient: PimlicoBundlerClient(
+            bundlerUrl: pimlicoBundlerUrl(
+              apiKey: pimlicoApiKey,
+              network: 'base',
+            ),
+          ),
+        );
 
     final callbackUrl = widget.payload['callbackUrl'] as String?;
     final challenge = widget.payload['challenge'] as Map<String, dynamic>?;
@@ -60,9 +90,12 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
     // https obrigatório: o mobile vai discar essa URL diretamente, então
     // ela precisa ser confiável — sem isso, um QR malicioso poderia apontar
     // pra um endpoint que intercepta a resposta assinada em texto claro.
-    if (challenge == null || callbackUrl == null || !callbackUrl.startsWith('https://')) {
+    if (challenge == null ||
+        callbackUrl == null ||
+        !callbackUrl.startsWith('https://')) {
       _status = _Status.error;
-      _statusMsg = 'Invalid QR: missing challenge or callbackUrl is not https://.';
+      _statusMsg =
+          'Invalid QR: missing challenge or callbackUrl is not https://.';
       return;
     }
 
@@ -70,8 +103,11 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
     _callbackUrl = callbackUrl;
     _status = _Status.challenge;
 
-    LocalStorageService().getPairedIdentityId().then((id) {
+    _localStorageService.getPairedIdentityId().then((id) {
       if (mounted) setState(() => _identityId = id);
+    });
+    _localStorageService.getPairedUsername().then((username) {
+      if (mounted) setState(() => _username = username);
     });
   }
 
@@ -107,22 +143,66 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
     final signature = await _keyService.signChallenge(challengeJson);
     final deviceAddress = await _keyService.getDeviceAddress();
 
-    // 2. Assina o session hash (registro on-chain — verificado pelo SessionRegistry)
+    // 2. Assina o session hash — prova de posse exigida por SessionRegistry.createSession
     // sessionHash = keccak256(utf8_bytes_do_nonce), igual ao que o servidor calcula
     final nonceBytes = Uint8List.fromList(utf8.encode(nonce));
     final sessionHash = keccak256(nonceBytes);
     final sessionSignature = await _keyService.signHash(sessionHash);
 
+    // O device precisa estar pareado com uma identidade — sem isso não há
+    // smart account nem identityId pra registrar a sessão.
+    if (_identityId == null || _username == null) {
+      _setError('This device is not paired with any identity yet.');
+      return;
+    }
+
+    setState(() => _status = _Status.submitting);
+
+    // 3. Resolve a smart account (controller) da identidade on-chain.
+    final identity = await _blockchainService.getIdentityByUsername(_username!);
+    if (identity == null) {
+      _setError(
+        'Could not find this identity on-chain. Check your connection.',
+      );
+      return;
+    }
+
+    // 4. Cria a sessão on-chain via UserOperation (etapa 14.9.5) — o próprio
+    // device monta, assina e envia a UserOp; a smart account paga o gas.
+    // Substitui o relayer server-side que o SDK usava até aqui (débito a
+    // resolver no SDK na 14.9.6, pra não chamar createSession de novo lá).
+    try {
+      await _sessionCreator.createSession(
+        identityId: identity.id,
+        smartAccountAddress: identity.controller,
+        sessionHash: sessionHash,
+        devicePubKey: EthereumAddress.fromHex(deviceAddress),
+        sessionSignatureHex: sessionSignature,
+      );
+    } catch (_) {
+      _setError(
+        'Could not create the session on-chain. Make sure your account has enough ETH for gas.',
+      );
+      return;
+    }
+
+    // 5. Notifica o site — o POST em si não muda desde antes da 14.9.5; o
+    // que muda é que a sessão já existe on-chain quando ele chega.
     try {
       await _postResponse({
         'approved': true,
         'nonce': nonce,
-        'signature': signature,           // autenticação: personal_sign(JSON do challenge)
-        'deviceAddress': deviceAddress,   // endereço Ethereum — verificado no DeviceRegistry
-        'sessionSignature': sessionSignature, // registro on-chain: personal_sign(keccak256(nonce))
+        'signature':
+            signature, // autenticação: personal_sign(JSON do challenge)
+        'deviceAddress':
+            deviceAddress, // endereço Ethereum — verificado no DeviceRegistry
+        'sessionSignature':
+            sessionSignature, // personal_sign(keccak256(nonce)) — já registrado on-chain
       });
     } catch (_) {
-      _setError('Could not send response to the website. Check your connection.');
+      _setError(
+        'Could not send response to the website. Check your connection.',
+      );
       return;
     }
 
@@ -138,10 +218,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
     _responded = true;
 
     try {
-      await _postResponse({
-        'approved': false,
-        'nonce': _challenge!['nonce'],
-      });
+      await _postResponse({'approved': false, 'nonce': _challenge!['nonce']});
     } catch (_) {
       // Recusa é best-effort: se o POST falhar, o challenge expira pelo TTL
       // no backend do site mesmo assim. Não vale travar o usuário aqui.
@@ -155,7 +232,12 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
   // ── Helpers ──────────────────────────────────────────────────────────────
 
   void _setError(String msg) {
-    if (mounted) setState(() { _status = _Status.error; _statusMsg = msg; });
+    if (mounted) {
+      setState(() {
+        _status = _Status.error;
+        _statusMsg = msg;
+      });
+    }
   }
 
   // ── UI ───────────────────────────────────────────────────────────────────
@@ -163,13 +245,12 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Login Request'),
-      ),
+      appBar: AppBar(title: const Text('Login Request')),
       body: switch (_status) {
         _Status.challenge => _buildChallengeUI(),
-        _Status.done      => _buildDoneUI(),
-        _Status.error     => _buildErrorUI(),
+        _Status.submitting => _buildSubmittingUI(),
+        _Status.done => _buildDoneUI(),
+        _Status.error => _buildErrorUI(),
       },
     );
   }
@@ -186,56 +267,75 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
           ).format(context)
         : '—';
 
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const SizedBox(height: 16),
-          const Icon(Icons.lock_open_rounded, size: 64, color: AppColors.accent),
-          const SizedBox(height: 16),
-          const Text(
-            'Login request received',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'A website is requesting to sign in with your TruthID identity.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: AppColors.textMuted),
-          ),
-          const SizedBox(height: 32),
-          _InfoRow(label: 'Site', value: displaySite),
-          const SizedBox(height: 8),
-          _InfoRow(label: 'Time', value: time),
-          if (_identityId != null) ...[
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 16),
+            const Icon(
+              Icons.lock_open_rounded,
+              size: 64,
+              color: AppColors.accent,
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Login request received',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+            ),
             const SizedBox(height: 8),
-            _InfoRow(label: 'Signing as', value: 'Identity #$_identityId'),
+            const Text(
+              'A website is requesting to sign in with your TruthID identity.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 32),
+            _InfoRow(label: 'Site', value: displaySite),
+            const SizedBox(height: 8),
+            _InfoRow(label: 'Time', value: time),
+            if (_identityId != null) ...[
+              const SizedBox(height: 8),
+              _InfoRow(label: 'Signing as', value: 'Identity #$_identityId'),
+            ],
+            const SizedBox(height: 32),
+            ElevatedButton.icon(
+              onPressed: _approve,
+              icon: const Icon(Icons.check_circle_outline),
+              label: const Text('Approve', style: TextStyle(fontSize: 18)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.success,
+                foregroundColor: AppColors.background,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _reject,
+              icon: const Icon(Icons.cancel_outlined),
+              label: const Text('Reject', style: TextStyle(fontSize: 18)),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.danger,
+                side: const BorderSide(color: AppColors.danger),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+            ),
+            const SizedBox(height: 24),
           ],
-          const Spacer(),
-          ElevatedButton.icon(
-            onPressed: _approve,
-            icon: const Icon(Icons.check_circle_outline),
-            label: const Text('Approve', style: TextStyle(fontSize: 18)),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.success,
-              foregroundColor: AppColors.background,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-            ),
-          ),
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: _reject,
-            icon: const Icon(Icons.cancel_outlined),
-            label: const Text('Reject', style: TextStyle(fontSize: 18)),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.danger,
-              side: const BorderSide(color: AppColors.danger),
-              padding: const EdgeInsets.symmetric(vertical: 16),
-            ),
-          ),
-          const SizedBox(height: 24),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSubmittingUI() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          CircularProgressIndicator(),
+          SizedBox(height: 16),
+          Text('Creating your session on-chain...'),
         ],
       ),
     );
@@ -295,7 +395,10 @@ class _InfoRow extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Text('$label: ', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          Text(
+            '$label: ',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+          ),
           Expanded(
             child: Text(
               value,

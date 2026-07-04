@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-04 (Sessão 66 — etapa 14.9.4: assinatura de UserOperations com a device key)
+> Última atualização: 2026-07-04 (Sessão 67 — etapa 14.9.5: integração real do createSession via UserOperation no mobile)
 
 ---
 
@@ -916,7 +916,7 @@ A partir daí: Ledger assina UserOps off-chain → bundler submete → smart acc
   - [x] 14.9.2 — Implementar em Dart (mobile) o encoding de `PackedUserOperation` + o cálculo do `userOpHash` (EIP-4337 v0.7). Funções puras, sem rede. Testar contra vetores conhecidos (dá pra gerar um "gabarito" usando `viem/account-abstraction` no desktop/Node e comparar byte a byte). *(Sessão 64 — `mobile/lib/utils/user_operation.dart`, testado contra 5 vetores gerados com `viem/account-abstraction` no Node do desktop, byte a byte. Ver Log de Sessões, Sessão 64.)*
   - [x] 14.9.3 — Cliente HTTP do bundler em Dart: `eth_estimateUserOperationGas`, `eth_sendUserOperation`, `eth_getUserOperationReceipt`. Só chamadas JSON-RPC, sem lógica de assinatura ainda. *(Sessão 65 — `mobile/lib/services/pimlico_bundler_client.dart`. Ver Log de Sessões, Sessão 65.)*
   - [x] 14.9.4 — Assinar o `userOpHash` com a device key e montar a assinatura no formato que `TruthIDAccount._validateSignature` espera (mesmo padrão `personal_sign`/r-s-v já usado hoje em `device_key_service.dart:signHash`). *(Sessão 66 — `mobile/lib/services/user_operation_signer.dart` + `copyWith` em `UserOperationV07`; reaproveita `DeviceKeyService.signHash` como já usado no `SessionRegistry`, sem migração pra Secure Enclave/Keystore (decisão explícita, registrada como débito #27). Vetor conhecido cruzado com `viem` (Node) e com `TruthIDAccount.validateUserOp` real (Foundry). Ver Log de Sessões, Sessão 66.)*
-  - [ ] 14.9.5 — Integrar tudo no fluxo real do `createSession`: construir calldata → montar UserOp → assinar → estimar gas → enviar → aguardar recibo. Ponta a ponta no app mobile, substituindo o fluxo atual (mobile assina, desktop/relayer submete).
+  - [x] 14.9.5 — Integrar tudo no fluxo real do `createSession`: construir calldata → montar UserOp → assinar → estimar gas → enviar → aguardar recibo. Ponta a ponta no app mobile, substituindo o fluxo atual (mobile assina, desktop/relayer submete). *(Sessão 67 — `mobile/lib/services/session_creator.dart` (novo) + `ApprovalScreen` reescrito pra chamar `SessionRegistry.createSession` ele mesmo via UserOp/bundler, em vez de só assinar e depender do relayer server-side do SDK. Achado que reenquadrou o escopo: o mobile nunca chamava `createSession` — quem sempre fez isso foi o backend do site via SDK (`registerSession`, `RELAYER_PRIVATE_KEY`). Ver Log de Sessões, Sessão 67, para o desenho completo e o débito aberto no SDK.)*
   - [ ] 14.9.6 — Testar de ponta a ponta em Sepolia com a identidade/smart account de teste; remover a dependência de `RELAYER_PRIVATE_KEY` nos lugares que hoje existem só por causa do mobile (SDK/docs, se aplicável).
 - [ ] 14.10 — Dashboard da smart account no Desktop (tab dedicada):
   - Saldo atual de ETH
@@ -2631,6 +2631,33 @@ Config do desktop revertida de volta pra Sepolia→Mainnet antes desse redeploy 
 
 **Débitos**: nenhum novo (o item da Secure Enclave já foi registrado à parte como débito #27, antes desta sessão).
 - **Próximo passo**: 14.9.5 — integrar tudo no fluxo real do `createSession`: construir calldata → montar UserOp → assinar (usando `signUserOperation`, desta sessão) → estimar gas → enviar → aguardar recibo.
+
+---
+
+### 2026-07-04 — Sessão 67
+
+- **Objetivo**: etapa 14.9.5 — integrar as peças da 14.9.1-14.9.4 no fluxo real do `createSession`: construir calldata → montar UserOp → assinar → estimar gas → enviar ao bundler → aguardar recibo, ponta a ponta no app mobile.
+
+**Achado que reenquadrou a etapa** (levantamento feito com um agente Explore antes de codar): o mobile **nunca chamou `SessionRegistry.createSession`**, nem direta nem indiretamente. O fluxo real (`ApprovalScreen._approve()`) sempre foi: assinar o challenge + assinar o `sessionHash`, e fazer um POST HTTPS desses dados pro `callbackUrl` do site. Quem de fato chama `createSession` on-chain é o **backend do site integrador**, via `sdk/typescript/src/client.ts` (`registerSession`), usando uma **relayer wallet financiada** (`RELAYER_PRIVATE_KEY`) — um servidor do lado do site, não o desktop nem nada do TruthID. A 14.9.5 não era "trocar uma chamada existente por UserOp": era **construir do zero**, no mobile, o caminho ponta a ponta que hoje só existe no SDK server-side, reaproveitando as peças prontas de 14.9.1–14.9.4. Confirmado com o dono do projeto antes de codar: o mobile passa a chamar `createSession` ele mesmo via UserOp/bundler (sem POST-relay pro site fazer isso), e a smart account precisa ter ETH próprio pra pagar o gás (mesmo padrão de funding já usado no desktop, sem paymaster).
+
+**Novos ABIs** (`mobile/lib/contracts/abis.dart`): `createSession` adicionado ao `sessionRegistryAbi`; `getIdentity` adicionado ao `identityRegistryAbi` (pra resolver o `controller` — endereço da smart account, desde o débito #17 — a partir do `@username`); `truthidAccountAbi` novo (só `execute`, pra encapsular a chamada); `entryPointAbi` novo (só `getNonce`).
+
+**`BlockchainService` estendido**: `sessionRegistryAddress` exposto publicamente (era só privado); `chainId` (Base Mainnet, `8453` — único RPC configurado hoje); `getIdentityByUsername(username)` (novo `IdentityInfo { id, controller }`); `getSmartAccountNonce(sender)` via `EntryPoint.getNonce(sender, 0)`.
+
+**`PimlicoBundlerClient` ganhou `getUserOperationGasPrice()`** (`pimlico_getUserOperationGasPrice`, tier "fast") — método específico da Pimlico (não é ERC-4337 padrão), necessário porque `eth_estimateUserOperationGas` não devolve `maxFeePerGas`/`maxPriorityFeePerGas`.
+
+**Novo `mobile/lib/services/session_creator.dart`** (`SessionCreator.createSession`): recebe `identityId`, `smartAccountAddress`, `sessionHash`, `devicePubKey`, `sessionSignatureHex` (a assinatura r∥s∥v já produzida por `DeviceKeyService.signHash`, mesmo formato que o SDK já espera em `registerSession` — só reparte os bytes, não assina de novo); monta `execute(SessionRegistry, 0, createSession(...))` via `web3dart` `ContractFunction.encodeCall` (sem reimplementar um encoder ABI — diferente da 14.9.2, aqui não há necessidade, já que o encoder da lib já é usado em produção em `BlockchainService`); lê o nonce; busca gas price; monta a `UserOperationV07` com assinatura placeholder pra estimativa; estima gas; assina de verdade via `signUserOperation` (14.9.4); envia; faz polling do recibo (30 tentativas × 2s por padrão, configurável — necessário pra testar o caminho de timeout sem esperar 60s de verdade).
+
+**`ApprovalScreen` reescrito**: novo `_Status.submitting` (UI de loading) entre `challenge` e `done`. `_approve()` passou a: assinar challenge + sessionHash (igual antes) → checar se o device está pareado (`_identityId`/`_username`, agora lidos via `LocalStorageService` injetável) → resolver a smart account via `BlockchainService.getIdentityByUsername` → chamar `SessionCreator.createSession` → só então fazer o POST ao `callbackUrl` (mantido sem mudança de formato — vira só uma notificação, já que a sessão já existe on-chain quando o site recebe). `BlockchainService`/`SessionCreator`/`LocalStorageService` viraram injetáveis no construtor, mesmo padrão já usado pra `DeviceKeyService`.
+
+**Bug de layout pré-existente, achado e corrigido nesta sessão** (não é da 14.9.5 em si): a `_InfoRow` "Signing as: Identity #..." em `_buildChallengeUI()` já existia desde antes, mas nunca renderizava nos testes porque o `LocalStorageService()` real (não mockado) sempre devolvia `null` no ambiente de teste. Ao injetar um mock com identidade pareada de verdade (necessário pra testar a 14.9.5 de forma realista), essa linha passou a aparecer e estourou a altura fixa do viewport de teste (`RenderFlex overflowed`) — um bug real de layout que existiria em qualquer tela pequena o bastante, só nunca tinha sido exercitado. Corrigido envolvendo `_buildChallengeUI()` num `SingleChildScrollView` e trocando o `Spacer()` (incompatível com scroll — exige altura limitada de um ancestral `Flex`) por um `SizedBox` fixo.
+
+**Escopo deliberadamente deixado de fora, registrado como próximo passo (14.9.6)**: o SDK (`registerSession`) ainda chama `createSession` — como o mobile agora já cria a sessão on-chain antes do POST chegar ao site, qualquer integrador que já rode o SDK atual veria esse `registerSession` reverter com `SessionAlreadyExists`. Isso é aceitável nesta fase (app ainda não distribuído publicamente — débito #26/#27 já bloqueiam release por outros motivos) mas precisa ser resolvido antes de qualquer uso real: ajustar o SDK (3 linguagens) pra não chamar `createSession` de novo, ou verificar existência antes.
+
+**Verificação**: `flutter analyze` limpo (mesmos 2 avisos pré-existentes + 3 infos novas de estilo em `session_creator.dart`, aceitas deliberadamente — corrigir exigiria expor nomes de campos privados como parâmetros públicos do construtor, pior que o atual). `flutter test` completo (68 testes, 14 novos: 4 em `session_creator_test.dart`, 2 em `pimlico_bundler_client_test.dart` pro gas price, 4 novos + os antigos ajustados em `approval_screen_test.dart`) sem regressão, rodado via `docker run` direto contra `mobile-flutter:latest` (mesmo padrão das Sessões 64/65, sem `docker compose build`).
+
+- **Débitos**: nenhum novo além do já registrado (#27). Aberto explicitamente como pendência de escopo: ajuste do SDK pra parar de chamar `createSession` (14.9.6).
+- **Próximo passo**: 14.9.6 — testar de ponta a ponta em Sepolia com a identidade/smart account de teste; ajustar o SDK pra não chamar `createSession` de novo (remover a dependência de `RELAYER_PRIVATE_KEY` nos lugares que hoje existem só por causa do mobile).
 
 ---
 
