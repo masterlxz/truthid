@@ -49,6 +49,49 @@ class UserOperationV07 {
         paymasterPostOpGasLimit = paymasterPostOpGasLimit ?? BigInt.zero,
         paymasterData = paymasterData ?? Uint8List(0),
         signature = signature ?? Uint8List(0);
+
+  // Como `factory`/`paymaster` são opcionais por natureza, este copyWith não
+  // consegue "resetar para null" um campo já preenchido — só deixar como
+  // está ou substituir por um valor não nulo. Suficiente pro único uso atual
+  // (14.9.4: trocar `signature` depois de assinar o userOpHash).
+  UserOperationV07 copyWith({
+    EthereumAddress? sender,
+    BigInt? nonce,
+    EthereumAddress? factory,
+    Uint8List? factoryData,
+    Uint8List? callData,
+    BigInt? callGasLimit,
+    BigInt? verificationGasLimit,
+    BigInt? preVerificationGas,
+    BigInt? maxFeePerGas,
+    BigInt? maxPriorityFeePerGas,
+    EthereumAddress? paymaster,
+    BigInt? paymasterVerificationGasLimit,
+    BigInt? paymasterPostOpGasLimit,
+    Uint8List? paymasterData,
+    Uint8List? signature,
+  }) {
+    return UserOperationV07(
+      sender: sender ?? this.sender,
+      nonce: nonce ?? this.nonce,
+      factory: factory ?? this.factory,
+      factoryData: factoryData ?? this.factoryData,
+      callData: callData ?? this.callData,
+      callGasLimit: callGasLimit ?? this.callGasLimit,
+      verificationGasLimit: verificationGasLimit ?? this.verificationGasLimit,
+      preVerificationGas: preVerificationGas ?? this.preVerificationGas,
+      maxFeePerGas: maxFeePerGas ?? this.maxFeePerGas,
+      maxPriorityFeePerGas:
+          maxPriorityFeePerGas ?? this.maxPriorityFeePerGas,
+      paymaster: paymaster ?? this.paymaster,
+      paymasterVerificationGasLimit:
+          paymasterVerificationGasLimit ?? this.paymasterVerificationGasLimit,
+      paymasterPostOpGasLimit:
+          paymasterPostOpGasLimit ?? this.paymasterPostOpGasLimit,
+      paymasterData: paymasterData ?? this.paymasterData,
+      signature: signature ?? this.signature,
+    );
+  }
 }
 
 // Forma "empacotada" da User Operation — a que o EntryPoint/TruthIDAccount

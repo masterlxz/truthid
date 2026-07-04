@@ -153,6 +153,77 @@ void main() {
     });
   });
 
+  group('copyWith', () {
+    UserOperationV07 buildOp({Uint8List? signature}) => UserOperationV07(
+          sender: EthereumAddress.fromHex(
+              '0x1234567890123456789012345678901234567890'),
+          nonce: BigInt.from(7),
+          factory: EthereumAddress.fromHex(
+              '0x1111111111111111111111111111111111111111'),
+          factoryData: _bytes('0xdeadbeef'),
+          callData: _bytes('0xabcdef01'),
+          callGasLimit: BigInt.from(100000),
+          verificationGasLimit: BigInt.from(200000),
+          preVerificationGas: BigInt.from(50000),
+          maxFeePerGas: BigInt.from(1000000000),
+          maxPriorityFeePerGas: BigInt.from(100000000),
+          paymaster: EthereumAddress.fromHex(
+              '0x2222222222222222222222222222222222222222'),
+          paymasterVerificationGasLimit: BigInt.from(80000),
+          paymasterPostOpGasLimit: BigInt.from(20000),
+          paymasterData: _bytes('0xfeedface'),
+          signature: signature,
+        );
+
+    void expectSameFieldsExceptSignature(
+        UserOperationV07 original, UserOperationV07 copy) {
+      expect(copy.sender, original.sender);
+      expect(copy.nonce, original.nonce);
+      expect(copy.factory, original.factory);
+      expect(copy.factoryData, original.factoryData);
+      expect(copy.callData, original.callData);
+      expect(copy.callGasLimit, original.callGasLimit);
+      expect(copy.verificationGasLimit, original.verificationGasLimit);
+      expect(copy.preVerificationGas, original.preVerificationGas);
+      expect(copy.maxFeePerGas, original.maxFeePerGas);
+      expect(copy.maxPriorityFeePerGas, original.maxPriorityFeePerGas);
+      expect(copy.paymaster, original.paymaster);
+      expect(copy.paymasterVerificationGasLimit,
+          original.paymasterVerificationGasLimit);
+      expect(
+          copy.paymasterPostOpGasLimit, original.paymasterPostOpGasLimit);
+      expect(copy.paymasterData, original.paymasterData);
+    }
+
+    test('troca só a assinatura, resto permanece idêntico', () {
+      final original = buildOp(signature: _bytes('0xaabbcc'));
+      final newSignature = _bytes('0x${'11' * 65}');
+
+      final copy = original.copyWith(signature: newSignature);
+
+      expect(copy.signature, newSignature);
+      expectSameFieldsExceptSignature(original, copy);
+    });
+
+    test('não altera o objeto original', () {
+      final originalSignature = _bytes('0xaabbcc');
+      final original = buildOp(signature: originalSignature);
+
+      original.copyWith(signature: _bytes('0x${'11' * 65}'));
+
+      expect(original.signature, originalSignature);
+    });
+
+    test('sem argumentos devolve uma cópia com os mesmos valores', () {
+      final original = buildOp(signature: _bytes('0xaabbcc'));
+
+      final copy = original.copyWith();
+
+      expect(copy.signature, original.signature);
+      expectSameFieldsExceptSignature(original, copy);
+    });
+  });
+
   group('toPackedUserOperation', () {
     test('empacota accountGasLimits e gasFees em 32 bytes cada', () {
       final op = UserOperationV07(

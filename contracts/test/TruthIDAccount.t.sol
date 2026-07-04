@@ -552,6 +552,45 @@ contract TruthIDAccountTest is Test {
     }
 
     // -------------------------------------------------------------------------
+    // B9 — vetor conhecido, cruzado com o pipeline mobile (etapa 14.9.4)
+    // -------------------------------------------------------------------------
+
+    // Fecha o ciclo da 14.9.4: prova que uma assinatura gerada fora deste
+    // contrato — pelo mesmo par (chave, hash) usado nos testes
+    // `mobile/test/services/device_key_signature_vector_test.dart` (Dart,
+    // `EthPrivateKey.signPersonalMessageToUint8List`) e no script Node com
+    // `viem/accounts` `signMessage` — é aceita de verdade por
+    // `validateUserOp`. Não é só "parece compatível por inspeção": é a
+    // mesma chave (conta #0 padrão do Anvil/Hardhat, pública, sem fundos
+    // reais), o mesmo hash e a mesma assinatura, coladas aqui como literais.
+    function test_ValidateUserOp_KnownVector_MatchesMobilePipeline() public {
+        uint256 knownPrivateKey =
+            0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
+        address knownAddress = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
+        assertEq(vm.addr(knownPrivateKey), knownAddress, "sanity: chave conhecida");
+
+        bytes32 knownHash = 0x4c0edff4da8c663198f35c78ab485687133310c50c343920b0e24510b2581b37;
+        bytes memory knownSignature =
+            hex"c957aeb33d6e8289d733442cf9b44fbafc6c1c07fbb71eef974c724cc087deae"
+            hex"0a4be53c6a97b8f41e53559d6327017adcf62341fc176583751ab61f1020f855"
+            hex"1c";
+        assertEq(knownSignature.length, 65);
+
+        vm.prank(owner);
+        account.addDevice(knownAddress);
+
+        address allowedDest = makeAddr("allowedDest");
+        bytes memory callData = abi.encodeCall(TruthIDAccount.execute, (allowedDest, 0, ""));
+        PackedUserOperation memory userOp = _buildUserOp(callData);
+        userOp.signature = knownSignature;
+
+        vm.prank(entryPoint);
+        uint256 validationData = account.validateUserOp(userOp, knownHash, 0);
+
+        assertEq(validationData, SIG_VALIDATION_SUCCESS);
+    }
+
+    // -------------------------------------------------------------------------
     // B6 — emergencyWithdraw
     // -------------------------------------------------------------------------
 
