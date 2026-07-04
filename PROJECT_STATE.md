@@ -910,12 +910,13 @@ A partir daí: Ledger assina UserOps off-chain → bundler submete → smart acc
   - **Script de deploy**: `DeployFactory.s.sol` criado (deploya só a factory, usando contratos existentes)
   - **Resultado**: `forge build` + `forge test` (191) + `npx tsc --noEmit` + `npm test` (21) — tudo limpo
 - [x] 14.8 — Desktop: sincronizar lista de signers da smart account com o DeviceRegistry. *(Sessão 63 — implementação, testes e verificação end-to-end em Sepolia com o Ledger físico, todos concluídos: pareamento e revogação testados via o app real contra a identidade `teste` (identityId 1), device `0xfd23ed10b147F2557D0F072b1D10F6575C300F65` registrado/revogado com sucesso e `authorizedDevices` sincronizado nos dois sentidos (`true` após parear, `false` após revogar). Ver Log de Sessões, Sessão 63, para o desenho completo e a descoberta de que o pareamento já estava quebrado para identidades smart-account antes desta correção. Mobile fica de fora desta etapa — depende da 14.9, que introduz UserOps de verdade.)*
-- [ ] 14.9 — Mobile: atualizar fluxo de assinatura de transações (ex: `createSession`) para UserOps
-  - Construir calldata para o contrato alvo
-  - Montar UserOp (nonce via EntryPoint, gas limits estimados via bundler API)
-  - Assinar UserOp hash com a device key (Secure Enclave)
-  - Submeter ao bundler público (ex: `eth_sendUserOperation` via Alchemy/Pimlico)
-  - Remove dependência do padrão relayer (Sessão 39) para o Mobile — sem `RELAYER_PRIVATE_KEY` necessário
+- [ ] 14.9 — Mobile: atualizar fluxo de assinatura de transações (ex: `createSession`) para UserOps. **Quebrada em mini-etapas (Sessão 63) porque é bem mais pesada que a 14.8** — o celular é signer tier "device", não `owner`, então não tem o atalho de transação direta que a 14.8 usou; é obrigatório passar pela UserOperation de verdade via um bundler. Cada sub-etapa abaixo deve caber numa sessão pequena.
+  - [ ] 14.9.1 — Decidir e configurar provedor de bundler (Pimlico vs Alchemy, compatibilidade com Base/Base Sepolia). Só decisão + conta/API key — sem código ainda. Guardar a chave como já é feito com outros segredos do projeto, nunca hardcoded.
+  - [ ] 14.9.2 — Implementar em Dart (mobile) o encoding de `PackedUserOperation` + o cálculo do `userOpHash` (EIP-4337 v0.7). Funções puras, sem rede. Testar contra vetores conhecidos (dá pra gerar um "gabarito" usando `viem/account-abstraction` no desktop/Node e comparar byte a byte).
+  - [ ] 14.9.3 — Cliente HTTP do bundler em Dart: `eth_estimateUserOperationGas`, `eth_sendUserOperation`, `eth_getUserOperationReceipt`. Só chamadas JSON-RPC, sem lógica de assinatura ainda.
+  - [ ] 14.9.4 — Assinar o `userOpHash` com a device key (Secure Enclave) e montar a assinatura no formato que `TruthIDAccount._validateSignature` espera (mesmo padrão `personal_sign`/r-s-v já usado hoje em `device_key_service.dart:signHash`).
+  - [ ] 14.9.5 — Integrar tudo no fluxo real do `createSession`: construir calldata → montar UserOp → assinar → estimar gas → enviar → aguardar recibo. Ponta a ponta no app mobile, substituindo o fluxo atual (mobile assina, desktop/relayer submete).
+  - [ ] 14.9.6 — Testar de ponta a ponta em Sepolia com a identidade/smart account de teste; remover a dependência de `RELAYER_PRIVATE_KEY` nos lugares que hoje existem só por causa do mobile (SDK/docs, se aplicável).
 - [ ] 14.10 — Dashboard da smart account no Desktop (tab dedicada):
   - Saldo atual de ETH
   - Histórico de operações com custo por tipo (sessão, registro de device, vault)
