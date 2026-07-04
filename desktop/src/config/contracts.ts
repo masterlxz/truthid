@@ -262,6 +262,54 @@ export const VAULT_REGISTRY_ABI = [
   },
 ] as const;
 
+// ─── TruthIDAccount (smart account) ───────────────────────────────────────────
+
+export const TRUTHID_ACCOUNT_ABI = [
+  {
+    type: "function",
+    name: "execute",
+    inputs: [
+      { name: "dest", type: "address" },
+      { name: "value", type: "uint256" },
+      { name: "func", type: "bytes" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "executeBatch",
+    inputs: [
+      { name: "dest", type: "address[]" },
+      { name: "value", type: "uint256[]" },
+      { name: "func", type: "bytes[]" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "addDevice",
+    inputs: [{ name: "device", type: "address" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "removeDevice",
+    inputs: [{ name: "device", type: "address" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "authorizedDevices",
+    inputs: [{ name: "", type: "address" }],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
+  },
+] as const;
+
 // ─── TruthIDAccountFactory ────────────────────────────────────────────────────
 
 export { TRUTHID_ACCOUNT_FACTORY_ADDRESS as FACTORY_ADDRESS } from "./truthidAccount";

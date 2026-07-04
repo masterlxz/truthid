@@ -1,15 +1,25 @@
 import { createContext, useContext, type ReactNode } from "react";
 import { useReadContract } from "wagmi";
+import type { Address } from "viem";
 import { IDENTITY_REGISTRY_ADDRESS, IDENTITY_REGISTRY_ABI } from "../config/contracts";
 
 interface IdentityContextValue {
   username: string;
   identityId: bigint | undefined;
+  smartAccountAddress: Address | null;
 }
 
 const IdentityContext = createContext<IdentityContextValue | null>(null);
 
-export function IdentityProvider({ username, children }: { username: string; children: ReactNode }) {
+export function IdentityProvider({
+  username,
+  smartAccountAddress,
+  children,
+}: {
+  username: string;
+  smartAccountAddress: Address | null;
+  children: ReactNode;
+}) {
   const { data: identity } = useReadContract({
     address: IDENTITY_REGISTRY_ADDRESS,
     abi: IDENTITY_REGISTRY_ABI,
@@ -18,7 +28,7 @@ export function IdentityProvider({ username, children }: { username: string; chi
   });
 
   return (
-    <IdentityContext.Provider value={{ username, identityId: identity?.id }}>
+    <IdentityContext.Provider value={{ username, identityId: identity?.id, smartAccountAddress }}>
       {children}
     </IdentityContext.Provider>
   );

@@ -7,19 +7,27 @@ import {
   useWriteContract,
   useWaitForTransactionReceipt,
 } from "wagmi";
-import { keccak256, encodePacked } from "viem";
-import { DEVICE_REGISTRY_ADDRESS, DEVICE_REGISTRY_ABI } from "../config/contracts";
+import { keccak256, encodePacked, encodeFunctionData } from "viem";
+import { DEVICE_REGISTRY_ADDRESS, DEVICE_REGISTRY_ABI, TRUTHID_ACCOUNT_ABI } from "../config/contracts";
 import { useWalletModal } from "../contexts/WalletModalContext";
+import { useIdentity } from "../contexts/IdentityContext";
+import { buildAccountCalls } from "../utils/buildAccountCalls";
 
 // invoke() é a ponte entre React e Rust.
 // Quando chamamos invoke("get_or_create_device_key"), o Tauri executa a
 // função Rust correspondente e devolve o resultado para o JavaScript.
 // É como uma API interna do app — sem servidor, sem rede.
+//
+// Desde a 14.8, as duas transações abaixo passam por `execute`/`executeBatch`
+// na smart account (mesma razão do PairDevice.tsx: `msg.sender` do
+// DeviceRegistry precisa ser o `controller` da identidade, que agora é a
+// smart account, não o Ledger).
 
 export function DesktopDevice({ onRegistered }: { onRegistered: () => void }) {
   const [address, setAddress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { address: controllerAddress, isConnected } = useAccount();
+  const { isConnected } = useAccount();
+  const { smartAccountAddress } = useIdentity();
   const { openConnectModal } = useWalletModal();
   const queryClient = useQueryClient();
 
@@ -60,16 +68,30 @@ export function DesktopDevice({ onRegistered }: { onRegistered: () => void }) {
   const isWriteError = isCommitError || isRegisterError;
 
   useEffect(() => {
-    if (!isCommitSuccess || phase !== "committing" || !address || !salt) return;
+    if (!isCommitSuccess || phase !== "committing" || !address || !salt || !smartAccountAddress) return;
     setPhase("registering");
     // O contrato exige block.number > commitBlock (RevealTooEarly).
     // Base mina a cada ~2s, então 4s garante que estamos no próximo bloco.
     const timer = setTimeout(() => {
+      const { dest, value, func } = buildAccountCalls([
+        {
+          address: DEVICE_REGISTRY_ADDRESS,
+          abi: DEVICE_REGISTRY_ABI,
+          functionName: "registerDevice",
+          args: [address as `0x${string}`, "This Desktop", salt],
+        },
+        {
+          address: smartAccountAddress,
+          abi: TRUTHID_ACCOUNT_ABI,
+          functionName: "addDevice",
+          args: [address as `0x${string}`],
+        },
+      ]);
       sendRegister({
-        address: DEVICE_REGISTRY_ADDRESS,
-        abi: DEVICE_REGISTRY_ABI,
-        functionName: "registerDevice",
-        args: [address as `0x${string}`, "This Desktop", salt],
+        address: smartAccountAddress,
+        abi: TRUTHID_ACCOUNT_ABI,
+        functionName: "executeBatch",
+        args: [dest, value, func],
       });
     }, 4000);
     return () => clearTimeout(timer);
@@ -85,7 +107,7 @@ export function DesktopDevice({ onRegistered }: { onRegistered: () => void }) {
 
   function handleRegister() {
     if (!isConnected) { openConnectModal(); return; }
-    if (!address || !controllerAddress) return;
+    if (!address || !smartAccountAddress) return;
 
     const saltBytes = crypto.getRandomValues(new Uint8Array(32));
     const newSalt = `0x${Array.from(saltBytes)
@@ -96,16 +118,24 @@ export function DesktopDevice({ onRegistered }: { onRegistered: () => void }) {
     const commitment = keccak256(
       encodePacked(
         ["address", "bytes32", "address"],
-        [address as `0x${string}`, newSalt, controllerAddress]
+        [address as `0x${string}`, newSalt, smartAccountAddress]
       )
     );
 
     setPhase("committing");
     sendCommit({
-      address: DEVICE_REGISTRY_ADDRESS,
-      abi: DEVICE_REGISTRY_ABI,
-      functionName: "commitDevice",
-      args: [commitment],
+      address: smartAccountAddress,
+      abi: TRUTHID_ACCOUNT_ABI,
+      functionName: "execute",
+      args: [
+        DEVICE_REGISTRY_ADDRESS,
+        0n,
+        encodeFunctionData({
+          abi: DEVICE_REGISTRY_ABI,
+          functionName: "commitDevice",
+          args: [commitment],
+        }),
+      ],
     });
   }
 

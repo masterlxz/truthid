@@ -209,7 +209,7 @@ function App() {
           )}
 
           {displayUsername && (
-            <IdentityProvider username={displayUsername}>
+            <IdentityProvider username={displayUsername} smartAccountAddress={smartAccountAddress}>
               <nav className="tabs">
                 <button
                   onClick={() => setActiveTab("devices")}

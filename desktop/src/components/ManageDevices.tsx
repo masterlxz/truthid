@@ -10,16 +10,18 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   DEVICE_REGISTRY_ADDRESS,
   DEVICE_REGISTRY_ABI,
+  TRUTHID_ACCOUNT_ABI,
 } from "../config/contracts";
 import type { DeviceInfo } from "../types";
 import { useIdentity } from "../contexts/IdentityContext";
 import { useWalletModal } from "../contexts/WalletModalContext";
+import { buildAccountCalls } from "../utils/buildAccountCalls";
 import { DeviceList } from "./DeviceList";
 import { PairDevice } from "./PairDevice";
 import { DesktopDevice } from "./DesktopDevice";
 
 export function ManageDevices() {
-  const { username, identityId } = useIdentity();
+  const { username, identityId, smartAccountAddress } = useIdentity();
   const { isConnected } = useAccount();
   const { openConnectModal } = useWalletModal();
   const queryClient = useQueryClient();
@@ -62,12 +64,32 @@ export function ManageDevices() {
 
   function handleRevoke(pubKey: string) {
     if (!isConnected) { openConnectModal(); return; }
+    if (!smartAccountAddress) return;
     setRevokingPubKey(pubKey);
+
+    // Mesma razão da 14.8 em PairDevice/DesktopDevice: msg.sender do
+    // DeviceRegistry precisa ser a smart account, não o Ledger — e
+    // aproveitamos o lote pra também tirar o device da lista de signers
+    // da própria smart account.
+    const { dest, value, func } = buildAccountCalls([
+      {
+        address: DEVICE_REGISTRY_ADDRESS,
+        abi: DEVICE_REGISTRY_ABI,
+        functionName: "revokeDevice",
+        args: [pubKey as `0x${string}`],
+      },
+      {
+        address: smartAccountAddress,
+        abi: TRUTHID_ACCOUNT_ABI,
+        functionName: "removeDevice",
+        args: [pubKey as `0x${string}`],
+      },
+    ]);
     sendRevoke({
-      address: DEVICE_REGISTRY_ADDRESS,
-      abi: DEVICE_REGISTRY_ABI,
-      functionName: "revokeDevice",
-      args: [pubKey as `0x${string}`],
+      address: smartAccountAddress,
+      abi: TRUTHID_ACCOUNT_ABI,
+      functionName: "executeBatch",
+      args: [dest, value, func],
     });
   }
 

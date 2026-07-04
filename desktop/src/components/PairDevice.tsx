@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { keccak256, encodePacked, isAddress } from "viem";
-import { DEVICE_REGISTRY_ADDRESS, DEVICE_REGISTRY_ABI } from "../config/contracts";
+import { keccak256, encodePacked, encodeFunctionData, isAddress } from "viem";
+import { DEVICE_REGISTRY_ADDRESS, DEVICE_REGISTRY_ABI, TRUTHID_ACCOUNT_ABI } from "../config/contracts";
 import { useWalletModal } from "../contexts/WalletModalContext";
+import { useIdentity } from "../contexts/IdentityContext";
+import { buildAccountCalls } from "../utils/buildAccountCalls";
 
 // Este componente:
 // 1. Mostra um campo pra colar o endereço que o celular exibe (tela "Mostrar
@@ -14,11 +16,18 @@ import { useWalletModal } from "../contexts/WalletModalContext";
 // o endereço dele (não precisa de rede pra isso), e aqui só confirmamos a
 // transação. O próprio celular detecta quando terminou fazendo polling
 // on-chain (ver ShowDeviceQrScreen no mobile).
+//
+// Desde a 14.8, `msg.sender` do DeviceRegistry precisa ser a smart account
+// (é ela o `controller` da identidade, não o Ledger) — por isso as duas
+// transações chamam `execute`/`executeBatch` na smart account em vez de
+// chamar o DeviceRegistry diretamente. O Ledger continua sendo quem assina
+// e paga o gás, só que agora por trás de um `execute`.
 
 export function PairDevice({ onDeviceRegistered }: {
   onDeviceRegistered: () => void;
 }) {
-  const { address: controllerAddress, isConnected } = useAccount();
+  const { isConnected } = useAccount();
+  const { smartAccountAddress } = useIdentity();
   const { openConnectModal } = useWalletModal();
 
   const [isOpen, setIsOpen] = useState(false);
@@ -57,14 +66,35 @@ export function PairDevice({ onDeviceRegistered }: {
   const isPairError = isCommitError || isRegisterError;
 
   useEffect(() => {
-    if (!isCommitSuccess || registerPhase !== "committing" || !salt || !isAddress(addressInput)) return;
+    if (
+      !isCommitSuccess ||
+      registerPhase !== "committing" ||
+      !salt ||
+      !isAddress(addressInput) ||
+      !smartAccountAddress
+    )
+      return;
     setRegisterPhase("registering");
     const timer = setTimeout(() => {
+      const { dest, value, func } = buildAccountCalls([
+        {
+          address: DEVICE_REGISTRY_ADDRESS,
+          abi: DEVICE_REGISTRY_ABI,
+          functionName: "registerDevice",
+          args: [addressInput as `0x${string}`, labelInput, salt],
+        },
+        {
+          address: smartAccountAddress,
+          abi: TRUTHID_ACCOUNT_ABI,
+          functionName: "addDevice",
+          args: [addressInput as `0x${string}`],
+        },
+      ]);
       sendRegister({
-        address: DEVICE_REGISTRY_ADDRESS,
-        abi: DEVICE_REGISTRY_ABI,
-        functionName: "registerDevice",
-        args: [addressInput as `0x${string}`, labelInput, salt],
+        address: smartAccountAddress,
+        abi: TRUTHID_ACCOUNT_ABI,
+        functionName: "executeBatch",
+        args: [dest, value, func],
       });
     }, 4000);
     return () => clearTimeout(timer);
@@ -87,7 +117,7 @@ export function PairDevice({ onDeviceRegistered }: {
 
   function handleRegister() {
     if (!isConnected) { openConnectModal(); return; }
-    if (!controllerAddress || !isAddress(addressInput) || !labelInput) return;
+    if (!smartAccountAddress || !isAddress(addressInput) || !labelInput) return;
 
     const saltBytes = crypto.getRandomValues(new Uint8Array(32));
     const newSalt = `0x${Array.from(saltBytes)
@@ -95,19 +125,29 @@ export function PairDevice({ onDeviceRegistered }: {
       .join("")}` as `0x${string}`;
     setSalt(newSalt);
 
+    // O commitment precisa usar o endereço que vai de fato aparecer como
+    // `msg.sender` no DeviceRegistry — a smart account, não o Ledger.
     const commitment = keccak256(
       encodePacked(
         ["address", "bytes32", "address"],
-        [addressInput as `0x${string}`, newSalt, controllerAddress]
+        [addressInput as `0x${string}`, newSalt, smartAccountAddress]
       )
     );
 
     setRegisterPhase("committing");
     sendCommit({
-      address: DEVICE_REGISTRY_ADDRESS,
-      abi: DEVICE_REGISTRY_ABI,
-      functionName: "commitDevice",
-      args: [commitment],
+      address: smartAccountAddress,
+      abi: TRUTHID_ACCOUNT_ABI,
+      functionName: "execute",
+      args: [
+        DEVICE_REGISTRY_ADDRESS,
+        0n,
+        encodeFunctionData({
+          abi: DEVICE_REGISTRY_ABI,
+          functionName: "commitDevice",
+          args: [commitment],
+        }),
+      ],
     });
   }
 

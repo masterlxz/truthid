@@ -909,7 +909,7 @@ A partir daí: Ledger assina UserOps off-chain → bundler submete → smart acc
   - **Factory deployada**: Base Sepolia `0xbf097EC74d0Cc9b16D3d94EaCa62060d89A63b17` + Base Mainnet `0x062c577C26067d04bBEEaa953F8E7675fF4849ab`
   - **Script de deploy**: `DeployFactory.s.sol` criado (deploya só a factory, usando contratos existentes)
   - **Resultado**: `forge build` + `forge test` (191) + `npx tsc --noEmit` + `npm test` (21) — tudo limpo
-- [ ] 14.8 — Desktop + Mobile: sincronizar lista de signers da smart account com o DeviceRegistry. Ao registrar device no DeviceRegistry → `TruthIDAccount.addDevice`. Ao revogar → `TruthIDAccount.removeDevice`. Ambas assinadas pelo Ledger (UserOp, gás da smart account).
+- [x] 14.8 — Desktop: sincronizar lista de signers da smart account com o DeviceRegistry. *(Sessão 63 — implementação + testes concluídos, verificação end-to-end em Sepolia com o Ledger físico ainda pendente. Ver Log de Sessões, Sessão 63, para o desenho completo e a descoberta de que o pareamento já estava quebrado para identidades smart-account antes desta correção. Mobile fica de fora desta etapa — depende da 14.9, que introduz UserOps de verdade.)*
 - [ ] 14.9 — Mobile: atualizar fluxo de assinatura de transações (ex: `createSession`) para UserOps
   - Construir calldata para o contrato alvo
   - Montar UserOp (nonce via EntryPoint, gas limits estimados via bundler API)
@@ -2444,8 +2444,6 @@ Três arquivos novos + um arquivo modificado:
 
 - **Objetivo**: resolver o débito #17 — opção (a) escolhida pelo dono do projeto (assinatura de consentimento em `createIdentity`).
 
-**IMPORTANTE — pendência desta sessão**: o código foi implementado e verificado (build/testes limpos), mas o dono do projeto pediu explicitamente, no fim da sessão, uma explicação melhor/mais detalhada do que foi feito — ainda não recebeu (a sessão fechou rápido demais pro ritmo de ensino de costume, ver "Diretriz de ensino" no topo deste arquivo). **Próxima sessão precisa começar por aí antes de qualquer coisa nova.**
-
 **Desenho da consentimento**: `createIdentity(username, controller, v, r, s)` agora aceita duas formas de prova de consentimento:
 1. `controller` é EOA comum → ele mesmo assina (`signer == controller`).
 2. `controller` é smart account pré-deploy (caso real da Fase 14) → quem assina é o dono da chave Ledger que vai virar owner dela; o registry verifica via `ITruthIDAccountFactory(_factory).getAddress(signer) == controller`.
@@ -2465,13 +2463,12 @@ Mensagem assinada: `keccak256(abi.encode(chainid, address(registry), username, c
 **Achado que bloqueia o redeploy — 1 identidade real já existe na mainnet**: `totalIdentities()` no `IdentityRegistry` atual (`0xbf097EC7...`) retorna `1` (confirmado via `cast call` read-only). Como a assinatura de `createIdentity` mudou (breaking change), o registry precisa ser redeployado — e como `DeviceRegistry`, `RecoveryManager`, `SessionRegistry` e `TruthIDAccountFactory` recebem o endereço do `IdentityRegistry` como `immutable` no construtor, **os 5 contratos precisam ser redeployados juntos** nas duas redes (`VaultRegistry` fica de fora — ainda não foi deployado, endereço é placeholder `0x0`). Decisão do dono do projeto: **aceitar a perda dessa identidade e recriá-la manualmente depois do redeploy** (sem script de migração).
 
 **PENDENTE — próxima sessão, com o Ledger físico em mãos**:
-1. Explicar em detalhe pro usuário o que foi implementado nesta sessão (pedido explícito, ver acima).
-2. Redeploy dos 5 contratos em Base Sepolia primeiro (`forge script script/Deploy.s.sol --rpc-url base_sepolia --broadcast --ledger --hd-paths "m/44'/60'/1'/0/0"`, depois `DeploySessionRegistry.s.sol` com `IDENTITY_REGISTRY`/`DEVICE_REGISTRY` como env vars).
-3. Testar o fluxo completo de criação de identidade no app contra Sepolia (passo de assinatura + 3 transações).
-4. Repetir em Base Mainnet.
-5. Atualizar `desktop/src/config/contracts.ts` e `truthidAccount.ts` com os 5 endereços novos (Sepolia + Mainnet).
-6. Recriar manualmente a identidade mainnet perdida.
-7. Marcar débito #17 como resolvido na tabela de Débitos Técnicos e fechar esta entrada do Log de Sessões.
+1. Redeploy dos 5 contratos em Base Sepolia primeiro (`forge script script/Deploy.s.sol --rpc-url base_sepolia --broadcast --ledger --hd-paths "m/44'/60'/1'/0/0"`, depois `DeploySessionRegistry.s.sol` com `IDENTITY_REGISTRY`/`DEVICE_REGISTRY` como env vars).
+2. Testar o fluxo completo de criação de identidade no app contra Sepolia (passo de assinatura + 3 transações).
+3. Repetir em Base Mainnet.
+4. Atualizar `desktop/src/config/contracts.ts` e `truthidAccount.ts` com os 5 endereços novos (Sepolia + Mainnet).
+5. Recriar manualmente a identidade mainnet perdida.
+6. Marcar débito #17 como resolvido na tabela de Débitos Técnicos e fechar esta entrada do Log de Sessões.
 
 ---
 
@@ -2509,12 +2506,35 @@ Verificação final: `forge build` limpo, `tsc --noEmit`/`vitest` (28/28) limpos
 
 Config do desktop revertida de volta pra Sepolia→Mainnet antes desse redeploy (já estava assim desde o teste), e agora atualizada com os endereços REAIS da mainnet nova (não mais temporário).
 
-**Ainda pendente**: recriar manualmente a identidade mainnet perdida (dono do projeto vai fazer isso pelo app, quando quiser); explicação detalhada pro usuário do que foi implementado no débito #17 (pedido ainda em aberto).
+**Ainda pendente**: recriar manualmente a identidade mainnet perdida (dono do projeto vai fazer isso pelo app, quando quiser).
 
 **Anotado para depois (fora do escopo do débito #17)**: dono do projeto pediu pra registrar que falta construir a parte visual da smart account no desktop — uma tela de **extrato**: saldo, lista de lançamentos/transações e o tipo de cada lançamento (ex: funding, gas de UserOp, transferência). Ainda não tem desenho de arquitetura nem etapa no roadmap da Fase 14 — só o registro de que é a próxima coisa "visual" a fazer depois do débito #17 fechar de vez. Vale desenhar isso numa sessão dedicada antes de codar (vai precisar decidir fonte de dados — indexar eventos on-chain via `eth_getLogs`/multicall, ou usar um indexer terceiro tipo Etherscan/Blockscout API).
 
 - **Resultado**: débito #17 resolvido de ponta a ponta — código, testes, Sepolia e Mainnet deployados e propagados por todo o repositório (desktop, mobile, 3 SDKs, docs públicas).
-- **Próximo passo**: explicar a implementação em detalhe pro usuário (pedido em aberto); recriar a identidade mainnet do dono do projeto pelo app; desenhar a tela de extrato da smart account.
+- **Próximo passo**: recriar a identidade mainnet do dono do projeto pelo app; desenhar a tela de extrato da smart account (etapa 14.10 do roadmap).
+
+---
+
+### 2026-07-03 — Sessão 63
+
+- **Objetivo**: etapa 14.8 — sincronizar a lista de signers da smart account (`TruthIDAccount.authorizedDevices`) com o `DeviceRegistry`.
+
+**Achado que reenquadrou a etapa**: `DeviceRegistry._getCallerIdentityId()` (`contracts/src/DeviceRegistry.sol:175`) exige `msg.sender == controller`. Desde o débito #17 (Sessão 62), `controller` é o endereço da smart account, não o Ledger. Só que `PairDevice.tsx`/`DesktopDevice.tsx`/`ManageDevices.tsx` chamavam `commitDevice`/`registerDevice`/`revokeDevice` **diretamente do Ledger como EOA** — ou seja, **pareamento e revogação de device já estavam quebrados** para qualquer identidade criada via smart account (toda identidade desde a Sessão 62). A 14.8 deixou de ser "só adicionar uma chamada" e passou a ser "consertar o `msg.sender`, aproveitando pra sincronizar".
+
+**Decisão de arquitetura**: o Ledger aciona `TruthIDAccount.execute`/`executeBatch` via **transação direta** (`msg.sender == owner`, permitido por `_requireAuthorized` sem precisar de `EntryPoint`/UserOp/bundler) — mesmo padrão de gás já usado nas 3 transações de setup da 14.7. UserOp/bundler via viem (`viem/account-abstraction`, já disponível na versão instalada — `createBundlerClient`, `getUserOperationHash`, etc., confirmado por exploração) fica pra 14.9, onde é genuinamente necessário porque devices móveis não são o `owner`.
+
+**Mudanças**:
+- `desktop/src/config/contracts.ts`: `TRUTHID_ACCOUNT_ABI` novo (`execute`, `executeBatch`, `addDevice`, `removeDevice`, `authorizedDevices`).
+- `desktop/src/contexts/IdentityContext.tsx`: `IdentityContextValue` ganhou `smartAccountAddress`; `App.tsx` passa o valor já calculado (`computeSmartAccountAddressSync`) pro `IdentityProvider` em vez de só usá-lo em `CreateIdentity`.
+- `desktop/src/utils/buildAccountCalls.ts` (novo): monta os arrays `dest`/`value`/`func` de um `executeBatch` a partir de uma lista de `{ address, abi, functionName, args }`, via `encodeFunctionData` (viem).
+- `PairDevice.tsx`/`DesktopDevice.tsx`: commitment agora hasheia `smartAccountAddress` (não mais o endereço do Ledger); tx de commit vira `execute(DEVICE_REGISTRY_ADDRESS, 0n, commitDevice(...))`; tx de reveal vira `executeBatch([DeviceRegistry.registerDevice, TruthIDAccount.addDevice])`.
+- `ManageDevices.tsx`: revogação vira `executeBatch([DeviceRegistry.revokeDevice, TruthIDAccount.removeDevice])`.
+- `PairDevice.test.tsx`: mocks de `IdentityContext`/`contracts` atualizados (ABIs reais, não vazias — `encodeFunctionData` não é mockado); teste final passou a checar `execute`/endereço da smart account em vez de `commitDevice` direto no `DeviceRegistry`.
+
+**Verificação**: `tsc --noEmit` e `vitest` (28/28) limpos. **Pendente**: teste end-to-end em Base Sepolia com o Ledger físico (parear um device novo, confirmar `getDevicesByIdentity`/`getDevice` no `DeviceRegistry` **e** `authorizedDevices(device)` na smart account; repetir pra revogação) — mesmo processo de apontamento temporário usado na Sessão 62. Mobile (`DevicesScreen`/`ShowDeviceQrScreen`) não foi tocado nesta sessão — o celular só *exibe* o próprio endereço pra colar no desktop, quem executa a transação é sempre o desktop/Ledger, então não há mudança necessária no lado mobile para esta etapa.
+
+- **Resultado**: 14.8 implementada e testada (unitário); descoberto e corrigido um bug real de pareamento quebrado para identidades smart-account, que passou despercebido desde a Sessão 62.
+- **Próximo passo**: verificação end-to-end em Sepolia com o Ledger físico; depois, 14.9 (UserOps no mobile) ou 14.10 (tela de extrato).
 
 ---
 
