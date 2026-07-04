@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-02 (Sessão 61 — limpeza dos débitos #21-24/#26 da `TruthIDAccountFactory` e redeploy em Base Sepolia e Base Mainnet)
+> Última atualização: 2026-07-04 (Sessão 64 — etapa 14.9.2: encoding de `PackedUserOperation` e `userOpHash` em Dart)
 
 ---
 
@@ -912,7 +912,7 @@ A partir daí: Ledger assina UserOps off-chain → bundler submete → smart acc
 - [x] 14.8 — Desktop: sincronizar lista de signers da smart account com o DeviceRegistry. *(Sessão 63 — implementação, testes e verificação end-to-end em Sepolia com o Ledger físico, todos concluídos: pareamento e revogação testados via o app real contra a identidade `teste` (identityId 1), device `0xfd23ed10b147F2557D0F072b1D10F6575C300F65` registrado/revogado com sucesso e `authorizedDevices` sincronizado nos dois sentidos (`true` após parear, `false` após revogar). Ver Log de Sessões, Sessão 63, para o desenho completo e a descoberta de que o pareamento já estava quebrado para identidades smart-account antes desta correção. Mobile fica de fora desta etapa — depende da 14.9, que introduz UserOps de verdade.)*
 - [ ] 14.9 — Mobile: atualizar fluxo de assinatura de transações (ex: `createSession`) para UserOps. **Quebrada em mini-etapas (Sessão 63) porque é bem mais pesada que a 14.8** — o celular é signer tier "device", não `owner`, então não tem o atalho de transação direta que a 14.8 usou; é obrigatório passar pela UserOperation de verdade via um bundler. Cada sub-etapa abaixo deve caber numa sessão pequena.
   - [x] 14.9.1 — Decidido: **Pimlico**. *(Sessão 63 — bundler "puro" sem exigir o paymaster deles (não usamos), suporta Base Mainnet e Base Sepolia, tier gratuito, software do bundler é open source (`alto`) — dá pra self-host no futuro sem depender deles. Decisão de design registrada: a URL do bundler deve ser **configurável** no mobile, não hardcoded — mesmo padrão do fallback de RPCs em `wagmi.ts` no desktop. Isso mantém aberta a porta pra quem quiser rodar o próprio bundler/nó um dia, sem exigir isso de todo mundo agora. Falta: dono do projeto criar conta em dashboard.pimlico.io e gerar a API key (ação de conta, fora do escopo de código) — pode ser feito quando conveniente, não bloqueia 14.9.2. Onde/como guardar a chave (arquivo local gitignored vs `--dart-define`) fica pra quando a 14.9.3 (cliente do bundler) for implementada de fato.)*
-  - [ ] 14.9.2 — Implementar em Dart (mobile) o encoding de `PackedUserOperation` + o cálculo do `userOpHash` (EIP-4337 v0.7). Funções puras, sem rede. Testar contra vetores conhecidos (dá pra gerar um "gabarito" usando `viem/account-abstraction` no desktop/Node e comparar byte a byte).
+  - [x] 14.9.2 — Implementar em Dart (mobile) o encoding de `PackedUserOperation` + o cálculo do `userOpHash` (EIP-4337 v0.7). Funções puras, sem rede. Testar contra vetores conhecidos (dá pra gerar um "gabarito" usando `viem/account-abstraction` no desktop/Node e comparar byte a byte). *(Sessão 64 — `mobile/lib/utils/user_operation.dart`, testado contra 5 vetores gerados com `viem/account-abstraction` no Node do desktop, byte a byte. Ver Log de Sessões, Sessão 64.)*
   - [ ] 14.9.3 — Cliente HTTP do bundler em Dart: `eth_estimateUserOperationGas`, `eth_sendUserOperation`, `eth_getUserOperationReceipt`. Só chamadas JSON-RPC, sem lógica de assinatura ainda.
   - [ ] 14.9.4 — Assinar o `userOpHash` com a device key (Secure Enclave) e montar a assinatura no formato que `TruthIDAccount._validateSignature` espera (mesmo padrão `personal_sign`/r-s-v já usado hoje em `device_key_service.dart:signHash`).
   - [ ] 14.9.5 — Integrar tudo no fluxo real do `createSession`: construir calldata → montar UserOp → assinar → estimar gas → enviar → aguardar recibo. Ponta a ponta no app mobile, substituindo o fluxo atual (mobile assina, desktop/relayer submete).
@@ -2566,6 +2566,30 @@ Config do desktop revertida de volta pra Sepolia→Mainnet antes desse redeploy 
 
 - **Débitos**: nenhum novo aberto. #17, #19, #25 continuam pendentes (decisões de design, não bugs).
 - **Próximo passo**: 14.6 — utilitário off-chain (viem) `computeSmartAccountAddress(ledgerAddress, factoryAddress)`, a integrar ao Desktop.
+
+---
+
+### 2026-07-04 — Sessão 64
+
+- **Objetivo**: etapa 14.9.2 — implementar em Dart (mobile) o encoding de `PackedUserOperation` e o cálculo do `userOpHash` (EIP-4337 v0.7), como funções puras sem rede, testadas contra vetores conhecidos.
+
+**Desenho**: `mobile/lib/utils/user_operation.dart` espelha bit a bit `viem/account-abstraction` (`toPackedUserOperation`/`getUserOperationHash`, `entryPointVersion: "0.7"`) e, por trás, o `EntryPoint.getUserOpHash`/`UserOperationLib.hash` do eth-infinitism:
+- `UserOperationV07`: forma "não empacotada" da user operation, com os campos separados que os métodos JSON-RPC do bundler esperam (`eth_sendUserOperation` etc. — consumido de fato só na 14.9.3). Suporta `factory`/`factoryData` (conta ainda não deployada) e `paymaster`/`paymasterData` (não usado hoje pelo projeto — sem Paymaster central — mas implementado para cobrir o formato completo do struct).
+- `toPackedUserOperation`: converte para a forma "empacotada" que o `EntryPoint`/`TruthIDAccount` decodifica on-chain — `accountGasLimits` e `gasFees` como dois `uint128` concatenados em 32 bytes cada; `initCode` = `factory ++ factoryData` (vazio se não há factory); `paymasterAndData` análogo (vazio se não há paymaster).
+- `computeUserOperationHash`: como todos os campos do `abi.encode` de referência são de tamanho estático (`address`, `uint256`, `bytes32`), a codificação é só concatenação de palavras de 32 bytes sem cabeçalho de offset — dispensou um encoder ABI genérico, só helpers manuais de padding/uint→bytes.
+
+**Vetores de teste**: gerados rodando `viem@2.52.2` (`getUserOperationHash`) num script Node descartável dentro de `desktop/` (reaproveitando o `node_modules` já instalado lá — o mesmo pacote que o desktop já usa para outras contas). 5 casos cobrindo: todos os campos zerados, caminho comum sem factory/paymaster, com `factory`/`factoryData` (conta pré-deploy), com `paymaster` completo, e valores grandes (nonce de 128 bits, calldata realista, assinatura não vazia) em Base Sepolia/Mainnet. Hashes resultantes hardcoded em `mobile/test/utils/user_operation_test.dart` — bateram byte a byte na primeira tentativa, sem precisar de ajuste na implementação Dart.
+
+**Verificação**: `flutter test` (43 testes, incluindo os 8 novos) e `flutter analyze` limpos (os 2 únicos avisos do analyzer são pré-existentes em `vault_repository.dart`, não tocados nesta sessão) — rodados via Docker (`mobile-flutter:latest`, já buildada em sessão anterior).
+
+**Incidente de ambiente — root partition encheu de novo durante a sessão**: `/dev/sda2` (root, 32GB) bateu 100% cheio (0 disponível) enquanto o container Docker rodava. Investigação encontrou o real culpado, diferente do que a memória de ambiente já registrava: `/var/lib/docker` já tinha sido movido para `/home` (symlink) numa sessão anterior, mas `/var/lib/containerd` — diretório **separado**, usado pelo `containerd.service` do sistema (dependência do pacote `docker` no Arch) para armazenar snapshots/conteúdo de imagem — nunca foi migrado e continuava no root, com **16GB** (12GB de snapshots overlayfs + 4.1GB de content store). Isso explica por que a migração anterior não preveniu o problema recorrente.
+- Liberado ~10GB no total via `docker rm`/`docker rmi`/`docker image prune` de um container de teste já finalizado e imagens `<none>` órfãs, sem tocar nas imagens em uso (`mobile-flutter`, `desktop-desktop`).
+- **Achado colateral**: remover uma imagem `<none>` órfã (mas usada como fonte de cache de build) invalidou a cache do `docker compose build` do mobile, disparando uma reconstrução completa da imagem (~200 pacotes apt, SDK do Flutter, Android SDK) que por pouco não encheu o disco de novo — processo morto a tempo (`kill` no `docker compose build`), sem chegar a produzir/commitar uma imagem final nova (a tag `mobile-flutter:latest` original ficou intacta).
+- Contornado rodando os testes via `docker run` direto contra a imagem já existente (`mobile-flutter:latest`), replicando os volumes do `docker-compose.yml` manualmente, em vez de deixar o `dev.sh` chamar `docker compose build` de novo.
+- **Correção durável ainda pendente** (não aplicada nesta sessão — precisa de sudo interativo, que o Claude Code não tem neste ambiente): mover `/var/lib/containerd` para `/home/masterlxz/.docker-data/containerd` (symlink), mesmo padrão já usado para `/var/lib/docker`. Comandos registrados na memória de ambiente para rodar quando conveniente.
+
+- **Débitos**: nenhum novo.
+- **Próximo passo**: 14.9.3 — cliente HTTP do bundler em Dart (`eth_estimateUserOperationGas`, `eth_sendUserOperation`, `eth_getUserOperationReceipt`), só chamadas JSON-RPC, sem lógica de assinatura ainda.
 
 ---
 
