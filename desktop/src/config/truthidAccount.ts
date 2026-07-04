@@ -18,8 +18,10 @@ export const FACTORY_IMMUTABLES = {
   recoveryManager: "0xbBe777145D32fdbf8A5878eAa3a21b5f1A7d67F7" as Address,
 } as const;
 
-// Sepolia (para devs testarem, débito #25, Sessão 68):
-//   factory: 0x662b406E0A6f5EB8DF7C2ea9C898C8d2A4347c3E
+// Sepolia (para devs testarem, débito #25, redeploy da factory feito fora de
+// sessão de código — endereço abaixo confirmado como o que o
+// IdentityRegistry.setFactory() aponta hoje; ver PROJECT_STATE.md):
+//   factory: 0x78d34582607e4790BCec66b6AaE3d755061F1F67
 //   deviceRegistry: 0x5F92f95ABaACC85ADAde04F072d30b67eD8c896e
 //   identityRegistry: 0x01df431F6a2276aE3220dc6f3874454caA5F20f8
 //   recoveryManager: 0x062c577C26067d04bBEEaa953F8E7675fF4849ab
