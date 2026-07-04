@@ -3,6 +3,7 @@ import {
   type Address,
   type Hex,
   keccak256,
+  encodeAbiParameters,
   toBytes,
   getAddress,
   slice,
@@ -22,13 +23,14 @@ const ENTRY_POINT: Address = "0x0000000071727De22E5E9d8BAf0edAc6f37da032";
 function predict(
   ledgerAddress: Address,
   factoryAddress: Address,
+  index: bigint = 0n,
 ): Address {
   return computeSmartAccountAddressSync(ledgerAddress, factoryAddress, {
     entryPoint: ENTRY_POINT,
     deviceRegistry: DEVICE_REGISTRY,
     identityRegistry: IDENTITY_REGISTRY,
     recoveryManager: RECOVERY_MANAGER,
-  });
+  }, index);
 }
 
 describe("computeSmartAccountAddress", () => {
@@ -105,12 +107,23 @@ describe("computeSmartAccountAddress", () => {
     expect(addr1).not.toBe(addr2);
   });
 
-  it("salt is keccak256 of raw 20-byte owner address — matches Solidity abi.encodePacked", () => {
-    // The salt in Solidity is keccak256(abi.encodePacked(owner_))
-    // In JS/viem, keccak256(hex) hashes the de-hexed bytes
-    const saltHex = keccak256(ledger1);
-    // Should be 32 bytes (66 hex chars including 0x)
+  it("salt is keccak256(abi.encodePacked(owner, index)) — matches Solidity", () => {
+    // salt = keccak256(abi.encodePacked(owner_, index)) in Solidity (débito #25)
+    const saltHex = keccak256(
+      encodeAbiParameters(
+        [{ type: "address" }, { type: "uint256" }],
+        [ledger1, 0n],
+      ),
+    );
     expect(saltHex.length).toBe(66);
+  });
+
+  it("different index for same owner produces different address", () => {
+    const addr0 = predict(ledger1, factory, 0n);
+    const addr1 = predict(ledger1, factory, 1n);
+    expect(addr0).not.toBe(addr1);
+    expect(addr0).toMatch(/^0x[0-9a-fA-F]{40}$/);
+    expect(addr1).toMatch(/^0x[0-9a-fA-F]{40}$/);
   });
 
   it("creation code is non-empty and starts with EVM preamble", () => {

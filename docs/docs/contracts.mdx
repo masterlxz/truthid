@@ -14,19 +14,19 @@ All four contracts are **immutable** (no upgrade proxy) and **verified** on Base
 
 | Contract | Address |
 |---|---|
-| `IdentityRegistry` | [`0x056b826e8E31F1dCD95886571e92CA206cFB6337`](https://basescan.org/address/0x056b826e8E31F1dCD95886571e92CA206cFB6337) |
-| `DeviceRegistry` | [`0xa42dfF462D90a11f2fbd53aD2fA4E4dd3dDBECeC`](https://basescan.org/address/0xa42dfF462D90a11f2fbd53aD2fA4E4dd3dDBECeC) |
-| `RecoveryManager` | [`0x925a0bCE2EA3AcF25454354197565B799E786e97`](https://basescan.org/address/0x925a0bCE2EA3AcF25454354197565B799E786e97) |
-| `SessionRegistry` | [`0x2d4a25324B5e3E93fa4d3201396Cf1E15cC2A221`](https://basescan.org/address/0x2d4a25324B5e3E93fa4d3201396Cf1E15cC2A221) |
+| `IdentityRegistry` | [`0xDe7a0f1918Ee39cc1792e709Edde17e8ea858998`](https://basescan.org/address/0xDe7a0f1918Ee39cc1792e709Edde17e8ea858998) |
+| `DeviceRegistry` | [`0x2be6a81B22823510c7F3Fa93E70B85aAd4fB488d`](https://basescan.org/address/0x2be6a81B22823510c7F3Fa93E70B85aAd4fB488d) |
+| `RecoveryManager` | [`0xbBe777145D32fdbf8A5878eAa3a21b5f1A7d67F7`](https://basescan.org/address/0xbBe777145D32fdbf8A5878eAa3a21b5f1A7d67F7) |
+| `SessionRegistry` | [`0xbf8b940dDC3754D06ee5281209Bd3dD58852BF65`](https://basescan.org/address/0xbf8b940dDC3754D06ee5281209Bd3dD58852BF65) |
 
 ### Base Sepolia (testnet, chain ID 84532)
 
 | Contract | Address |
 |---|---|
-| `IdentityRegistry` | [`0xA93123C1ca438D9F56E4E599363F4d973d61A307`](https://sepolia.basescan.org/address/0xA93123C1ca438D9F56E4E599363F4d973d61A307) |
-| `DeviceRegistry` | [`0x7339aB41d3E16577311A6B2e468224b4aAdB88A7`](https://sepolia.basescan.org/address/0x7339aB41d3E16577311A6B2e468224b4aAdB88A7) |
-| `RecoveryManager` | [`0x24074587a2aFB3aa5491361BB0a5eBee90797D1B`](https://sepolia.basescan.org/address/0x24074587a2aFB3aa5491361BB0a5eBee90797D1B) |
-| `SessionRegistry` | [`0x3DcCF11435C8c22217e27a629b4173Bc9e7c1781`](https://sepolia.basescan.org/address/0x3DcCF11435C8c22217e27a629b4173Bc9e7c1781) |
+| `IdentityRegistry` | [`0x01df431F6a2276aE3220dc6f3874454caA5F20f8`](https://sepolia.basescan.org/address/0x01df431F6a2276aE3220dc6f3874454caA5F20f8) |
+| `DeviceRegistry` | [`0x5F92f95ABaACC85ADAde04F072d30b67eD8c896e`](https://sepolia.basescan.org/address/0x5F92f95ABaACC85ADAde04F072d30b67eD8c896e) |
+| `RecoveryManager` | [`0x062c577C26067d04bBEEaa953F8E7675fF4849ab`](https://sepolia.basescan.org/address/0x062c577C26067d04bBEEaa953F8E7675fF4849ab) |
+| `SessionRegistry` | [`0x925a0bCE2EA3AcF25454354197565B799E786e97`](https://sepolia.basescan.org/address/0x925a0bCE2EA3AcF25454354197565B799E786e97) |
 
 Use testnet while developing — see [Networks](/docs/sdk/typescript#networks) in the SDK reference for how to point a client at Sepolia.
 
@@ -113,7 +113,7 @@ Real gas numbers from the project's own test suite (`forge test --gas-report`, 1
 Gas scales with the size of the `guardians` array. The low end is a couple of guardians; the high end in this table comes from a test that exercises the full `MAX_GUARDIANS` cap of 20. A typical 3-of-5 setup lands well below the median shown here.
 :::
 
-**What that costs in ETH**: at the ~0.011 gwei gas price observed during the [mainnet deploy](https://basescan.org/address/0x056b826e8E31F1dCD95886571e92CA206cFB6337), even the heaviest row here (`registerDevice`, ~204k gas) comes out to roughly 0.0000022 ETH — a small fraction of a cent. Gas price moves with network demand; check [Base's live gas tracker](https://basescan.org/gastracker) for the current rate before assuming these numbers hold exactly.
+**What that costs in ETH**: at the ~0.011 gwei gas price observed during the [mainnet deploy](https://basescan.org/address/0xDe7a0f1918Ee39cc1792e709Edde17e8ea858998), even the heaviest row here (`registerDevice`, ~204k gas) comes out to roughly 0.0000022 ETH — a small fraction of a cent. Gas price moves with network demand; check [Base's live gas tracker](https://basescan.org/gastracker) for the current rate before assuming these numbers hold exactly.
 
 ## Audit status
 

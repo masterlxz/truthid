@@ -1,5 +1,5 @@
 export const IDENTITY_REGISTRY_ADDRESS =
-  "0x056b826e8E31F1dCD95886571e92CA206cFB6337" as const;
+  "0xDe7a0f1918Ee39cc1792e709Edde17e8ea858998" as const;
 
 export const IDENTITY_REGISTRY_ABI = [
   {
@@ -52,7 +52,7 @@ export const IDENTITY_REGISTRY_ABI = [
 // ─── DeviceRegistry ────────────────────────────────────────────────────────────
 
 export const DEVICE_REGISTRY_ADDRESS =
-  "0xa42dfF462D90a11f2fbd53aD2fA4E4dd3dDBECeC" as const;
+  "0x2be6a81B22823510c7F3Fa93E70B85aAd4fB488d" as const;
 
 export const DEVICE_REGISTRY_ABI = [
   {
@@ -119,7 +119,7 @@ export const DEVICE_REGISTRY_ABI = [
 // ─── SessionRegistry ───────────────────────────────────────────────────────────
 
 export const SESSION_REGISTRY_ADDRESS =
-  "0x2d4a25324B5e3E93fa4d3201396Cf1E15cC2A221" as const;
+  "0xbf8b940dDC3754D06ee5281209Bd3dD58852BF65" as const;
 
 export const SESSION_REGISTRY_ABI = [
   {
@@ -318,14 +318,20 @@ export const FACTORY_ABI = [
   {
     type: "function",
     name: "createAccount",
-    inputs: [{ name: "owner_", type: "address" }],
+    inputs: [
+      { name: "owner_", type: "address" },
+      { name: "index", type: "uint256" },
+    ],
     outputs: [{ name: "ret", type: "address" }],
     stateMutability: "nonpayable",
   },
   {
     type: "function",
     name: "getAddress",
-    inputs: [{ name: "owner_", type: "address" }],
+    inputs: [
+      { name: "owner_", type: "address" },
+      { name: "index", type: "uint256" },
+    ],
     outputs: [{ name: "", type: "address" }],
     stateMutability: "view",
   },

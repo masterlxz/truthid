@@ -52,11 +52,11 @@ class IdentityInfo {
 class BlockchainService {
   static const _rpcUrl = 'https://mainnet.base.org';
   static const _sessionRegistryAddress =
-      '0x2d4a25324B5e3E93fa4d3201396Cf1E15cC2A221';
+      '0xbf8b940dDC3754D06ee5281209Bd3dD58852BF65';
   static const _deviceRegistryAddress =
-      '0xa42dfF462D90a11f2fbd53aD2fA4E4dd3dDBECeC';
+      '0x2be6a81B22823510c7F3Fa93E70B85aAd4fB488d';
   static const _identityRegistryAddress =
-      '0x056b826e8E31F1dCD95886571e92CA206cFB6337';
+      '0xDe7a0f1918Ee39cc1792e709Edde17e8ea858998';
 
   // Exposto publicamente — a 14.9.5 (SessionCreator) precisa deste endereço
   // como `dest` da chamada `TruthIDAccount.execute`.

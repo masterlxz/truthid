@@ -7,8 +7,8 @@ import 'package:web3dart/web3dart.dart' show EthereumAddress;
 
 import 'package:flutter/material.dart';
 
-import '../config/secrets.dart';
 import '../services/blockchain_service.dart';
+import '../services/bundler_config_service.dart';
 import '../services/device_key_service.dart';
 import '../services/local_storage_service.dart';
 import '../services/pimlico_bundler_client.dart';
@@ -35,6 +35,7 @@ class ApprovalScreen extends StatefulWidget {
   final BlockchainService? blockchainService;
   final SessionCreator? sessionCreator;
   final LocalStorageService? localStorageService;
+  final BundlerConfigService? bundlerConfigService;
   final Future<void> Function(Map<String, dynamic>)? postResponse;
 
   const ApprovalScreen({
@@ -44,6 +45,7 @@ class ApprovalScreen extends StatefulWidget {
     this.blockchainService,
     this.sessionCreator,
     this.localStorageService,
+    this.bundlerConfigService,
     this.postResponse,
   });
 
@@ -62,8 +64,9 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
 
   late final DeviceKeyService _keyService;
   late final BlockchainService _blockchainService;
-  late final SessionCreator _sessionCreator;
+  SessionCreator? _sessionCreator;
   late final LocalStorageService _localStorageService;
+  late final BundlerConfigService _bundlerConfigService;
 
   @override
   void initState() {
@@ -71,18 +74,12 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
     _keyService = widget.keyService ?? DeviceKeyService();
     _blockchainService = widget.blockchainService ?? BlockchainService();
     _localStorageService = widget.localStorageService ?? LocalStorageService();
-    _sessionCreator =
-        widget.sessionCreator ??
-        SessionCreator(
-          blockchainService: _blockchainService,
-          deviceKeyService: _keyService,
-          bundlerClient: PimlicoBundlerClient(
-            bundlerUrl: pimlicoBundlerUrl(
-              apiKey: pimlicoApiKey,
-              network: 'base',
-            ),
-          ),
-        );
+    _bundlerConfigService =
+        widget.bundlerConfigService ?? BundlerConfigService();
+    // Se o SessionCreator foi injetado (mock/teste), usa ele direto.
+    // Caso contrario, constroi sob demanda em _approve() lendo a config
+    // do bundler do secure storage (debito #27).
+    _sessionCreator = widget.sessionCreator;
 
     final callbackUrl = widget.payload['callbackUrl'] as String?;
     final challenge = widget.payload['challenge'] as Map<String, dynamic>?;
@@ -167,12 +164,30 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
       return;
     }
 
+    // Constrói o SessionCreator sob demanda lendo a config do bundler no
+    // runtime (flutter_secure_storage), em vez de usar uma chave de API
+    // hardcoded em tempo de compilacao (debito #27).
+    if (_sessionCreator == null) {
+      final bundleConfig = await _bundlerConfigService.getConfig();
+      _sessionCreator = widget.sessionCreator ??
+          SessionCreator(
+            blockchainService: _blockchainService,
+            deviceKeyService: _keyService,
+            bundlerClient: PimlicoBundlerClient(
+              bundlerUrl: pimlicoBundlerUrl(
+                apiKey: bundleConfig.apiKey,
+                network: bundleConfig.network,
+              ),
+            ),
+          );
+    }
+
     // 4. Cria a sessão on-chain via UserOperation (etapa 14.9.5) — o próprio
     // device monta, assina e envia a UserOp; a smart account paga o gas.
     // Substitui o relayer server-side que o SDK usava até aqui (débito a
     // resolver no SDK na 14.9.6, pra não chamar createSession de novo lá).
     try {
-      await _sessionCreator.createSession(
+      await _sessionCreator!.createSession(
         identityId: identity.id,
         smartAccountAddress: identity.controller,
         sessionHash: sessionHash,

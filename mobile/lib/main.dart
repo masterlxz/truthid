@@ -9,6 +9,7 @@ import 'screens/approval_screen.dart';
 import 'screens/devices_screen.dart';
 import 'screens/scan_screen.dart';
 import 'screens/sessions_screen.dart';
+import 'screens/settings_screen.dart';
 import 'theme.dart';
 
 const _kAppVersion = '1.0.0';
@@ -142,6 +143,15 @@ class _RootScreenState extends State<RootScreen> {
       appBar: AppBar(
         title: const Text('TruthID'),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'Settings',
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.favorite_border),
             tooltip: 'Support TruthID',

@@ -1,8 +1,8 @@
 module TruthID
   module Contracts
     DEVICE_REGISTRY_ADDRESSES = {
-      "base-sepolia" => "0x7339aB41d3E16577311A6B2e468224b4aAdB88A7",
-      "base-mainnet" => "0xa42dfF462D90a11f2fbd53aD2fA4E4dd3dDBECeC"
+      "base-sepolia" => "0x5F92f95ABaACC85ADAde04F072d30b67eD8c896e",
+      "base-mainnet" => "0x2be6a81B22823510c7F3Fa93E70B85aAd4fB488d"
     }.freeze
     DEVICE_REGISTRY_ABI = [
       {
@@ -35,8 +35,8 @@ module TruthID
     ].freeze
 
     SESSION_REGISTRY_ADDRESSES = {
-      "base-sepolia" => "0x3DcCF11435C8c22217e27a629b4173Bc9e7c1781",
-      "base-mainnet" => "0x2d4a25324B5e3E93fa4d3201396Cf1E15cC2A221"
+      "base-sepolia" => "0x925a0bCE2EA3AcF25454354197565B799E786e97",
+      "base-mainnet" => "0xbf8b940dDC3754D06ee5281209Bd3dD58852BF65"
     }.freeze
     SESSION_REGISTRY_ABI = [
       {

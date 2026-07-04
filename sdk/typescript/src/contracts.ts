@@ -1,6 +1,6 @@
 export const IDENTITY_REGISTRY_ADDRESSES = {
-  "base-sepolia": "0xA93123C1ca438D9F56E4E599363F4d973d61A307",
-  "base-mainnet": "0x056b826e8E31F1dCD95886571e92CA206cFB6337",
+  "base-sepolia": "0x01df431F6a2276aE3220dc6f3874454caA5F20f8",
+  "base-mainnet": "0xDe7a0f1918Ee39cc1792e709Edde17e8ea858998",
 } as const;
 
 export const IDENTITY_REGISTRY_ABI = [
@@ -32,8 +32,8 @@ export const IDENTITY_REGISTRY_ABI = [
 ] as const;
 
 export const DEVICE_REGISTRY_ADDRESSES = {
-  "base-sepolia": "0x7339aB41d3E16577311A6B2e468224b4aAdB88A7",
-  "base-mainnet": "0xa42dfF462D90a11f2fbd53aD2fA4E4dd3dDBECeC",
+  "base-sepolia": "0x5F92f95ABaACC85ADAde04F072d30b67eD8c896e",
+  "base-mainnet": "0x2be6a81B22823510c7F3Fa93E70B85aAd4fB488d",
 } as const;
 
 export const DEVICE_REGISTRY_ABI = [
@@ -67,8 +67,8 @@ export const DEVICE_REGISTRY_ABI = [
 ] as const;
 
 export const SESSION_REGISTRY_ADDRESSES = {
-  "base-sepolia": "0x3DcCF11435C8c22217e27a629b4173Bc9e7c1781",
-  "base-mainnet": "0x2d4a25324B5e3E93fa4d3201396Cf1E15cC2A221",
+  "base-sepolia": "0x925a0bCE2EA3AcF25454354197565B799E786e97",
+  "base-mainnet": "0xbf8b940dDC3754D06ee5281209Bd3dD58852BF65",
 } as const;
 
 export const SESSION_REGISTRY_ABI = [

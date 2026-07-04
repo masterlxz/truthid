@@ -2,11 +2,13 @@
 pragma solidity ^0.8.24;
 
 // Interface mínima da factory — só o suficiente pra createIdentity conseguir
-// perguntar "qual smart account esse endereço vai ter?" sem precisar importar
-// o contrato inteiro da TruthIDAccountFactory (evita criar um ciclo de import,
-// já que a factory por sua vez recebe o endereço deste registry no construtor).
+// perguntar "qual smart account esse endereco + indice vao ter?" sem precisar
+// importar o contrato inteiro da TruthIDAccountFactory (evita criar um ciclo de
+// import, ja que a factory por sua vez recebe o endereco deste registry no
+// construtor). O indice 0 eh a conta principal; indices maiores permitem
+// reset/multiplas contas por owner (debito #25).
 interface ITruthIDAccountFactory {
-    function getAddress(address owner) external view returns (address);
+    function getAddress(address owner, uint256 index) external view returns (address);
 }
 
 contract IdentityRegistry {
@@ -142,7 +144,7 @@ contract IdentityRegistry {
 
         bool consented = signer == controller;
         if (!consented && _factory != address(0)) {
-            consented = ITruthIDAccountFactory(_factory).getAddress(signer) == controller;
+            consented = ITruthIDAccountFactory(_factory).getAddress(signer, 0) == controller;
         }
         if (!consented) revert InvalidConsentSignature();
 

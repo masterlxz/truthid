@@ -22,6 +22,7 @@ interface ComputeAddressFromFactory {
   ledgerAddress: Address;
   factoryAddress: Address;
   publicClient: PublicClient;
+  index?: bigint;
 }
 
 interface ComputeAddressExplicit extends Record<string, unknown> {
@@ -31,6 +32,7 @@ interface ComputeAddressExplicit extends Record<string, unknown> {
   deviceRegistry: Address;
   identityRegistry: Address;
   recoveryManager: Address;
+  index?: bigint;
 }
 
 type ComputeSmartAccountParams = ComputeAddressFromFactory | ComputeAddressExplicit;
@@ -50,10 +52,13 @@ function isExplicitParams(params: ComputeSmartAccountParams): params is ComputeA
  *    `recoveryManager` directly (useful pre-deploy or offline).
  *
  * Formula (same as Solidity):
- *   salt = keccak256(abi.encodePacked(ledgerAddress))
+ *   salt = keccak256(abi.encodePacked(ledgerAddress, index))
  *   initCode = creationCode || abi.encode(entryPoint, deviceRegistry, identityRegistry, recoveryManager, ledgerAddress)
  *   initCodeHash = keccak256(initCode)
  *   address = last 20 bytes of keccak256(0xFF || factoryAddress || salt || initCodeHash)
+ *
+ * `index` defaults to 0 (primary account). Use index > 0 for account resets
+ * or additional accounts per Ledger (débito #25).
  */
 export async function computeSmartAccountAddress(
   params: ComputeSmartAccountParams,
@@ -89,7 +94,7 @@ export async function computeSmartAccountAddress(
     deviceRegistry,
     identityRegistry,
     recoveryManager,
-  });
+  }, params.index ?? 0n);
 }
 
 interface FactoryImmutables {
@@ -103,16 +108,23 @@ export function computeSmartAccountAddressSync(
   ledgerAddress: Address,
   factoryAddress: Address,
   immutables: FactoryImmutables,
+  index: bigint = 0n,
 ): Address {
-  return computeAddress(ledgerAddress, factoryAddress, immutables);
+  return computeAddress(ledgerAddress, factoryAddress, immutables, index);
 }
 
 function computeAddress(
   ledgerAddress: Address,
   factoryAddress: Address,
   immutables: FactoryImmutables,
+  index: bigint,
 ): Address {
-  const salt = keccak256(ledgerAddress);
+  const salt = keccak256(
+    encodeAbiParameters(
+      [{ type: "address" }, { type: "uint256" }],
+      [ledgerAddress, index],
+    ),
+  );
 
   const constructorArgs = encodeAbiParameters(
     [

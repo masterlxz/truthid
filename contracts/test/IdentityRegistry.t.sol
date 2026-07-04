@@ -215,7 +215,7 @@ contract IdentityRegistryTest is Test, IdentityConsentHelper {
         TruthIDAccountFactory factory = _deployFactory();
         registry.setFactory(address(factory));
 
-        address predictedAccount = factory.getAddress(alice);
+        address predictedAccount = factory.getAddress(alice, 0);
         (uint8 v, bytes32 r, bytes32 s) =
             _signConsent(registry, aliceKey, "alice.id", predictedAccount);
 
@@ -231,7 +231,7 @@ contract IdentityRegistryTest is Test, IdentityConsentHelper {
         // Mesma assinatura que seria válida SE a factory estivesse configurada
         // — mas _factory ainda é address(0) (padrão fail-closed).
         TruthIDAccountFactory factory = _deployFactory();
-        address predictedAccount = factory.getAddress(alice);
+        address predictedAccount = factory.getAddress(alice, 0);
         (uint8 v, bytes32 r, bytes32 s) =
             _signConsent(registry, aliceKey, "alice.id", predictedAccount);
 

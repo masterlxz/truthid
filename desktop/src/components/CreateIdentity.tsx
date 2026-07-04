@@ -135,7 +135,7 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
         address: FACTORY_ADDRESS,
         abi: FACTORY_ABI,
         functionName: "createAccount",
-        args: [address!],
+        args: [address!, 0n],
       });
     }
   }, [tx1Success, step, tx2Hash, tx2Pending, tx2Confirming, deployAccount, address]);

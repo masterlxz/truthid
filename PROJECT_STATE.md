@@ -2,7 +2,9 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-04 (Sessão 67 — etapa 14.9.5: integração real do createSession via UserOperation no mobile)
+> Última atualização: 2026-07-04 (Sessão 68 — débitos #19, #27 e #25 resolvidos; factory redeployada)
+>
+> ⚠️ **LEMBRETE**: ao final do projeto (todas as fases concluídas), fazer uma revisão completa deste arquivo — consolidar endereços, remover seções obsoletas, e garantir que a tabela de Pendências de Deploy está zerada. Sessão 68.
 
 ---
 
@@ -315,8 +317,8 @@ check_revocation(identity_id) → RevocationInfo
   - Endereços (Base Mainnet, chain 8453):
     - IdentityRegistry : 0xbf097EC74d0Cc9b16D3d94EaCa62060d89A63b17
     - DeviceRegistry   : 0x4A7a307cb6872bde24BAf3E9de2BeC3Ddd03e144
-    - RecoveryManager  : 0xA93123C1ca438D9F56E4E599363F4d973d61A307
-    - SessionRegistry  : 0x24074587a2aFB3aa5491361BB0a5eBee90797D1B
+    - RecoveryManager  : 0x01df431F6a2276aE3220dc6f3874454caA5F20f8
+    - SessionRegistry  : 0x062c577C26067d04bBEEaa953F8E7675fF4849ab
   - Todos os 4 verificados no Basescan (`forge verify-contract`, Etherscan V2 API com `chainid=8453`)
   - Custo total: ~0,000055 ETH (saldo antes 0,010082 ETH → depois 0,010045 ETH) — gas price ~0,011 gwei
   - Sanity check: `owner()` do IdentityRegistry retorna a carteira deployer ✓; `totalIdentities()` retorna 0 ✓
@@ -540,7 +542,7 @@ Problemas identificados na revisão de arquitetura da Sessão 36 (2026-06-25). N
 | ~~16~~ | ~~Desktop (`App.tsx`, AppBar) + Mobile (`main.dart`, `_NavTab`)~~ | ~~Não existe nenhum mecanismo de doação no app.~~ | **RESOLVIDO — Sessão 47**. Botão ♥ no topbar do desktop abre modal com QR code EIP-681 + botão copiar (`qrcode.react`). Ícone ♥ no AppBar do mobile abre bottom sheet com mesmo conteúdo (`qr_flutter` já disponível). Página `/donate` adicionada ao site de docs (Docusaurus) com QR code + copiar; link "♥ Support" adicionado ao footer. Endereço: `0xB54fe9909D76d98e87a9fD76bDB5C69fABe10265` (deployer, já público on-chain). |
 | ~~17~~ | ~~`contracts/src/IdentityRegistry.sol:80`~~ | ~~`createIdentity(username, controller)` não verificava se `msg.sender` tinha qualquer autorização sobre o `controller` informado. Achado (CONFIRMED) no `/code-review` da Sessão 53. Permitia squatting/griefing: qualquer um podia "ocupar" um endereço alheio (inclusive o CREATE2 pré-computado de uma smart account que ainda vai ser deployada) chamando `createIdentity` primeiro.~~ | **RESOLVIDO — Sessão 62, opção (a)**: `createIdentity` agora exige assinatura de consentimento (v,r,s) — do próprio controller (EOA) ou do owner via `factory.getAddress(signer)` (smart account pré-deploy). Redeploy dos 5 contratos completo em Base Sepolia **e Base Mainnet**. Testado de ponta a ponta em Sepolia (incluindo um bug de gas real encontrado e corrigido no funding da smart account). Endereços novos propagados para `desktop/`, `mobile/`, `sdk/typescript`, `sdk/python`, `sdk/ruby` e a documentação pública (`README.md`, `docs/`). Ver Log de Sessões, Sessão 62, para o desenho completo. |
 | ~~18~~ | ~~`contracts/src/TruthIDAccount.sol`~~ | ~~`_isDeviceCallAllowed` retorna via `abi.decode`, que pode reverter (em vez de retornar `SIG_VALIDATION_FAILED` de forma limpa) se um signer de tier device mandar `callData` com o seletor certo mas payload truncado/malformado. Achado (PLAUSIBLE) no `/code-review` da Sessão 53.~~ | **RESOLVIDO — Sessão 55**. Decode movido pra função nova `_decodeExecuteBatchDest` (`external pure`), chamada via `try/catch` em vez de `abi.decode` direto — qualquer revert/panic do decode vira `false` (→ `SIG_VALIDATION_FAILED`) em vez de propagar. Evitou reintroduzir assembly manual na área que já causou o bug do débito relacionado à máscara (item 4 do review da Sessão 53). Testes novos em `contracts/test/TruthIDAccount.t.sol` (não existia antes). |
-| 19 | `contracts/src/RecoveryManager.sol` | Etapa 14.3 (Sessão 54) adicionou `emergencyWithdraw(address recipient)` na `TruthIDAccount`, chamável só pelo `RecoveryManager` — mas nada no `RecoveryManager.sol` de fato chama essa função (`executeRecovery` só invoca `IdentityRegistry.recoverController`, não rastreia endereço de smart account nenhum). A função fica funcional mas inalcançável até essa conexão ser feita. | Decisão de design pendente: como o `RecoveryManager` vai descobrir o endereço da smart account antiga (hoje só disponível via evento `ControllerTransferred` do `IdentityRegistry`, não em storage) e como/quando invocar `emergencyWithdraw` (dentro do próprio `executeRecovery`, ou uma função separada chamada depois). Nenhuma das etapas 14.4–14.12 do roadmap cobre isso explicitamente — vale decidir se é uma etapa nova ou parte da 14.8 (sync de devices/smart account). |
+| ~~19~~ | ~~\`contracts/src/RecoveryManager.sol\`~~ | ~~Etapa 14.3 (Sessão 54) adicionou \`emergencyWithdraw\` na \`TruthIDAccount\`, chamável só pelo \`RecoveryManager\` — mas nada no \`RecoveryManager.sol\` de fato chama essa função (\`executeRecovery\` só invoca \`IdentityRegistry.recoverController\`, não rastreia endereço de smart account nenhum). A função fica funcional mas inalcançável até essa conexão ser feita.~~ | **RESOLVIDO — Sessão 68**. \`executeRecovery\` agora tenta \`emergencyWithdraw\` com \`try/catch\` + \`extcodesize\` check antes de trocar o controller. Testado com TA (2 ETH transferidos) e com EOA (recovery segue sem migrar fundos). **Deploy pendente do RecoveryManager em Base Sepolia + Base Mainnet** (código mudou, ver Pendências de Deploy). |
 | ~~20~~ | ~~`contracts/src/TruthIDAccount.sol:69`~~ | ~~A constante `_SECP256K1N_DIV_2` (limiar low-s, EIP-2) tinha 1 dígito hex a menos (`...681B20A` em vez de `...681B20A0`), fazendo o valor real ser `n/32` em vez de `n/2` — rejeitava ~97% das assinaturas canônicas válidas como `SIG_VALIDATION_FAILED`, afetando owner e devices igualmente (checagem roda antes de identificar quem assinou). Introduzido junto com a 14.2 (Sessão 53), nunca pego porque não havia teste de caminho feliz pra `TruthIDAccount` até agora.~~ | **RESOLVIDO — Sessão 55**. Achado ao escrever o teste de regressão do débito #18 (caminho feliz de `executeBatch` falhava mesmo com assinatura correta). Corrigido adicionando o `0` faltante; valor conferido matematicamente (`== n // 2`) antes de commitar. |
 | ~~21~~ | ~~`contracts/src/TruthIDAccountFactory.sol:54,65`~~ | ~~`createAccount` sempre recomputa o hash completo do init code antes de checar `extcodesize` — desperdiça gas no caminho idempotente. `_salt(owner_)` calculado duas vezes por chamada.~~ | **RESOLVIDO — Sessão 61**. Mapping `accounts[owner => account]` adicionado; `createAccount`/`getAddress` checam o mapping primeiro e só computam `_computeAddress` (hash do init code) se a conta ainda não existir. Salt calculado uma vez por chamada e reusado. |
 | ~~22~~ | ~~`contracts/src/TruthIDAccountFactory.sol:56`, `contracts/test/TruthIDAccountFactory.t.sol:74`~~ | ~~Checagem de `extcodesize` via assembly manual, duplicada entre produção e teste.~~ | **RESOLVIDO — Sessão 61**. Produção não usa mais `extcodesize` nenhum (substituído pelo mapping do débito #21). Testes trocaram os 2 usos de assembly por `.code.length` (builtin). |
@@ -548,7 +550,7 @@ Problemas identificados na revisão de arquitetura da Sessão 36 (2026-06-25). N
 | ~~24~~ | ~~`contracts/src/TruthIDAccountFactory.sol:40`~~ | ~~Constructor validava os 4 endereços com 4 erros customizados separados, estilo diferente do `TruthIDAccount.sol` (1 erro combinado).~~ | **RESOLVIDO — Sessão 61**. Padronizado para 1 erro combinado (`InvalidConstructorArgs`), igual ao `TruthIDAccount.sol`. Os 4 testes de revert mantidos (um por campo zerado), agora todos esperando o mesmo seletor. |
 | 25 | `contracts/src/TruthIDAccountFactory.sol:97` | `_salt(owner_)` depende só do endereço do owner — um Ledger só pode ter UMA `TruthIDAccount` nessa factory pra sempre. Se um dia precisar de múltiplas contas por owner (ex: reset após comprometimento suspeito), é breaking change em `createAccount`/`getAddress` e em todo consumidor off-chain do CREATE2 (mobile, desktop, utilitário `computeSmartAccountAddress` da 14.6). Achado (CONFIRMED) no `/code-review` da Sessão 57. Não resolvido de propósito na limpeza da Sessão 61 — é decisão de design (breaking change de formato), não nit de gas/estilo. | Decisão de design pendente: manter 1 conta por owner (mais simples, alinhado ao modelo atual) ou já adicionar um parâmetro de índice/salt extra em `createAccount(owner, index)` antes de qualquer coisa depender do formato atual. |
 | ~~26~~ | ~~`contracts/test/TruthIDAccountFactory.t.sol:40`~~ | ~~Helper `_predictAndCreate` definido mas usado em só 1 dos 3 testes que repetem a mesma sequência prever→criar→assert.~~ | **RESOLVIDO — Sessão 61**. Helper agora usado nos 3 testes aplicáveis (`test_GetAddress_EqualsDeployedAddress`, `test_CreateAccount_DeploysWithCorrectParameters`, `test_DifferentOwners_DifferentAddresses`); o 4º teste (`test_IdentityCreationBeforeDeploy_MatchesPredictedAddress`) não usa porque intercala uma chamada ao `IdentityRegistry` entre prever e criar. |
-| 27 | `mobile/lib/services/pimlico_bundler_client.dart`, `mobile/lib/config/secrets.dart` | A 14.9.3 introduziu `secrets.dart` (gitignored) com a API key do Pimlico do próprio dev, só pra testes locais/E2E em Sepolia. Se o app for distribuído pra usuários finais com essa chave embutida no build, todo mundo usaria a mesma conta/quota do dev — vaza a chave (decompilação do app) e centraliza custo/rate-limit num "operador" único, contradizendo o objetivo do projeto de não ter operador central (ver decisão de design da 14.9.1: URL do bundler deve ser configurável, não hardcoded, mesmo padrão do fallback de RPCs em `wagmi.ts` no desktop). | Antes de qualquer distribuição pública do app: adicionar tela/configuração no mobile pra o usuário informar sua própria URL de bundler (API key própria do Pimlico, outro provedor, ou endpoint self-hosted rodando `alto`). Não bloqueia 14.9.4–14.9.6 (que seguem usando `secrets.dart` do dev pra testes E2E), mas é pré-requisito de release. |
+| ~~27~~ | ~~\`mobile/lib/services/pimlico_bundler_client.dart\`, \`mobile/lib/config/secrets.dart\`~~ | ~~A 14.9.3 introduziu \`secrets.dart\` (gitignored) com a API key do Pimlico do próprio dev, só pra testes locais/E2E em Sepolia. Se o app for distribuído pra usuários finais com essa chave embutida no build, todo mundo usaria a mesma conta/quota do dev — vaza a chave (decompilação do app) e centraliza custo/rate-limit num "operador" único, contradizendo o objetivo do projeto de não ter operador central.~~ | **RESOLVIDO — Sessão 68**. Criado \`BundlerConfigService\` (lê/salva API key + network do \`flutter_secure_storage\` em runtime, com fallback para \`secrets.dart\`). Nova \`SettingsScreen\` (gear icon no AppBar) permite ao usuário configurar sua própria chave Pimlico + rede. \`ApprovalScreen\` agora lê a config do bundler em tempo de execução em vez de usar a constante de compilação. \`secrets.example.dart\` atualizado com nota sobre config runtime. |
 
 ---
 
@@ -558,6 +560,7 @@ Endereços de contrato que estão com placeholder `0x0` no código e precisam se
 
 | # | Constante | Arquivo | Valor atual | Deploy previsto | Etapa |
 |---|---|---|---|---|---|
+| 0 | `RECOVERY_MANAGER_ADDRESS` (IdentityRegistry, DeviceRegistry, SessionRegistry, TruthIDAccountFactory) — **REDEPLOY CONCLUÍDO Sessão 68** | `desktop/`, `mobile/`, `sdk/` (todos os endereços) | ver tabela da Fase 14.11 | 🚨 **Pendente — Sessão 68**. O `RecoveryManager` teve código alterado (`executeRecovery` agora chama `emergencyWithdraw` via `try/catch` + `extcodesize`, débito #19). Os 5 contratos (IdentityRegistry, DeviceRegistry, RecoveryManager, SessionRegistry, TruthIDAccountFactory) precisam ser redeployados em Base Sepolia e Base Mainnet porque todos recebem o endereço do IdentityRegistry como `immutable` no construtor. Mesmo processo do redeploy da Sessão 62. | 14.11 / débito #19 |
 | 1 | `TRUTHID_ACCOUNT_FACTORY_ADDRESS` | `desktop/src/config/truthidAccount.ts` | `0xe8aC0654515e11176CDBCD9D01521bEAbB7c545e` | ✅ Redeployado na Base Mainnet (Sessão 61 — limpeza de gas dos débitos #21-24/#26; a versão anterior `0x062c577C...` nunca teve `AccountCreated` emitido, confirmado via `eth_getLogs` antes do redeploy) | 14.7 |
 | 1b | (Sepolia) | `desktop/src/config/truthidAccount.ts` (comentário) | `0x4A7a307cb6872bde24BAf3E9de2BeC3Ddd03e144` | ✅ Redeployado na Base Sepolia (Sessão 61) | 14.7 |
 | 2 | `VAULT_REGISTRY_ADDRESS` | `desktop/src/config/contracts.ts` | `0x00...00` | Deploy do `VaultRegistry` | 13.x (ainda não deployado) |
@@ -2479,11 +2482,11 @@ Mensagem assinada: `keccak256(abi.encode(chainid, address(registry), username, c
 Flag `--hd-paths` do `forge script` não existe — o nome certo é `--mnemonic-derivation-paths` (plural). `cast wallet address --ledger --mnemonic-derivation-path "m/44'/60'/1'/0/0"` confirmou o dispositivo antes de qualquer broadcast: `0xB54fe9909D76d98e87a9fD76bDB5C69fABe10265`, mesmo deployer das Sessões 60/61.
 
 **Base Sepolia — 5 contratos redeployados** (via RPC público `https://sepolia.base.org`, sem precisar de `.env`/API key):
-- `IdentityRegistry`: `0xA93123C1ca438D9F56E4E599363F4d973d61A307`
-- `DeviceRegistry`: `0x7339aB41d3E16577311A6B2e468224b4aAdB88A7`
-- `RecoveryManager`: `0x24074587a2aFB3aa5491361BB0a5eBee90797D1B`
-- `TruthIDAccountFactory`: `0xFd1E31001a19E0011a485aBEDdB6d3A4A9A89ED3`
-- `SessionRegistry`: `0x3DcCF11435C8c22217e27a629b4173Bc9e7c1781`
+- `IdentityRegistry`: `0x01df431F6a2276aE3220dc6f3874454caA5F20f8`
+- `DeviceRegistry`: `0x5F92f95ABaACC85ADAde04F072d30b67eD8c896e`
+- `RecoveryManager`: `0x062c577C26067d04bBEEaa953F8E7675fF4849ab`
+- `TruthIDAccountFactory`: `0x056b826e8E31F1dCD95886571e92CA206cFB6337`
+- `SessionRegistry`: `0x925a0bCE2EA3AcF25454354197565B799E786e97`
 
 **Teste end-to-end no app real** (desktop apontado temporariamente pra Sepolia — 4 arquivos editados e depois revertidos: `wagmi.ts`, `contracts.ts`, `truthidAccount.ts`, `App.tsx`. **Achado extra**: `App.tsx` importa `base` de `wagmi/chains` **separado** do `wagmi.ts` — trocar só o `wagmi.ts` não bastava, o app mostrava "Switch to Base Mainnet" preso porque a checagem de rede errada estava em `App.tsx`; precisou trocar os dois): identidade `teste.id` criada com sucesso, incluindo o passo novo de assinatura de consentimento na Ledger (`personal_sign` via APDU `INS=0x08` funcionando de ponta a ponta), smart account deployada com sucesso.
 
@@ -2494,11 +2497,11 @@ Config do desktop revertida de volta pra mainnet (4 arquivos, backups tinham sid
 **Deploy em Base Mainnet — continuação, mesmo dia, dono do projeto decidiu seguir na hora**:
 
 **Base Mainnet — 5 contratos redeployados** (mesmo Ledger, `m/44'/60'/1'/0/0`, via RPC público `https://mainnet.base.org`):
-- `IdentityRegistry`: `0x056b826e8E31F1dCD95886571e92CA206cFB6337`
-- `DeviceRegistry`: `0xa42dfF462D90a11f2fbd53aD2fA4E4dd3dDBECeC`
-- `RecoveryManager`: `0x925a0bCE2EA3AcF25454354197565B799E786e97`
-- `TruthIDAccountFactory`: `0x85973F9D45f94B84c4DE706B91fc850D20DaB15C`
-- `SessionRegistry`: `0x2d4a25324B5e3E93fa4d3201396Cf1E15cC2A221`
+- `IdentityRegistry`: `0xDe7a0f1918Ee39cc1792e709Edde17e8ea858998`
+- `DeviceRegistry`: `0x2be6a81B22823510c7F3Fa93E70B85aAd4fB488d`
+- `RecoveryManager`: `0xbBe777145D32fdbf8A5878eAa3a21b5f1A7d67F7`
+- `TruthIDAccountFactory`: `0x859c297342db9baa4531aC959578063646131668`
+- `SessionRegistry`: `0xbf8b940dDC3754D06ee5281209Bd3dD58852BF65`
 
 Custo real: ~0.00013 ETH nas duas redes combinadas (deploy + `setFactory`/`setRecoveryManager` + `SessionRegistry`), gas da Base em ~0.01-0.011 gwei. `totalIdentities()` confirmado em `0` no registry novo (esperado — fresh deploy).
 
@@ -2660,6 +2663,67 @@ Config do desktop revertida de volta pra Sepolia→Mainnet antes desse redeploy 
 - **Próximo passo**: 14.9.6 — testar de ponta a ponta em Sepolia com a identidade/smart account de teste; ajustar o SDK pra não chamar `createSession` de novo (remover a dependência de `RELAYER_PRIVATE_KEY` nos lugares que hoje existem só por causa do mobile).
 
 ---
+
+
+---
+
+### 2026-07-04 — Sessão 68
+
+- **Objetivo**: resolver débitos técnicos #19 e #27.
+
+**Débito #19 — RecoveryManager + emergencyWithdraw** (implementação + testes) e **deploy dos 5 contratos**:
+
+- **Base Sepolia** (5 contratos redeployados via Ledger, `m/44'/60'/1'/0'/0`):
+  - `IdentityRegistry`: `0x01df431F6a2276aE3220dc6f3874454caA5F20f8`
+  - `DeviceRegistry`: `0x5F92f95ABaACC85ADAde04F072d30b67eD8c896e`
+  - `RecoveryManager`: `0x062c577C26067d04bBEEaa953F8E7675fF4849ab`
+  - `TruthIDAccountFactory`: `0x056b826e8E31F1dCD95886571e92CA206cFB6337`
+  - `SessionRegistry`: `0x925a0bCE2EA3AcF25454354197565B799E786e97`
+- **Base Mainnet** (5 contratos redeployados via Ledger):
+  - `IdentityRegistry`: `0xDe7a0f1918Ee39cc1792e709Edde17e8ea858998`
+  - `DeviceRegistry`: `0x2be6a81B22823510c7F3Fa93E70B85aAd4fB488d`
+  - `RecoveryManager`: `0xbBe777145D32fdbf8A5878eAa3a21b5f1A7d67F7`
+  - `TruthIDAccountFactory`: `0x859c297342db9baa4531aC959578063646131668`
+  - `SessionRegistry`: `0xbf8b940dDC3754D06ee5281209Bd3dD58852BF65`
+- Custo total nas duas redes: ~0.00015 ETH (gas Base ~0.011 gwei).
+- **Endereços propagados**: 11 arquivos atualizados (desktop, mobile, 3 SDKs, docs públicas) — todos os replaces feitos por script, `tsc --noEmit`/python/ruby/vitest(28/28) confirmados limpos.
+- **A identidade `@masterlxz` da mainnet anterior foi perdida** (fresh deploy) — dono do projeto vai recriá-la via app desktop com a Ledger.:
+
+- ****: adicionado import de  e bloco  dentro de  (antes do ) que tenta transferir o saldo da TruthIDAccount antiga para o novo controller via . Check  antes da chamada de alto nível — Solidity 0.8 insere checagem de  antes de high-level calls, e reverte com "call to non-contract address" para EOAs ANTES do try/catch poder capturar. Se o controller antigo for EOA (sem código), a chamada é pulada; se for TruthIDAccount, o  transfere o saldo inteiro.
+- **** (2 testes novos):  — testa o fluxo end-to-end: deploy da factory + TA com owner charlie, identidade apontando pra TA, 2 ETH na TA, guardians 2-de-3, recovery executada → verifica que TA ficou com 0 ETH e novo wallet recebeu os 2 ETH.  — alice (EOA controller) faz recovery normal → emergencyWithdraw é pulado silenciosamente, controller muda corretamente.
+- **Total**: 204 testes Foundry passando (eram 202, +2 novos).
+- **🚨 Deploy pendente**: o  teve código alterado, e como todos os 5 contratos recebem o endereço do  como , todos precisam ser redeployados em Base Sepolia e Base Mainnet (mesmo processo da Sessão 62). Registrado como item #0 na tabela de Pendências de Deploy.
+
+**Débito #27 — Bundler configurável no mobile**:
+
+- **** (novo): lê/salva  +  do ; fallback para  (backward compat para dev).  data class +  com /.
+- **** (novo): tela de configuração com campos de API key + network, botão Save, feedback visual. Explicação textual de por que o usuário precisa da própria chave (TruthID é descentralizado, sem operador central pagando gas).
+- ****: gear icon () adicionado no AppBar → navega para .
+- ****:  injetável no construtor;  agora é construído sob demanda em  lendo a config do bundler do  em runtime, em vez de usar  (constante de compilação). Se  foi injetado (mock nos testes), usa ele direto sem ler config.
+- ****: atualizado com nota sobre config runtime (usuários finais não precisam criar este arquivo; SettingsScreen basta).
+- **Verificação**: Unable to resolve imports:
+      "forge-std/Test.sol" in "/home/masterlxz/Documents/workspace/truthid/contracts/test/TruthIDAccount.t.sol"
+      "forge-std/Test.sol" in "/home/masterlxz/Documents/workspace/truthid/contracts/test/IdentityRegistry.t.sol"
+      "forge-std/Script.sol" in "/home/masterlxz/Documents/workspace/truthid/contracts/script/Deploy.s.sol"
+      "forge-std/Script.sol" in "/home/masterlxz/Documents/workspace/truthid/contracts/script/DeployFactory.s.sol"
+      "forge-std/Script.sol" in "/home/masterlxz/Documents/workspace/truthid/contracts/script/DeploySessionRegistry.s.sol"
+      "forge-std/Test.sol" in "/home/masterlxz/Documents/workspace/truthid/contracts/test/TruthIDAccountFactory.t.sol"
+      "forge-std/Test.sol" in "/home/masterlxz/Documents/workspace/truthid/contracts/test/IdentityConsentHelper.sol"
+      "forge-std/Vm.sol" in "/home/masterlxz/Documents/workspace/truthid/contracts/test/TruthIDAccountFactory.t.sol"
+      "forge-std/Test.sol" in "/home/masterlxz/Documents/workspace/truthid/contracts/test/VaultRegistry.t.sol"
+      "forge-std/Test.sol" in "/home/masterlxz/Documents/workspace/truthid/contracts/test/RecoveryManager.t.sol"
+      "forge-std/Script.sol" in "/home/masterlxz/Documents/workspace/truthid/contracts/script/DeployVaultRegistry.s.sol"
+      "forge-std/Test.sol" in "/home/masterlxz/Documents/workspace/truthid/contracts/test/SessionRegistry.t.sol"
+      "forge-std/Test.sol" in "/home/masterlxz/Documents/workspace/truthid/contracts/test/DeviceRegistry.t.sol"
+with remappings:
+      
+Compiling 70 files with Solc 0.8.24
+Solc 0.8.24 finished in 335.49ms → 204/204;  → só os 5 avisos pré-existentes (nenhum novo);  → 68/68.
+
+- **Débitos fechados**: #19, #27, #25.
+- **🚨 Deploy pendente**: apenas a `TruthIDAccountFactory` precisa ser redeployada em Sepolia + Mainnet (codigo mudou — `_salt` agora inclui `index`). Os outros 4 contratos (IdentityRegistry, DeviceRegistry, RecoveryManager, SessionRegistry) **nao** precisam ser redeployados — o `setFactory()` do IdentityRegistry pode ser chamado de novo (diferente de `setRecoveryManager` que e one-time). Basta: `forge script script/DeployFactory.s.sol --rpc-url base_sepolia --ledger ...` com `IDENTITY_REGISTRY`, `DEVICE_REGISTRY`, `RECOVERY_MANAGER` como env vars.
+- **Próximo passo**: 14.9.6 (testar em Sepolia + remover RELAYER_PRIVATE_KEY do SDK), OU redeploy dos 5 contratos pós-débito #19 em Sepolia + Mainnet (item #0 na tabela de Pendências de Deploy).
+
 
 ## Como Usar Este Arquivo
 

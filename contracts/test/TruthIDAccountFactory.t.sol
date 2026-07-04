@@ -46,9 +46,9 @@ contract TruthIDAccountFactoryTest is Test, IdentityConsentHelper {
     // Helpers
     // -------------------------------------------------------------------------
 
-    function _predictAndCreate(address owner_) internal returns (TruthIDAccount account) {
-        address predicted = factory.getAddress(owner_);
-        account = factory.createAccount(owner_);
+    function _predictAndCreate(address owner_, uint256 index) internal returns (TruthIDAccount account) {
+        address predicted = factory.getAddress(owner_, index);
+        account = factory.createAccount(owner_, index);
         assertEq(address(account), predicted);
     }
 
@@ -57,13 +57,13 @@ contract TruthIDAccountFactoryTest is Test, IdentityConsentHelper {
     // -------------------------------------------------------------------------
 
     function test_GetAddress_EqualsDeployedAddress() public {
-        TruthIDAccount account = _predictAndCreate(owner);
+        TruthIDAccount account = _predictAndCreate(owner, 0);
 
         assertTrue(address(account) != address(0));
     }
 
     function test_CreateAccount_DeploysWithCorrectParameters() public {
-        TruthIDAccount account = _predictAndCreate(owner);
+        TruthIDAccount account = _predictAndCreate(owner, 0);
 
         assertEq(account.owner(), owner);
         assertEq(account.entryPoint(), ENTRY_POINT_V07);
@@ -77,23 +77,23 @@ contract TruthIDAccountFactoryTest is Test, IdentityConsentHelper {
     // -------------------------------------------------------------------------
 
     function test_CreateAccount_SecondCall_ReturnsExistingAccount() public {
-        TruthIDAccount first = factory.createAccount(owner);
-        TruthIDAccount second = factory.createAccount(owner);
+        TruthIDAccount first = factory.createAccount(owner, 0);
+        TruthIDAccount second = factory.createAccount(owner, 0);
 
         assertEq(address(first), address(second));
         assertGt(address(first).code.length, 0);
     }
 
     function test_CreateAccount_SecondCall_DoesNotEmitAgain() public {
-        factory.createAccount(owner);
+        factory.createAccount(owner, 0);
 
         vm.recordLogs();
-        factory.createAccount(owner);
+        factory.createAccount(owner, 0);
 
         // Nenhum AccountCreated deve ser emitido na segunda chamada, pois
         // a conta ja existe (idempotente).
         Vm.Log[] memory entries = vm.getRecordedLogs();
-        bytes32 accountCreatedSig = keccak256("AccountCreated(address,address)");
+        bytes32 accountCreatedSig = keccak256("AccountCreated(address,address,uint256)");
         for (uint256 i = 0; i < entries.length; i++) {
             assertTrue(entries[i].topics[0] != accountCreatedSig);
         }
@@ -104,8 +104,8 @@ contract TruthIDAccountFactoryTest is Test, IdentityConsentHelper {
     // -------------------------------------------------------------------------
 
     function test_DifferentOwners_DifferentAddresses() public {
-        TruthIDAccount account1 = _predictAndCreate(owner);
-        TruthIDAccount account2 = _predictAndCreate(owner2);
+        TruthIDAccount account1 = _predictAndCreate(owner, 0);
+        TruthIDAccount account2 = _predictAndCreate(owner2, 0);
 
         assertTrue(address(account1) != address(account2));
     }
@@ -145,7 +145,7 @@ contract TruthIDAccountFactoryTest is Test, IdentityConsentHelper {
     // -------------------------------------------------------------------------
 
     function test_IdentityCreationBeforeDeploy_MatchesPredictedAddress() public {
-        address predictedAccount = factory.getAddress(owner);
+        address predictedAccount = factory.getAddress(owner, 0);
 
         // 1. Ledger (owner) assina o consentimento (debito #17) e paga a
         // identidade apontando para o endereco previsto.
@@ -164,7 +164,7 @@ contract TruthIDAccountFactoryTest is Test, IdentityConsentHelper {
         assertEq(identity.controller, predictedAccount);
 
         // 2. So depois a factory deploya a conta.
-        TruthIDAccount account = factory.createAccount(owner);
+        TruthIDAccount account = factory.createAccount(owner, 0);
         assertEq(address(account), predictedAccount);
 
         // A conta sabe quem e o owner.
@@ -178,7 +178,7 @@ contract TruthIDAccountFactoryTest is Test, IdentityConsentHelper {
     // -------------------------------------------------------------------------
 
     function test_GetAddress_BeforeDeploy_NonZeroAddress() public {
-        address predicted = factory.getAddress(owner);
+        address predicted = factory.getAddress(owner, 0);
 
         assertTrue(predicted != address(0), "predicted address must be non-zero");
         // Ainda nao deployada.
@@ -195,7 +195,7 @@ contract TruthIDAccountFactoryTest is Test, IdentityConsentHelper {
         // rejeita qualquer arg zero com InvalidConstructorArgs (check
         // generico no topo do constructor, antes de qualquer outra logica).
         vm.expectRevert(TruthIDAccount.InvalidConstructorArgs.selector);
-        factory.createAccount(address(0));
+        factory.createAccount(address(0), 0);
     }
 
     // -------------------------------------------------------------------------
@@ -205,14 +205,52 @@ contract TruthIDAccountFactoryTest is Test, IdentityConsentHelper {
     // -------------------------------------------------------------------------
 
     function test_GetAddress_SameOwner_SameAddress_AcrossTime() public {
-        address predicted1 = factory.getAddress(owner);
+        address predicted1 = factory.getAddress(owner, 0);
 
         // Acao intermediaria que NAO afeta o endereco previsto (deploy de
         // outro owner). Se o endereco do primeiro owner mudasse apos essa
         // acao, estariamos em frente a um bug grave de CREATE2.
-        factory.createAccount(owner2);
+        factory.createAccount(owner2, 0);
 
-        address predicted2 = factory.getAddress(owner);
+        address predicted2 = factory.getAddress(owner, 0);
         assertEq(predicted1, predicted2);
+    }
+
+    // -------------------------------------------------------------------------
+    // Multiplas contas por owner via indice (debito #25)
+    // -------------------------------------------------------------------------
+
+    function test_DifferentIndex_SameOwner_DifferentAddresses() public {
+        TruthIDAccount account0 = _predictAndCreate(owner, 0);
+        TruthIDAccount account1 = _predictAndCreate(owner, 1);
+
+        assertTrue(address(account0) != address(account1), "different indices should produce different addresses");
+        assertEq(account0.owner(), owner);
+        assertEq(account1.owner(), owner);
+    }
+
+    function test_SameIndex_SameOwner_Idempotent() public {
+        TruthIDAccount first = factory.createAccount(owner, 0);
+        TruthIDAccount second = factory.createAccount(owner, 0);
+
+        assertEq(address(first), address(second));
+    }
+
+    function test_GetAddress_DifferentIndex_DifferentPredictions() public {
+        address pred0 = factory.getAddress(owner, 0);
+        address pred1 = factory.getAddress(owner, 1);
+
+        assertTrue(pred0 != address(0));
+        assertTrue(pred1 != address(0));
+        assertTrue(pred0 != pred1);
+    }
+
+    function test_CreateAccount_Index1_AfterIndex0_BothExist() public {
+        TruthIDAccount account0 = _predictAndCreate(owner, 0);
+        TruthIDAccount account1 = _predictAndCreate(owner, 1);
+
+        // Ambas existem e sao independentes.
+        assertGt(address(account0).code.length, 0);
+        assertGt(address(account1).code.length, 0);
     }
 }

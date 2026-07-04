@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IdentityRegistry} from "./IdentityRegistry.sol";
+import {TruthIDAccount} from "./TruthIDAccount.sol";
 
 // Como funciona o recovery social?
 // ------------------------------------------------------------------
@@ -221,6 +222,20 @@ contract RecoveryManager {
         }
 
         proposal.executed = true;
+
+        // Tenta transferir o saldo da smart account antiga (TruthIDAccount)
+        // para o novo controller. identity.controller eh uma copia memory —
+        // ainda guarda o endereco antigo (antes de recoverController sobrescrever
+        // no storage). Se o controller antigo for um EOA comum (nao uma
+        // TruthIDAccount), a chamada eh pulada — Solidity 0.8 insere extcodesize
+        // antes de high-level calls, entao nao da pra confiar soh no try/catch.
+        if (identity.controller.code.length > 0) {
+            try TruthIDAccount(payable(identity.controller)).emergencyWithdraw(proposal.newController) {
+                // Fundos migrados da smart account antiga para o novo controller.
+            } catch {
+                // Nao eh uma TruthIDAccount valida — recovery segue sem migrar fundos.
+            }
+        }
 
         _identityRegistry.recoverController(username, proposal.newController);
 

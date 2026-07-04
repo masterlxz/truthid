@@ -4,6 +4,8 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {IdentityRegistry} from "../src/IdentityRegistry.sol";
 import {RecoveryManager} from "../src/RecoveryManager.sol";
+import {TruthIDAccountFactory} from "../src/TruthIDAccountFactory.sol";
+import {TruthIDAccount} from "../src/TruthIDAccount.sol";
 import {IdentityConsentHelper} from "./IdentityConsentHelper.sol";
 
 contract RecoveryManagerTest is Test, IdentityConsentHelper {
@@ -28,10 +30,25 @@ contract RecoveryManagerTest is Test, IdentityConsentHelper {
 
     address public stranger = makeAddr("stranger"); // sem identidade, sem papel
 
+    // Fixtures para o teste de emergencyWithdraw (debito #19):
+    // charlie tem uma identidade cujo controller eh uma TruthIDAccount
+    // (smart account), nao um EOA direto.
+    address public charlie;
+    uint256 charlieKey;
+    address public charlieTA;
+    TruthIDAccountFactory public taFactory;
+
+    // Guardians pra identidade do charlie (2-de-3 pra cobrir threshold diferente)
+    address public charlieG1 = makeAddr("charlie-g1");
+    address public charlieG2 = makeAddr("charlie-g2");
+    address public charlieG3 = makeAddr("charlie-g3");
+    address public charlieNewWallet = makeAddr("charlie-new-wallet");
+
     // setUp() roda antes de cada teste — estado completamente isolado
     function setUp() public {
         (alice, aliceKey) = makeAddrAndKey("alice");
         (bob, bobKey) = makeAddrAndKey("bob");
+        (charlie, charlieKey) = makeAddrAndKey("charlie");
 
         identityRegistry = new IdentityRegistry();
         recoveryManager = new RecoveryManager(address(identityRegistry));
@@ -627,5 +644,107 @@ contract RecoveryManagerTest is Test, IdentityConsentHelper {
 
         (, uint256 threshold) = recoveryManager.getGuardianConfig("alice.id");
         assertEq(threshold, 1);
+    }
+
+    // -----------------------------------------------------------------
+    // emergencyWithdraw — débito #19: RecoveryManager transfere ETH
+    // da TruthIDAccount antiga para o novo controller durante recovery.
+    // -----------------------------------------------------------------
+
+    // Deploy da factory + cria identidade do charlie com TruthIDAccount
+    // como controller. Soh chamado pelos testes de emergencyWithdraw
+    // (custa deploy de 2 contratos — mantido fora do setUp compartilhado).
+    function _setupCharlieWithTA() internal {
+        // Dummy addresses pra entryPoint e deviceRegistry — a TA soh precisa
+        // que nao sejam address(0); nunca chamamos o EntryPoint ou DeviceRegistry
+        // nesses testes especificos de recovery.
+        taFactory = new TruthIDAccountFactory(
+            address(0x1234), // entryPoint (nao usado neste teste)
+            address(0x5678), // deviceRegistry (nao usado neste teste)
+            address(identityRegistry),
+            address(recoveryManager)
+        );
+
+        // O IdentityRegistry precisa saber da factory pra validar a assinatura
+        // de consentimento quando o controller eh uma smart account (debito #17).
+        identityRegistry.setFactory(address(taFactory));
+
+        // Pre-computa o endereco da TA de charlie antes de deployar.
+        address predictedAccount = taFactory.getAddress(charlie, 0);
+
+        // Cria identidade apontando pro endereco pre-computado da TA.
+        // Consentimento: charlie (dono da chave) assina confirmando que quer
+        // a smart account como controller da sua identidade.
+        {
+            (uint8 v, bytes32 r, bytes32 s) = _signConsent(
+                identityRegistry,
+                charlieKey,
+                "charlie.id",
+                predictedAccount
+            );
+            vm.prank(charlie);
+            identityRegistry.createIdentity("charlie.id", predictedAccount, v, r, s);
+        }
+
+        // Agora deploya a TA de fato — cai no mesmo endereco previsto.
+        vm.prank(charlie);
+        charlieTA = address(taFactory.createAccount(charlie, 0));
+
+        // Financia a TA com 2 ETH pra ter algo pra transferir.
+        vm.deal(charlieTA, 2 ether);
+
+        // Configura guardians 2-de-3 para charlie.
+        address[] memory guardians = new address[](3);
+        guardians[0] = charlieG1;
+        guardians[1] = charlieG2;
+        guardians[2] = charlieG3;
+
+        vm.prank(charlieTA);
+        recoveryManager.configureGuardians("charlie.id", guardians, 2);
+    }
+
+    function test_ExecuteRecovery_EmergencyWithdraw_TransfersEthFromTA() public {
+        _setupCharlieWithTA();
+
+        uint256 taBalanceBefore = charlieTA.balance;
+        assertEq(taBalanceBefore, 2 ether, "TA should have 2 ETH before recovery");
+
+        // Propoe recovery pelo guardian 1
+        vm.prank(charlieG1);
+        recoveryManager.proposeRecovery("charlie.id", charlieNewWallet);
+
+        // Aprova pelos guardians 1 e 2 (threshold = 2)
+        vm.prank(charlieG1);
+        recoveryManager.approveRecovery("charlie.id");
+        vm.prank(charlieG2);
+        recoveryManager.approveRecovery("charlie.id");
+
+        // Avanca o timelock
+        vm.warp(block.timestamp + 7 days + 1);
+
+        // Executa recovery — deve transferir os 2 ETH da TA para o novo wallet
+        recoveryManager.executeRecovery("charlie.id");
+
+        // Verifica: TA ficou sem ETH
+        assertEq(charlieTA.balance, 0, "TA balance should be 0 after emergencyWithdraw");
+        // Verifica: novo controller recebeu os 2 ETH
+        assertEq(charlieNewWallet.balance, 2 ether, "new wallet should have 2 ETH");
+    }
+
+    function test_ExecuteRecovery_EOAController_DoesNotRevert() public {
+        // Caso normal: alice tem um EOA simples como controller.
+        // O try/catch em executeRecovery deve capturar o revert de
+        // emergencyWithdraw (EOA nao tem essa funcao) e a recovery continua.
+        _configureAliceGuardians();
+        _propose();
+        _collectThreeApprovals();
+        vm.warp(block.timestamp + 7 days + 1);
+
+        // Nao deve reverter — emergencyWithdraw falha silenciosamente no try/catch.
+        recoveryManager.executeRecovery("alice.id");
+
+        // Confirma que o controller mudou de fato.
+        IdentityRegistry.Identity memory recovered = identityRegistry.getIdentity("alice.id");
+        assertEq(recovered.controller, aliceNewWallet);
     }
 }
