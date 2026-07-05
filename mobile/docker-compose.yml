@@ -6,6 +6,7 @@ services:
       - flutter_pub_cache:/root/.pub-cache
       - gradle_cache:/root/.gradle
       - android_ndk:/opt/android-sdk/ndk
+      - android_debug_keystore:/root/.android
     working_dir: /app
     stdin_open: true
     tty: true
@@ -14,3 +15,9 @@ volumes:
   flutter_pub_cache:
   gradle_cache:
   android_ndk:
+  # `docker compose run --rm` cria um container novo a cada execução — sem
+  # persistir /root/.android, o Gradle gerava uma keystore de debug (e
+  # portanto uma chave de assinatura) nova em cada build, obrigando
+  # desinstalar o app pra atualizar (assinaturas diferentes) e perdendo a
+  # chave do device a cada rebuild (achado real, Sessão 70).
+  android_debug_keystore:

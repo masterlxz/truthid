@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   useAccount,
@@ -116,8 +116,27 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
     if (tx3Success || tx1Success) queryClient.invalidateQueries();
   }, [tx3Success, tx1Success, queryClient]);
 
+  // Guards contra disparo duplicado: `writeContract`/`sendTransaction` (React
+  // Query `mutate`) não atualiza `isPending` no mesmo tick da chamada — se o
+  // efeito rodar de novo antes do próximo render, `!tx1Pending` ainda lê
+  // `false` e a mutation dispara duas vezes (achado real: duas chamadas
+  // `eth_sendTransaction` concorrentes brigando pelo mesmo HID da Ledger,
+  // travando o dispositivo sem erro nenhum). O ref é síncrono, então cobre a
+  // janela que o state assíncrono não cobre.
+  const tx1Submitted = useRef(false);
+  const tx2Submitted = useRef(false);
+  const tx3Submitted = useRef(false);
+
   useEffect(() => {
-    if (consentSignature && step === 2 && !tx1Hash && !tx1Pending && !tx1Confirming) {
+    if (
+      consentSignature &&
+      step === 2 &&
+      !tx1Hash &&
+      !tx1Pending &&
+      !tx1Confirming &&
+      !tx1Submitted.current
+    ) {
+      tx1Submitted.current = true;
       const { r, s, v } = hexToSignature(consentSignature);
       if (v === undefined) throw new Error("Unexpected consent signature format.");
       createIdentity({
@@ -130,7 +149,15 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
   }, [consentSignature, step, tx1Hash, tx1Pending, tx1Confirming, createIdentity, username, smartAccountAddress]);
 
   useEffect(() => {
-    if (tx1Success && step === 3 && !tx2Hash && !tx2Pending && !tx2Confirming) {
+    if (
+      tx1Success &&
+      step === 3 &&
+      !tx2Hash &&
+      !tx2Pending &&
+      !tx2Confirming &&
+      !tx2Submitted.current
+    ) {
+      tx2Submitted.current = true;
       deployAccount({
         address: FACTORY_ADDRESS,
         abi: FACTORY_ABI,
@@ -141,7 +168,15 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
   }, [tx1Success, step, tx2Hash, tx2Pending, tx2Confirming, deployAccount, address]);
 
   useEffect(() => {
-    if (tx2Success && step === 4 && !tx3Hash && !tx3Pending && !tx3Confirming) {
+    if (
+      tx2Success &&
+      step === 4 &&
+      !tx3Hash &&
+      !tx3Pending &&
+      !tx3Confirming &&
+      !tx3Submitted.current
+    ) {
+      tx3Submitted.current = true;
       const value = (() => {
         try {
           return parseEther(fundingEth);

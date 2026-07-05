@@ -126,15 +126,28 @@ export class TruthIDClient {
     };
   }
 
-  // Checks whether a session exists and has not been revoked
-  async verifySession(hash: string): Promise<SessionInfo> {
-    const [session, revoked] = await Promise.all([
-      this.publicClient.readContract({
+  // Reads a session's full data, or null if it was never created.
+  // getSession() reverts with SessionNotFound on-chain when the hash is unknown —
+  // that revert is the only way this call can fail against a live RPC, so any
+  // error here is treated as "doesn't exist yet" rather than propagated.
+  private async readSession(hash: `0x${string}`) {
+    try {
+      const session = await this.publicClient.readContract({
         address: this.sessionRegistryAddress,
         abi: SESSION_REGISTRY_ABI,
         functionName: "getSession",
-        args: [hash as `0x${string}`],
-      }),
+        args: [hash],
+      });
+      return session.exists ? session : null;
+    } catch {
+      return null;
+    }
+  }
+
+  // Checks whether a session exists and has not been revoked
+  async verifySession(hash: string): Promise<SessionInfo> {
+    const [session, revoked] = await Promise.all([
+      this.readSession(hash as `0x${string}`),
       this.publicClient.readContract({
         address: this.sessionRegistryAddress,
         abi: SESSION_REGISTRY_ABI,
@@ -143,7 +156,7 @@ export class TruthIDClient {
       }),
     ]);
 
-    if (!session.exists) {
+    if (!session) {
       return { exists: false, revoked: false };
     }
 
@@ -160,6 +173,11 @@ export class TruthIDClient {
   // The mobile device signed the session hash (keccak256 of the challenge nonce)
   // with personal_sign — the contract uses that signature to verify device ownership.
   // The relayer submits the transaction and pays the gas; the device key never holds ETH.
+  //
+  // The TruthID mobile app (v14.9.5+) already creates the session on-chain itself via
+  // UserOperation before it calls this integrator's callback — so this is idempotent:
+  // if the session is already there, this returns without submitting a transaction
+  // (avoids a guaranteed-revert and wasted relayer gas).
   async registerSession({
     nonce,
     identityId,
@@ -169,6 +187,11 @@ export class TruthIDClient {
   }: RegisterSessionParams): Promise<RegisterSessionResult> {
     // Both sides derive the session hash from the nonce — no extra communication needed
     const sessionHash = keccak256(toBytes(nonce));
+
+    const existing = await this.readSession(sessionHash);
+    if (existing) {
+      return { sessionHash, alreadyRegistered: true };
+    }
 
     // Split the 65-byte compact signature into the (r, s, v) components the contract expects
     const r = `0x${sessionSignature.slice(2, 66)}` as `0x${string}`;
@@ -191,7 +214,7 @@ export class TruthIDClient {
       chain: this.chain,
     });
 
-    return { txHash, sessionHash };
+    return { txHash, sessionHash, alreadyRegistered: false };
   }
 
   // Checks the status of a device on-chain

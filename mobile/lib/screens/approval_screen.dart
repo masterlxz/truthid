@@ -156,7 +156,19 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
     setState(() => _status = _Status.submitting);
 
     // 3. Resolve a smart account (controller) da identidade on-chain.
-    final identity = await _blockchainService.getIdentityByUsername(_username!);
+    // try/catch necessário: sem ele, qualquer falha de rede aqui prende a
+    // tela pra sempre em "Creating your session on-chain..." sem nenhum erro
+    // aparecer pro usuário (achado real, Sessão 70 — esta chamada nunca
+    // tinha tratamento de erro nenhum antes).
+    IdentityInfo? identity;
+    try {
+      identity = await _blockchainService.getIdentityByUsername(_username!);
+    } catch (_) {
+      _setError(
+        'Could not find this identity on-chain. Check your connection.',
+      );
+      return;
+    }
     if (identity == null) {
       _setError(
         'Could not find this identity on-chain. Check your connection.',

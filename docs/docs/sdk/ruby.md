@@ -261,7 +261,7 @@ Registers a completed login session on-chain so it appears in the user's TruthID
 | `session_signature:` | `String` | The session signature from the phone's response (`sessionSignature`) |
 | `relayer_private_key:` | `String` | Private key (`"0x..."`) of the funded relayer wallet |
 
-**Returns** `RegisterSessionResult` with `tx_hash` and `session_hash`
+**Returns** `RegisterSessionResult` with `tx_hash`, `session_hash` and `already_registered`
 
 ```ruby
 # After verify_auth_response succeeds:
@@ -275,7 +275,8 @@ if session_signature && ENV["RELAYER_PRIVATE_KEY"]
       session_signature:   session_signature,
       relayer_private_key: ENV["RELAYER_PRIVATE_KEY"]
     )
-    puts "Session registered on-chain: #{result.session_hash}"
+    label = result.already_registered ? "Session already on-chain:" : "Session registered on-chain:"
+    puts "#{label} #{result.session_hash}"
   rescue => e
     puts "Session registration failed (login still succeeded): #{e.message}"
   end
@@ -284,6 +285,10 @@ end
 
 :::tip[Non-blocking]
 `register_session` failing does not affect the login — wrap it in a begin/rescue and keep it out of the response path. If the relayer runs out of ETH, auth continues normally.
+:::
+
+:::info[Idempotent]
+TruthID mobile app v14.9.5+ creates the session on-chain itself (via a UserOperation) before it ever calls your callback. `register_session` detects this and returns `already_registered: true` with `tx_hash: nil` without submitting a transaction — no relayer gas spent, no `SessionAlreadyExists` revert.
 :::
 
 **Setup** — fund a relayer wallet with a small amount of ETH on Base (0.01 ETH covers thousands of sessions):

@@ -82,12 +82,23 @@ module TruthID
       )
     end
 
+    # getSession reverte on-chain quando o hash é desconhecido — a única forma dessa
+    # chamada falhar contra um RPC funcionando, então qualquer erro aqui é tratado
+    # como "ainda não existe" em vez de propagado.
+    def read_session(hash_bytes)
+      session = @rpc.call(@sessions, "getSession", hash_bytes)
+      session[4] ? session : nil # session[4] == exists
+    rescue StandardError
+      nil
+    end
+    private :read_session
+
     def verify_session(session_hash)
       # bytes32: converte hex string → 32 bytes binários
       hash_bytes = [session_hash.delete_prefix("0x")].pack("H*")
 
-      session = @rpc.call(@sessions, "getSession", hash_bytes)
-      return SessionInfo.new(exists: false, revoked: false) unless session[4] # exists
+      session = read_session(hash_bytes)
+      return SessionInfo.new(exists: false, revoked: false) if session.nil?
 
       revoked = @rpc.call(@sessions, "isSessionRevoked", hash_bytes)
 
@@ -104,6 +115,18 @@ module TruthID
       # Deriva o mesmo session hash que o mobile calculou: keccak256(utf8(nonce))
       session_hash_bytes = Eth::Util.keccak256(nonce)
 
+      # O app mobile TruthID (v14.9.5+) já cria a sessão on-chain sozinho via
+      # UserOperation antes de chamar o callback do integrador — então isso é
+      # idempotente: se a sessão já existe, pula a transação (evita um revert
+      # garantido e gás desperdiçado do relayer).
+      if read_session(session_hash_bytes)
+        return RegisterSessionResult.new(
+          tx_hash:             nil,
+          session_hash:        "0x#{session_hash_bytes.unpack1("H*")}",
+          already_registered:  true
+        )
+      end
+
       # Separa a assinatura compacta de 65 bytes em (r, s, v) que o contrato espera
       sig     = session_signature.delete_prefix("0x")
       r_bytes = [sig[0, 64]].pack("H*")    # bytes32
@@ -116,8 +139,9 @@ module TruthID
         sender_key: key)
 
       RegisterSessionResult.new(
-        tx_hash:      tx_hash.start_with?("0x") ? tx_hash : "0x#{tx_hash}",
-        session_hash: "0x#{session_hash_bytes.unpack1("H*")}",
+        tx_hash:            tx_hash.start_with?("0x") ? tx_hash : "0x#{tx_hash}",
+        session_hash:       "0x#{session_hash_bytes.unpack1("H*")}",
+        already_registered: false
       )
     end
 

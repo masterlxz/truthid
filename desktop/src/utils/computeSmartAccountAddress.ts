@@ -3,6 +3,7 @@ import {
   type PublicClient,
   keccak256,
   encodeAbiParameters,
+  encodePacked,
   concat,
   slice,
   getAddress,
@@ -119,11 +120,14 @@ function computeAddress(
   immutables: FactoryImmutables,
   index: bigint,
 ): Address {
+  // Precisa ser encodePacked, não encodeAbiParameters — o contrato usa
+  // `abi.encodePacked(owner_, index)` (endereço sem left-pad, 20 bytes), não
+  // `abi.encode` (endereço com left-pad, 32 bytes). Usar o encoding errado
+  // aqui produz um salt diferente do que a factory calcula on-chain,
+  // gerando um `controller` que nunca bate com `factory.getAddress(...)` —
+  // acabou de causar um `InvalidConsentSignature` real (Sessão 70).
   const salt = keccak256(
-    encodeAbiParameters(
-      [{ type: "address" }, { type: "uint256" }],
-      [ledgerAddress, index],
-    ),
+    encodePacked(["address", "uint256"], [ledgerAddress, index]),
   );
 
   const constructorArgs = encodeAbiParameters(

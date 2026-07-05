@@ -181,14 +181,14 @@ Registers a completed login session on-chain so it appears in the user's TruthID
 // After verifyAuthResponse succeeds:
 if (response.sessionSignature && process.env.RELAYER_PRIVATE_KEY) {
   try {
-    const { txHash, sessionHash } = await truthid.registerSession({
+    const { txHash, sessionHash, alreadyRegistered } = await truthid.registerSession({
       nonce: response.nonce,
       identityId: result.identityId!,
       devicePubKey: result.deviceAddress!,
       sessionSignature: response.sessionSignature,
       relayerPrivateKey: process.env.RELAYER_PRIVATE_KEY as `0x${string}`,
     });
-    console.log("Session registered on-chain:", sessionHash);
+    console.log(alreadyRegistered ? "Session already on-chain:" : "Session registered on-chain:", sessionHash);
   } catch (err) {
     console.error("Session registration failed (login still succeeded):", err);
   }
@@ -197,6 +197,10 @@ if (response.sessionSignature && process.env.RELAYER_PRIVATE_KEY) {
 
 :::tip[Non-blocking]
 `registerSession` failing does not affect the login — wrap it in a try/catch and keep it out of the response path. If the relayer runs out of ETH, auth continues normally.
+:::
+
+:::info[Idempotent]
+TruthID mobile app v14.9.5+ creates the session on-chain itself (via a UserOperation) before it ever calls your callback. `registerSession` detects this and returns `{ alreadyRegistered: true, txHash: undefined, sessionHash }` without submitting a transaction — no relayer gas spent, no `SessionAlreadyExists` revert.
 :::
 
 **Setup** — fund a relayer wallet with a small amount of ETH on Base (0.01 ETH covers thousands of sessions):
@@ -299,8 +303,9 @@ interface RegisterSessionParams {
 
 ```typescript
 interface RegisterSessionResult {
-  txHash: `0x${string}`;
+  txHash?: `0x${string}`; // absent when alreadyRegistered is true
   sessionHash: `0x${string}`; // keccak256(nonce) — the on-chain session identifier
+  alreadyRegistered: boolean; // true if the mobile app had already created this session
 }
 ```
 

@@ -350,18 +350,22 @@ RELAYER_PRIVATE_KEY=0x... node server.js
 ```typescript
 // After verifyAuthResponse succeeds:
 if (response.sessionSignature && process.env.RELAYER_PRIVATE_KEY) {
-  const { txHash, sessionHash } = await truthid.registerSession({
+  const { txHash, sessionHash, alreadyRegistered } = await truthid.registerSession({
     nonce: response.nonce,
     identityId: result.identityId!,
     devicePubKey: result.deviceAddress!,
     sessionSignature: response.sessionSignature,
     relayerPrivateKey: process.env.RELAYER_PRIVATE_KEY as `0x${string}`,
   });
-  console.log("Session registered on-chain:", sessionHash);
+  console.log(alreadyRegistered ? "Session already on-chain:" : "Session registered on-chain:", sessionHash);
 }
 ```
 
 `registerSession` is non-blocking for auth — if it fails (e.g. relayer has no ETH), the login still succeeds. Wrap it in a try/catch and log the error.
+
+### Idempotency
+
+TruthID mobile app v14.9.5+ creates the session on-chain itself (via a UserOperation, before it ever calls your callback). `registerSession` checks for this first: if the session already exists, it returns `{ alreadyRegistered: true, txHash: undefined, sessionHash }` without submitting a transaction — no relayer gas spent, no `SessionAlreadyExists` revert. `txHash` is only present when this call actually submitted the transaction.
 
 ### Mobile compatibility
 
@@ -435,10 +439,10 @@ const truthid = new TruthIDClient({
 
 | Contract | Address |
 |----------|---------|
-| IdentityRegistry | `0xDe7a0f1918Ee39cc1792e709Edde17e8ea858998` |
-| DeviceRegistry | `0x2be6a81B22823510c7F3Fa93E70B85aAd4fB488d` |
-| RecoveryManager | `0xbBe777145D32fdbf8A5878eAa3a21b5f1A7d67F7` |
-| SessionRegistry | `0xbf8b940dDC3754D06ee5281209Bd3dD58852BF65` |
+| IdentityRegistry | `0x1313C576403F89eE265C880b33373d5DFB504cF2` |
+| DeviceRegistry | `0x48e0862c43339f29ED850a59f5DBd08A4786EaDf` |
+| RecoveryManager | `0x889d45C27264e1f59576FDb06722DF9Cf970CBFD` |
+| SessionRegistry | `0x6531a5Ed42e077cf1b2D78d441248dC7a3ab9776` |
 
 All contracts are verified on [Basescan](https://basescan.org).
 
@@ -446,9 +450,9 @@ All contracts are verified on [Basescan](https://basescan.org).
 
 | Contract | Address |
 |----------|---------|
-| IdentityRegistry | `0x01df431F6a2276aE3220dc6f3874454caA5F20f8` |
-| DeviceRegistry | `0x5F92f95ABaACC85ADAde04F072d30b67eD8c896e` |
-| RecoveryManager | `0x062c577C26067d04bBEEaa953F8E7675fF4849ab` |
-| SessionRegistry | `0x925a0bCE2EA3AcF25454354197565B799E786e97` |
+| IdentityRegistry | `0xDe7a0f1918Ee39cc1792e709Edde17e8ea858998` |
+| DeviceRegistry | `0x2be6a81B22823510c7F3Fa93E70B85aAd4fB488d` |
+| RecoveryManager | `0xbBe777145D32fdbf8A5878eAa3a21b5f1A7d67F7` |
+| SessionRegistry | `0xbf8b940dDC3754D06ee5281209Bd3dD58852BF65` |
 
 All contracts are verified on [Basescan](https://sepolia.basescan.org).

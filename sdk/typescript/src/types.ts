@@ -59,6 +59,9 @@ export interface RegisterSessionParams {
 }
 
 export interface RegisterSessionResult {
-  txHash: `0x${string}`;
+  // Absent when alreadyRegistered is true — no transaction was submitted
+  txHash?: `0x${string}`;
   sessionHash: `0x${string}`; // keccak256(nonce) — the on-chain session identifier
+  // True when the mobile app had already created this session on-chain itself
+  alreadyRegistered: boolean;
 }

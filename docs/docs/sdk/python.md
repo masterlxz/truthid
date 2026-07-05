@@ -279,7 +279,7 @@ Registers a completed login session on-chain so it appears in the user's TruthID
 | `session_signature` | `str` | The session signature from the phone's response (`sessionSignature`) |
 | `relayer_private_key` | `str` | Private key (`"0x..."`) of the funded relayer wallet |
 
-**Returns** `RegisterSessionResult(tx_hash, session_hash)`
+**Returns** `RegisterSessionResult(tx_hash, session_hash, already_registered)`
 
 ```python
 # After verify_auth_response succeeds:
@@ -293,13 +293,18 @@ if session_signature and os.environ.get("RELAYER_PRIVATE_KEY"):
             session_signature=session_signature,
             relayer_private_key=os.environ["RELAYER_PRIVATE_KEY"],
         )
-        print("Session registered on-chain:", result.session_hash)
+        label = "Session already on-chain:" if result.already_registered else "Session registered on-chain:"
+        print(label, result.session_hash)
     except Exception as e:
         print("Session registration failed (login still succeeded):", e)
 ```
 
 :::tip[Non-blocking]
 `register_session` failing does not affect the login — wrap it in a try/except and keep it out of the response path. If the relayer runs out of ETH, auth continues normally.
+:::
+
+:::info[Idempotent]
+TruthID mobile app v14.9.5+ creates the session on-chain itself (via a UserOperation) before it ever calls your callback. `register_session` detects this and returns `already_registered=True` with `tx_hash=None` without submitting a transaction — no relayer gas spent, no `SessionAlreadyExists` revert.
 :::
 
 **Setup** — fund a relayer wallet with a small amount of ETH on Base (0.01 ETH covers thousands of sessions):

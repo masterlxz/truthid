@@ -50,13 +50,15 @@ class IdentityInfo {
 }
 
 class BlockchainService {
+  // Endereços atualizados no redeploy de 2026-07-04 (corrige bug do
+  // getAddress de 1 argumento no IdentityRegistry — ver PROJECT_STATE.md).
   static const _rpcUrl = 'https://mainnet.base.org';
   static const _sessionRegistryAddress =
-      '0xbf8b940dDC3754D06ee5281209Bd3dD58852BF65';
+      '0x6531a5Ed42e077cf1b2D78d441248dC7a3ab9776';
   static const _deviceRegistryAddress =
-      '0x2be6a81B22823510c7F3Fa93E70B85aAd4fB488d';
+      '0x48e0862c43339f29ED850a59f5DBd08A4786EaDf';
   static const _identityRegistryAddress =
-      '0xDe7a0f1918Ee39cc1792e709Edde17e8ea858998';
+      '0x1313C576403F89eE265C880b33373d5DFB504cF2';
 
   // Exposto publicamente — a 14.9.5 (SessionCreator) precisa deste endereço
   // como `dest` da chamada `TruthIDAccount.execute`.
@@ -76,11 +78,6 @@ class BlockchainService {
     EthereumAddress.fromHex(_deviceRegistryAddress),
   );
 
-  static final _identityContract = DeployedContract(
-    ContractAbi.fromJson(identityRegistryAbi, 'IdentityRegistry'),
-    EthereumAddress.fromHex(_identityRegistryAddress),
-  );
-
   static final _entryPointContract = DeployedContract(
     ContractAbi.fromJson(entryPointAbi, 'EntryPoint'),
     EthereumAddress.fromHex(entryPointV07Address),
@@ -92,12 +89,20 @@ class BlockchainService {
   // (SessionRegistry e DeviceRegistry) com a mesma função.
   Future<List<dynamic>> _ethCall(
       String contractAddress, ContractFunction fn, List<dynamic> params) async {
-    // 1. Codifica a chamada (nome da função + parâmetros) em binário ABI
     final callData = fn.encodeCall(params);
+    final resultHex = await _ethCallRawHex(contractAddress, callData);
+    // decodeReturnValues espera a string hex sem o '0x' (já removido em _ethCallRawHex)
+    return fn.decodeReturnValues(resultHex);
+  }
+
+  // Faz o eth_call cru e devolve o hex do resultado (sem '0x'), sem decodificar.
+  // Usado por _ethCall (decodifica via web3dart) e por chamadas que precisam
+  // de decodificação manual (ver getIdentityByUsername).
+  Future<String> _ethCallRawHex(
+      String contractAddress, List<int> callData) async {
     final callDataHex =
         '0x${callData.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
 
-    // 2. Manda a requisição JSON-RPC para o nó
     final client = HttpClient();
     try {
       final request = await client.postUrl(Uri.parse(_rpcUrl));
@@ -120,10 +125,7 @@ class BlockchainService {
         throw Exception('RPC error: ${json['error']}');
       }
 
-      // 3. Decodifica o resultado hex de volta para os tipos Dart
-      // decodeReturnValues espera a string hex sem o '0x'
-      final resultHex = (json['result'] as String).substring(2);
-      return fn.decodeReturnValues(resultHex);
+      return (json['result'] as String).substring(2);
     } finally {
       client.close();
     }
@@ -175,9 +177,28 @@ class BlockchainService {
     return sessions.whereType<SessionInfo>().toList();
   }
 
+  // Tamanho máximo de faixa de blocos por chamada eth_getLogs — RPCs públicos
+  // (ex: sepolia.base.org) rejeitam faixas maiores com "query exceeds max
+  // block range". Buscar sem fromBlock/toBlock faz o RPC assumir "latest"
+  // (só o bloco mais recente) e nunca encontrar eventos antigos — por isso
+  // não dá pra simplesmente omitir os dois, tem que paginar.
+  static const _maxLogRangeBlocks = 2000;
+
+  // Quantas faixas de _maxLogRangeBlocks percorrer pra trás a partir de
+  // "latest" antes de desistir. 50 faixas ≈ 100k blocos ≈ ~55h de histórico
+  // na Base (bloco a cada ~2s) — cobre confortavelmente uma identidade
+  // pareada há pouco tempo (o caso de uso real: DevicesScreen chama isso
+  // logo depois de descobrir um pareamento novo), sem escanear a chain
+  // inteira desde o genesis.
+  static const _maxLogLookbackChunks = 50;
+
   // Resolve o @username da identidade via eth_getLogs no evento IdentityCreated.
   // O contrato não tem um getter id→username, então a única fonte é o log.
-  // Retorna null se não encontrar (identidade não existe ou RPC falhou).
+  // Pagina pra trás a partir do bloco mais recente (ver _maxLogRangeBlocks/
+  // _maxLogLookbackChunks) — identidades criadas há mais tempo que isso não
+  // são encontradas (limitação conhecida, não um caso genérico de indexação).
+  // Retorna null se não encontrar (identidade não existe, é antiga demais
+  // pra essa janela, ou o RPC falhou).
   Future<String?> getUsernameForIdentity(BigInt identityId) async {
     // keccak256("IdentityCreated(uint256,string,address)") — topic[0]
     final sigBytes = keccak256(
@@ -187,6 +208,59 @@ class BlockchainService {
     // topic[1] = indexed uint256 id, padded to 32 bytes
     final idTopic = '0x${identityId.toRadixString(16).padLeft(64, '0')}';
 
+    final latestBlock = await _getLatestBlockNumber();
+    if (latestBlock == null) return null;
+
+    var toBlock = latestBlock;
+    for (var chunk = 0; chunk < _maxLogLookbackChunks; chunk++) {
+      final fromBlock =
+          toBlock - _maxLogRangeBlocks + 1 > 0 ? toBlock - _maxLogRangeBlocks + 1 : 0;
+
+      final logs = await _fetchIdentityCreatedLogs(
+        eventTopic: eventTopic,
+        idTopic: idTopic,
+        fromBlock: fromBlock,
+        toBlock: toBlock,
+      );
+      if (logs != null && logs.isNotEmpty) {
+        return _decodeUsernameFromLog(logs.first as Map<String, dynamic>);
+      }
+
+      if (fromBlock == 0) break; // chegou no genesis, não tem mais o que buscar
+      toBlock = fromBlock - 1;
+    }
+    return null;
+  }
+
+  Future<int?> _getLatestBlockNumber() async {
+    final client = HttpClient();
+    try {
+      final request = await client.postUrl(Uri.parse(_rpcUrl));
+      request.headers.set('content-type', 'application/json');
+      request.write(jsonEncode({
+        'jsonrpc': '2.0',
+        'method': 'eth_blockNumber',
+        'params': [],
+        'id': 1,
+      }));
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      if (json.containsKey('error')) return null;
+      return int.parse((json['result'] as String).substring(2), radix: 16);
+    } catch (_) {
+      return null;
+    } finally {
+      client.close();
+    }
+  }
+
+  Future<List<dynamic>?> _fetchIdentityCreatedLogs({
+    required String eventTopic,
+    required String idTopic,
+    required int fromBlock,
+    required int toBlock,
+  }) async {
     final client = HttpClient();
     try {
       final request = await client.postUrl(Uri.parse(_rpcUrl));
@@ -198,6 +272,8 @@ class BlockchainService {
           {
             'address': _identityRegistryAddress,
             'topics': [eventTopic, idTopic],
+            'fromBlock': '0x${fromBlock.toRadixString(16)}',
+            'toBlock': '0x${toBlock.toRadixString(16)}',
           }
         ],
         'id': 1,
@@ -208,25 +284,25 @@ class BlockchainService {
       final json = jsonDecode(body) as Map<String, dynamic>;
 
       if (json.containsKey('error')) return null;
-      final logs = json['result'] as List<dynamic>;
-      if (logs.isEmpty) return null;
-
-      // ABI-decode the non-indexed `string username` from log.data.
-      // Layout: [0-31] offset=0x20 | [32-63] length N | [64-64+N] UTF-8 bytes
-      final dataHex =
-          ((logs[0] as Map<String, dynamic>)['data'] as String).substring(2);
-      final length = int.parse(dataHex.substring(64, 128), radix: 16);
-      final strHex = dataHex.substring(128, 128 + length * 2);
-      final strBytes = Uint8List.fromList(
-        List.generate(strHex.length ~/ 2,
-            (i) => int.parse(strHex.substring(i * 2, i * 2 + 2), radix: 16)),
-      );
-      return utf8.decode(strBytes);
+      return json['result'] as List<dynamic>;
     } catch (_) {
       return null;
     } finally {
       client.close();
     }
+  }
+
+  String _decodeUsernameFromLog(Map<String, dynamic> log) {
+    // ABI-decode the non-indexed `string username` from log.data.
+    // Layout: [0-31] offset=0x20 | [32-63] length N | [64-64+N] UTF-8 bytes
+    final dataHex = (log['data'] as String).substring(2);
+    final length = int.parse(dataHex.substring(64, 128), radix: 16);
+    final strHex = dataHex.substring(128, 128 + length * 2);
+    final strBytes = Uint8List.fromList(
+      List.generate(strHex.length ~/ 2,
+          (i) => int.parse(strHex.substring(i * 2, i * 2 + 2), radix: 16)),
+    );
+    return utf8.decode(strBytes);
   }
 
   // Leitura usada no polling do pareamento: confirma se este device já foi
@@ -258,21 +334,52 @@ class BlockchainService {
   // Resolve o controller (endereço da smart account, desde o débito #17) e o
   // identityId on-chain de uma identidade pelo @username — fonte de verdade
   // usada pela 14.9.5 pra saber quem é o `sender` da UserOperation.
+  // Decodificação manual, não via fn.decodeReturnValues — o decoder de tuplas
+  // do web3dart não lida direito com uma struct que tem um campo dinâmico
+  // (`string username`) entre campos fixos: o `exists` (bool) vinha sempre
+  // null (achado real, Sessão 70). Layout ABI conhecido pra essa struct:
+  // [outerOffset(32B)] [id(32B)] [stringOffset(32B)] [controller(32B)]
+  // [exists(32B)] [stringLen(32B)] [stringBytes...] — só os 4 primeiros
+  // campos (tudo antes do texto dinâmico) importam aqui.
   Future<IdentityInfo?> getIdentityByUsername(String username) async {
-    try {
-      final fn = _identityContract.function('getIdentity');
-      final result = await _ethCall(_identityRegistryAddress, fn, [username]);
-      final tuple = result[0] as List<dynamic>;
-      final exists = tuple[3] as bool;
-      if (!exists) return null;
+    // Calldata montado à mão — não usa fn.encodeCall/_identityContract.function
+    // de propósito. O bug do web3dart não estava só no decode (débito #32):
+    // mesmo evitando decodeReturnValues, a construção da chamada via
+    // ContractFunction (que também enxerga a struct de saída com o campo
+    // dinâmico no meio) reproduzia o mesmo erro "null is not a subtype of
+    // bool" antes de qualquer resposta da rede chegar (Sessão 70). Selector
+    // e encoding manuais eliminam qualquer contato com esse caminho do
+    // web3dart pra esta chamada específica.
+    final selector =
+        keccak256(Uint8List.fromList(utf8.encode('getIdentity(string)')))
+            .sublist(0, 4);
+    final usernameBytes = Uint8List.fromList(utf8.encode(username));
+    final paddedLength = ((usernameBytes.length + 31) ~/ 32) * 32;
+    final callData = BytesBuilder()
+      ..add(selector)
+      ..add(_uint256Bytes(32)) // offset do parâmetro dinâmico
+      ..add(_uint256Bytes(usernameBytes.length)) // tamanho da string
+      ..add(usernameBytes)
+      ..add(Uint8List(paddedLength - usernameBytes.length)); // padding pra 32 bytes
 
-      return IdentityInfo(
-        id: tuple[0] as BigInt,
-        controller: tuple[2] as EthereumAddress,
-      );
-    } catch (_) {
-      return null;
-    }
+    final resultHex = await _ethCallRawHex(
+        _identityRegistryAddress, callData.toBytes());
+
+    final id = BigInt.parse(resultHex.substring(64, 128), radix: 16);
+    final controllerHex = resultHex.substring(216, 256);
+    final exists = BigInt.parse(resultHex.substring(256, 320), radix: 16) != BigInt.zero;
+    if (!exists) return null;
+
+    return IdentityInfo(
+      id: id,
+      controller: EthereumAddress.fromHex('0x$controllerHex'),
+    );
+  }
+
+  Uint8List _uint256Bytes(int value) {
+    final hex = value.toRadixString(16).padLeft(64, '0');
+    return Uint8List.fromList(List.generate(
+        32, (i) => int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16)));
   }
 
   // Lê o nonce atual da smart account no EntryPoint (key=0 — nonce

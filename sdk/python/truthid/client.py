@@ -90,11 +90,21 @@ class TruthIDClient:
             device_address=response.deviceAddress,
         )
 
+    def _read_session(self, hash_bytes: bytes) -> Optional[list]:
+        # getSession() reverts on-chain (ContractLogicError) when the hash is unknown —
+        # that's the only way this call can fail against a live RPC, so any error here
+        # is treated as "doesn't exist yet" rather than propagated.
+        try:
+            session = self._sessions.functions.getSession(hash_bytes).call()
+        except Exception:
+            return None
+        return session if session[4] else None  # session[4] == exists
+
     def verify_session(self, session_hash: str) -> SessionInfo:
         hash_bytes = bytes.fromhex(session_hash.removeprefix("0x"))
 
-        session = self._sessions.functions.getSession(hash_bytes).call()
-        if not session[4]:  # exists
+        session = self._read_session(hash_bytes)
+        if session is None:
             return SessionInfo(exists=False, revoked=False)
 
         revoked = self._sessions.functions.isSessionRevoked(hash_bytes).call()
@@ -119,6 +129,17 @@ class TruthIDClient:
         # Derives the same session hash the mobile computed: keccak256(utf8(nonce))
         session_hash = Web3.keccak(text=nonce)  # returns bytes
 
+        # The TruthID mobile app (v14.9.5+) already creates the session on-chain itself
+        # via UserOperation before it calls this integrator's callback — so this is
+        # idempotent: if the session is already there, skip the transaction entirely
+        # (avoids a guaranteed-revert and wasted relayer gas).
+        if self._read_session(session_hash) is not None:
+            return RegisterSessionResult(
+                tx_hash=None,
+                session_hash="0x" + session_hash.hex(),
+                already_registered=True,
+            )
+
         # Splits the compact 65-byte signature into the (r, s, v) the contract expects
         sig = session_signature.removeprefix("0x")
         r = bytes.fromhex(sig[0:64])    # bytes32
@@ -140,6 +161,7 @@ class TruthIDClient:
         return RegisterSessionResult(
             tx_hash="0x" + tx_hash.hex(),
             session_hash="0x" + session_hash.hex(),
+            already_registered=False,
         )
 
     def check_device_status(self, device_pub_key: str) -> DeviceStatus:

@@ -40,15 +40,19 @@ class _DevicesScreenState extends State<DevicesScreen> {
 
     if (device != null && !device.revoked) {
       if (identityId == null) {
-        // Auto-descoberta: device registrado on-chain mas não salvo localmente
+        // Auto-descoberta: device registrado on-chain mas não salvo localmente.
+        // Aguarda o username resolver antes de considerar "pareado" — sem
+        // isso, quem navegasse rápido pra aprovar um login veria
+        // "device not paired" mesmo com o identityId já salvo (a
+        // ApprovalScreen exige os dois, ver Sessão 70 no PROJECT_STATE.md).
         identityId = device.identityId.toString();
         await _storage.savePairedIdentity(identityId);
-        _blockchain.getUsernameForIdentity(device.identityId).then((u) {
-          if (u != null) {
-            _storage.savePairedUsername(u);
-            if (mounted) setState(() => _pairedUsername = u);
-          }
-        });
+        final resolvedUsername =
+            await _blockchain.getUsernameForIdentity(device.identityId);
+        if (resolvedUsername != null) {
+          await _storage.savePairedUsername(resolvedUsername);
+          username = resolvedUsername;
+        }
       }
     } else if (identityId != null) {
       // Device revogado ou removido — limpar storage
