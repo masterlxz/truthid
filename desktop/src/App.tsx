@@ -10,6 +10,7 @@ import { ActiveSessions } from "./components/ActiveSessions";
 import { QuickLogin } from "./components/QuickLogin";
 import { DonateModal } from "./components/DonateModal";
 import { VaultManagement } from "./components/VaultManagement";
+import { SmartAccountDashboard } from "./components/SmartAccountDashboard";
 import { IdentityProvider } from "./contexts/IdentityContext";
 import { WalletModalContext } from "./contexts/WalletModalContext";
 import { useStoredUsername } from "./hooks/useStoredUsername";
@@ -22,7 +23,7 @@ import {
 import { computeSmartAccountAddressSync } from "./utils/computeSmartAccountAddress";
 import "./App.css";
 
-type Tab = "devices" | "sessions" | "vault";
+type Tab = "dashboard" | "devices" | "sessions" | "vault";
 
 function LogoIcon() {
   return (
@@ -47,7 +48,7 @@ function LogoIcon() {
 function App() {
   const { isConnected, address, chainId } = useAccount();
   const { disconnect } = useDisconnect();
-  const [activeTab, setActiveTab] = useState<Tab>("devices");
+  const [activeTab, setActiveTab] = useState<Tab>("dashboard");
   const [loginOpen, setLoginOpen] = useState(false);
   const [connectModalOpen, setConnectModalOpen] = useState(false);
   const [donateOpen, setDonateOpen] = useState(false);
@@ -212,6 +213,12 @@ function App() {
             <IdentityProvider username={displayUsername} smartAccountAddress={smartAccountAddress}>
               <nav className="tabs">
                 <button
+                  onClick={() => setActiveTab("dashboard")}
+                  disabled={activeTab === "dashboard"}
+                >
+                  Dashboard
+                </button>
+                <button
                   onClick={() => setActiveTab("devices")}
                   disabled={activeTab === "devices"}
                 >
@@ -231,6 +238,7 @@ function App() {
                 </button>
               </nav>
 
+              {activeTab === "dashboard" && <SmartAccountDashboard />}
               {activeTab === "devices" && <ManageDevices />}
               {activeTab === "sessions" && <ActiveSessions />}
               {activeTab === "vault" && <VaultManagement />}

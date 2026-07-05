@@ -54,6 +54,10 @@ export const IDENTITY_REGISTRY_ABI = [
 export const DEVICE_REGISTRY_ADDRESS =
   "0x48e0862c43339f29ED850a59f5DBd08A4786EaDf" as const;
 
+// Bloco de deploy na Base Mainnet (Sessão 70 — redeploy completo, débito #28).
+// Fonte: contracts/broadcast/Deploy.s.sol/8453/run-1783205021432.json
+export const DEVICE_REGISTRY_DEPLOY_BLOCK = 48_207_828n;
+
 export const DEVICE_REGISTRY_ABI = [
   {
     type: "function",
@@ -114,12 +118,33 @@ export const DEVICE_REGISTRY_ABI = [
     ],
     stateMutability: "view",
   },
+  {
+    type: "event",
+    name: "DeviceRegistered",
+    inputs: [
+      { name: "identityId", type: "uint256", indexed: true },
+      { name: "pubKey", type: "address", indexed: true },
+      { name: "label", type: "string", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "DeviceRevoked",
+    inputs: [
+      { name: "identityId", type: "uint256", indexed: true },
+      { name: "pubKey", type: "address", indexed: true },
+    ],
+  },
 ] as const;
 
 // ─── SessionRegistry ───────────────────────────────────────────────────────────
 
 export const SESSION_REGISTRY_ADDRESS =
   "0x6531a5Ed42e077cf1b2D78d441248dC7a3ab9776" as const;
+
+// Bloco de deploy na Base Mainnet (Sessão 70 — redeploy completo, débito #28).
+// Fonte: contracts/broadcast/DeploySessionRegistry.s.sol/8453/run-1783205056882.json
+export const SESSION_REGISTRY_DEPLOY_BLOCK = 48_207_855n;
 
 export const SESSION_REGISTRY_ABI = [
   {
@@ -212,6 +237,10 @@ export const SESSION_REGISTRY_ABI = [
 
 export const VAULT_REGISTRY_ADDRESS =
   "0x0000000000000000000000000000000000000000" as const;
+
+// VaultRegistry ainda não deployado — sem constante de bloco de deploy; o
+// scan de atividade da smart account (14.10) pula este contrato inteiramente
+// enquanto o endereço acima for o zero address.
 
 export const VAULT_REGISTRY_ABI = [
   {

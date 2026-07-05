@@ -37,3 +37,20 @@ export type DeviceVaultPermission = {
   pub_key: string;
   can_write: boolean;
 };
+
+export type SmartAccountActivityType =
+  | "session_created"
+  | "session_revoked"
+  | "session_revoked_all"
+  | "device_registered"
+  | "device_revoked"
+  | "vault_updated";
+
+export type SmartAccountActivity = {
+  type: SmartAccountActivityType;
+  hash: `0x${string}`;
+  blockNumber: bigint;
+  logIndex: number;
+  timestamp: number;
+  costWei: bigint;
+};
