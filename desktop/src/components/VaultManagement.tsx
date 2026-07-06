@@ -305,6 +305,7 @@ export function VaultManagement() {
   // ── Permissões locais ────────────────────────────────────────────────────
   const [permissions, setPermissions] = useState<DeviceVaultPermission[]>([]);
   const [permsOpen, setPermsOpen] = useState(false);
+  const [permError, setPermError] = useState<string | null>(null);
 
   // ── Carregamento inicial ──────────────────────────────────────────────────
   async function loadAll() {
@@ -436,14 +437,17 @@ export function VaultManagement() {
 
   // ── Permissões ───────────────────────────────────────────────────────────
   async function handleTogglePerm(pubKey: string, canWrite: boolean) {
+    setPermError(null);
     try {
-      await invoke<void>("vault_set_device_permission", { pub_key: pubKey, can_write: canWrite });
+      await invoke<void>("vault_set_device_permission", { pubKey, canWrite });
       setPermissions((prev) => {
         const existing = prev.find((p) => p.pub_key === pubKey);
         if (existing) return prev.map((p) => p.pub_key === pubKey ? { ...p, can_write: canWrite } : p);
         return [...prev, { pub_key: pubKey, can_write: canWrite }];
       });
-    } catch { /* ignora */ }
+    } catch (e) {
+      setPermError(String(e));
+    }
   }
 
   // ── Filtragem ─────────────────────────────────────────────────────────────
@@ -683,6 +687,7 @@ export function VaultManagement() {
               Controla se um device mobile pode <strong>escrever</strong> no vault (por padrão, só leitura).
               Este desktop sempre tem permissão total.
             </p>
+            {permError && <p className="error-text">{permError}</p>}
             {activeDevices.length === 0 ? (
               <p className="muted">Nenhum device ativo registrado.</p>
             ) : (
