@@ -351,7 +351,7 @@ export function VaultManagement() {
       ],
     });
     setPendingUpdate(null);
-  }, [pendingUpdate]);
+  }, [pendingUpdate, isConnected, smartAccountAddress]);
 
   useEffect(() => {
     if (isTxSuccess) {
