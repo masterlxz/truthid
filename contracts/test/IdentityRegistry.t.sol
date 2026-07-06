@@ -365,4 +365,19 @@ contract IdentityRegistryTest is Test, IdentityConsentHelper {
 
         assertTrue(registry.isUsernameTaken("alice.id"));
     }
+
+    // -----------------------------------------------------------------
+    // getIdentityIdByController
+    // -----------------------------------------------------------------
+
+    function test_GetIdentityIdByController_Success() public {
+        vm.prank(alice);
+        uint256 id = _createIdentity(registry, aliceKey, "alice.id");
+
+        assertEq(registry.getIdentityIdByController(alice), id);
+    }
+
+    function test_GetIdentityIdByController_ReturnsZeroWhenNotFound() public {
+        assertEq(registry.getIdentityIdByController(alice), 0);
+    }
 }

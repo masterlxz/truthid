@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {IdentityRegistry} from "../src/IdentityRegistry.sol";
 import {DeviceRegistry} from "../src/DeviceRegistry.sol";
 import {VaultRegistry} from "../src/VaultRegistry.sol";
+import {IdentityResolver} from "../src/IdentityResolver.sol";
 import {IdentityConsentHelper} from "./IdentityConsentHelper.sol";
 
 contract VaultRegistryTest is Test, IdentityConsentHelper {
@@ -93,7 +94,7 @@ contract VaultRegistryTest is Test, IdentityConsentHelper {
 
     function test_Revert_UpdateVault_SemIdentidade() public {
         vm.prank(charlie);
-        vm.expectRevert(VaultRegistry.NotIdentityController.selector);
+        vm.expectRevert(IdentityResolver.NotIdentityController.selector);
         vaultRegistry.updateVault(CID_V1, HASH_V1);
     }
 

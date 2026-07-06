@@ -5,6 +5,7 @@ import {Test} from "forge-std/Test.sol";
 import {IdentityRegistry} from "../src/IdentityRegistry.sol";
 import {DeviceRegistry} from "../src/DeviceRegistry.sol";
 import {SessionRegistry} from "../src/SessionRegistry.sol";
+import {IdentityResolver} from "../src/IdentityResolver.sol";
 import {IdentityConsentHelper} from "./IdentityConsentHelper.sol";
 
 contract SessionRegistryTest is Test, IdentityConsentHelper {
@@ -240,7 +241,7 @@ contract SessionRegistryTest is Test, IdentityConsentHelper {
         _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
 
         vm.prank(bob);
-        vm.expectRevert(SessionRegistry.NotIdentityController.selector);
+        vm.expectRevert(IdentityResolver.NotIdentityController.selector);
         sessionRegistry.revokeSession(sessionA);
     }
 
@@ -248,7 +249,7 @@ contract SessionRegistryTest is Test, IdentityConsentHelper {
         _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
 
         vm.prank(charlie);
-        vm.expectRevert(SessionRegistry.NotIdentityController.selector);
+        vm.expectRevert(IdentityResolver.NotIdentityController.selector);
         sessionRegistry.revokeSession(sessionA);
     }
 
@@ -317,7 +318,7 @@ contract SessionRegistryTest is Test, IdentityConsentHelper {
 
     function test_RevokeAllSessions_SemIdentidade_Reverte() public {
         vm.prank(charlie);
-        vm.expectRevert(SessionRegistry.NotIdentityController.selector);
+        vm.expectRevert(IdentityResolver.NotIdentityController.selector);
         sessionRegistry.revokeAllSessions();
     }
 

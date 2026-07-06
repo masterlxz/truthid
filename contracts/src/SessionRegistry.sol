@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {IdentityRegistry} from "./IdentityRegistry.sol";
+import {IdentityResolver} from "./IdentityResolver.sol";
 import {DeviceRegistry} from "./DeviceRegistry.sol";
 
-contract SessionRegistry {
+contract SessionRegistry is IdentityResolver {
     // -------------------------------------------------------------------------
     // Tipos de dados
     // -------------------------------------------------------------------------
@@ -21,7 +21,6 @@ contract SessionRegistry {
     // Estado
     // -------------------------------------------------------------------------
 
-    IdentityRegistry private immutable _identityRegistry;
     DeviceRegistry private immutable _deviceRegistry;
 
     // hash → Session
@@ -49,7 +48,6 @@ contract SessionRegistry {
     error SessionAlreadyExists(bytes32 hash);
     error SessionNotFound(bytes32 hash);
     error SessionAlreadyRevoked(bytes32 hash);
-    error NotIdentityController();
     error InvalidSessionSignature();
     error DeviceNotOwnedByIdentity();
 
@@ -57,8 +55,9 @@ contract SessionRegistry {
     // Constructor
     // -------------------------------------------------------------------------
 
-    constructor(address identityRegistry, address deviceRegistry) {
-        _identityRegistry = IdentityRegistry(identityRegistry);
+    constructor(address identityRegistry, address deviceRegistry)
+        IdentityResolver(identityRegistry)
+    {
         _deviceRegistry = DeviceRegistry(deviceRegistry);
     }
 
@@ -162,16 +161,5 @@ contract SessionRegistry {
     /// Retorna o timestamp de revogação em massa (0 se revokeAllSessions nunca foi chamado).
     function getRevokedBefore(uint256 identityId) external view returns (uint256) {
         return _revokedBefore[identityId];
-    }
-
-    // -------------------------------------------------------------------------
-    // Funções internas
-    // -------------------------------------------------------------------------
-
-    function _getCallerIdentityId() internal view returns (uint256) {
-        string memory username = _identityRegistry.getUsernameByController(msg.sender);
-        if (bytes(username).length == 0) revert NotIdentityController();
-        IdentityRegistry.Identity memory identity = _identityRegistry.getIdentity(username);
-        return identity.id;
     }
 }

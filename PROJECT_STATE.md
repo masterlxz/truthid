@@ -565,7 +565,7 @@ Problemas identificados na revisão de arquitetura da Sessão 36 (2026-06-25). N
 | ~~39~~ | ~~`desktop/src/components/VaultManagement.tsx:288`~~ | ~~O `useEffect` que dispara `updateVault` depois do `vault_publish` só dependia de `[pendingUpdate]`. Se a wallet não estivesse conectada quando o efeito rodava, ele abria o modal de conexão e retornava sem chamar `writeContract` — mas como `isConnected` não estava nas dependências, conectar a wallet depois nunca reexecutava o efeito sozinho (contorno manual: clicar "Enviar" de novo).~~ | **RESOLVIDO — Sessão 83**. `isConnected` e `smartAccountAddress` (este último lido pelo efeito desde o fix do débito #33) adicionados ao array de dependências — sem adicionar `writeContract`/`openConnectModal` (referências potencialmente instáveis entre renders, que arriscariam reabrir o modal repetidamente). Sem risco de disparo duplicado: o guard `if (!pendingUpdate) return` já barra reexecuções depois que `setPendingUpdate(null)` roda. `tsc --noEmit`/`vitest` (47/47) limpos. |
 | ~~40~~ | ~~`desktop/src/components/VaultSettings.tsx:90`~~ | ~~`handleFormAdd` só exigia `name`/`endpoint_url` preenchidos, mesmo quando `kind === "psa"` — a API key (obrigatória pra qualquer provedor PSA funcionar) não tinha validação equivalente antes de salvar.~~ | **RESOLVIDO — Sessão 84**. Nova variável `formInvalid` (componente PSA exige `api_key` não-vazio também) usada tanto no `handleFormAdd` quanto no `disabled` do botão "Adicionar" — evita duplicar a condição em 2 lugares que podiam divergir. `tsc --noEmit`/`vitest` (47/47) limpos. |
 | ~~41~~ | ~~`contracts/src/VaultRegistry.sol:71`~~ | ~~`updateVault` validava que `cid` não é vazio mas nunca validava que `contentHash` é diferente de zero, apesar do comentário do struct dizer que esse campo existe pra verificação de integridade.~~ | **RESOLVIDO — Sessão 85**. Novo erro `EmptyContentHash()` + `if (contentHash == bytes32(0)) revert EmptyContentHash();`, mesmo padrão do `EmptyCid()`. Novo teste `test_Revert_UpdateVault_ContentHashVazio`. `forge test` 213/213 (era 212, +1). Sem redeploy necessário — `VaultRegistry` ainda não foi deployado em rede nenhuma. |
-| 42 | `contracts/src/VaultRegistry.sol:117` | `_getCallerIdentityId()` é cópia verbatim da mesma função em `SessionRegistry.sol`/`DeviceRegistry.sol` (inclusive redefinindo o mesmo erro `NotIdentityController`), e faz 2 chamadas externas + copia o struct `Identity` inteiro (incluindo a string `username`) só pra extrair o `id` — padrão repetido nos 3 contratos, não é bug isolado deste arquivo. Achado no `/code-review high` da Sessão 75. | Verificado (CONFIRMED). Extrair pra uma lib/contrato base compartilhado entre os 3 registries; ao mesmo tempo, considerar adicionar um accessor mais barato no `IdentityRegistry` (ex: `getIdentityIdByController(address) returns (uint256)`) pra evitar copiar o struct inteiro. Baixa prioridade — é um padrão antigo, não introduzido pelo Vault. |
+| ~~42~~ | ~~`contracts/src/VaultRegistry.sol:117`~~ | ~~`_getCallerIdentityId()` era cópia verbatim da mesma função em `SessionRegistry.sol`/`DeviceRegistry.sol` (inclusive redefinindo o mesmo erro `NotIdentityController`), e fazia 2 chamadas externas + copiava o struct `Identity` inteiro (incluindo a string `username`) só pra extrair o `id` — padrão repetido nos 3 contratos.~~ | **RESOLVIDO (código) — Sessão 86**. Novo contrato-base `IdentityResolver.sol` (primeiro uso de herança em `contracts/src/`), herdado por `DeviceRegistry`/`SessionRegistry`/`VaultRegistry`; novo accessor `IdentityRegistry.getIdentityIdByController(address)` reduz a resolução de 2 chamadas externas pra 1, sem copiar o struct inteiro. Gas medido (`forge test --gas-report`, antes/depois via `git stash`): `registerDevice` 204.428→195.037, `revokeDevice` 51.490→40.767, `revokeSession` 53.880→43.157, `revokeAllSessions` 65.169→54.446 (todas ~10.7k gas mais baratas na mediana). 215/215 testes Foundry (era 213, +2 novos em `IdentityRegistry.t.sol`). `docs/docs/contracts.mdx` atualizado com os números novos. **Deploy pendente** — ver Pendências de Deploy (item #4). |
 | 43 | `desktop/src/components/VaultManagement.tsx:199` | Toda a orquestração de publicação on-chain (máquina de estados do wagmi), busca de devices e mutação de permissões vive inline num único componente de UI de 636 linhas, ao contrário do padrão já estabelecido no repo de extrair essa lógica pra um hook reutilizável (ex: `desktop/src/hooks/useSmartAccountActivity.ts`). Achado no `/code-review high` da Sessão 75. | Verificado (CONFIRMED). Extrair a máquina de estados de publish (linhas ~199-330) pra um hook próprio (ex: `useVaultPublish.ts`), testável isoladamente — facilita corrigir os débitos #33/#36/#39 acima sem mexer direto na JSX. Baixa prioridade — cleanup estrutural, não é bug. |
 
 ---
@@ -586,6 +586,7 @@ Endereços de contrato que estão com placeholder `0x0` no código e precisam se
 | 1b | (Sepolia) | `desktop/src/config/truthidAccount.ts` (comentário) | `0x4A7a307cb6872bde24BAf3E9de2BeC3Ddd03e144` | ✅ Superado pelo redeploy completo da Sessão 70 (débito #28) | 14.7 |
 | 2 | `VAULT_REGISTRY_ADDRESS` | `desktop/src/config/contracts.ts` | `0x00...00` | Deploy do `VaultRegistry` | 13.x (ainda não deployado — deliberadamente pulado no redeploy da Sessão 70, feature não implementada) |
 | 3 | ~~`DeviceRegistry` (débito #34)~~ | ~~`contracts/src/DeviceRegistry.sol`~~ | ~~ver Fase 1.6~~ | **RESOLVIDO — Sessão 77**. Redeploy completo dos 5 contratos (mesma cascata da Sessão 70 — `SessionRegistry` e `TruthIDAccountFactory` têm o endereço do `DeviceRegistry` como `immutable`) em Sepolia e Mainnet, `totalIdentities()` confirmado em 0 nas duas redes antes do redeploy (sem identidade real perdida). Endereços novos e propagação completa (desktop, mobile, 3 SDKs, docs, README) na Sessão 77 do Log de Sessões. | ~~Sessão 76~~ / Sessão 77 / débito #34 |
+| 4 | `IdentityRegistry` + `DeviceRegistry` + `SessionRegistry` (débito #42) | `contracts/src/{IdentityRegistry,DeviceRegistry,SessionRegistry}.sol` | ver débito #42 | **Pendente.** Cascata completa dos 5 contratos de novo (mesmo formato das Sessões 70/77): `IdentityRegistry` (novo accessor `getIdentityIdByController`), `DeviceRegistry` e `SessionRegistry` (agora herdam de `IdentityResolver`) mudam de bytecode; `RecoveryManager` e `TruthIDAccountFactory` entram na cascata só por guardarem o endereço do `IdentityRegistry`/`DeviceRegistry` como `immutable` — o código deles em si não muda. Decisão consciente da Sessão 86: implementar o código agora, redeploy fica pra uma sessão futura à parte. | débito #42 |
 
 Ao fazer o deploy, atualizar:
 1. A constante no código com o novo endereço
@@ -3147,6 +3148,45 @@ Custo real: ~0.00013 ETH nas duas redes combinadas (mesma ordem de grandeza da S
 
 - **Débitos**: nenhum novo. Débito #41 marcado como resolvido.
 - **Próximo passo**: débitos #42–#43, ou avançar a Fase 13 (13.8/13.9).
+
+---
+
+### Sessão 86 — 2026-07-06: Débito #42 — extrai `IdentityResolver` compartilhado + accessor mais barato (planejado via Plan Mode)
+
+- **Objetivo**: resolver o débito #42 — `_getCallerIdentityId()` era cópia byte-a-byte em `DeviceRegistry.sol`, `SessionRegistry.sol` e `VaultRegistry.sol` (mesmo campo `_identityRegistry`, mesmo erro `NotIdentityController`, 2 chamadas externas + cópia do struct `Identity` inteiro só pra extrair o `id`). Planejado em Plan Mode (dado o impacto em contratos já deployados) antes de implementar.
+
+- **Investigação prévia**: confirmado que `_identityRegistry` só é usado dentro de `_getCallerIdentityId()` nos 3 contratos (seguro extrair). `RecoveryManager.sol` tem um campo parecido mas usa de forma bem diferente (recebe `username` como parâmetro, nunca resolve a partir de `msg.sender`) — **fica fora de escopo**, não é o mesmo padrão. Não existe herança em `contracts/src/` hoje — este é o primeiro uso.
+
+- **Decisão de escopo (usuário)**: implementar o refactor completo, incluindo um accessor novo no `IdentityRegistry` (`getIdentityIdByController`) que resolve com 1 chamada externa em vez de 2 — aceitando que isso muda o bytecode de `IdentityRegistry`/`DeviceRegistry`/`SessionRegistry` (já deployados desde a Sessão 77) e portanto vai exigir outra cascata de redeploy dos 5 contratos no futuro (não feita nesta sessão — ver Pendências de Deploy, item #4).
+
+- **Novo arquivo `contracts/src/IdentityResolver.sol`**: `abstract contract` com o campo `_identityRegistry` (private, immutable), o erro `NotIdentityController`, o constructor, e `_getCallerIdentityId()` reescrito pra usar o accessor novo (1 chamada externa).
+
+- **`contracts/src/IdentityRegistry.sol`**: novo `getIdentityIdByController(address) returns (uint256)` — encadeia as duas mappings existentes (`_usernameByController` → `_identityByUsername`) internamente, retorna `0` se não encontrado (mesma convenção "soft not-found" de `getUsernameByController`, sem reverter; seguro porque ids reais nunca são `0`).
+
+- **`DeviceRegistry.sol`/`SessionRegistry.sol`/`VaultRegistry.sol`**: ganharam `is IdentityResolver`; campo `_identityRegistry`, erro `NotIdentityController` e a função `_getCallerIdentityId()` duplicados foram removidos (agora herdados); constructors encadeiam pra `IdentityResolver(identityRegistry)`, mantendo a assinatura externa idêntica (testes que constroem via `new X(...)` não precisaram mudar nesse ponto).
+
+- **Achado durante a implementação**: `vm.expectRevert(DeviceRegistry.NotIdentityController.selector)` (e o equivalente em `SessionRegistry`/`VaultRegistry`) **não compilou** depois do erro virar herdado — Solidity não expõe erros do contrato-base através do nome do contrato derivado nesse contexto (`Member "NotIdentityController" not found`). Corrigido trocando as 7 referências (3 em `DeviceRegistry.t.sol`, 3 em `SessionRegistry.t.sol`, 1 em `VaultRegistry.t.sol`) para `IdentityResolver.NotIdentityController.selector`, com o import correspondente adicionado nos 3 arquivos de teste. `RecoveryManager.t.sol` não foi tocado (usa seu próprio `RecoveryManager.NotIdentityController`, contrato fora de escopo).
+
+- **Teste novo**: `contracts/test/IdentityRegistry.t.sol` — `test_GetIdentityIdByController_Success` e `test_GetIdentityIdByController_ReturnsZeroWhenNotFound`.
+
+- **Gas medido de verdade (antes/depois via `git stash`, não estimado)** — `forge test --gas-report`, mesmo filtro de contratos nas duas medições:
+
+  | Função | Antes (min/mediana/max) | Depois | Δ mediana |
+  |---|---|---|---|
+  | `registerDevice` | 23.757 / 205.761 / 229.010 | 23.757 / 195.037 / 218.286 | -10.724 |
+  | `revokeDevice` | 24.411 / 51.490 / 51.490 | 24.411 / 40.767 / 40.767 | -10.723 |
+  | `revokeSession` | 24.501 / 53.880 / 56.224 | 24.501 / 43.157 / 45.501 | -10.723 |
+  | `revokeAllSessions` | 28.694 / 65.169 / 65.169 | 27.961 / 54.446 / 54.446 | -10.723 |
+  | `updateVault` | 22.584 / 209.444 / 292.697 | 22.584 / 201.139 / 281.973 | -10.724 |
+
+  Redução consistente de ~10,7k gas por chamada nas 5 funções (1 chamada externa a menos + sem copiar a string `username` do struct `Identity`). Pegadinha na medição: `git stash` não inclui arquivo novo não-trackeado (`IdentityResolver.sol`) — precisei mover o arquivo manualmente pra fora da pasta antes de medir o "antes", senão o `IdentityResolver.sol` ficava presente chamando uma função (`getIdentityIdByController`) que não existia no `IdentityRegistry.sol` restaurado pelo stash, e o build quebrava.
+
+- **`docs/docs/contracts.mdx`**: tabela "Cost per operation" atualizada com os 4 números novos (`registerDevice`/`revokeDevice`/`revokeSession`/`revokeAllSessions`); frase sobre "a operação mais pesada" atualizada de `~204k gas`/`0.0000022 ETH` pra `~195k gas`/`0.0000021 ETH`. De brinde, a contagem "120 tests" citada no mesmo parágrafo estava desatualizada (hoje são 140, incluindo os 2 novos desta sessão) — corrigida também, já que a convenção do projeto é nunca deixar número estimado/desatualizado no lugar de um medido.
+
+- **Verificação**: `forge build`/`forge test` — 215/215 (era 213, +2). `docs && npm run build` — limpo, sem links quebrados.
+
+- **Débitos**: nenhum novo. Débito #42 marcado como **resolvido (código)** — deploy fica pendente (Pendências de Deploy, item #4, cascata completa dos 5 contratos, mesmo formato de #34/Sessão 77).
+- **Próximo passo**: débito #43 (extrair hook `useVaultPublish` do `VaultManagement.tsx`), ou decidir quando fazer o redeploy em cascata pendente do débito #42.
 
 ---
 

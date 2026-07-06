@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {IdentityRegistry} from "./IdentityRegistry.sol";
+import {IdentityResolver} from "./IdentityResolver.sol";
 
 // Por que a chave pública do device é um `address`?
 // -------------------------------------------------------
@@ -16,7 +16,7 @@ import {IdentityRegistry} from "./IdentityRegistry.sol";
 //      `ecrecover(hash, v, r, s)` e comparar com o `address` registrado aqui.
 //      Nenhuma biblioteca de criptografia extra é necessária — é tudo nativo.
 
-contract DeviceRegistry {
+contract DeviceRegistry is IdentityResolver {
     // -------------------------------------------------------------------------
     // Tipos de dados
     // -------------------------------------------------------------------------
@@ -33,10 +33,6 @@ contract DeviceRegistry {
     // -------------------------------------------------------------------------
     // Estado
     // -------------------------------------------------------------------------
-
-    // `immutable`: calculado no constructor e gravado diretamente no bytecode.
-    // Não ocupa um slot de storage — leituras são mais baratas.
-    IdentityRegistry private immutable _identityRegistry;
 
     // pubKey (address) → Device
     mapping(address => Device) private _devices;
@@ -66,7 +62,6 @@ contract DeviceRegistry {
     error DeviceAlreadyRegistered(address pubKey);
     error DeviceNotFound(address pubKey);
     error DeviceAlreadyRevoked(address pubKey);
-    error NotIdentityController();
     error InvalidPubKey();
     error NoCommitmentFound();
     error RevealTooEarly();
@@ -75,9 +70,7 @@ contract DeviceRegistry {
     // Constructor
     // -------------------------------------------------------------------------
 
-    constructor(address identityRegistry) {
-        _identityRegistry = IdentityRegistry(identityRegistry);
-    }
+    constructor(address identityRegistry) IdentityResolver(identityRegistry) {}
 
     // -------------------------------------------------------------------------
     // Funções de escrita
@@ -183,23 +176,5 @@ contract DeviceRegistry {
     /// Retorna quantos devices uma identidade tem (incluindo revogados).
     function deviceCount(uint256 identityId) external view returns (uint256) {
         return _devicesByIdentity[identityId].length;
-    }
-
-    // -------------------------------------------------------------------------
-    // Funções internas
-    // -------------------------------------------------------------------------
-
-    // Obtém o identityId da identidade controlada por msg.sender.
-    // Reverte se msg.sender não for controller de nenhuma identidade.
-    function _getCallerIdentityId() internal view returns (uint256) {
-        // Lookup reverso: carteira → username
-        string memory username = _identityRegistry.getUsernameByController(msg.sender);
-
-        // String vazia significa que esse endereço não controla nenhuma identidade
-        if (bytes(username).length == 0) revert NotIdentityController();
-
-        // Com o username em mãos, buscamos a identidade completa
-        IdentityRegistry.Identity memory identity = _identityRegistry.getIdentity(username);
-        return identity.id;
     }
 }

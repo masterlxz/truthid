@@ -239,6 +239,19 @@ contract IdentityRegistry {
         return _usernameByController[controller];
     }
 
+    /// Retorna o identityId de um controller diretamente, sem o chamador
+    /// precisar dar 2 chamadas externas (getUsernameByController + getIdentity)
+    /// e copiar o struct Identity inteiro (com a string `username` dinâmica)
+    /// só pra descartar tudo menos o `id`. Encadeia as duas mappings
+    /// internamente. Retorna 0 se o controller não tiver identidade — mesma
+    /// convenção de "não encontrado" de `getUsernameByController` (string
+    /// vazia), não reverte.
+    function getIdentityIdByController(address controller) external view returns (uint256) {
+        string memory username = _usernameByController[controller];
+        if (bytes(username).length == 0) return 0;
+        return _identityByUsername[username].id;
+    }
+
     /// Verifica se um username já está em uso.
     function isUsernameTaken(string calldata username) external view returns (bool) {
         return _identityByUsername[username].exists;

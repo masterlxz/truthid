@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {IdentityRegistry} from "../src/IdentityRegistry.sol";
 import {DeviceRegistry} from "../src/DeviceRegistry.sol";
+import {IdentityResolver} from "../src/IdentityResolver.sol";
 import {IdentityConsentHelper} from "./IdentityConsentHelper.sol";
 
 contract DeviceRegistryTest is Test, IdentityConsentHelper {
@@ -163,7 +164,7 @@ contract DeviceRegistryTest is Test, IdentityConsentHelper {
         vm.roll(block.number + 1);
 
         vm.prank(charlie);
-        vm.expectRevert(DeviceRegistry.NotIdentityController.selector);
+        vm.expectRevert(IdentityResolver.NotIdentityController.selector);
         deviceRegistry.registerDevice(charlieDevice, "iPad", SALT, "");
     }
 
@@ -263,7 +264,7 @@ contract DeviceRegistryTest is Test, IdentityConsentHelper {
 
         // Bob tenta revogar o device da Alice — não é o controller da identidade dona do device
         vm.prank(bob);
-        vm.expectRevert(DeviceRegistry.NotIdentityController.selector);
+        vm.expectRevert(IdentityResolver.NotIdentityController.selector);
         deviceRegistry.revokeDevice(aliceDevice1);
     }
 
@@ -272,7 +273,7 @@ contract DeviceRegistryTest is Test, IdentityConsentHelper {
 
         // Charlie não tem identidade
         vm.prank(charlie);
-        vm.expectRevert(DeviceRegistry.NotIdentityController.selector);
+        vm.expectRevert(IdentityResolver.NotIdentityController.selector);
         deviceRegistry.revokeDevice(aliceDevice1);
     }
 

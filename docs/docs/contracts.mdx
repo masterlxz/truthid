@@ -116,22 +116,22 @@ Deploys `TruthIDAccount` instances at deterministic `CREATE2` addresses, one per
 
 ## Cost per operation
 
-Real gas numbers from the project's own test suite (`forge test --gas-report`), not estimates — the four original contracts have 120 tests passing; `TruthIDAccount`/`TruthIDAccountFactory` (rows below `revokeAllSessions`) have their own 62. Read functions (`view`) are free when called the normal way — directly via an RPC `eth_call`, exactly how every SDK reads them. The "free" label below stops applying only if another contract calls them mid-transaction, which no part of TruthID does today.
+Real gas numbers from the project's own test suite (`forge test --gas-report`), not estimates — the four original contracts have 140 tests passing; `TruthIDAccount`/`TruthIDAccountFactory` (rows below `revokeAllSessions`) have their own 62. Read functions (`view`) are free when called the normal way — directly via an RPC `eth_call`, exactly how every SDK reads them. The "free" label below stops applying only if another contract calls them mid-transaction, which no part of TruthID does today.
 
 | Operation | Min gas | Median gas | Max gas |
 |---|---|---|---|
 | `createIdentity` | 22,153 | 141,483 | 142,832 |
 | `commitDevice` | 44,211 | 44,211 | 44,211 |
-| `registerDevice` | 23,278 | 204,428 | 204,428 |
-| `revokeDevice` | 24,411 | 51,490 | 51,490 |
+| `registerDevice` | 23,757 | 195,037 | 218,286 |
+| `revokeDevice` | 24,411 | 40,767 | 40,767 |
 | `configureGuardians` | 37,894 | 340,329 | 1,028,006 |
 | `proposeRecovery` | 22,532 | 162,839 | 162,839 |
 | `approveRecovery` | 39,187 | 71,787 | 88,887 |
 | `executeRecovery` | 39,349 | 126,801 | 126,801 |
 | `cancelRecovery` | 36,929 | 43,951 | 43,951 |
 | `createSession` | 27,061 | 183,605 | 183,605 |
-| `revokeSession` | 24,501 | 53,880 | 56,224 |
-| `revokeAllSessions` | 28,694 | 65,169 | 65,169 |
+| `revokeSession` | 24,501 | 43,157 | 45,501 |
+| `revokeAllSessions` | 27,961 | 54,446 | 54,446 |
 | `TruthIDAccountFactory.createAccount` (already deployed) | 24,996 | — | — |
 | `TruthIDAccountFactory.createAccount` (first deploy) | — | — | 1,774,511 |
 | `TruthIDAccount.execute` | 23,135 | 71,519 | 71,544 |
@@ -142,7 +142,7 @@ Real gas numbers from the project's own test suite (`forge test --gas-report`), 
 Gas scales with the size of the `guardians` array. The low end is a couple of guardians; the high end in this table comes from a test that exercises the full `MAX_GUARDIANS` cap of 20. A typical 3-of-5 setup lands well below the median shown here.
 :::
 
-**What that costs in ETH**: at the ~0.011 gwei gas price observed during the [mainnet deploy](https://basescan.org/address/0xAC24F39e7Abdd819578d96A040c2DF4394c43423), the heaviest of the four original contracts' operations (`registerDevice`, ~204k gas) comes out to roughly 0.0000022 ETH — a small fraction of a cent. `TruthIDAccountFactory.createAccount`'s first-deploy row is heavier still (it deploys a whole contract via `CREATE2`, not just a state update) — see [Smart Account & Gas → Cost](/docs/smart-account#cost) for that conversion. Gas price moves with network demand; check [Base's live gas tracker](https://basescan.org/gastracker) for the current rate before assuming these numbers hold exactly.
+**What that costs in ETH**: at the ~0.011 gwei gas price observed during the [mainnet deploy](https://basescan.org/address/0xAC24F39e7Abdd819578d96A040c2DF4394c43423), the heaviest of the four original contracts' operations (`registerDevice`, ~195k gas) comes out to roughly 0.0000021 ETH — a small fraction of a cent. `TruthIDAccountFactory.createAccount`'s first-deploy row is heavier still (it deploys a whole contract via `CREATE2`, not just a state update) — see [Smart Account & Gas → Cost](/docs/smart-account#cost) for that conversion. Gas price moves with network demand; check [Base's live gas tracker](https://basescan.org/gastracker) for the current rate before assuming these numbers hold exactly.
 
 ## Audit status
 
