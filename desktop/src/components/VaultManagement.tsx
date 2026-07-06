@@ -241,6 +241,7 @@ export function VaultManagement() {
   // ── Publicação (vault_publish + on-chain updateVault) ────────────────────
   const [publishState, setPublishState] = useState<"idle" | "publishing" | "error">("idle");
   const [publishError, setPublishError] = useState<string | null>(null);
+  const [pinWarning, setPinWarning] = useState<string | null>(null);
   const [pendingUpdate, setPendingUpdate] = useState<{
     cid: string;
     contentHash: `0x${string}`;
@@ -366,11 +367,18 @@ export function VaultManagement() {
   // ── Publicar ─────────────────────────────────────────────────────────────
   async function handleEnviar() {
     setPublishError(null);
+    setPinWarning(null);
     setPublishState("publishing");
     try {
       const result = await invoke<PinResult>("vault_publish");
       if (result.providers_failed.length > 0 && result.providers_ok.length === 0) {
         throw new Error(`Todos os providers falharam: ${result.providers_failed.join(", ")}`);
+      }
+      if (result.providers_failed.length > 0) {
+        setPinWarning(
+          `Redundância parcial: falhou em ${result.providers_failed.join(", ")} ` +
+          `(ok em ${result.providers_ok.join(", ")}). O vault foi publicado, mas sem a redundância configurada.`
+        );
       }
       setPendingUpdate({ cid: result.cid, contentHash: result.content_hash as `0x${string}` });
       setPublishState("idle");
@@ -554,6 +562,11 @@ export function VaultManagement() {
         {publishState === "error" && publishError && (
           <p className="error-text" style={{ marginBottom: 0, marginTop: "0.5rem" }}>
             {publishError}
+          </p>
+        )}
+        {pinWarning && (
+          <p style={{ color: "#d9a441", marginBottom: 0, marginTop: "0.5rem", fontSize: "0.9em" }}>
+            ⚠ {pinWarning}
           </p>
         )}
         {isTxError && txError && (
