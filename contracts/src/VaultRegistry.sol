@@ -51,6 +51,7 @@ contract VaultRegistry {
     error NotIdentityController();
     error VaultNotFound(uint256 identityId);
     error EmptyCid();
+    error EmptyContentHash();
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -70,6 +71,7 @@ contract VaultRegistry {
     /// desconfiados que precisem ser restritos on-chain neste fluxo.
     function updateVault(string calldata cid, bytes32 contentHash) external {
         if (bytes(cid).length == 0) revert EmptyCid();
+        if (contentHash == bytes32(0)) revert EmptyContentHash();
 
         uint256 identityId = _getCallerIdentityId();
 

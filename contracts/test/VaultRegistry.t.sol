@@ -103,6 +103,12 @@ contract VaultRegistryTest is Test, IdentityConsentHelper {
         vaultRegistry.updateVault("", HASH_V1);
     }
 
+    function test_Revert_UpdateVault_ContentHashVazio() public {
+        vm.prank(alice);
+        vm.expectRevert(VaultRegistry.EmptyContentHash.selector);
+        vaultRegistry.updateVault(CID_V1, bytes32(0));
+    }
+
     // -------------------------------------------------------------------------
     // getVault
     // -------------------------------------------------------------------------
