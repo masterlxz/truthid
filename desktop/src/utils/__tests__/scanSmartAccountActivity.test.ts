@@ -25,7 +25,7 @@ describe("scanSmartAccountActivity", () => {
     expect(ranges).toEqual(["100-2099", "2100-4099", "4100-4500"]);
   });
 
-  it("skips VaultUpdated entirely while VAULT_REGISTRY_ADDRESS is the zero address", async () => {
+  it("scans all 6 event sources, including VaultUpdated", async () => {
     const client = makeMockClient();
 
     await scanSmartAccountActivity(client, { identityId: 1n, fromBlock: 100n, toBlock: 200n });
@@ -34,9 +34,8 @@ describe("scanSmartAccountActivity", () => {
       .mocked(client.getContractEvents)
       .mock.calls.map(([args]) => (args as { eventName: string }).eventName);
 
-    expect(eventNames).not.toContain("VaultUpdated");
     expect([...eventNames].sort()).toEqual(
-      ["AllSessionsRevoked", "DeviceRegistered", "DeviceRevoked", "SessionCreated", "SessionRevoked"].sort(),
+      ["AllSessionsRevoked", "DeviceRegistered", "DeviceRevoked", "SessionCreated", "SessionRevoked", "VaultUpdated"].sort(),
     );
   });
 

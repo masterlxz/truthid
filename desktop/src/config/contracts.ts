@@ -1,5 +1,5 @@
 export const IDENTITY_REGISTRY_ADDRESS =
-  "0xAC24F39e7Abdd819578d96A040c2DF4394c43423" as const;
+  "0xC11426fd1cB103bC56dD3263325b34f2AcEe9903" as const;
 
 export const IDENTITY_REGISTRY_ABI = [
   {
@@ -52,11 +52,11 @@ export const IDENTITY_REGISTRY_ABI = [
 // ─── DeviceRegistry ────────────────────────────────────────────────────────────
 
 export const DEVICE_REGISTRY_ADDRESS =
-  "0xea61a59810Ee981B5FB7C1d42FE348Cbe8aE5344" as const;
+  "0x4Fd53d70553df00D42c015EB35E2626cB80b1614" as const;
 
-// Bloco de deploy na Base Mainnet (Sessão 76 — redeploy completo, débito #34).
+// Bloco de deploy na Base Mainnet (Sessão 88 — redeploy completo, débito #42).
 // Fonte: contracts/broadcast/Deploy.s.sol/8453/run-latest.json
-export const DEVICE_REGISTRY_DEPLOY_BLOCK = 48_291_335n;
+export const DEVICE_REGISTRY_DEPLOY_BLOCK = 48_294_070n;
 
 export const DEVICE_REGISTRY_ABI = [
   {
@@ -149,11 +149,11 @@ export const DEVICE_REGISTRY_ABI = [
 // ─── SessionRegistry ───────────────────────────────────────────────────────────
 
 export const SESSION_REGISTRY_ADDRESS =
-  "0x1F34F33f1061E44028e28a4e17E43d4eaE92f7FA" as const;
+  "0x66F10F8c38b3F35551e90ACa3c675F5E3432C6Df" as const;
 
-// Bloco de deploy na Base Mainnet (Sessão 76 — redeploy completo, débito #34).
+// Bloco de deploy na Base Mainnet (Sessão 88 — redeploy completo, débito #42).
 // Fonte: contracts/broadcast/DeploySessionRegistry.s.sol/8453/run-latest.json
-export const SESSION_REGISTRY_DEPLOY_BLOCK = 48_291_355n;
+export const SESSION_REGISTRY_DEPLOY_BLOCK = 48_294_090n;
 
 export const SESSION_REGISTRY_ABI = [
   {
@@ -245,11 +245,11 @@ export const SESSION_REGISTRY_ABI = [
 ] as const;
 
 export const VAULT_REGISTRY_ADDRESS =
-  "0x0000000000000000000000000000000000000000" as const;
+  "0x602Fa39611960e5ef17D95a5d7b16816eE0ff734" as const;
 
-// VaultRegistry ainda não deployado — sem constante de bloco de deploy; o
-// scan de atividade da smart account (14.10) pula este contrato inteiramente
-// enquanto o endereço acima for o zero address.
+// Bloco de deploy na Base Mainnet (Sessão 88 — primeiro deploy do VaultRegistry).
+// Fonte: contracts/broadcast/DeployVaultRegistry.s.sol/8453/run-latest.json
+export const VAULT_REGISTRY_DEPLOY_BLOCK = 48_294_149n;
 
 export const VAULT_REGISTRY_ABI = [
   {

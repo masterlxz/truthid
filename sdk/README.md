@@ -439,10 +439,10 @@ const truthid = new TruthIDClient({
 
 | Contract | Address |
 |----------|---------|
-| IdentityRegistry | `0xAC24F39e7Abdd819578d96A040c2DF4394c43423` |
-| DeviceRegistry | `0xea61a59810Ee981B5FB7C1d42FE348Cbe8aE5344` |
-| RecoveryManager | `0x62795F69a4e815E3A79737122C7Fdd45D857C94D` |
-| SessionRegistry | `0x1F34F33f1061E44028e28a4e17E43d4eaE92f7FA` |
+| IdentityRegistry | `0xC11426fd1cB103bC56dD3263325b34f2AcEe9903` |
+| DeviceRegistry | `0x4Fd53d70553df00D42c015EB35E2626cB80b1614` |
+| RecoveryManager | `0x1d51daD35Bd3562f8B56B334a9B8637873fE40e9` |
+| SessionRegistry | `0x66F10F8c38b3F35551e90ACa3c675F5E3432C6Df` |
 
 All contracts are verified on [Basescan](https://basescan.org).
 
@@ -450,9 +450,9 @@ All contracts are verified on [Basescan](https://basescan.org).
 
 | Contract | Address |
 |----------|---------|
-| IdentityRegistry | `0xe399DbA342558Bc8937BBb4C33060cCE1F936AD0` |
-| DeviceRegistry | `0xC61b82C29D80098558D7Ca73CC47D907B62f9e3F` |
-| RecoveryManager | `0xfFBA6E09E7170183F61B00723ef2255eaf765e2e` |
-| SessionRegistry | `0x80878CC2B339D187051EEd905699613a0ed84B12` |
+| IdentityRegistry | `0x7582E1c55fAFF19619A6c0a8b6575855d4e933d0` |
+| DeviceRegistry | `0x867EA636FDF324B0Cc4a631C70421580e2Bbe91c` |
+| RecoveryManager | `0xC60AE3D7Fc7991A48B780E3bF2838027079204Ce` |
+| SessionRegistry | `0xFE49Cec3a927136f7F18E521BF1547f00b09B17f` |
 
 All contracts are verified on [Basescan](https://sepolia.basescan.org).

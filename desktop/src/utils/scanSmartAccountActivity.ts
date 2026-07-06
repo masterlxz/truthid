@@ -13,8 +13,6 @@ import type { SmartAccountActivity, SmartAccountActivityType } from "../types";
 // exceeds max block range" visto em mobile/lib/services/blockchain_service.dart).
 const CHUNK_SIZE = 2000n;
 
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
-
 type EventSource = {
   address: Address;
   abi: Abi;
@@ -31,11 +29,7 @@ const EVENT_SOURCES: EventSource[] = [
   { address: SESSION_REGISTRY_ADDRESS, abi: SESSION_REGISTRY_ABI as Abi, eventName: "SessionCreated", type: "session_created" },
   { address: SESSION_REGISTRY_ADDRESS, abi: SESSION_REGISTRY_ABI as Abi, eventName: "SessionRevoked", type: "session_revoked" },
   { address: SESSION_REGISTRY_ADDRESS, abi: SESSION_REGISTRY_ABI as Abi, eventName: "AllSessionsRevoked", type: "session_revoked_all" },
-  // VaultRegistry ainda não deployado (endereço zero) — pulado inteiramente,
-  // nenhuma chamada de rede é feita para ele.
-  ...(VAULT_REGISTRY_ADDRESS !== ZERO_ADDRESS
-    ? [{ address: VAULT_REGISTRY_ADDRESS, abi: VAULT_REGISTRY_ABI as Abi, eventName: "VaultUpdated", type: "vault_updated" as const }]
-    : []),
+  { address: VAULT_REGISTRY_ADDRESS, abi: VAULT_REGISTRY_ABI as Abi, eventName: "VaultUpdated", type: "vault_updated" },
 ];
 
 export type ScanClient = Pick<PublicClient, "getContractEvents" | "getTransactionReceipt" | "getBlock">;

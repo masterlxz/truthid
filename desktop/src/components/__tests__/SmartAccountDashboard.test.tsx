@@ -150,11 +150,22 @@ describe("SmartAccountDashboard", () => {
     expect(screen.getByText("2 ETH")).toBeInTheDocument(); // device bucket total
   });
 
-  it("shows 'Not available yet' for vault when VaultRegistry is not deployed", () => {
-    setupMocks();
+  it("tallies the vault bucket into the cost-by-type summary", () => {
+    setupMocks({
+      activities: [
+        {
+          type: "vault_updated",
+          hash: "0xcc1",
+          blockNumber: 3n,
+          logIndex: 0,
+          timestamp: 3,
+          costWei: 3_000_000_000_000_000_000n,
+        },
+      ],
+    });
     render(<SmartAccountDashboard />);
 
-    expect(screen.getByText("Not available yet")).toBeInTheDocument();
+    expect(screen.getByText("3 ETH")).toBeInTheDocument(); // vault bucket total
   });
 
   it("opens the deposit modal when Deposit is clicked", async () => {

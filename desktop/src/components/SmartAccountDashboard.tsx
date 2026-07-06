@@ -3,13 +3,9 @@ import { useBalance } from "wagmi";
 import { formatEther } from "viem";
 import { useIdentity } from "../contexts/IdentityContext";
 import { useSmartAccountActivity } from "../hooks/useSmartAccountActivity";
-import { VAULT_REGISTRY_ADDRESS } from "../config/contracts";
 import { DepositModal } from "./DepositModal";
 import { WithdrawModal } from "./WithdrawModal";
 import type { SmartAccountActivityType } from "../types";
-
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
-const VAULT_DEPLOYED = VAULT_REGISTRY_ADDRESS !== ZERO_ADDRESS;
 
 const ACTIVITY_LABELS: Record<SmartAccountActivityType, string> = {
   session_created: "Session created",
@@ -101,16 +97,10 @@ export function SmartAccountDashboard() {
           </div>
           <div>
             <p className="muted" style={{ margin: 0 }}>Vault</p>
-            {VAULT_DEPLOYED ? (
-              <>
-                <strong>{summary.vault.count}</strong>
-                <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
-                  {formatEther(summary.vault.costWei)} ETH
-                </p>
-              </>
-            ) : (
-              <p className="muted" style={{ margin: 0 }}>Not available yet</p>
-            )}
+            <strong>{summary.vault.count}</strong>
+            <p className="muted" style={{ margin: 0, fontSize: "0.85rem" }}>
+              {formatEther(summary.vault.costWei)} ETH
+            </p>
           </div>
         </div>
       </div>
