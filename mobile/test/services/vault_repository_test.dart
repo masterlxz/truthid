@@ -92,6 +92,24 @@ void main() {
       );
     });
 
+    test('updateEntry — lança quando id não existe (débito #38)', () async {
+      await repo.addEntry(site: 'github.com', username: 'fab', password: 'x');
+
+      final ghost = VaultEntry(
+        id: 'id-inexistente',
+        site: 'ghost.com',
+        url: '',
+        username: 'u',
+        password: 'p',
+        notes: '',
+        createdAt: DateTime.now().toUtc(),
+        updatedAt: DateTime.now().toUtc(),
+      );
+
+      expect(() => repo.updateEntry(ghost), throwsException);
+      expect(await repo.listEntries(), hasLength(1)); // no-op, não vira insert
+    });
+
     test('deleteEntry — entry some da lista', () async {
       final entry = await repo.addEntry(
         site: 'github.com',

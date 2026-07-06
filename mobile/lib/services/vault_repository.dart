@@ -154,6 +154,9 @@ class VaultRepository {
 
   Future<VaultEntry> updateEntry(VaultEntry entry) async {
     final data = await _load();
+    if (!data.entries.any((e) => e.id == entry.id)) {
+      throw Exception('Vault entry not found: ${entry.id}');
+    }
     final updated = entry.copyWith(); // renova updatedAt via copyWith
     final entries = data.entries
         .map((e) => e.id == entry.id ? updated : e)
