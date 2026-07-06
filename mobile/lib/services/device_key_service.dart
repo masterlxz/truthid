@@ -32,6 +32,18 @@ class DeviceKeyService {
     return key.address.hexEip55;
   }
 
+  Future<String> getDevicePublicKeyHex() async {
+    final key = await _getOrCreateKey();
+    final privBigInt = BigInt.parse(
+      bytesToHex(key.privateKey, include0x: false),
+      radix: 16,
+    );
+    return bytesToHex(
+      privateKeyToPublic(privBigInt),
+      include0x: true,
+    );
+  }
+
   Future<String> signChallenge(String challengeJson) async {
     final key = await _getOrCreateKey();
     final messageBytes = Uint8List.fromList(utf8.encode(challengeJson));

@@ -6,7 +6,9 @@ import {
   useReadContracts,
   useWriteContract,
   useWaitForTransactionReceipt,
+  useSignMessage,
 } from "wagmi";
+import { hexToSignature } from "viem";
 import { useIdentity } from "../contexts/IdentityContext";
 import { useWalletModal } from "../contexts/WalletModalContext";
 import {
@@ -17,6 +19,8 @@ import {
 } from "../config/contracts";
 import type { DeviceInfo, VaultEntry, PinResult, DeviceVaultPermission } from "../types";
 import { VaultSettings } from "./VaultSettings";
+
+const VAULT_KEY_MESSAGE = "TruthID Vault Key v1";
 
 // ---------------------------------------------------------------------------
 // Constantes
@@ -178,6 +182,44 @@ export function VaultManagement() {
   const { identityId } = useIdentity();
   const { isConnected } = useAccount();
   const { openConnectModal } = useWalletModal();
+
+  // ── Vault key derivation ──────────────────────────────────────────────────
+  const [vaultKeyReady, setVaultKeyReady] = useState<boolean | null>(null);
+  const [derivingKey, setDerivingKey] = useState(false);
+  const [deriveError, setDeriveError] = useState<string | null>(null);
+
+  const {
+    signMessage,
+    data: vaultKeySignature,
+    isPending: signKeyPending,
+    isError: signKeyError,
+    error: signKeyErr,
+  } = useSignMessage();
+
+  useEffect(() => {
+    invoke<boolean>("vault_key_exists").then(setVaultKeyReady).catch(() => setVaultKeyReady(false));
+  }, []);
+
+  useEffect(() => {
+    if (!vaultKeySignature) return;
+    try {
+      const { r, s, v } = hexToSignature(vaultKeySignature);
+      if (v == null) { setDeriveError("Invalid signature"); setDerivingKey(false); return; }
+      invoke("derive_vault_key_from_wallet", { r, s, v: Number(v) })
+        .then(() => { setVaultKeyReady(true); setDerivingKey(false); })
+        .catch((e: string) => { setDeriveError(String(e)); setDerivingKey(false); });
+    } catch (e) {
+      setDeriveError(String(e));
+      setDerivingKey(false);
+    }
+  }, [vaultKeySignature]);
+
+  function handleDeriveKey() {
+    if (!isConnected) { openConnectModal(); return; }
+    setDeriveError(null);
+    setDerivingKey(true);
+    signMessage({ message: VAULT_KEY_MESSAGE });
+  }
 
   // ── View ──────────────────────────────────────────────────────────────────
   const [view, setView] = useState<"entries" | "settings">("entries");
@@ -415,6 +457,41 @@ export function VaultManagement() {
           <h2 style={{ margin: 0 }}>Providers de Pinning</h2>
         </div>
         <VaultSettings />
+      </div>
+    );
+  }
+
+  // ── Guard: vault key ─────────────────────────────────────────────────────
+  if (vaultKeyReady === null) {
+    return <div className="card"><p className="muted">Checking vault key...</p></div>;
+  }
+
+  if (!vaultKeyReady) {
+    return (
+      <div className="card">
+        <h2 style={{ marginTop: 0 }}>Unlock Vault</h2>
+        <p className="muted" style={{ marginBottom: "1rem", lineHeight: "1.5" }}>
+          Your vault key is derived from your wallet signature (RFC 6979).
+          Sign once with your Ledger or connected wallet to unlock the vault on this device.
+          The key is cached in your OS keyring — you will not need the wallet for daily use.
+        </p>
+        {(signKeyError || deriveError) && (
+          <p className="error-text">
+            {signKeyErr?.message?.includes("rejected_by_user")
+              ? "Signature rejected on Ledger."
+              : `Error: ${deriveError || signKeyErr?.message?.split("\\n")[0] || "operation failed"}`}
+          </p>
+        )}
+        <button
+          onClick={handleDeriveKey}
+          disabled={derivingKey || signKeyPending}
+        >
+          {derivingKey || signKeyPending
+            ? "Confirm signature on wallet..."
+            : !isConnected
+            ? "Connect wallet to unlock"
+            : "Unlock vault"}
+        </button>
       </div>
     );
   }

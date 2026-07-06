@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { invoke } from "@tauri-apps/api/core";
 import {
   useAccount,
   useChainId,
@@ -17,6 +18,8 @@ import {
   FACTORY_ABI,
 } from "../config/contracts";
 import { buildIdentityConsentHash } from "../utils/buildIdentityConsentHash";
+
+const VAULT_KEY_MESSAGE = "TruthID Vault Key v1";
 
 const USERNAME_REGEX = /^[a-z0-9.\-]{1,64}$/;
 
@@ -96,6 +99,37 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
     isLoading: tx3Confirming,
     isSuccess: tx3Success,
   } = useWaitForTransactionReceipt({ hash: tx3Hash });
+
+  // ── Vault key derivation ──────────────────────────────────────────────────
+  const [vaultKeyDerived, setVaultKeyDerived] = useState(false);
+
+  const {
+    signMessage: signVaultKey,
+    data: vaultKeySig,
+    isPending: signVaultPending,
+    isError: signVaultError,
+    error: signVaultErr,
+  } = useSignMessage();
+
+  useEffect(() => {
+    if (!vaultKeySig) return;
+    try {
+      const { r, s, v } = hexToSignature(vaultKeySig);
+      if (v == null) return;
+      invoke("derive_vault_key_from_wallet", { r, s, v: Number(v) })
+        .then(() => setVaultKeyDerived(true))
+        .catch(() => {});
+    } catch {
+      // ignore
+    }
+  }, [vaultKeySig]);
+
+  useEffect(() => {
+    // Check if vault key already exists (from a previous session)
+    invoke<boolean>("vault_key_exists")
+      .then(setVaultKeyDerived)
+      .catch(() => {});
+  }, []);
 
   const overallError = signErr ?? tx1Err ?? tx2Err ?? tx3Err;
   const hasError = signError || tx1Error || tx2Error || tx3Error;
@@ -237,6 +271,34 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
         <p className="muted" style={{ marginTop: "0.5rem" }}>
           Smart account funded with {fundingEth} ETH. Your Ledger will not be charged for future operations.
         </p>
+
+        {!vaultKeyDerived && (
+          <div style={{ marginTop: "1.5rem", paddingTop: "1rem", borderTop: "1px solid var(--color-border)" }}>
+            <p className="muted" style={{ marginBottom: "0.75rem", lineHeight: "1.5" }}>
+              Your vault encryption key is derived from your wallet signature.
+              Sign once now (while your wallet is connected) to unlock the password manager on this device.
+            </p>
+            {signVaultError && (
+              <p className="error-text">
+                {signVaultErr?.message?.includes("rejected_by_user")
+                  ? "Signature rejected on Ledger."
+                  : `Error: ${signVaultErr?.message?.split("\n")[0]}`}
+              </p>
+            )}
+            <button
+              onClick={() => signVaultKey({ message: VAULT_KEY_MESSAGE })}
+              disabled={signVaultPending}
+            >
+              {signVaultPending ? "Confirm signature on Ledger..." : "Setup vault key"}
+            </button>
+          </div>
+        )}
+
+        {vaultKeyDerived && (
+          <p className="muted" style={{ marginTop: "0.75rem" }}>
+            Vault key ready — you can now use the password manager.
+          </p>
+        )}
       </div>
     );
   }

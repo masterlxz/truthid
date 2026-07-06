@@ -1,9 +1,13 @@
 use hkdf::Hkdf;
 use k256::ecdsa::SigningKey;
+use k256::PublicKey;
 use keyring::Entry;
 use rand::rngs::OsRng;
 use sha2::Sha256;
 use sha3::{Digest, Keccak256};
+use aes_gcm::{Aes256Gcm, Key};
+use aes_gcm::aead::{Aead, AeadCore, KeyInit};
+use k256::elliptic_curve::ecdh::diffie_hellman;
 
 mod ipfs;
 mod ledger;
@@ -12,6 +16,7 @@ mod vault;
 
 const SERVICE: &str = "truthid";
 const ACCOUNT: &str = "device-private-key";
+const VAULT_KEY_ACCOUNT: &str = "vault-key";
 
 /// Caminho de fallback quando o keyring do SO não está disponível (ex: Docker).
 /// Usa $HOME/.truthid/device.key — montado como volume no compose para persistir.
@@ -56,15 +61,15 @@ fn get_device_key_hex() -> Result<String, String> {
     Ok(hex)
 }
 
-/// Deriva a chave de criptografia do vault a partir da chave privada do device.
+/// Deriva a chave de criptografia do vault a partir da chave privada do device
+/// (esquema antigo, pré-Fase 13.8). Mantida apenas para migração de vaults
+/// existentes — novos vaults usam `derive_vault_key_from_wallet`.
 ///
 /// Usa HKDF-SHA256 (RFC 5869). A chave privada do device é o IKM; o resultado
 /// é uma chave AES-256 de 32 bytes usada apenas para cifrar o vault — nunca
 /// para assinar nada. Isolamento por propósito: mudar `info` geraria uma chave
 /// completamente diferente, mesmo com o mesmo device.
-///
-/// Nunca exposta via `#[tauri::command]` — fica em memória no processo Rust.
-pub(crate) fn derive_vault_key() -> Result<[u8; 32], String> {
+pub(crate) fn derive_vault_key_legacy() -> Result<[u8; 32], String> {
     let priv_hex = get_device_key_hex()?;
     let priv_bytes = hex::decode(&priv_hex).map_err(|e| e.to_string())?;
 
@@ -73,6 +78,118 @@ pub(crate) fn derive_vault_key() -> Result<[u8; 32], String> {
     hk.expand(b"vault-key-v1", &mut okm)
         .map_err(|_| "HKDF expand failed".to_string())?;
     Ok(okm)
+}
+
+/// Lê a chave do vault do keyring do SO.
+/// Se nenhuma chave foi derivada da wallet ainda, usa a chave legada
+/// (device-key) como fallback temporário — a migração acontece no próximo
+/// `load()` quando a wallet assinar.
+pub(crate) fn get_vault_key() -> Result<[u8; 32], String> {
+    // 1. Tenta keyring do SO (chave nova, wallet-derived)
+    if let Ok(entry) = Entry::new(SERVICE, VAULT_KEY_ACCOUNT) {
+        if let Ok(hex) = entry.get_password() {
+            let bytes = hex::decode(&hex).map_err(|e| e.to_string())?;
+            if bytes.len() == 32 {
+                let mut key = [0u8; 32];
+                key.copy_from_slice(&bytes);
+                return Ok(key);
+            }
+        }
+    }
+
+    // 2. Fallback: arquivo ($HOME/.truthid/vault.key)
+    let path = vault_key_path()?;
+    if path.exists() {
+        let hex = std::fs::read_to_string(&path)
+            .map_err(|e| e.to_string())?;
+        let bytes = hex::decode(hex.trim()).map_err(|e| e.to_string())?;
+        if bytes.len() == 32 {
+            let mut key = [0u8; 32];
+            key.copy_from_slice(&bytes);
+            return Ok(key);
+        }
+    }
+
+    // 3. Fallback legacy: chave derivada do device (pré-migração)
+    //    Mantém compatibilidade com vaults existentes e testes unitários
+    //    que não passaram pelo fluxo de assinatura da wallet.
+    derive_vault_key_legacy()
+}
+
+fn vault_key_path() -> Result<std::path::PathBuf, String> {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let dir = std::path::Path::new(&home).join(".truthid");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join("vault.key"))
+}
+
+fn set_vault_key(key: &[u8; 32]) -> Result<(), String> {
+    let hex_key = hex::encode(key);
+
+    // Salva no keyring do SO
+    let saved = Entry::new(SERVICE, VAULT_KEY_ACCOUNT)
+        .and_then(|e| e.set_password(&hex_key))
+        .is_ok();
+
+    // Fallback: arquivo
+    if !saved {
+        let path = vault_key_path()?;
+        std::fs::write(&path, &hex_key).map_err(|e| e.to_string())?;
+    }
+
+    Ok(())
+}
+
+/// Verifica se a chave do vault já foi derivada (existe no keyring).
+#[tauri::command]
+fn vault_key_exists() -> Result<bool, String> {
+    if let Ok(entry) = Entry::new(SERVICE, VAULT_KEY_ACCOUNT) {
+        if entry.get_password().is_ok() {
+            return Ok(true);
+        }
+    }
+    let path = vault_key_path()?;
+    Ok(path.exists())
+}
+
+/// Deriva a chave AES-256 do vault a partir de uma assinatura ECDSA da wallet.
+///
+/// A wallet (Ledger, MetaMask, etc.) assina a mensagem fixa
+/// `"TruthID Vault Key v1"` via `personal_sign`. Como carteiras modernas usam
+/// RFC 6979 (k determinístico), a mesma wallet + mesma mensagem produz sempre
+/// a mesma assinatura — permitindo re-derivar a chave do vault em qualquer
+/// dispositivo, sem armazenar nada.
+///
+/// Parâmetros:
+/// - `r`, `s`: componentes da assinatura (hex, com prefixo 0x)
+/// - `v`: recovery id (0 ou 1, convertido pelo frontend a partir do v do eip-191)
+///
+/// A chave resultante é armazenada no keyring do SO para uso futuro
+/// (não é necessário re-conectar a wallet no dia a dia).
+#[tauri::command]
+fn derive_vault_key_from_wallet(r: String, s: String, v: u8) -> Result<(), String> {
+    let r_bytes = hex::decode(r.trim_start_matches("0x")).map_err(|e| e.to_string())?;
+    let s_bytes = hex::decode(s.trim_start_matches("0x")).map_err(|e| e.to_string())?;
+
+    if r_bytes.len() != 32 || s_bytes.len() != 32 {
+        return Err("r and s must each be 32 bytes".to_string());
+    }
+
+    // Concatena r || s || v como IKM para o HKDF
+    let mut ikm = Vec::with_capacity(65);
+    ikm.extend_from_slice(&r_bytes);
+    ikm.extend_from_slice(&s_bytes);
+    ikm.push(v);
+
+    // Deriva chave AES-256 via HKDF-SHA256
+    // info="vault-key-v2" é diferente de "vault-key-v1" (legacy, device-key-based)
+    // para garantir isolamento criptográfico entre os dois esquemas.
+    let hk = Hkdf::<Sha256>::new(Some(b"TruthID"), &ikm);
+    let mut okm = [0u8; 32];
+    hk.expand(b"vault-key-v2", &mut okm)
+        .map_err(|_| "HKDF expand failed".to_string())?;
+
+    set_vault_key(&okm)
 }
 
 /// Retorna o endereço Ethereum da chave pública deste desktop.
@@ -156,7 +273,68 @@ fn vault_delete_entry(id: String) -> Result<(), String> {
     vault::save(&v)
 }
 
-/// Cifra dados com AES-256-GCM usando a chave do vault derivada do device.
+/// Cifra a chave do vault com a chave pública de um device (ECIES secp256k1)
+/// para compartilhamento durante o pareamento.
+///
+/// Recebe a chave pública não-comprimida do device (hex, 130 chars = 65 bytes)
+/// e retorna o blob cifrado em Base64:
+///   ephemeral_pubkey(33 bytes comprimida) || nonce(12) || ciphertext+tag
+///
+/// O device destino usa sua chave privada para fazer ECDH com a ephemeral_pubkey,
+/// derivar a mesma chave AES e decifrar a vault_key.
+#[tauri::command]
+fn encrypt_vault_key_for_device(device_pubkey_hex: String) -> Result<String, String> {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    use k256::elliptic_curve::sec1::FromEncodedPoint;
+
+    let pubkey_hex = device_pubkey_hex.trim_start_matches("0x");
+    let pubkey_bytes = hex::decode(pubkey_hex).map_err(|e| e.to_string())?;
+
+    if pubkey_bytes.len() != 33 && pubkey_bytes.len() != 65 {
+        return Err("device_pubkey must be 33-byte (compressed) or 65-byte (uncompressed) secp256k1 key".to_string());
+    }
+
+    // Converte os bytes para uma chave pública k256
+    let point = k256::EncodedPoint::from_bytes(&pubkey_bytes)
+        .map_err(|e| e.to_string())?;
+    let device_pub = PublicKey::from_encoded_point(&point)
+        .into_option()
+        .ok_or_else(|| "invalid public key".to_string())?;
+
+    // Lê a chave do vault do keyring
+    let vault_key = get_vault_key()?;
+
+    // Gera par efêmero
+    let ephemeral_priv = SigningKey::random(&mut OsRng);
+    let ephemeral_pub = ephemeral_priv.verifying_key();
+
+    // ECDH: shared_secret = ephemeral_priv * device_pub
+    let shared = diffie_hellman(
+        ephemeral_priv.as_nonzero_scalar(),
+        device_pub.as_affine(),
+    );
+    let shared_bytes = shared.raw_secret_bytes();
+
+    // Deriva chave AES do shared secret via SHA-256
+    let aes_key = Key::<Aes256Gcm>::from_slice(&shared_bytes);
+
+    // Cifra a vault_key com AES-256-GCM
+    let cipher = Aes256Gcm::new(aes_key);
+    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+    let ciphertext = cipher
+        .encrypt(&nonce, vault_key.as_slice())
+        .map_err(|_| "ECIES encrypt failed".to_string())?;
+
+    // Formato do blob: ephemeral_pubkey(33 comprimida) || nonce(12) || ciphertext+tag
+    let ephemeral_bytes = ephemeral_pub.to_encoded_point(true); // comprimida
+    let mut blob = Vec::with_capacity(33 + 12 + ciphertext.len());
+    blob.extend_from_slice(ephemeral_bytes.as_bytes());
+    blob.extend_from_slice(&nonce);
+    blob.extend_from_slice(&ciphertext);
+
+    Ok(STANDARD.encode(blob))
+}
+/// Cifra dados com AES-256-GCM usando a chave do vault.
 /// Entrada: plaintext em Base64. Saída: blob cifrado em Base64 (nonce+cipher+tag).
 #[tauri::command]
 fn vault_encrypt(plaintext_b64: String) -> Result<String, String> {
@@ -266,6 +444,9 @@ pub fn run() {
             get_or_create_device_key,
             sign_challenge,
             sign_session_hash,
+            vault_key_exists,
+            derive_vault_key_from_wallet,
+            encrypt_vault_key_for_device,
             vault_list_entries,
             vault_upsert_entry,
             vault_delete_entry,

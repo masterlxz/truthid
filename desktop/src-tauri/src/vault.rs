@@ -6,7 +6,7 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-use crate::derive_vault_key;
+use crate::{get_vault_key, derive_vault_key_legacy};
 
 // ---------------------------------------------------------------------------
 // Tipos de dados
@@ -106,13 +106,47 @@ pub(crate) fn vault_path() -> Result<PathBuf, String> {
 
 // Lê o arquivo cifrado e desserializa o vault.
 // Se o arquivo não existe ainda, retorna Vault::default() (primeiro uso).
+//
+// Migração automática: se o vault foi cifrado com a chave antiga (device-key,
+// "vault-key-v1"), ele é decifrado com a chave legada e recifrado com a chave
+// nova (wallet-signature, "vault-key-v2") — transparente pro usuário.
 pub(crate) fn load() -> Result<Vault, String> {
     let path = vault_path()?;
     if !path.exists() {
         return Ok(Vault::default());
     }
     let blob = std::fs::read(&path).map_err(|e| e.to_string())?;
-    let json = decrypt(&blob)?;
+
+    // Tenta decifrar com a chave nova (wallet-derived)
+    let json = match decrypt(&blob) {
+        Ok(json) => json,
+        Err(_) => {
+            // Fallback: tenta chave legada (device-key) para migração
+            let legacy_key = derive_vault_key_legacy()?;
+            let key = Key::<Aes256Gcm>::from_slice(&legacy_key);
+            let cipher = Aes256Gcm::new(key);
+            let nonce = Nonce::from_slice(&blob[..12]);
+            let legacy_json = cipher
+                .decrypt(nonce, &blob[12..])
+                .map_err(|_| "vault decrypt failed — blob corrupted or wrong key".to_string())?;
+
+            // Migração: recifra com a chave nova
+            let new_key = get_vault_key()
+                .map_err(|_| "vault unlocked with legacy key but new key not found — connect wallet to migrate".to_string())?;
+            let new_cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(&new_key));
+            let new_nonce = Aes256Gcm::generate_nonce(&mut OsRng);
+            let new_ciphertext = new_cipher
+                .encrypt(&new_nonce, legacy_json.as_slice())
+                .map_err(|_| "vault re-encrypt during migration failed".to_string())?;
+            let mut new_blob = Vec::with_capacity(12 + new_ciphertext.len());
+            new_blob.extend_from_slice(&new_nonce);
+            new_blob.extend_from_slice(&new_ciphertext);
+            std::fs::write(&path, &new_blob).map_err(|e| e.to_string())?;
+
+            legacy_json
+        }
+    };
+
     let mut vault: Vault = serde_json::from_slice(&json).map_err(|e| e.to_string())?;
     // Migração: vaults antigos tinham campo "profile" (string única) em vez de "profiles".
     for entry in &mut vault.entries {
@@ -136,7 +170,7 @@ pub(crate) fn save(vault: &Vault) -> Result<(), String> {
 // ---------------------------------------------------------------------------
 
 pub(crate) fn encrypt(plaintext: &[u8]) -> Result<Vec<u8>, String> {
-    let key_bytes = derive_vault_key()?;
+    let key_bytes = get_vault_key()?;
     let key = Key::<Aes256Gcm>::from_slice(&key_bytes);
     let cipher = Aes256Gcm::new(key);
 
@@ -155,7 +189,7 @@ pub(crate) fn decrypt(blob: &[u8]) -> Result<Vec<u8>, String> {
     if blob.len() < 28 {
         return Err("vault blob too short".to_string());
     }
-    let key_bytes = derive_vault_key()?;
+    let key_bytes = get_vault_key()?;
     let key = Key::<Aes256Gcm>::from_slice(&key_bytes);
     let cipher = Aes256Gcm::new(key);
 

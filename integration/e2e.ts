@@ -228,7 +228,7 @@ async function main() {
     address: deviceAddress,
     abi: deviceArtifact.abi,
     functionName: "registerDevice",
-    args: [deviceAddress2, "Meu celular de teste", salt],
+    args: [deviceAddress2, "Meu celular de teste", salt, "0x"],
   });
   await publicClient.waitForTransactionReceipt({ hash: registerTx });
 

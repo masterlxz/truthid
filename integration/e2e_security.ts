@@ -234,7 +234,7 @@ async function main() {
   await publicClient.waitForTransactionReceipt({
     hash: await aliceWallet.writeContract({
       address: deviceAddr, abi: deviceArtifact.abi,
-      functionName: "registerDevice", args: [devicePubKey, "Meu celular", salt],
+      functionName: "registerDevice", args: [devicePubKey, "Meu celular", salt, "0x"],
     }),
   });
 

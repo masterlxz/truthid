@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
-import { keccak256, encodePacked, encodeFunctionData, isAddress } from "viem";
+import { keccak256, encodePacked, encodeFunctionData, isAddress, type Hex } from "viem";
+import { invoke } from "@tauri-apps/api/core";
 import { DEVICE_REGISTRY_ADDRESS, DEVICE_REGISTRY_ABI, TRUTHID_ACCOUNT_ABI } from "../config/contracts";
 import { useWalletModal } from "../contexts/WalletModalContext";
 import { useIdentity } from "../contexts/IdentityContext";
@@ -32,6 +33,7 @@ export function PairDevice({ onDeviceRegistered }: {
 
   const [isOpen, setIsOpen] = useState(false);
   const [addressInput, setAddressInput] = useState("");
+  const [encryptionKey, setEncryptionKey] = useState("");
   const [labelInput, setLabelInput] = useState("");
 
   // Registro em 2 passos (commit-reveal) — esconde o devicePubKey até a
@@ -75,13 +77,28 @@ export function PairDevice({ onDeviceRegistered }: {
     )
       return;
     setRegisterPhase("registering");
-    const timer = setTimeout(() => {
+    const timer = setTimeout(async () => {
+      // Encrypt vault key for the new device (ECIES)
+      let encryptedVaultKey: Hex = "0x";
+      if (encryptionKey) {
+        try {
+          const b64 = await invoke<string>("encrypt_vault_key_for_device", {
+            devicePubkeyHex: encryptionKey,
+          });
+          // Convert base64 blob to hex for the contract call
+          const raw = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+          encryptedVaultKey = `0x${Array.from(raw, (b) => b.toString(16).padStart(2, "0")).join("")}` as Hex;
+        } catch {
+          // Non-critical: pairing succeeds without vault key
+        }
+      }
+
       const { dest, value, func } = buildAccountCalls([
         {
           address: DEVICE_REGISTRY_ADDRESS,
           abi: DEVICE_REGISTRY_ABI,
           functionName: "registerDevice",
-          args: [addressInput as `0x${string}`, labelInput, salt],
+          args: [addressInput as `0x${string}`, labelInput, salt, encryptedVaultKey],
         },
         {
           address: smartAccountAddress,
@@ -110,6 +127,7 @@ export function PairDevice({ onDeviceRegistered }: {
   function closePairing() {
     setIsOpen(false);
     setAddressInput("");
+    setEncryptionKey("");
     setLabelInput("");
     setRegisterPhase("idle");
     setSalt(null);
@@ -163,22 +181,33 @@ export function PairDevice({ onDeviceRegistered }: {
     <div className="card">
       <h3 style={{ marginTop: 0 }}>Add device</h3>
 
-      <p className="muted">
-        On your phone, open <strong>Devices → Show QR to pair</strong> and
-        paste the displayed address here:
-      </p>
+<p className="muted">
+          On your phone, open <strong>Devices → Show QR to pair</strong> and
+          paste the displayed data here:
+        </p>
 
-      <div className="field">
-        <label>Device address</label>
-        <input
-          value={addressInput}
-          onChange={(e) => setAddressInput(e.target.value.trim())}
-          placeholder="0x..."
-          disabled={registerPhase !== "idle"}
-          style={{ fontFamily: "monospace" }}
-        />
-        {!addressIsValid && <p className="error-text">Invalid address.</p>}
-      </div>
+        <div className="field">
+          <label>Device address</label>
+          <input
+            value={addressInput}
+            onChange={(e) => setAddressInput(e.target.value.trim())}
+            placeholder="0x..."
+            disabled={registerPhase !== "idle"}
+            style={{ fontFamily: "monospace" }}
+          />
+          {!addressIsValid && <p className="error-text">Invalid address.</p>}
+        </div>
+
+        <div className="field">
+          <label>Encryption key (optional)</label>
+          <input
+            value={encryptionKey}
+            onChange={(e) => setEncryptionKey(e.target.value.trim())}
+            placeholder="0x03... or 0x04..."
+            disabled={registerPhase !== "idle"}
+            style={{ fontFamily: "monospace", fontSize: "0.8rem" }}
+          />
+        </div>
 
       <div className="field">
         <label>Device name</label>

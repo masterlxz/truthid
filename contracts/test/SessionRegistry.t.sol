@@ -65,7 +65,7 @@ contract SessionRegistryTest is Test, IdentityConsentHelper {
         vm.roll(block.number + 1);
 
         vm.prank(controller);
-        deviceRegistry.registerDevice(devicePubKey, label, SALT);
+        deviceRegistry.registerDevice(devicePubKey, label, SALT, "");
     }
 
     // Atalho: assina `hash` com a chave do device (mesmo formato que o

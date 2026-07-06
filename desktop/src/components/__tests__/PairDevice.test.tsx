@@ -37,6 +37,7 @@ vi.mock("../../config/contracts", () => ({
         { name: "devicePubKey", type: "address" },
         { name: "label", type: "string" },
         { name: "salt", type: "bytes32" },
+        { name: "encryptedVaultKey", type: "bytes" },
       ],
       outputs: [],
       stateMutability: "nonpayable",

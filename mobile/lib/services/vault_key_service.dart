@@ -1,36 +1,85 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:crypto/crypto.dart';
+import 'package:crypto/crypto.dart' as crypto;
+import 'package:cryptography/cryptography.dart' as crypt;
+import 'package:elliptic/elliptic.dart';
+import 'package:elliptic/ecdh.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'device_key_service.dart';
 
-// Deriva a chave AES-256 do vault a partir da chave privada do device
-// usando HKDF-SHA256 (RFC 5869).
-//
-// A chave derivada é determinística: mesmo device → mesmo resultado, sempre.
-// Ela nunca é persistida — é rederivada a cada uso a partir da chave no
-// secure storage.
 class VaultKeyService {
+  static const _storage = FlutterSecureStorage();
+  static const _storageKey = 'truthid_vault_key';
+  static const _legacySalt = 'TruthID';
+  static const _legacyInfo = 'vault-key-v1';
+
   final DeviceKeyService _deviceKeyService;
+  final _ec = getSecp256k1();
 
   VaultKeyService({DeviceKeyService? deviceKeyService})
       : _deviceKeyService = deviceKeyService ?? DeviceKeyService();
 
-  static const _salt = 'TruthID';
-  static const _info = 'vault-key-v1';
-
   Future<Uint8List> deriveVaultKey() async {
+    final stored = await _storage.read(key: _storageKey);
+    if (stored != null) {
+      return Uint8List.fromList(base64Decode(stored));
+    }
+
+    return _deriveLegacyKey();
+  }
+
+  Future<bool> hasVaultKey() async {
+    return await _storage.read(key: _storageKey) != null;
+  }
+
+  Future<void> decryptVaultKeyFromPairing(Uint8List encryptedBlob) async {
+    if (encryptedBlob.length < 33 + 12 + 16) {
+      throw Exception('encryptedBlob too short');
+    }
+
+    final ephemeralPubBytes = encryptedBlob.sublist(0, 33);
+    final nonceBytes = encryptedBlob.sublist(33, 45);
+    final ciphertext = encryptedBlob.sublist(45);
+
+    final devicePrivBytes = await _deviceKeyService.getPrivateKeyBytes();
+
+    // ECDH via elliptic package
+    final devicePriv = PrivateKey.fromBytes(_ec, devicePrivBytes);
+    final ephemeralPub = PublicKey.fromHex(_ec, _bytesToHex(ephemeralPubBytes));
+    final sharedSecretBytes = computeSecret(devicePriv, ephemeralPub);
+    final sharedSecret = Uint8List.fromList(sharedSecretBytes);
+
+    // Derive AES-256 key via SHA-256(shared_secret)
+    final aesKey = crypto.sha256.convert(sharedSecret).bytes;
+
+    // AES-256-GCM decryption via cryptography package
+    final cipher = crypt.AesGcm.with256bits();
+    final secretKey = crypt.SecretKey(aesKey);
+    final secretBox = crypt.SecretBox(
+      ciphertext,
+      nonce: nonceBytes,
+      mac: crypt.Mac.empty,
+    );
+    final plaintext = await cipher.decrypt(secretBox, secretKey: secretKey);
+
+    await _storage.write(
+      key: _storageKey,
+      value: base64Encode(plaintext),
+    );
+  }
+
+  Future<Uint8List> _deriveLegacyKey() async {
     final ikm = await _deviceKeyService.getPrivateKeyBytes();
     return _hkdfSha256(
       ikm: ikm,
-      salt: utf8.encode(_salt),
-      info: utf8.encode(_info),
+      salt: utf8.encode(_legacySalt),
+      info: utf8.encode(_legacyInfo),
       length: 32,
     );
   }
 
-  // HKDF-SHA256 (RFC 5869) para length <= 32 bytes (um único bloco de expand).
   static Uint8List _hkdfSha256({
     required List<int> ikm,
     required List<int> salt,
@@ -39,12 +88,13 @@ class VaultKeyService {
   }) {
     assert(length <= 32, 'length must be <= 32 for single-block HKDF');
 
-    // Passo 1 — Extract: PRK = HMAC-SHA256(salt, IKM)
-    final prk = Hmac(sha256, salt).convert(ikm).bytes;
-
-    // Passo 2 — Expand: T(1) = HMAC-SHA256(PRK, info || 0x01)
-    final t1 = Hmac(sha256, prk).convert([...info, 0x01]).bytes;
+    final prk = crypto.Hmac(crypto.sha256, salt).convert(ikm).bytes;
+    final t1 = crypto.Hmac(crypto.sha256, prk).convert([...info, 0x01]).bytes;
 
     return Uint8List.fromList(t1.sublist(0, length));
+  }
+
+  static String _bytesToHex(Uint8List bytes) {
+    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
 }

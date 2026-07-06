@@ -344,6 +344,22 @@ class BlockchainService {
     }
   }
 
+  Future<Uint8List?> getDeviceVaultKey(String address) async {
+    try {
+      final fn = _deviceContract.function('deviceVaultKeys');
+      final result = await _ethCall(
+        _deviceRegistryAddress,
+        fn,
+        [EthereumAddress.fromHex(address)],
+      );
+      final bytes = result[0] as List<int>;
+      if (bytes.isEmpty) return null;
+      return Uint8List.fromList(bytes);
+    } catch (_) {
+      return null;
+    }
+  }
+
   // Resolve o controller (endereço da smart account, desde o débito #17) e o
   // identityId on-chain de uma identidade pelo @username — fonte de verdade
   // usada pela 14.9.5 pra saber quem é o `sender` da UserOperation.

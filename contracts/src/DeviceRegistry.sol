@@ -48,11 +48,15 @@ contract DeviceRegistry {
     // Usado pelo esquema commit-reveal de registerDevice — ver nota abaixo.
     mapping(bytes32 => uint256) private _commitBlocks;
 
+    // devicePubKey → vault key cifrada para este device (ECIES com a chave pública do device).
+    // Vazio se nenhuma chave de vault foi compartilhada durante o pareamento.
+    mapping(address => bytes) public deviceVaultKeys;
+
     // -------------------------------------------------------------------------
     // Eventos
     // -------------------------------------------------------------------------
 
-    event DeviceRegistered(uint256 indexed identityId, address indexed pubKey, string label);
+    event DeviceRegistered(uint256 indexed identityId, address indexed pubKey, string label, bytes encryptedVaultKey);
     event DeviceRevoked(uint256 indexed identityId, address indexed pubKey);
 
     // -------------------------------------------------------------------------
@@ -96,7 +100,18 @@ contract DeviceRegistry {
     /// Passo 2 de 2: revela devicePubKey + salt, registra o device.
     /// Só funciona se `commitDevice` foi chamado antes (em um bloco anterior)
     /// com o commitment correspondente.
-    function registerDevice(address devicePubKey, string calldata label, bytes32 salt) external {
+    ///
+    /// `encryptedVaultKey` é opcional: bytes vazios se nenhuma chave de vault
+    /// foi compartilhada. Quando preenchido, contém a chave AES do vault cifrada
+    /// com a chave pública do device (ECIES secp256k1) — o device consegue
+    /// decifrar com sua chave privada e assim acessar o vault sem precisar da
+    /// wallet conectada.
+    function registerDevice(
+        address devicePubKey,
+        string calldata label,
+        bytes32 salt,
+        bytes calldata encryptedVaultKey
+    ) external {
         if (devicePubKey == address(0)) revert InvalidPubKey();
         if (_devices[devicePubKey].exists) revert DeviceAlreadyRegistered(devicePubKey);
 
@@ -120,7 +135,11 @@ contract DeviceRegistry {
 
         _devicesByIdentity[identityId].push(devicePubKey);
 
-        emit DeviceRegistered(identityId, devicePubKey, label);
+        if (encryptedVaultKey.length > 0) {
+            deviceVaultKeys[devicePubKey] = encryptedVaultKey;
+        }
+
+        emit DeviceRegistered(identityId, devicePubKey, label, encryptedVaultKey);
     }
 
     /// Revoga um device. O chamador precisa ser o controller da identidade dona do device.

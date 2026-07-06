@@ -52,7 +52,7 @@ contract DeviceRegistryTest is Test, IdentityConsentHelper {
         vm.roll(block.number + 1); // precisa de pelo menos 1 bloco entre commit e reveal
 
         vm.prank(controller);
-        deviceRegistry.registerDevice(devicePubKey, label, SALT);
+        deviceRegistry.registerDevice(devicePubKey, label, SALT, "");
     }
 
     // -----------------------------------------------------------------
@@ -97,8 +97,8 @@ contract DeviceRegistryTest is Test, IdentityConsentHelper {
 
         vm.prank(alice);
         vm.expectEmit(true, true, false, true);
-        emit DeviceRegistry.DeviceRegistered(1, aliceDevice1, "iPhone 15 Pro");
-        deviceRegistry.registerDevice(aliceDevice1, "iPhone 15 Pro", SALT);
+        emit DeviceRegistry.DeviceRegistered(1, aliceDevice1, "iPhone 15 Pro", "");
+        deviceRegistry.registerDevice(aliceDevice1, "iPhone 15 Pro", SALT, "");
     }
 
     // -----------------------------------------------------------------
@@ -109,7 +109,7 @@ contract DeviceRegistryTest is Test, IdentityConsentHelper {
         // Nunca commitou — não pode revelar direto
         vm.prank(alice);
         vm.expectRevert(DeviceRegistry.NoCommitmentFound.selector);
-        deviceRegistry.registerDevice(aliceDevice1, "iPhone 15 Pro", SALT);
+        deviceRegistry.registerDevice(aliceDevice1, "iPhone 15 Pro", SALT, "");
     }
 
     function test_Revert_RegisterDevice_RevealTooEarly() public {
@@ -120,7 +120,7 @@ contract DeviceRegistryTest is Test, IdentityConsentHelper {
         // Tenta revelar no MESMO bloco do commit — deve reverter
         vm.prank(alice);
         vm.expectRevert(DeviceRegistry.RevealTooEarly.selector);
-        deviceRegistry.registerDevice(aliceDevice1, "iPhone 15 Pro", SALT);
+        deviceRegistry.registerDevice(aliceDevice1, "iPhone 15 Pro", SALT, "");
     }
 
     function test_Revert_RegisterDevice_WrongSalt() public {
@@ -132,7 +132,7 @@ contract DeviceRegistryTest is Test, IdentityConsentHelper {
         // Salt errado → commitment recalculado não bate com o que foi salvo
         vm.prank(alice);
         vm.expectRevert(DeviceRegistry.NoCommitmentFound.selector);
-        deviceRegistry.registerDevice(aliceDevice1, "iPhone 15 Pro", keccak256("salt-errado"));
+        deviceRegistry.registerDevice(aliceDevice1, "iPhone 15 Pro", keccak256("salt-errado"), "");
     }
 
     function test_Revert_RegisterDevice_CannotStealAnothersCommitment() public {
@@ -148,7 +148,7 @@ contract DeviceRegistryTest is Test, IdentityConsentHelper {
         // nunca foi commitado por ele.
         vm.prank(bob);
         vm.expectRevert(DeviceRegistry.NoCommitmentFound.selector);
-        deviceRegistry.registerDevice(aliceDevice1, "device roubado", SALT);
+        deviceRegistry.registerDevice(aliceDevice1, "device roubado", SALT, "");
     }
 
     // -----------------------------------------------------------------
@@ -164,7 +164,7 @@ contract DeviceRegistryTest is Test, IdentityConsentHelper {
 
         vm.prank(charlie);
         vm.expectRevert(DeviceRegistry.NotIdentityController.selector);
-        deviceRegistry.registerDevice(charlieDevice, "iPad", SALT);
+        deviceRegistry.registerDevice(charlieDevice, "iPad", SALT, "");
     }
 
     function test_Revert_RegisterDevice_AlreadyRegistered() public {
@@ -179,7 +179,7 @@ contract DeviceRegistryTest is Test, IdentityConsentHelper {
         vm.expectRevert(
             abi.encodeWithSelector(DeviceRegistry.DeviceAlreadyRegistered.selector, aliceDevice1)
         );
-        deviceRegistry.registerDevice(aliceDevice1, "Duplicado", SALT);
+        deviceRegistry.registerDevice(aliceDevice1, "Duplicado", SALT, "");
     }
 
     function test_Revert_RegisterDevice_InvalidPubKey() public {
@@ -190,7 +190,7 @@ contract DeviceRegistryTest is Test, IdentityConsentHelper {
 
         vm.prank(alice);
         vm.expectRevert(DeviceRegistry.InvalidPubKey.selector);
-        deviceRegistry.registerDevice(address(0), "Device invalido", SALT);
+        deviceRegistry.registerDevice(address(0), "Device invalido", SALT, "");
     }
 
     // -----------------------------------------------------------------
@@ -375,5 +375,78 @@ contract DeviceRegistryTest is Test, IdentityConsentHelper {
 
         // Revogação não remove da lista, só marca como revogado
         assertEq(deviceRegistry.deviceCount(1), 1);
+    }
+
+    // -----------------------------------------------------------------
+    // encryptedVaultKey — compartilhamento da chave do vault no pareamento
+    // -----------------------------------------------------------------
+
+    function test_RegisterDevice_WithEncryptedVaultKey() public {
+        bytes memory vaultKey = hex"aabbccdd";
+        _registerDevice(alice, aliceDevice1, "iPhone 15 Pro", vaultKey);
+
+        bytes memory stored = deviceRegistry.deviceVaultKeys(aliceDevice1);
+        assertEq(stored, vaultKey);
+    }
+
+    function test_RegisterDevice_EmptyEncryptedVaultKey() public {
+        _registerDevice(alice, aliceDevice1, "iPhone 15 Pro");
+
+        bytes memory stored = deviceRegistry.deviceVaultKeys(aliceDevice1);
+        assertEq(stored.length, 0);
+    }
+
+    function test_RegisterDevice_EmitsEventWithVaultKey() public {
+        bytes memory vaultKey = hex"deadbeef";
+
+        bytes32 commitment = keccak256(abi.encodePacked(aliceDevice1, SALT, alice));
+        vm.prank(alice);
+        deviceRegistry.commitDevice(commitment);
+        vm.roll(block.number + 1);
+
+        vm.prank(alice);
+        vm.expectEmit(true, true, false, true);
+        emit DeviceRegistry.DeviceRegistered(1, aliceDevice1, "iPhone 15 Pro", vaultKey);
+        deviceRegistry.registerDevice(aliceDevice1, "iPhone 15 Pro", SALT, vaultKey);
+    }
+
+    function test_RegisterDevice_TwoDevices_DifferentVaultKeys() public {
+        bytes memory vaultKey1 = hex"aabb";
+        bytes memory vaultKey2 = hex"ccdd";
+
+        bytes32 commitment1 = keccak256(abi.encodePacked(aliceDevice1, SALT, alice));
+        vm.prank(alice);
+        deviceRegistry.commitDevice(commitment1);
+        vm.roll(block.number + 1);
+        vm.prank(alice);
+        deviceRegistry.registerDevice(aliceDevice1, "Phone", SALT, vaultKey1);
+
+        bytes32 commitment2 = keccak256(abi.encodePacked(aliceDevice2, SALT, alice));
+        vm.prank(alice);
+        deviceRegistry.commitDevice(commitment2);
+        vm.roll(block.number + 1);
+        vm.prank(alice);
+        deviceRegistry.registerDevice(aliceDevice2, "Laptop", SALT, vaultKey2);
+
+        assertEq(deviceRegistry.deviceVaultKeys(aliceDevice1), vaultKey1);
+        assertEq(deviceRegistry.deviceVaultKeys(aliceDevice2), vaultKey2);
+    }
+
+    // Sobrecarga do helper que aceita encryptedVaultKey
+    function _registerDevice(
+        address controller,
+        address devicePubKey,
+        string memory label,
+        bytes memory encryptedVaultKey
+    ) internal {
+        bytes32 commitment = keccak256(abi.encodePacked(devicePubKey, SALT, controller));
+
+        vm.prank(controller);
+        deviceRegistry.commitDevice(commitment);
+
+        vm.roll(block.number + 1);
+
+        vm.prank(controller);
+        deviceRegistry.registerDevice(devicePubKey, label, SALT, encryptedVaultKey);
     }
 }

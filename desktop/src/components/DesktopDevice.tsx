@@ -78,7 +78,7 @@ export function DesktopDevice({ onRegistered }: { onRegistered: () => void }) {
           address: DEVICE_REGISTRY_ADDRESS,
           abi: DEVICE_REGISTRY_ABI,
           functionName: "registerDevice",
-          args: [address as `0x${string}`, "This Desktop", salt],
+          args: [address as `0x${string}`, "This Desktop", salt, "0x"],
         },
         {
           address: smartAccountAddress,

@@ -7,6 +7,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../services/blockchain_service.dart';
 import '../services/device_key_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/vault_key_service.dart';
 import '../theme.dart';
 
 // Tela mostrada quando o usuário quer parear este celular com uma
@@ -32,6 +33,7 @@ class _ShowDeviceQrScreenState extends State<ShowDeviceQrScreen> {
   final _storage = LocalStorageService();
 
   String? _address;
+  String? _encryptionPubKey;
   Timer? _pollTimer;
   bool _confirmed = false;
   bool _isChecking = false;
@@ -44,8 +46,12 @@ class _ShowDeviceQrScreenState extends State<ShowDeviceQrScreen> {
 
   Future<void> _init() async {
     final address = await _keyService.getDeviceAddress();
+    final encryptionPubKey = await _keyService.getDevicePublicKeyHex();
     if (!mounted) return;
-    setState(() => _address = address);
+    setState(() {
+      _address = address;
+      _encryptionPubKey = encryptionPubKey;
+    });
 
     // Timer.periodic dispara o callback repetidamente até cancelarmos —
     // como um loop com sleep() entre as iterações, mas sem travar a UI.
@@ -67,11 +73,20 @@ class _ShowDeviceQrScreenState extends State<ShowDeviceQrScreen> {
     _pollTimer?.cancel();
     await _storage.savePairedIdentity(device.identityId.toString());
 
-    // Fetch username in the background — don't block the confirmation UX.
-    // If the RPC call fails, the app falls back to showing Identity #X.
     _blockchain.getUsernameForIdentity(device.identityId).then((username) {
       if (username != null) _storage.savePairedUsername(username);
     });
+
+    // Decrypt vault key from the pairing transaction data
+    final vaultKeyService = VaultKeyService();
+    final encryptedKey = await _blockchain.getDeviceVaultKey(address);
+    if (encryptedKey != null) {
+      try {
+        await vaultKeyService.decryptVaultKeyFromPairing(encryptedKey);
+      } catch (_) {
+        // Non-critical: vault key can be obtained later by pairing again
+      }
+    }
 
     if (!mounted) return;
     setState(() => _confirmed = true);
@@ -89,6 +104,7 @@ class _ShowDeviceQrScreenState extends State<ShowDeviceQrScreen> {
   String get _qrPayload => jsonEncode({
         'action': 'truthid-device',
         'pubKey': _address,
+        'encryptionKey': _encryptionPubKey,
         'label': _label,
       });
 
