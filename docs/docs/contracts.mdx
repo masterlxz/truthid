@@ -18,6 +18,7 @@ All four contracts are **immutable** (no upgrade proxy) and **verified** on Base
 | `DeviceRegistry` | [`0x48e0862c43339f29ED850a59f5DBd08A4786EaDf`](https://basescan.org/address/0x48e0862c43339f29ED850a59f5DBd08A4786EaDf) |
 | `RecoveryManager` | [`0x889d45C27264e1f59576FDb06722DF9Cf970CBFD`](https://basescan.org/address/0x889d45C27264e1f59576FDb06722DF9Cf970CBFD) |
 | `SessionRegistry` | [`0x6531a5Ed42e077cf1b2D78d441248dC7a3ab9776`](https://basescan.org/address/0x6531a5Ed42e077cf1b2D78d441248dC7a3ab9776) |
+| `TruthIDAccountFactory` | [`0xEd6018EE14109636F0141F2a95f9C82ef8a21eCB`](https://basescan.org/address/0xEd6018EE14109636F0141F2a95f9C82ef8a21eCB) |
 
 ### Base Sepolia (testnet, chain ID 84532)
 
@@ -27,8 +28,9 @@ All four contracts are **immutable** (no upgrade proxy) and **verified** on Base
 | `DeviceRegistry` | [`0x2be6a81B22823510c7F3Fa93E70B85aAd4fB488d`](https://sepolia.basescan.org/address/0x2be6a81B22823510c7F3Fa93E70B85aAd4fB488d) |
 | `RecoveryManager` | [`0xbBe777145D32fdbf8A5878eAa3a21b5f1A7d67F7`](https://sepolia.basescan.org/address/0xbBe777145D32fdbf8A5878eAa3a21b5f1A7d67F7) |
 | `SessionRegistry` | [`0xbf8b940dDC3754D06ee5281209Bd3dD58852BF65`](https://sepolia.basescan.org/address/0xbf8b940dDC3754D06ee5281209Bd3dD58852BF65) |
+| `TruthIDAccountFactory` | [`0xA438f4CF6712361001Fd07fD386596B657D98080`](https://sepolia.basescan.org/address/0xA438f4CF6712361001Fd07fD386596B657D98080) |
 
-Use testnet while developing — see [Networks](/docs/sdk/typescript#networks) in the SDK reference for how to point a client at Sepolia.
+Use testnet while developing — see [Networks](/docs/sdk/typescript#networks) in the SDK reference for how to point a client at Sepolia. `TruthIDAccount` itself isn't listed here — every identity gets its own instance, deployed on demand by the factory; see [Smart Account & Gas](/docs/smart-account) for how that address is computed.
 
 ## Getting the ABI
 
@@ -90,9 +92,31 @@ Stores only a `keccak256` hash per session — never the data it represents.
 | `revokeAllSessions()` | the identity's controller | Revoke every session up to now, in one O(1) call |
 | `isSessionRevoked(hash)` / `getSession(hash)` / `getSessionsByIdentity(id)` / `getRevokedBefore(id)` | anyone, free | Reads |
 
+### TruthIDAccount
+
+The ERC-4337 smart account that controls an identity — one instance per owner, deployed via `TruthIDAccountFactory`. Full explanation of the two signer tiers, setup flow, and cost is in [Smart Account & Gas](/docs/smart-account); this is just the function list.
+
+| Function | Caller | Purpose |
+|---|---|---|
+| `validateUserOp(userOp, userOpHash, missingFunds)` | `EntryPoint` only | Verify a UserOperation's signature and pay the prefund |
+| `execute(dest, value, data)` / `executeBatch(dest[], value[], data[])` | `EntryPoint`, the owner, or the account itself | Perform one or more calls — the only entry point available to device-tier signers |
+| `addDevice(device)` / `removeDevice(device)` | owner (directly or via a UserOp) | Authorize or deauthorize a device-tier signer |
+| `blockDestinationForDevices(dest)` / `unblockDestinationForDevices(dest)` | owner | Extend or shrink the set of contracts devices can't target via `execute` |
+| `emergencyWithdraw(recipient)` | `RecoveryManager` only | Move the account's ETH balance out during social recovery |
+| `owner()` / `authorizedDevices(addr)` / `blockedForDevices(addr)` | anyone, free | Reads |
+
+### TruthIDAccountFactory
+
+Deploys `TruthIDAccount` instances at deterministic `CREATE2` addresses, one per owner (or per owner + index, for multiple accounts).
+
+| Function | Caller | Purpose |
+|---|---|---|
+| `createAccount(owner, index)` | anyone | Deploy the account if it doesn't exist yet; idempotent — returns the existing address otherwise |
+| `getAddress(owner, index)` | anyone, free | Predict the `CREATE2` address before deployment |
+
 ## Cost per operation
 
-Real gas numbers from the project's own test suite (`forge test --gas-report`, 120 tests passing), not estimates. Read functions (`view`) are free when called the normal way — directly via an RPC `eth_call`, exactly how every SDK reads them. The "free" label below stops applying only if another contract calls them mid-transaction, which no part of TruthID does today.
+Real gas numbers from the project's own test suite (`forge test --gas-report`), not estimates — the four original contracts have 120 tests passing; `TruthIDAccount`/`TruthIDAccountFactory` (rows below `revokeAllSessions`) have their own 62. Read functions (`view`) are free when called the normal way — directly via an RPC `eth_call`, exactly how every SDK reads them. The "free" label below stops applying only if another contract calls them mid-transaction, which no part of TruthID does today.
 
 | Operation | Min gas | Median gas | Max gas |
 |---|---|---|---|
@@ -108,12 +132,17 @@ Real gas numbers from the project's own test suite (`forge test --gas-report`, 1
 | `createSession` | 27,061 | 183,605 | 183,605 |
 | `revokeSession` | 24,501 | 53,880 | 56,224 |
 | `revokeAllSessions` | 28,694 | 65,169 | 65,169 |
+| `TruthIDAccountFactory.createAccount` (already deployed) | 24,996 | — | — |
+| `TruthIDAccountFactory.createAccount` (first deploy) | — | — | 1,774,511 |
+| `TruthIDAccount.execute` | 23,135 | 71,519 | 71,544 |
+| `TruthIDAccount.addDevice` | 21,924 | 45,812 | 45,812 |
+| `TruthIDAccount.removeDevice` | 22,148 | 23,854 | 24,573 |
 
 :::info[Why configureGuardians has such a wide range]
 Gas scales with the size of the `guardians` array. The low end is a couple of guardians; the high end in this table comes from a test that exercises the full `MAX_GUARDIANS` cap of 20. A typical 3-of-5 setup lands well below the median shown here.
 :::
 
-**What that costs in ETH**: at the ~0.011 gwei gas price observed during the [mainnet deploy](https://basescan.org/address/0x1313C576403F89eE265C880b33373d5DFB504cF2), even the heaviest row here (`registerDevice`, ~204k gas) comes out to roughly 0.0000022 ETH — a small fraction of a cent. Gas price moves with network demand; check [Base's live gas tracker](https://basescan.org/gastracker) for the current rate before assuming these numbers hold exactly.
+**What that costs in ETH**: at the ~0.011 gwei gas price observed during the [mainnet deploy](https://basescan.org/address/0x1313C576403F89eE265C880b33373d5DFB504cF2), the heaviest of the four original contracts' operations (`registerDevice`, ~204k gas) comes out to roughly 0.0000022 ETH — a small fraction of a cent. `TruthIDAccountFactory.createAccount`'s first-deploy row is heavier still (it deploys a whole contract via `CREATE2`, not just a state update) — see [Smart Account & Gas → Cost](/docs/smart-account#cost) for that conversion. Gas price moves with network demand; check [Base's live gas tracker](https://basescan.org/gastracker) for the current rate before assuming these numbers hold exactly.
 
 ## Audit status
 
@@ -121,5 +150,6 @@ See [Security Model → Audit status](/docs/security#audit-status) for the manua
 
 ## Next steps
 
+- [Smart Account & Gas](/docs/smart-account) — how the ERC-4337 account works, setup flow, and funding
 - [Security Model](/docs/security) — threat model and what TruthID does and doesn't protect against
 - [SDK Reference](/docs/sdk/typescript) — the typed, documented way to call these contracts from TypeScript, Python, or Ruby

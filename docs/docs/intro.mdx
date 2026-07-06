@@ -15,7 +15,7 @@ Centralized identity providers create account lockouts, data collection, and a s
 TruthID has two kinds of users — people logging into a site, and developers adding TruthID to one. Each side needs different things.
 
 **To log in with TruthID:**
-- An identity registered on-chain — created once with any EVM wallet (MetaMask, Rabby, Ledger, Trezor, WalletConnect) holding a small amount of ETH on [Base](https://base.org) to cover gas (typically well under a cent).
+- An identity registered on-chain — created once with any EVM wallet (MetaMask, Rabby, Ledger, Trezor, WalletConnect) holding a small amount of ETH on [Base](https://base.org) to cover setup gas (typically well under a cent). That wallet becomes the owner of a smart account created during setup, and isn't needed again after that — the smart account pays its own gas from then on. See [Smart Account & Gas](/docs/smart-account) for the full setup flow and cost.
 - A trusted device paired to that identity — the desktop app or the mobile app. The device's own private key never leaves it; the wallet above is only needed once, to create the identity, not for day-to-day logins.
 
 **To integrate TruthID into your app:**
@@ -67,8 +67,9 @@ Full API reference for each SDK — every method, type, and security note — li
 | `DeviceRegistry` | [`0x48e0862c43339f29ED850a59f5DBd08A4786EaDf`](https://basescan.org/address/0x48e0862c43339f29ED850a59f5DBd08A4786EaDf) |
 | `RecoveryManager` | [`0x889d45C27264e1f59576FDb06722DF9Cf970CBFD`](https://basescan.org/address/0x889d45C27264e1f59576FDb06722DF9Cf970CBFD) |
 | `SessionRegistry` | [`0x6531a5Ed42e077cf1b2D78d441248dC7a3ab9776`](https://basescan.org/address/0x6531a5Ed42e077cf1b2D78d441248dC7a3ab9776) |
+| `TruthIDAccountFactory` | [`0xEd6018EE14109636F0141F2a95f9C82ef8a21eCB`](https://basescan.org/address/0xEd6018EE14109636F0141F2a95f9C82ef8a21eCB) |
 
-All four contracts are immutable (no upgrade proxy) and verified on Basescan. Testnet addresses, ABIs, function reference, and real gas costs per operation: [Smart Contracts](/docs/contracts).
+All contracts are immutable (no upgrade proxy) and verified on Basescan. Each identity's controller is itself a smart account (ERC-4337) deployed by the factory above — it pays its own gas after a one-time setup, so day-to-day logins never touch the owner wallet. Testnet addresses, ABIs, function reference, and real gas costs: [Smart Contracts](/docs/contracts). Setup flow and the smart account model: [Smart Account & Gas](/docs/smart-account).
 
 ## Source code
 

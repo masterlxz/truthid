@@ -1,0 +1,83 @@
+---
+sidebar_position: 6
+---
+
+# Smart Account & Gas
+
+Every TruthID identity is controlled by an ERC-4337 smart account, not a plain wallet address. This page explains why, what it costs to set up, what day-to-day operations cost, and how to keep the account funded. Read it if you're curious why login doesn't need MetaMask, or you're deciding how much ETH to send during setup.
+
+## How it works
+
+TruthID has no relayer and no hot wallet operated by the project — each user's smart account pays its own gas. The smart account (`TruthIDAccount.sol`, a from-scratch ERC-4337 implementation with no external dependencies) recognizes two tiers of signer:
+
+- **Owner** — the wallet used to create the identity (Ledger, MetaMask, or any EVM wallet). Full access to the account.
+- **Devices** — the desktop and mobile apps, added after setup. A device can only call `execute`/`executeBatch`, and never against the account itself or against `DeviceRegistry`/`IdentityRegistry`/`RecoveryManager` — this stops a compromised device from re-authorizing itself or rewriting who controls the identity.
+
+There's no paymaster. The account deposits ETH directly with the official [EntryPoint v0.7](https://basescan.org/address/0x0000000071727De22E5E9d8BAf0edAc6f37da032) contract and pays for its own `UserOperation`s from that balance — the same EntryPoint every ERC-4337 account on every EVM chain uses, not something TruthID deployed itself.
+
+The account's address is computed with `CREATE2` before it exists, from the owner's address — see `computeSmartAccountAddress` in the [TypeScript SDK](/docs/sdk/typescript) if you need to predict it off-chain.
+
+## One-time setup
+
+Creating an identity takes one signature and three transactions, all paid by the owner wallet:
+
+1. **Sign consent** — a message binding the chain ID, registry address, username, and the future smart account address. No gas.
+2. **Create the identity** — `IdentityRegistry.createIdentity(username, smartAccountAddress, v, r, s)`. The signature from step 1 proves the owner actually agreed to this exact smart account address, so nobody can front-run the identity with an address they don't control.
+3. **Deploy the smart account** — `TruthIDAccountFactory.createAccount(owner, 0)`, at the address already committed to in step 2.
+4. **Fund it** — a plain ETH transfer to the new smart account address. The desktop app suggests 0.001 ETH by default; this field is editable, and you can always send more later (see [Funding your smart account](#funding-your-smart-account) below).
+
+After that, the owner wallet is only a signature key — it never needs ETH again. Every future operation (pairing a device, creating or revoking a session) is a `UserOperation` signed off-chain and submitted through a bundler, paid entirely by the smart account.
+
+## Day-to-day cost
+
+Once setup is done, there's no wallet popup and no gas prompt. The desktop or mobile app signs a `UserOperation` locally and submits it to a bundler — [Pimlico](https://pimlico.io) today, with the bundler URL configurable per user so a self-hosted bundler works too — which forwards it to the EntryPoint. The smart account's own balance covers the gas; nothing is charged to the device, and nobody at TruthID sees or handles the transaction.
+
+## Funding your smart account
+
+The smart account is a regular address — send it ETH on Base the same way you'd send it to any wallet. Both apps have a Deposit action (QR code + address) for this: the desktop dashboard and the mobile Wallet tab. There's no minimum balance enforced by the contracts; running out just means the next operation fails until you top it up.
+
+## Addresses
+
+`TruthIDAccount` itself has no fixed address — each owner gets their own instance via `CREATE2`, deployed on demand by the factory. The factory and the EntryPoint do have fixed addresses:
+
+### Base Mainnet (production, chain ID 8453)
+
+| Contract | Address |
+|---|---|
+| `TruthIDAccountFactory` | [`0xEd6018EE14109636F0141F2a95f9C82ef8a21eCB`](https://basescan.org/address/0xEd6018EE14109636F0141F2a95f9C82ef8a21eCB) |
+| `EntryPoint` (v0.7) | [`0x0000000071727De22E5E9d8BAf0edAc6f37da032`](https://basescan.org/address/0x0000000071727De22E5E9d8BAf0edAc6f37da032) |
+
+### Base Sepolia (testnet, chain ID 84532)
+
+| Contract | Address |
+|---|---|
+| `TruthIDAccountFactory` | [`0xA438f4CF6712361001Fd07fD386596B657D98080`](https://sepolia.basescan.org/address/0xA438f4CF6712361001Fd07fD386596B657D98080) |
+| `EntryPoint` (v0.7) | [`0x0000000071727De22E5E9d8BAf0edAc6f37da032`](https://sepolia.basescan.org/address/0x0000000071727De22E5E9d8BAf0edAc6f37da032) |
+
+Full function-level reference for both contracts is in [Smart Contracts → Contract reference](/docs/contracts#contract-reference).
+
+## Cost
+
+Real gas numbers from the project's own test suite (`forge test --gas-report`, `TruthIDAccount.t.sol` + `TruthIDAccountFactory.t.sol`, 62 tests passing) — not estimates.
+
+| Operation | Min gas | Median gas | Max gas |
+|---|---|---|---|
+| `createAccount` (first deploy) | — | — | 1,774,511 |
+| `createAccount` (already deployed, returns existing) | 24,996 | — | — |
+| `execute` (one UserOp, day-to-day) | 23,135 | 71,519 | 71,544 |
+| `addDevice` | 21,924 | 45,812 | 45,812 |
+| `removeDevice` | 22,148 | 23,854 | 24,573 |
+
+:::info[Why createAccount has two very different numbers]
+The factory is idempotent — calling `createAccount` again for an owner who already has a deployed account just returns the existing address for ~25k gas. The ~1.77M gas row is the actual `CREATE2` deployment, paid once per identity during setup.
+:::
+
+**What that costs in ETH**: at the ~0.011 gwei gas price observed during the [mainnet deploy](https://basescan.org/address/0x1313C576403F89eE265C880b33373d5DFB504cF2) (same rate used throughout [Smart Contracts → Cost per operation](/docs/contracts#cost-per-operation)), the smart account deployment (~1.77M gas) comes out to roughly 0.0000195 ETH, and a day-to-day `execute` call (~71.5k gas) to roughly 0.0000008 ETH. Gas price moves with network demand — check [Base's live gas tracker](https://basescan.org/gastracker) for the current rate.
+
+These numbers are pure on-chain execution cost, measured locally with Foundry. They don't include whatever a bundler charges on top of gas to submit your `UserOperation` — Pimlico's free tier adds none today, but that's a bundler-level detail, not something this test suite can measure.
+
+## Next steps
+
+- [Quickstart](/docs/quickstart) — add TruthID login to your backend
+- [Smart Contracts](/docs/contracts) — addresses, ABIs, and gas cost for every contract
+- [Security Model](/docs/security) — threat model and what TruthID does and doesn't protect against

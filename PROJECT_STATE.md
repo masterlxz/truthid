@@ -71,7 +71,7 @@ Fase 10 — Ledger via USB (Rust/hidapi)         [x] Concluída
 Fase 11 — Teste E2E Prático (login, sessão, revogação) [x] Concluída
 Fase 12 — Publicação & Release (v1.0.0)        [x] Concluída
 Fase 13 — TruthID Vault (gerenciador de senhas) [~] Em andamento (13.1–13.7 ✓, 13.8–13.9 pendentes)
-Fase 14 — Smart Account (ERC-4337, Self-Funded)  [~] Em andamento (14.1–14.9.5 ✓, 14.9.6/14.10/14.11/14.12 pendentes)
+Fase 14 — Smart Account (ERC-4337, Self-Funded)  [x] Concluída
 ```
 
 ---
@@ -938,7 +938,7 @@ A partir daí: Ledger assina UserOps off-chain → bundler submete → smart acc
   - Botão "Sacar" (transfere ETH para endereço informado, assinado pelo Ledger)
   *(Sessão 71 — implementação + 18 testes novos, ver Log de Sessões. Falta só o checklist manual E2E com a Ledger física, pendente pro dono do projeto.)*
 - [x] 14.11 — Deploy em Base Mainnet: `TruthIDAccount` (implementation) + `TruthIDAccountFactory`. Atualizar endereços em `contracts.ts`, mobile e SDKs. *(Coberto pelo redeploy completo da Sessão 70 — débito #28 — que já incluiu `TruthIDAccount`/`TruthIDAccountFactory` em Base Mainnet junto com os outros 3 contratos, com endereços propagados para `desktop/`, `mobile/` e os 3 SDKs. Este item ficou tecnicamente satisfeito como efeito colateral da correção do débito, não marcado até agora.)*
-- [ ] 14.12 — Atualizar site de docs: nova página explicando o modelo de smart account, custo de setup, como financiar.
+- [x] 14.12 — Atualizar site de docs: nova página explicando o modelo de smart account, custo de setup, como financiar. *(Sessão 74 — `docs/docs/smart-account.mdx`, nova página cobrindo os dois tiers de signer, o fluxo real de 4 passos do setup, custo do dia a dia via UserOp/bundler, financiamento, endereços de `TruthIDAccountFactory`/`EntryPoint` e uma tabela de gas real via `forge test --gas-report`. `contracts.mdx` e `intro.mdx` também atualizados — não mencionavam ERC-4337/smart account em lugar nenhum antes, e o `intro.mdx` chegou a descrever o modelo antigo de forma que contradizia a Fase 14. Ver Log de Sessões, Sessão 74.)*
 
 ---
 
@@ -2931,6 +2931,26 @@ Revertido (todos os valores de mainnet já eram os endereços **novos** do redep
 - **Débitos**: nenhum novo.
 - **Pendência**: validação manual contra a Base Mainnet real (saldo/atividade batendo com o que a dashboard do Desktop já mostra pra mesma identidade; saque de verdade com valores pequenos, exige saldo pra bundler + Pimlico API key configurada; cache incremental entre reinícios do app) — fica pro dono do projeto, análogo à pendência da 14.10.
 - **Próximo passo**: sem pendência de código aberta por esta sessão. Candidatos de continuação: 14.12 (docs), Fase 13 (Vault, 13.8/13.9), ou os checklists manuais acumulados (Ledger física da Sessão 71 + validação da Wallet mobile desta sessão).
+
+### 2026-07-06 — Sessão 74
+
+- **Objetivo**: etapa 14.12 — última pendência da Fase 14. Nova página de docs explicando o modelo de smart account, custo de setup e como financiar. Com isso, a **Fase 14 fica concluída**.
+
+**Achado antes de escrever**: o site de docs (`docs/`, Docusaurus) não mencionava ERC-4337, `TruthIDAccount`, `TruthIDAccountFactory`, UserOp ou bundler em lugar nenhum. Pior: `intro.mdx` descrevia o modelo antigo ("identidade criada com qualquer wallet EVM segurando um pouco de ETH pra cobrir gas"), o que hoje é impreciso — o controller real é uma smart account que se autofinancia depois do setup. Corrigido junto, não só a página nova.
+
+**Dado interessante descoberto durante a implementação**: a memória de ambiente registrada anteriormente ("Foundry/forge não instalado") estava desatualizada — `forge` já está instalado (`~/.foundry/bin/forge`). Rodado `forge test --gas-report` em `TruthIDAccount.t.sol`/`TruthIDAccountFactory.t.sol` (62 testes) pra obter números reais de gas, seguindo a mesma disciplina do resto do site ("never estimate, always measure") — não havia nenhum número de gas documentado pra esses dois contratos até agora.
+
+**Novos arquivos**:
+- `docs/docs/smart-account.mdx` (`sidebar_position: 6`) — dois tiers de signer (owner/device), CREATE2, sem paymaster; os 4 passos reais do setup (assinatura de consentimento + createIdentity + deploy + funding, citando a UI real do `CreateIdentity.tsx`); custo do dia a dia via UserOp/bundler; como financiar depois (Deposit do Desktop/mobile); endereços de `TruthIDAccountFactory`/`EntryPoint` (mainnet+sepolia); tabela de gas real (`createAccount` primeiro deploy vs já-existente, `execute`, `addDevice`, `removeDevice`), com a ressalva de que o gas medido não inclui overhead do bundler.
+
+**Mudanças em arquivos existentes**:
+- `docs/docs/contracts.mdx` — `TruthIDAccountFactory` adicionado às tabelas de endereço (mainnet/sepolia); novas subseções `### TruthIDAccount`/`### TruthIDAccountFactory` no "Contract reference" (mesmo formato function/caller/purpose das outras quatro); linhas de gas novas na tabela "Cost per operation"; nota sobre a fonte dos 62 testes novos; link pra `/docs/smart-account` no "Next steps" e na frase sobre o gas mais pesado da tabela (que deixou de ser `registerDevice` depois de incluir `createAccount`).
+- `docs/docs/intro.mdx` — "Prerequisites" deixa claro que a wallet externa só paga gas uma vez; tabela "Smart contracts" ganhou `TruthIDAccountFactory` e a frase final agora explica o modelo self-funded, linkando pra página nova.
+- `docs/docusaurus.config.ts` — item "Smart Account & Gas" adicionado à lista "Docs" do footer.
+
+- **Débitos**: nenhum novo.
+- **Verificação**: `cd docs && npm run build` — sucesso, sem links quebrados (`onBrokenLinks: 'throw'` no config, então qualquer link interno errado teria derrubado o build). Página nova presente em `docs/build/docs/smart-account/`.
+- **Fase 14 concluída** (14.1–14.12, todos os itens). Próximo passo: Fase 13 (Vault, 13.8/13.9), ou os checklists manuais acumulados (Ledger física da Sessão 71 + validação da Wallet mobile da Sessão 73) — nenhum débito de código aberto.
 
 
 ## Como Usar Este Arquivo

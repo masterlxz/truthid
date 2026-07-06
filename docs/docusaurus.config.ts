@@ -100,6 +100,10 @@ const config: Config = {
               label: 'Smart Contracts',
               to: '/docs/contracts',
             },
+            {
+              label: 'Smart Account & Gas',
+              to: '/docs/smart-account',
+            },
           ],
         },
         {
