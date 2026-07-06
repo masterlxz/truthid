@@ -1,25 +1,13 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import {
-  useAccount,
-  useReadContract,
-  useReadContracts,
-  useWriteContract,
-  useWaitForTransactionReceipt,
-  useSignMessage,
-} from "wagmi";
-import { encodeFunctionData, hexToSignature } from "viem";
+import { useAccount, useReadContract, useReadContracts, useSignMessage } from "wagmi";
+import { hexToSignature } from "viem";
 import { useIdentity } from "../contexts/IdentityContext";
 import { useWalletModal } from "../contexts/WalletModalContext";
-import {
-  DEVICE_REGISTRY_ADDRESS,
-  DEVICE_REGISTRY_ABI,
-  VAULT_REGISTRY_ADDRESS,
-  VAULT_REGISTRY_ABI,
-  TRUTHID_ACCOUNT_ABI,
-} from "../config/contracts";
-import type { DeviceInfo, VaultEntry, PinResult, DeviceVaultPermission } from "../types";
+import { DEVICE_REGISTRY_ADDRESS, DEVICE_REGISTRY_ABI } from "../config/contracts";
+import type { DeviceInfo, VaultEntry, DeviceVaultPermission } from "../types";
 import { VaultSettings } from "./VaultSettings";
+import { useVaultPublish } from "../hooks/useVaultPublish";
 
 const VAULT_KEY_MESSAGE = "TruthID Vault Key v1";
 
@@ -180,7 +168,7 @@ function EntryForm({
 // ---------------------------------------------------------------------------
 
 export function VaultManagement() {
-  const { identityId, smartAccountAddress } = useIdentity();
+  const { identityId } = useIdentity();
   const { isConnected } = useAccount();
   const { openConnectModal } = useWalletModal();
 
@@ -238,46 +226,6 @@ export function VaultManagement() {
   const [mutating, setMutating] = useState(false);
   const [mutateError, setMutateError] = useState<string | null>(null);
 
-  // ── Publicação (vault_publish + on-chain updateVault) ────────────────────
-  const [publishState, setPublishState] = useState<"idle" | "publishing" | "error">("idle");
-  const [publishError, setPublishError] = useState<string | null>(null);
-  const [pinWarning, setPinWarning] = useState<string | null>(null);
-  const [pendingUpdate, setPendingUpdate] = useState<{
-    cid: string;
-    contentHash: `0x${string}`;
-  } | null>(null);
-  const [justPublished, setJustPublished] = useState(false);
-
-  // ── Wagmi: publicação on-chain ────────────────────────────────────────────
-  const {
-    writeContract,
-    data: txHash,
-    isPending: isTxPending,
-    isError: isTxError,
-    error: txError,
-    reset: resetTx,
-  } = useWriteContract();
-
-  const { isLoading: isConfirming, isSuccess: isTxSuccess } =
-    useWaitForTransactionReceipt({ hash: txHash });
-
-  // ── On-chain: status do vault ─────────────────────────────────────────────
-  const { data: hasVault, refetch: refetchHasVault } = useReadContract({
-    address: VAULT_REGISTRY_ADDRESS,
-    abi: VAULT_REGISTRY_ABI,
-    functionName: "hasVault",
-    args: [identityId!],
-    query: { enabled: !!identityId },
-  });
-
-  const { data: vaultRef, refetch: refetchVaultRef } = useReadContract({
-    address: VAULT_REGISTRY_ADDRESS,
-    abi: VAULT_REGISTRY_ABI,
-    functionName: "getVault",
-    args: [identityId!],
-    query: { enabled: !!identityId && !!hasVault },
-  });
-
   // ── On-chain: devices (para seção de permissões) ──────────────────────────
   const { data: devicePubKeys } = useReadContract({
     address: DEVICE_REGISTRY_ADDRESS,
@@ -329,73 +277,17 @@ export function VaultManagement() {
 
   useEffect(() => { loadAll(); }, []);
 
-  // ── Dispara updateVault quando vault_publish retornar ────────────────────
-  // Roteado via TruthIDAccount.execute() contra a smart account — VaultRegistry
-  // só aceita chamadas de quem resolve como controller da identidade (débito #33).
-  useEffect(() => {
-    if (!pendingUpdate) return;
-    if (!isConnected) { openConnectModal(); return; }
-    if (!smartAccountAddress) return;
-    writeContract({
-      address: smartAccountAddress,
-      abi: TRUTHID_ACCOUNT_ABI,
-      functionName: "execute",
-      args: [
-        VAULT_REGISTRY_ADDRESS,
-        0n,
-        encodeFunctionData({
-          abi: VAULT_REGISTRY_ABI,
-          functionName: "updateVault",
-          args: [pendingUpdate.cid, pendingUpdate.contentHash],
-        }),
-      ],
-    });
-    setPendingUpdate(null);
-  }, [pendingUpdate, isConnected, smartAccountAddress]);
-
-  useEffect(() => {
-    if (isTxSuccess) {
-      refetchHasVault();
-      refetchVaultRef();
-      setPendingCount(0);
-      setJustPublished(true);
-      setTimeout(() => setJustPublished(false), 3000);
-      resetTx();
-    }
-  }, [isTxSuccess]);
-
-  // ── Publicar ─────────────────────────────────────────────────────────────
-  async function handleEnviar() {
-    setPublishError(null);
-    setPinWarning(null);
-    setPublishState("publishing");
-    try {
-      const result = await invoke<PinResult>("vault_publish");
-      if (result.providers_failed.length > 0 && result.providers_ok.length === 0) {
-        throw new Error(`Todos os providers falharam: ${result.providers_failed.join(", ")}`);
-      }
-      if (result.providers_failed.length > 0) {
-        setPinWarning(
-          `Redundância parcial: falhou em ${result.providers_failed.join(", ")} ` +
-          `(ok em ${result.providers_ok.join(", ")}). O vault foi publicado, mas sem a redundância configurada.`
-        );
-      }
-      setPendingUpdate({ cid: result.cid, contentHash: result.content_hash as `0x${string}` });
-      setPublishState("idle");
-    } catch (e) {
-      setPublishError(String(e));
-      setPublishState("error");
-    }
-  }
-
-  function publishButtonLabel() {
-    if (publishState === "publishing") return "Publicando no IPFS...";
-    if (isTxPending) return "Confirmar na carteira...";
-    if (isConfirming) return "Aguardando rede...";
-    if (justPublished) return "Enviado ✓";
-    if (pendingCount > 0) return `Enviar (${pendingCount} pendente${pendingCount > 1 ? "s" : ""})`;
-    return "Enviar";
-  }
+  // ── Publicação (vault_publish + on-chain updateVault) — débito #43 ───────
+  const {
+    hasVault,
+    vaultRef,
+    publishError,
+    pinWarning,
+    txErrorMessage,
+    buttonLabel,
+    buttonDisabled,
+    handleEnviar,
+  } = useVaultPublish(pendingCount, () => setPendingCount(0));
 
   // ── CRUD de entradas ──────────────────────────────────────────────────────
   async function handleAdd(form: FormState) {
@@ -551,15 +443,12 @@ export function VaultManagement() {
               <span className="muted">Vault ainda não registrado on-chain</span>
             )}
           </div>
-          <button
-            onClick={handleEnviar}
-            disabled={publishState === "publishing" || isTxPending || isConfirming || justPublished}
-          >
-            {publishButtonLabel()}
+          <button onClick={handleEnviar} disabled={buttonDisabled}>
+            {buttonLabel}
           </button>
         </div>
 
-        {publishState === "error" && publishError && (
+        {publishError && (
           <p className="error-text" style={{ marginBottom: 0, marginTop: "0.5rem" }}>
             {publishError}
           </p>
@@ -569,9 +458,9 @@ export function VaultManagement() {
             ⚠ {pinWarning}
           </p>
         )}
-        {isTxError && txError && (
+        {txErrorMessage && (
           <p className="error-text" style={{ marginBottom: 0, marginTop: "0.5rem" }}>
-            {txError.message?.split("\n")[0]}
+            {txErrorMessage}
           </p>
         )}
       </div>
