@@ -48,6 +48,13 @@ export function VaultSettings() {
   const [showKey, setShowKey] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
 
+  // api_key é obrigatória pra provedores PSA (cloud) funcionarem de verdade;
+  // kubo local não precisa (ver DEFAULT_KUBO acima, api_key vazia).
+  const formInvalid =
+    !form.name.trim() ||
+    !form.endpoint_url.trim() ||
+    (form.kind === "psa" && !form.api_key.trim());
+
   useEffect(() => {
     invoke<PinningProvider[]>("vault_get_providers")
       .then(setProviders)
@@ -87,7 +94,7 @@ export function VaultSettings() {
   }
 
   function handleFormAdd() {
-    if (!form.name.trim() || !form.endpoint_url.trim()) return;
+    if (formInvalid) return;
     const updated = [...providers, { ...form }];
     save(updated);
     setForm({ name: "", kind: "kubo", endpoint_url: "", api_key: "" });
@@ -246,7 +253,7 @@ export function VaultSettings() {
           <div className="actions-row">
             <button
               onClick={handleFormAdd}
-              disabled={!form.name.trim() || !form.endpoint_url.trim()}
+              disabled={formInvalid}
             >
               Adicionar
             </button>
