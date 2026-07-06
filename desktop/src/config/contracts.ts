@@ -1,5 +1,5 @@
 export const IDENTITY_REGISTRY_ADDRESS =
-  "0x1313C576403F89eE265C880b33373d5DFB504cF2" as const;
+  "0xAC24F39e7Abdd819578d96A040c2DF4394c43423" as const;
 
 export const IDENTITY_REGISTRY_ABI = [
   {
@@ -52,11 +52,11 @@ export const IDENTITY_REGISTRY_ABI = [
 // ─── DeviceRegistry ────────────────────────────────────────────────────────────
 
 export const DEVICE_REGISTRY_ADDRESS =
-  "0x48e0862c43339f29ED850a59f5DBd08A4786EaDf" as const;
+  "0xea61a59810Ee981B5FB7C1d42FE348Cbe8aE5344" as const;
 
-// Bloco de deploy na Base Mainnet (Sessão 70 — redeploy completo, débito #28).
-// Fonte: contracts/broadcast/Deploy.s.sol/8453/run-1783205021432.json
-export const DEVICE_REGISTRY_DEPLOY_BLOCK = 48_207_828n;
+// Bloco de deploy na Base Mainnet (Sessão 76 — redeploy completo, débito #34).
+// Fonte: contracts/broadcast/Deploy.s.sol/8453/run-latest.json
+export const DEVICE_REGISTRY_DEPLOY_BLOCK = 48_291_335n;
 
 export const DEVICE_REGISTRY_ABI = [
   {
@@ -149,11 +149,11 @@ export const DEVICE_REGISTRY_ABI = [
 // ─── SessionRegistry ───────────────────────────────────────────────────────────
 
 export const SESSION_REGISTRY_ADDRESS =
-  "0x6531a5Ed42e077cf1b2D78d441248dC7a3ab9776" as const;
+  "0x1F34F33f1061E44028e28a4e17E43d4eaE92f7FA" as const;
 
-// Bloco de deploy na Base Mainnet (Sessão 70 — redeploy completo, débito #28).
-// Fonte: contracts/broadcast/DeploySessionRegistry.s.sol/8453/run-1783205056882.json
-export const SESSION_REGISTRY_DEPLOY_BLOCK = 48_207_855n;
+// Bloco de deploy na Base Mainnet (Sessão 76 — redeploy completo, débito #34).
+// Fonte: contracts/broadcast/DeploySessionRegistry.s.sol/8453/run-latest.json
+export const SESSION_REGISTRY_DEPLOY_BLOCK = 48_291_355n;
 
 export const SESSION_REGISTRY_ABI = [
   {

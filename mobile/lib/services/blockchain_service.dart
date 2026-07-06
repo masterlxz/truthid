@@ -54,11 +54,11 @@ class BlockchainService {
   // getAddress de 1 argumento no IdentityRegistry — ver PROJECT_STATE.md).
   static const _rpcUrl = 'https://mainnet.base.org';
   static const _sessionRegistryAddress =
-      '0x6531a5Ed42e077cf1b2D78d441248dC7a3ab9776';
+      '0x1F34F33f1061E44028e28a4e17E43d4eaE92f7FA';
   static const _deviceRegistryAddress =
-      '0x48e0862c43339f29ED850a59f5DBd08A4786EaDf';
+      '0xea61a59810Ee981B5FB7C1d42FE348Cbe8aE5344';
   static const _identityRegistryAddress =
-      '0x1313C576403F89eE265C880b33373d5DFB504cF2';
+      '0xAC24F39e7Abdd819578d96A040c2DF4394c43423';
 
   // Exposto publicamente — a 14.9.5 (SessionCreator) precisa deste endereço
   // como `dest` da chamada `TruthIDAccount.execute`.
@@ -68,12 +68,12 @@ class BlockchainService {
   // deste endereço pra escanear os eventos DeviceRegistered/DeviceRevoked.
   static const deviceRegistryAddress = _deviceRegistryAddress;
 
-  // Blocos de deploy na Base Mainnet (redeploy da Sessão 70, débito #28) —
+  // Blocos de deploy na Base Mainnet (redeploy da Sessão 76, débito #34) —
   // mesmos valores já usados no Desktop (desktop/src/config/contracts.ts),
   // confirmados nos artefatos de broadcast do Foundry. Ponto de partida do
   // scan de histórico completo da aba Wallet.
-  static const deviceRegistryDeployBlock = 48207828;
-  static const sessionRegistryDeployBlock = 48207855;
+  static const deviceRegistryDeployBlock = 48291335;
+  static const sessionRegistryDeployBlock = 48291355;
 
   // Único RPC configurado hoje é Base Mainnet (ver _rpcUrl acima) — por isso
   // um único chainId fixo, em vez de um mapa rede→chainId que nada usaria.

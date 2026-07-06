@@ -44,14 +44,14 @@ The smart account is a regular address — send it ETH on Base the same way you'
 
 | Contract | Address |
 |---|---|
-| `TruthIDAccountFactory` | [`0xEd6018EE14109636F0141F2a95f9C82ef8a21eCB`](https://basescan.org/address/0xEd6018EE14109636F0141F2a95f9C82ef8a21eCB) |
+| `TruthIDAccountFactory` | [`0xD154B28F60500348cFCbb0F6511b8EF51D0D29B8`](https://basescan.org/address/0xD154B28F60500348cFCbb0F6511b8EF51D0D29B8) |
 | `EntryPoint` (v0.7) | [`0x0000000071727De22E5E9d8BAf0edAc6f37da032`](https://basescan.org/address/0x0000000071727De22E5E9d8BAf0edAc6f37da032) |
 
 ### Base Sepolia (testnet, chain ID 84532)
 
 | Contract | Address |
 |---|---|
-| `TruthIDAccountFactory` | [`0xA438f4CF6712361001Fd07fD386596B657D98080`](https://sepolia.basescan.org/address/0xA438f4CF6712361001Fd07fD386596B657D98080) |
+| `TruthIDAccountFactory` | [`0xD6f2c3Ef24d647f381CD2467B9485cA022520a91`](https://sepolia.basescan.org/address/0xD6f2c3Ef24d647f381CD2467B9485cA022520a91) |
 | `EntryPoint` (v0.7) | [`0x0000000071727De22E5E9d8BAf0edAc6f37da032`](https://sepolia.basescan.org/address/0x0000000071727De22E5E9d8BAf0edAc6f37da032) |
 
 Full function-level reference for both contracts is in [Smart Contracts → Contract reference](/docs/contracts#contract-reference).
@@ -72,7 +72,7 @@ Real gas numbers from the project's own test suite (`forge test --gas-report`, `
 The factory is idempotent — calling `createAccount` again for an owner who already has a deployed account just returns the existing address for ~25k gas. The ~1.77M gas row is the actual `CREATE2` deployment, paid once per identity during setup.
 :::
 
-**What that costs in ETH**: at the ~0.011 gwei gas price observed during the [mainnet deploy](https://basescan.org/address/0x1313C576403F89eE265C880b33373d5DFB504cF2) (same rate used throughout [Smart Contracts → Cost per operation](/docs/contracts#cost-per-operation)), the smart account deployment (~1.77M gas) comes out to roughly 0.0000195 ETH, and a day-to-day `execute` call (~71.5k gas) to roughly 0.0000008 ETH. Gas price moves with network demand — check [Base's live gas tracker](https://basescan.org/gastracker) for the current rate.
+**What that costs in ETH**: at the ~0.011 gwei gas price observed during the [mainnet deploy](https://basescan.org/address/0xAC24F39e7Abdd819578d96A040c2DF4394c43423) (same rate used throughout [Smart Contracts → Cost per operation](/docs/contracts#cost-per-operation)), the smart account deployment (~1.77M gas) comes out to roughly 0.0000195 ETH, and a day-to-day `execute` call (~71.5k gas) to roughly 0.0000008 ETH. Gas price moves with network demand — check [Base's live gas tracker](https://basescan.org/gastracker) for the current rate.
 
 These numbers are pure on-chain execution cost, measured locally with Foundry. They don't include whatever a bundler charges on top of gas to submit your `UserOperation` — Pimlico's free tier adds none today, but that's a bundler-level detail, not something this test suite can measure.
 

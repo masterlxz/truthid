@@ -14,21 +14,21 @@ All four contracts are **immutable** (no upgrade proxy) and **verified** on Base
 
 | Contract | Address |
 |---|---|
-| `IdentityRegistry` | [`0x1313C576403F89eE265C880b33373d5DFB504cF2`](https://basescan.org/address/0x1313C576403F89eE265C880b33373d5DFB504cF2) |
-| `DeviceRegistry` | [`0x48e0862c43339f29ED850a59f5DBd08A4786EaDf`](https://basescan.org/address/0x48e0862c43339f29ED850a59f5DBd08A4786EaDf) |
-| `RecoveryManager` | [`0x889d45C27264e1f59576FDb06722DF9Cf970CBFD`](https://basescan.org/address/0x889d45C27264e1f59576FDb06722DF9Cf970CBFD) |
-| `SessionRegistry` | [`0x6531a5Ed42e077cf1b2D78d441248dC7a3ab9776`](https://basescan.org/address/0x6531a5Ed42e077cf1b2D78d441248dC7a3ab9776) |
-| `TruthIDAccountFactory` | [`0xEd6018EE14109636F0141F2a95f9C82ef8a21eCB`](https://basescan.org/address/0xEd6018EE14109636F0141F2a95f9C82ef8a21eCB) |
+| `IdentityRegistry` | [`0xAC24F39e7Abdd819578d96A040c2DF4394c43423`](https://basescan.org/address/0xAC24F39e7Abdd819578d96A040c2DF4394c43423) |
+| `DeviceRegistry` | [`0xea61a59810Ee981B5FB7C1d42FE348Cbe8aE5344`](https://basescan.org/address/0xea61a59810Ee981B5FB7C1d42FE348Cbe8aE5344) |
+| `RecoveryManager` | [`0x62795F69a4e815E3A79737122C7Fdd45D857C94D`](https://basescan.org/address/0x62795F69a4e815E3A79737122C7Fdd45D857C94D) |
+| `SessionRegistry` | [`0x1F34F33f1061E44028e28a4e17E43d4eaE92f7FA`](https://basescan.org/address/0x1F34F33f1061E44028e28a4e17E43d4eaE92f7FA) |
+| `TruthIDAccountFactory` | [`0xD154B28F60500348cFCbb0F6511b8EF51D0D29B8`](https://basescan.org/address/0xD154B28F60500348cFCbb0F6511b8EF51D0D29B8) |
 
 ### Base Sepolia (testnet, chain ID 84532)
 
 | Contract | Address |
 |---|---|
-| `IdentityRegistry` | [`0xDe7a0f1918Ee39cc1792e709Edde17e8ea858998`](https://sepolia.basescan.org/address/0xDe7a0f1918Ee39cc1792e709Edde17e8ea858998) |
-| `DeviceRegistry` | [`0x2be6a81B22823510c7F3Fa93E70B85aAd4fB488d`](https://sepolia.basescan.org/address/0x2be6a81B22823510c7F3Fa93E70B85aAd4fB488d) |
-| `RecoveryManager` | [`0xbBe777145D32fdbf8A5878eAa3a21b5f1A7d67F7`](https://sepolia.basescan.org/address/0xbBe777145D32fdbf8A5878eAa3a21b5f1A7d67F7) |
-| `SessionRegistry` | [`0xbf8b940dDC3754D06ee5281209Bd3dD58852BF65`](https://sepolia.basescan.org/address/0xbf8b940dDC3754D06ee5281209Bd3dD58852BF65) |
-| `TruthIDAccountFactory` | [`0xA438f4CF6712361001Fd07fD386596B657D98080`](https://sepolia.basescan.org/address/0xA438f4CF6712361001Fd07fD386596B657D98080) |
+| `IdentityRegistry` | [`0xe399DbA342558Bc8937BBb4C33060cCE1F936AD0`](https://sepolia.basescan.org/address/0xe399DbA342558Bc8937BBb4C33060cCE1F936AD0) |
+| `DeviceRegistry` | [`0xC61b82C29D80098558D7Ca73CC47D907B62f9e3F`](https://sepolia.basescan.org/address/0xC61b82C29D80098558D7Ca73CC47D907B62f9e3F) |
+| `RecoveryManager` | [`0xfFBA6E09E7170183F61B00723ef2255eaf765e2e`](https://sepolia.basescan.org/address/0xfFBA6E09E7170183F61B00723ef2255eaf765e2e) |
+| `SessionRegistry` | [`0x80878CC2B339D187051EEd905699613a0ed84B12`](https://sepolia.basescan.org/address/0x80878CC2B339D187051EEd905699613a0ed84B12) |
+| `TruthIDAccountFactory` | [`0xD6f2c3Ef24d647f381CD2467B9485cA022520a91`](https://sepolia.basescan.org/address/0xD6f2c3Ef24d647f381CD2467B9485cA022520a91) |
 
 Use testnet while developing — see [Networks](/docs/sdk/typescript#networks) in the SDK reference for how to point a client at Sepolia. `TruthIDAccount` itself isn't listed here — every identity gets its own instance, deployed on demand by the factory; see [Smart Account & Gas](/docs/smart-account) for how that address is computed.
 
@@ -142,7 +142,7 @@ Real gas numbers from the project's own test suite (`forge test --gas-report`), 
 Gas scales with the size of the `guardians` array. The low end is a couple of guardians; the high end in this table comes from a test that exercises the full `MAX_GUARDIANS` cap of 20. A typical 3-of-5 setup lands well below the median shown here.
 :::
 
-**What that costs in ETH**: at the ~0.011 gwei gas price observed during the [mainnet deploy](https://basescan.org/address/0x1313C576403F89eE265C880b33373d5DFB504cF2), the heaviest of the four original contracts' operations (`registerDevice`, ~204k gas) comes out to roughly 0.0000022 ETH — a small fraction of a cent. `TruthIDAccountFactory.createAccount`'s first-deploy row is heavier still (it deploys a whole contract via `CREATE2`, not just a state update) — see [Smart Account & Gas → Cost](/docs/smart-account#cost) for that conversion. Gas price moves with network demand; check [Base's live gas tracker](https://basescan.org/gastracker) for the current rate before assuming these numbers hold exactly.
+**What that costs in ETH**: at the ~0.011 gwei gas price observed during the [mainnet deploy](https://basescan.org/address/0xAC24F39e7Abdd819578d96A040c2DF4394c43423), the heaviest of the four original contracts' operations (`registerDevice`, ~204k gas) comes out to roughly 0.0000022 ETH — a small fraction of a cent. `TruthIDAccountFactory.createAccount`'s first-deploy row is heavier still (it deploys a whole contract via `CREATE2`, not just a state update) — see [Smart Account & Gas → Cost](/docs/smart-account#cost) for that conversion. Gas price moves with network demand; check [Base's live gas tracker](https://basescan.org/gastracker) for the current rate before assuming these numbers hold exactly.
 
 ## Audit status
 
