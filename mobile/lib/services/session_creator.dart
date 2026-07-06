@@ -37,13 +37,13 @@ class SessionCreationResult {
   );
 }
 
-// Constrói, assina e envia a UserOperation que chama
-// `SessionRegistry.createSession` através da smart account do usuário
-// (etapa 14.9.5 — fecha o ciclo aberto na 14.9.1). Antes desta etapa, o
-// mobile só assinava o session hash e delegava a submissão a um relayer
-// server-side (ver sdk/*/registerSession); agora o próprio device, como
-// signer tier "device", monta e envia a UserOp via bundler — a smart
-// account paga o próprio gas, sem paymaster (decisão de design do projeto).
+// Constrói, assina e envia UserOperations através da smart account do
+// usuário: chamadas ao `SessionRegistry` (createSession na etapa 14.9.5,
+// fecha o ciclo aberto na 14.9.1; revokeSession depois) e transferências
+// nativas de ETH (withdraw, aba Wallet) — todas reaproveitando o mesmo
+// núcleo `_executeViaUserOp`. O device, como signer tier "device", monta e
+// envia a UserOp via bundler — a smart account paga o próprio gas, sem
+// paymaster (decisão de design do projeto).
 class SessionCreator {
   final BlockchainService _blockchainService;
   final PimlicoBundlerClient _bundlerClient;
@@ -99,6 +99,67 @@ class SessionCreator {
       BigInt.from(sig.v), // web3dart codifica todo "uintN" como BigInt, mesmo uint8
     ]);
 
+    return _executeViaUserOp(
+      smartAccountAddress: smartAccountAddress,
+      dest: EthereumAddress.fromHex(BlockchainService.sessionRegistryAddress),
+      value: BigInt.zero,
+      innerCallData: createSessionCallData,
+    );
+  }
+
+  // Revoga uma sessão existente através da própria smart account do usuário —
+  // mesmo caminho da 14.9.5 (device tier assina a UserOp, smart account paga
+  // o gas). `SessionRegistry.revokeSession` só exige que `msg.sender` seja o
+  // controller da identidade (a smart account); como o device não é bloqueado
+  // de chamar SessionRegistry (só DeviceRegistry tem essa restrição — ver
+  // Problema 3 do design da Fase 14), revogar do mobile já era possível
+  // desde a 14.9.5, só nunca tinha sido exposto na UI (o aviso "use o
+  // desktop" em SessionsScreen ficou desatualizado depois dessa etapa).
+  Future<SessionCreationResult> revokeSession({
+    required EthereumAddress smartAccountAddress,
+    required Uint8List sessionHash,
+  }) async {
+    final revokeCallData = _sessionRegistryContract
+        .function('revokeSession')
+        .encodeCall([sessionHash]);
+
+    return _executeViaUserOp(
+      smartAccountAddress: smartAccountAddress,
+      dest: EthereumAddress.fromHex(BlockchainService.sessionRegistryAddress),
+      value: BigInt.zero,
+      innerCallData: revokeCallData,
+    );
+  }
+
+  // Saca ETH nativo da smart account pro endereço `destination`, via UserOp
+  // assinada pelo device — mesmo caminho de revokeSession/createSession.
+  // Confirmado em TruthIDAccount._isDeviceCallAllowed (contracts/src/
+  // TruthIDAccount.sol) que `value` não é restringido pro tier device: só o
+  // `dest` precisa não ser a própria smart account nem um contrato bloqueado
+  // (DeviceRegistry/IdentityRegistry/RecoveryManager). Por isso o mobile não
+  // precisa do owner (Ledger) pra sacar, ao contrário do WithdrawModal do
+  // Desktop (que assina uma tx direta com a Ledger).
+  Future<SessionCreationResult> withdraw({
+    required EthereumAddress smartAccountAddress,
+    required EthereumAddress destination,
+    required BigInt amountWei,
+  }) {
+    return _executeViaUserOp(
+      smartAccountAddress: smartAccountAddress,
+      dest: destination,
+      value: amountWei,
+      innerCallData: Uint8List(0),
+    );
+  }
+
+  // Monta, assina e envia a UserOp que chama `execute(dest, value, innerCallData)`
+  // na smart account — núcleo compartilhado por createSession/revokeSession/withdraw.
+  Future<SessionCreationResult> _executeViaUserOp({
+    required EthereumAddress smartAccountAddress,
+    required EthereumAddress dest,
+    required BigInt value,
+    required Uint8List innerCallData,
+  }) async {
     // DeployedContract aqui só serve pra alcançar a função pelo ABI — o
     // endereço de destino real (`dest`) é passado explicitamente abaixo, já
     // que o `sender`/smart account varia por identidade.
@@ -107,9 +168,9 @@ class SessionCreator {
       smartAccountAddress,
     );
     final executeCallData = truthidAccount.function('execute').encodeCall([
-      EthereumAddress.fromHex(BlockchainService.sessionRegistryAddress),
-      BigInt.zero,
-      createSessionCallData,
+      dest,
+      value,
+      innerCallData,
     ]);
 
     final nonce =

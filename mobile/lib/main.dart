@@ -10,6 +10,7 @@ import 'screens/devices_screen.dart';
 import 'screens/scan_screen.dart';
 import 'screens/sessions_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/wallet_screen.dart';
 import 'theme.dart';
 
 const _kAppVersion = '1.0.0';
@@ -170,7 +171,7 @@ class _RootScreenState extends State<RootScreen> {
           Expanded(
             child: IndexedStack(
               index: _currentIndex,
-              children: const [DevicesScreen(), SessionsScreen()],
+              children: const [DevicesScreen(), SessionsScreen(), WalletScreen()],
             ),
           ),
         ],
@@ -196,12 +197,20 @@ class _RootScreenState extends State<RootScreen> {
               selected: _currentIndex == 0,
               onTap: () => setState(() => _currentIndex = 0),
             ),
-            const SizedBox(width: 72),
             _NavTab(
               icon: Icons.verified_user,
               label: 'Sessions',
               selected: _currentIndex == 1,
               onTap: () => setState(() => _currentIndex = 1),
+            ),
+            // Espaço reservado pro notch do FAB central — mesmo valor usado
+            // quando havia só 2 abas, agora entre a 2ª e a 3ª.
+            const SizedBox(width: 72),
+            _NavTab(
+              icon: Icons.account_balance_wallet,
+              label: 'Wallet',
+              selected: _currentIndex == 2,
+              onTap: () => setState(() => _currentIndex = 2),
             ),
           ],
         ),

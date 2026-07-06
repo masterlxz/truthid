@@ -64,6 +64,17 @@ class BlockchainService {
   // como `dest` da chamada `TruthIDAccount.execute`.
   static const sessionRegistryAddress = _sessionRegistryAddress;
 
+  // Exposto publicamente — o SmartAccountActivityScanner (aba Wallet) precisa
+  // deste endereço pra escanear os eventos DeviceRegistered/DeviceRevoked.
+  static const deviceRegistryAddress = _deviceRegistryAddress;
+
+  // Blocos de deploy na Base Mainnet (redeploy da Sessão 70, débito #28) —
+  // mesmos valores já usados no Desktop (desktop/src/config/contracts.ts),
+  // confirmados nos artefatos de broadcast do Foundry. Ponto de partida do
+  // scan de histórico completo da aba Wallet.
+  static const deviceRegistryDeployBlock = 48207828;
+  static const sessionRegistryDeployBlock = 48207855;
+
   // Único RPC configurado hoje é Base Mainnet (ver _rpcUrl acima) — por isso
   // um único chainId fixo, em vez de um mapa rede→chainId que nada usaria.
   static final chainId = BigInt.from(8453);
@@ -208,7 +219,7 @@ class BlockchainService {
     // topic[1] = indexed uint256 id, padded to 32 bytes
     final idTopic = '0x${identityId.toRadixString(16).padLeft(64, '0')}';
 
-    final latestBlock = await _getLatestBlockNumber();
+    final latestBlock = await getLatestBlockNumber();
     if (latestBlock == null) return null;
 
     var toBlock = latestBlock;
@@ -232,7 +243,9 @@ class BlockchainService {
     return null;
   }
 
-  Future<int?> _getLatestBlockNumber() async {
+  // Exposto publicamente — o SmartAccountActivityScanner (aba Wallet) precisa
+  // do bloco mais recente como `toBlock` do scan de histórico completo.
+  Future<int?> getLatestBlockNumber() async {
     final client = HttpClient();
     try {
       final request = await client.postUrl(Uri.parse(_rpcUrl));
@@ -394,4 +407,152 @@ class BlockchainService {
     );
     return result[0] as BigInt;
   }
+
+  // Saldo nativo (ETH) da smart account, em wei. Espelha o que o dashboard
+  // do Desktop já mostra (`useBalance` do wagmi, 14.10) — aqui via
+  // eth_getBalance cru, mesmo padrão de JSON-RPC manual usado no resto deste
+  // service (sem depender de Web3Client do web3dart).
+  Future<BigInt> getBalance(EthereumAddress address) async {
+    final client = HttpClient();
+    try {
+      final request = await client.postUrl(Uri.parse(_rpcUrl));
+      request.headers.set('content-type', 'application/json');
+      request.write(jsonEncode({
+        'jsonrpc': '2.0',
+        'method': 'eth_getBalance',
+        'params': [address.hex, 'latest'],
+        'id': 1,
+      }));
+
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
+      final json = jsonDecode(body) as Map<String, dynamic>;
+
+      if (json.containsKey('error')) {
+        throw Exception('RPC error: ${json['error']}');
+      }
+
+      return BigInt.parse((json['result'] as String).substring(2), radix: 16);
+    } finally {
+      client.close();
+    }
+  }
+
+  // eth_getLogs genérico — generaliza _fetchIdentityCreatedLogs (endereço
+  // parametrizado em vez de hardcoded pro IdentityRegistry). Usado pelo
+  // SmartAccountActivityScanner (aba Wallet) pra escanear os 5 tipos de
+  // evento de atividade. Diferente de _fetchIdentityCreatedLogs (que engole
+  // erro e tenta o chunk anterior — estratégia de busca bounded), este método
+  // **lança exceção** em erro: o scanner precisa que falha de rede vire um
+  // erro real na UI, não um resultado silenciosamente incompleto.
+  Future<List<Map<String, dynamic>>> getLogs({
+    required String address,
+    required List<String> topics,
+    required int fromBlock,
+    required int toBlock,
+  }) async {
+    final client = HttpClient();
+    try {
+      final request = await client.postUrl(Uri.parse(_rpcUrl));
+      request.headers.set('content-type', 'application/json');
+      request.write(jsonEncode({
+        'jsonrpc': '2.0',
+        'method': 'eth_getLogs',
+        'params': [
+          {
+            'address': address,
+            'topics': topics,
+            'fromBlock': '0x${fromBlock.toRadixString(16)}',
+            'toBlock': '0x${toBlock.toRadixString(16)}',
+          }
+        ],
+        'id': 1,
+      }));
+
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
+      final json = jsonDecode(body) as Map<String, dynamic>;
+
+      if (json.containsKey('error')) {
+        throw Exception('RPC error: ${json['error']}');
+      }
+
+      return (json['result'] as List).cast<Map<String, dynamic>>();
+    } finally {
+      client.close();
+    }
+  }
+
+  // eth_getTransactionReceipt — novo nesta base de código. Usado pelo
+  // SmartAccountActivityScanner pra calcular o custo (gasUsed *
+  // effectiveGasPrice) da tx que emitiu cada evento de atividade.
+  Future<TxReceiptInfo> getTransactionReceipt(String txHash) async {
+    final client = HttpClient();
+    try {
+      final request = await client.postUrl(Uri.parse(_rpcUrl));
+      request.headers.set('content-type', 'application/json');
+      request.write(jsonEncode({
+        'jsonrpc': '2.0',
+        'method': 'eth_getTransactionReceipt',
+        'params': [txHash],
+        'id': 1,
+      }));
+
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
+      final json = jsonDecode(body) as Map<String, dynamic>;
+
+      if (json.containsKey('error') || json['result'] == null) {
+        throw Exception('RPC error fetching receipt for $txHash: ${json['error']}');
+      }
+
+      final result = json['result'] as Map<String, dynamic>;
+      return TxReceiptInfo(
+        gasUsed: BigInt.parse((result['gasUsed'] as String).substring(2), radix: 16),
+        effectiveGasPrice:
+            BigInt.parse((result['effectiveGasPrice'] as String).substring(2), radix: 16),
+      );
+    } finally {
+      client.close();
+    }
+  }
+
+  // eth_getBlockByNumber (sem transações completas — segundo parâmetro
+  // `false`) — novo nesta base de código. Usado pelo SmartAccountActivityScanner
+  // pra resolver o timestamp de cada evento de atividade a partir do bloco.
+  Future<int> getBlockTimestamp(int blockNumber) async {
+    final client = HttpClient();
+    try {
+      final request = await client.postUrl(Uri.parse(_rpcUrl));
+      request.headers.set('content-type', 'application/json');
+      request.write(jsonEncode({
+        'jsonrpc': '2.0',
+        'method': 'eth_getBlockByNumber',
+        'params': ['0x${blockNumber.toRadixString(16)}', false],
+        'id': 1,
+      }));
+
+      final response = await request.close();
+      final body = await response.transform(utf8.decoder).join();
+      final json = jsonDecode(body) as Map<String, dynamic>;
+
+      if (json.containsKey('error') || json['result'] == null) {
+        throw Exception('RPC error fetching block $blockNumber: ${json['error']}');
+      }
+
+      final result = json['result'] as Map<String, dynamic>;
+      return int.parse((result['timestamp'] as String).substring(2), radix: 16);
+    } finally {
+      client.close();
+    }
+  }
+}
+
+// Custo de uma transação (gasUsed * effectiveGasPrice) — usado pelo
+// SmartAccountActivityScanner pra calcular o `costWei` de cada atividade.
+class TxReceiptInfo {
+  final BigInt gasUsed;
+  final BigInt effectiveGasPrice;
+
+  const TxReceiptInfo({required this.gasUsed, required this.effectiveGasPrice});
 }

@@ -48,6 +48,13 @@ const String sessionRegistryAbi = '''[
     ],
     "outputs": [],
     "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "revokeSession",
+    "inputs": [{"name": "hash", "type": "bytes32"}],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   }
 ]''';
 

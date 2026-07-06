@@ -2884,6 +2884,54 @@ Revertido (todos os valores de mainnet já eram os endereços **novos** do redep
 - **Pendência**: o checklist manual E2E em Base Sepolia com a Ledger física (abrir a tab contra a identidade `teste`, conferir saldo/histórico batendo com `cast`, testar depósito/saque de verdade, confirmar retomada incremental do scan numa segunda visita) fica pro dono do projeto rodar — depende de hardware físico, não foi executado nesta sessão.
 - **14.10 concluída** (implementação + testes automatizados). Próximo passo em aberto: validação manual E2E acima, 14.12 (docs) ou Fase 13 (Vault, 13.8/13.9).
 
+### 2026-07-06 — Sessão 72
+
+- **Objetivo**: fechar uma paridade desktop↔mobile encontrada numa conversa de acompanhamento — o mobile não mostrava o saldo da smart account (só o Desktop, via 14.10) e a `SessionsScreen` trazia um aviso fixo dizendo "para revogar sessões, use o desktop" que ficou desatualizado desde a 14.9.5.
+
+**Achado**: `SessionRegistry.revokeSession` só exige que `msg.sender` seja o controller da identidade (a smart account) — não distingue quem assinou a UserOp que chegou até ali. Como a Fase 14 (Problema 3) só bloqueia devices de chamar o `DeviceRegistry`, um device já podia revogar sessões via UserOp desde que a 14.9.5 implementou `createSession` pelo mobile; o aviso na UI nunca foi atualizado para refletir isso.
+
+**Mudanças**:
+- `mobile/lib/services/blockchain_service.dart` — novo método `getBalance(EthereumAddress)`, via `eth_getBalance` cru (mesmo padrão JSON-RPC manual do resto do arquivo, sem depender de `Web3Client`).
+- `mobile/lib/contracts/abis.dart` — adicionada a função `revokeSession(bytes32)` ao `sessionRegistryAbi` (só tinha `createSession`/getters).
+- `mobile/lib/services/session_creator.dart` — extraído o núcleo de `createSession` (montar `execute()`, ler nonce, estimar gas, assinar, enviar, aguardar recibo) num método privado `_executeViaUserOp`, reaproveitado por um novo método público `revokeSession({smartAccountAddress, sessionHash})`. `SessionCreationResult` (só `userOpHash`/`transactionHash`) reaproveitado como retorno de ambos — não é específico de criação, apesar do nome.
+- `mobile/lib/screens/sessions_screen.dart` — reescrita: (1) card de saldo no topo, resolvido via `getIdentityByUsername` (mesma chamada que a `ApprovalScreen` já fazia) seguido de `getBalance`, carregado em paralelo à lista de sessões sem bloquear a tela; (2) botão de revogar (ícone `logout`) em cada sessão ativa, com diálogo de confirmação, spinner por linha durante a UserOp e recarga da lista ao concluir; erro de rede/gas insuficiente vira snackbar em vez de travar a tela. `SessionCreator`/`BundlerConfigService` são construídos sob demanda na primeira revogação, mesmo padrão de lazy-init da `ApprovalScreen` (débito #27). Aviso fixo "use o desktop" removido.
+- Construtor de `SessionsScreen` ganhou parâmetros injetáveis (`blockchainService`, `localStorageService`, `deviceKeyService`, `bundlerConfigService`, `sessionCreator`) para testes, mesmo padrão da `ApprovalScreen`.
+
+**Testes novos**: 2 casos em `session_creator_test.dart` (grupo `revokeSession` — monta/assina/envia a UserOp de revogação e confirma o recibo; propaga erro do bundler) e `sessions_screen_test.dart` (novo — 5 casos: saldo exibido, botão de revogar só em sessões ativas, confirmar chama `revokeSession` e recarrega, cancelar não chama nada, erro vira snackbar sem travar). Suite completa do mobile: 68 → 75 testes, todos passando. `flutter analyze` limpo (só os 5 lints pré-existentes, nenhum novo).
+
+- **Débitos**: nenhum novo.
+- **Próximo passo**: sem pendência aberta por esta sessão. Candidatos de continuação: 14.12 (docs), Fase 13 (Vault, 13.8/13.9), ou o checklist manual E2E da Ledger física (Sessão 71).
+
+### 2026-07-06 — Sessão 73
+
+- **Objetivo**: completar a paridade desktop↔mobile iniciada na Sessão 72 — o mobile ainda não tinha histórico de atividade nem depósito/saque (só saldo). Adicionada uma aba "Wallet" dedicada, espelhando a dashboard da smart account do Desktop (14.10).
+
+**Decisões confirmadas com o dono do projeto antes de implementar**: (1) aba nova dedicada na bottom nav, não expandir a `SessionsScreen`; (2) histórico completo desde o bloco de deploy dos contratos, com cache de progresso (não a janela bounded de ~100k blocos que `getUsernameForIdentity` usa); (3) Vault fica de fora do histórico (VaultRegistry ainda não deployado), mesma decisão do Desktop.
+
+**Achado de arquitetura que viabilizou o saque sem o owner**: confirmado em `TruthIDAccount._isDeviceCallAllowed` (contracts/src/TruthIDAccount.sol) que o `value` de `execute(dest, value, func)` não é restringido pro tier device — só o `dest` precisa não ser a smart account nem um contrato bloqueado. Logo o mobile pode sacar ETH via UserOp assinada pelo device, sem precisar do Ledger (diferente do `WithdrawModal` do Desktop, que assina uma tx direta porque a Ledger é o owner).
+
+**Novos arquivos**:
+- `mobile/lib/models/smart_account_activity.dart` — `SmartAccountActivityType` (sem `vaultUpdated`), `SmartAccountActivity` (toJson/fromJson, costWei serializado como string) e `ScanProgress`.
+- `mobile/lib/services/smart_account_activity_scanner.dart` — porta de `desktop/src/utils/scanSmartAccountActivity.ts`: 5 fontes de evento (topic0 computado à mão via keccak256, mesmo estilo de `getUsernameForIdentity`), chunks de 2000 blocos pra frente, dedup de receipt/timestamp por chamada, `onChunkScanned` incremental.
+- `mobile/lib/services/activity_cache_service.dart` — cache de progresso do scan (`lastScannedBlock` + atividades) via `flutter_secure_storage` (reaproveitando a dependência já usada por `LocalStorageService`/`BundlerConfigService`, sem adicionar `shared_preferences`), espelhando `readCache`/`writeCache`/`clearCache` de `useSmartAccountActivity.ts`.
+- `mobile/lib/screens/wallet_screen.dart` — nova aba: card de saldo + Deposit/Withdraw, resumo de custo por tipo (Sessions/Devices), lista de atividade (mais recente primeiro). Deposit é um bottom sheet com QR + endereço (mesmo padrão do `_DonationSheet` de `main.dart`). Withdraw é um bottom sheet com formulário (endereço + quantidade + Max), validado e enviado via `SessionCreator.withdraw` (novo). Parser manual de ETH decimal→wei (`_parseEtherToWei`) — **achado**: `EtherAmount.fromBase10String` do web3dart 2.7.3 não entende ponto decimal (faz só `BigInt.parse` cru multiplicado pelo fator da unidade), então não dava pra usar direto pra um input tipo "0.05".
+- `mobile/test/services/smart_account_activity_scanner_test.dart`, `mobile/test/services/activity_cache_service_test.dart`, `mobile/test/screens/wallet_screen_test.dart` — novos.
+
+**Mudanças em arquivos existentes**:
+- `mobile/lib/services/blockchain_service.dart` — `_getLatestBlockNumber` virou público (`getLatestBlockNumber`); novos `getLogs` (genérico, lança exceção em erro — ao contrário de `_fetchIdentityCreatedLogs`, que engole erro e tenta o chunk anterior), `getTransactionReceipt`, `getBlockTimestamp` (ambos novos nesta base de código); nova classe `TxReceiptInfo`; novas constantes `deviceRegistryDeployBlock`/`sessionRegistryDeployBlock` (48207828/48207855, mesmos valores do Desktop) e `deviceRegistryAddress` público.
+- `mobile/lib/services/session_creator.dart` — `_executeViaUserOp` ganhou parâmetro `value` (antes hardcoded em `BigInt.zero`); novo método público `withdraw({smartAccountAddress, destination, amountWei})`.
+- `mobile/lib/main.dart` — 3ª aba "Wallet" (`IndexedStack` + `_NavTab`, ícone `account_balance_wallet`), espaço do FAB realocado entre a 2ª e a 3ª aba.
+- `mobile/lib/screens/sessions_screen.dart` — card de saldo (`_balanceWei`/`_balanceLoading`/`_formatBalance`) removido, migrado pra `WalletScreen`; `_loadBalance` virou `_resolveSmartAccount` (só resolve `_smartAccountAddress`, ainda necessário como `sender` da UserOp de revoke).
+- `mobile/test/screens/sessions_screen_test.dart`, `mobile/test/services/session_creator_test.dart` (grupo `withdraw` novo), `mobile/test/widget_test.dart` — atualizados.
+
+**Testes novos**: 7 no scanner (chunk único, ordenação por blockNumber/logIndex, dedup de receipt/timestamp, chunking >2000 blocos, `onChunkScanned` incremental, propagação de erro de `getLogs`/`getTransactionReceipt`), 5 no cache (round-trip, JSON corrompido, sem cache, clear, falha de escrita engolida), 2 em `withdraw` (encoding do `execute` com `value` correto — comparado byte a byte contra um `encodeCall` reconstruído, já que aqui o `value` varia; propagação de erro), 6 na `WalletScreen` (saldo, custo por tipo via cache, deposit mostra QR, withdraw com sucesso, withdraw com falha, refresh limpa cache e re-escaneia). Suite completa do mobile: 75 → 94 testes, todos passando. `flutter analyze` limpo (mesmos 5 lints pré-existentes, nenhum novo).
+
+**Bugs pegos e corrigidos durante os próprios testes** (não chegaram a produção): (1) sheet de depósito estourava a altura da tela em viewports menores — trocado `Padding` por `SingleChildScrollView`; (2) teste inicial usava hashes de teste curtos demais (`'0xTx1'`) que quebravam o slice de exibição (`substring`) — corrigido pra hashes de 66 chars, formato real de tx hash; (3) mock de `getLatestBlockNumber` retornava um bloco bem menor que os deploy blocks reais, fazendo o guard "já passamos do tip" (`fromBlock > latest`) pular o scan silenciosamente em todo teste — corrigido o valor mockado.
+
+- **Débitos**: nenhum novo.
+- **Pendência**: validação manual contra a Base Mainnet real (saldo/atividade batendo com o que a dashboard do Desktop já mostra pra mesma identidade; saque de verdade com valores pequenos, exige saldo pra bundler + Pimlico API key configurada; cache incremental entre reinícios do app) — fica pro dono do projeto, análogo à pendência da 14.10.
+- **Próximo passo**: sem pendência de código aberta por esta sessão. Candidatos de continuação: 14.12 (docs), Fase 13 (Vault, 13.8/13.9), ou os checklists manuais acumulados (Ledger física da Sessão 71 + validação da Wallet mobile desta sessão).
+
 
 ## Como Usar Este Arquivo
 

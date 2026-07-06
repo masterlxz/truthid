@@ -1,20 +1,41 @@
 import 'package:flutter/material.dart';
+import 'package:web3dart/web3dart.dart';
+
 import '../services/blockchain_service.dart';
+import '../services/bundler_config_service.dart';
 import '../services/device_key_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/pimlico_bundler_client.dart';
+import '../services/session_creator.dart';
 import '../theme.dart';
 
 class SessionsScreen extends StatefulWidget {
-  const SessionsScreen({super.key});
+  // Injetáveis para testes — em produção usa os defaults.
+  final BlockchainService? blockchainService;
+  final LocalStorageService? localStorageService;
+  final DeviceKeyService? deviceKeyService;
+  final BundlerConfigService? bundlerConfigService;
+  final SessionCreator? sessionCreator;
+
+  const SessionsScreen({
+    super.key,
+    this.blockchainService,
+    this.localStorageService,
+    this.deviceKeyService,
+    this.bundlerConfigService,
+    this.sessionCreator,
+  });
 
   @override
   State<SessionsScreen> createState() => _SessionsScreenState();
 }
 
 class _SessionsScreenState extends State<SessionsScreen> {
-  final _storage = LocalStorageService();
-  final _blockchain = BlockchainService();
-  final _keyService = DeviceKeyService();
+  late final LocalStorageService _storage;
+  late final BlockchainService _blockchain;
+  late final DeviceKeyService _keyService;
+  late final BundlerConfigService _bundlerConfigService;
+  SessionCreator? _sessionCreator;
 
   bool _isLoading = true;
   bool _isPaired = false;
@@ -24,9 +45,25 @@ class _SessionsScreenState extends State<SessionsScreen> {
   List<SessionInfo>? _sessions;
   String? _error;
 
+  // Smart account (controller) da identidade pareada — resolvida on-chain a
+  // partir do username, mesma chamada que a ApprovalScreen já faz antes de
+  // montar uma UserOp (14.9.5). Necessária como `sender` da UserOp de revoke.
+  // O saldo em si (que também dependia dessa resolução) migrou pra WalletScreen.
+  EthereumAddress? _smartAccountAddress;
+
+  // Hash da sessão sendo revogada agora (null = nenhuma) — desabilita os
+  // outros botões de revogar enquanto uma UserOp está em voo.
+  String? _revokingHash;
+
   @override
   void initState() {
     super.initState();
+    _storage = widget.localStorageService ?? LocalStorageService();
+    _blockchain = widget.blockchainService ?? BlockchainService();
+    _keyService = widget.deviceKeyService ?? DeviceKeyService();
+    _bundlerConfigService =
+        widget.bundlerConfigService ?? BundlerConfigService();
+    _sessionCreator = widget.sessionCreator;
     _load();
   }
 
@@ -97,6 +134,93 @@ class _SessionsScreenState extends State<SessionsScreen> {
         });
       }
     }
+
+    // Resolver a smart account depende do username — segue em paralelo, sem
+    // bloquear a lista de sessões (a lista já lê por identityId, que sempre
+    // temos nesse ponto). Necessária só pro _revoke() (sender da UserOp).
+    if (username != null) {
+      _resolveSmartAccount(username);
+    }
+  }
+
+  Future<void> _resolveSmartAccount(String username) async {
+    try {
+      final identity = await _blockchain.getIdentityByUsername(username);
+      if (identity == null) return;
+      if (mounted) setState(() => _smartAccountAddress = identity.controller);
+    } catch (_) {
+      // Informativo — falha de rede aqui só desabilita o botão de revoke.
+    }
+  }
+
+  Future<void> _confirmRevoke(SessionInfo session) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Revoke session?'),
+        content: const Text(
+          'Any website using this session will be signed out immediately. '
+          'This cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+            child: const Text('Revoke'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true) _revoke(session);
+  }
+
+  Future<void> _revoke(SessionInfo session) async {
+    final smartAccountAddress = _smartAccountAddress;
+    if (smartAccountAddress == null) {
+      _showSnackBar('Could not resolve your smart account. Check your connection.');
+      return;
+    }
+
+    setState(() => _revokingHash = session.hashHex);
+
+    try {
+      if (_sessionCreator == null) {
+        final bundlerConfig = await _bundlerConfigService.getConfig();
+        _sessionCreator = widget.sessionCreator ??
+            SessionCreator(
+              blockchainService: _blockchain,
+              deviceKeyService: _keyService,
+              bundlerClient: PimlicoBundlerClient(
+                bundlerUrl: pimlicoBundlerUrl(
+                  apiKey: bundlerConfig.apiKey,
+                  network: bundlerConfig.network,
+                ),
+              ),
+            );
+      }
+
+      await _sessionCreator!.revokeSession(
+        smartAccountAddress: smartAccountAddress,
+        sessionHash: session.hash,
+      );
+
+      if (mounted) setState(() => _revokingHash = null);
+      await _load();
+    } catch (_) {
+      if (mounted) setState(() => _revokingHash = null);
+      _showSnackBar(
+        'Could not revoke the session. Make sure your account has enough ETH for gas.',
+      );
+    }
+  }
+
+  void _showSnackBar(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -159,7 +283,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
             'Sessions are created by websites when you approve a login.',
             style: TextStyle(fontSize: 12, color: AppColors.textMuted),
           ),
-          const Divider(height: 24),
+          const SizedBox(height: 12),
 
           // ── Erro de leitura ───────────────────────────────────────────────
           if (_error != null)
@@ -195,31 +319,11 @@ class _SessionsScreenState extends State<SessionsScreen> {
                 isCurrentDevice: _deviceAddress != null &&
                     s.devicePubKey.toLowerCase() ==
                         _deviceAddress!.toLowerCase(),
+                isRevoking: _revokingHash == s.hashHex,
+                revokeDisabled: _revokingHash != null || _smartAccountAddress == null,
+                onRevoke: () => _confirmRevoke(s),
               ),
             ),
-
-          // ── Aviso: revogação requer desktop ──────────────────────────────
-          const SizedBox(height: 16),
-          Card(
-            color: AppColors.warningBg,
-            child: const Padding(
-              padding: EdgeInsets.all(12),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Icon(Icons.info_outline, color: AppColors.warning, size: 18),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'To revoke sessions, use the desktop app. '
-                      'Revocation requires the controller wallet.',
-                      style: TextStyle(fontSize: 13, color: AppColors.warning),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
         ],
       ),
     );
@@ -231,8 +335,17 @@ class _SessionsScreenState extends State<SessionsScreen> {
 class _SessionCard extends StatelessWidget {
   final SessionInfo session;
   final bool isCurrentDevice;
+  final bool isRevoking;
+  final bool revokeDisabled;
+  final VoidCallback onRevoke;
 
-  const _SessionCard({required this.session, required this.isCurrentDevice});
+  const _SessionCard({
+    required this.session,
+    required this.isCurrentDevice,
+    required this.isRevoking,
+    required this.revokeDisabled,
+    required this.onRevoke,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -266,19 +379,25 @@ class _SessionCard extends StatelessWidget {
                 ],
               ),
             ),
-            Chip(
-              label: Text(session.isRevoked ? 'Revoked' : 'Active'),
-              backgroundColor: session.isRevoked
-                  ? AppColors.surfaceAlt
-                  : AppColors.successBg,
-              labelStyle: TextStyle(
-                fontSize: 12,
-                color: session.isRevoked
-                    ? AppColors.textMuted
-                    : AppColors.success,
+            if (session.isRevoked)
+              const Chip(
+                label: Text('Revoked'),
+                backgroundColor: AppColors.surfaceAlt,
+                labelStyle: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                padding: EdgeInsets.zero,
+              )
+            else if (isRevoking)
+              const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+            else
+              IconButton(
+                icon: const Icon(Icons.logout, size: 20, color: AppColors.danger),
+                tooltip: 'Revoke session',
+                onPressed: revokeDisabled ? null : onRevoke,
               ),
-              padding: EdgeInsets.zero,
-            ),
           ],
         ),
       ),

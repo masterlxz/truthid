@@ -4,8 +4,10 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:web3dart/crypto.dart';
-import 'package:web3dart/web3dart.dart' show EthereumAddress;
+import 'package:web3dart/web3dart.dart'
+    show ContractAbi, DeployedContract, EthereumAddress;
 
+import 'package:truthid_mobile/contracts/abis.dart';
 import 'package:truthid_mobile/services/blockchain_service.dart';
 import 'package:truthid_mobile/services/device_key_service.dart';
 import 'package:truthid_mobile/services/pimlico_bundler_client.dart';
@@ -199,5 +201,128 @@ void main() {
       ),
       throwsException,
     );
+  });
+
+  group('revokeSession', () {
+    // Selector de `revokeSession(bytes32)` — mesma convenção de _executeSelector.
+    Uint8List revokeSelector() => keccak256(
+          Uint8List.fromList(utf8.encode('revokeSession(bytes32)')),
+        ).sublist(0, 4);
+
+    test('monta, assina e envia a UserOp de revogação, e devolve o recibo',
+        () async {
+      when(() => mockBundler.getUserOperationReceipt('0xUserOpHashXYZ'))
+          .thenAnswer((_) async => UserOperationReceipt(
+                userOpHash: '0xUserOpHashXYZ',
+                success: true,
+                actualGasCost: BigInt.from(1000),
+                actualGasUsed: BigInt.from(90000),
+                transactionHash: '0xTxHash',
+              ));
+
+      final result = await sessionCreator.revokeSession(
+        smartAccountAddress: smartAccountAddress,
+        sessionHash: sessionHash,
+      );
+
+      expect(result.userOpHash, '0xUserOpHashXYZ');
+      expect(result.transactionHash, '0xTxHash');
+
+      verify(() => mockBlockchain.getSmartAccountNonce(smartAccountAddress))
+          .called(1);
+      verify(() => mockKeyService.signHash(any())).called(1);
+
+      final sentOp = verify(() => mockBundler.sendUserOperation(captureAny()))
+          .captured
+          .single as UserOperationV07;
+      expect(sentOp.sender, smartAccountAddress);
+
+      // callData é `execute(SessionRegistry, 0, revokeSession(hash))` —
+      // confirma os dois selectors sem reimplementar o decoder ABI completo.
+      expect(sentOp.callData.sublist(0, 4), _executeSelector());
+      // O innerCallData (revokeSession) fica embutido no encoding do
+      // `execute` — busca o selector de revokeSession em algum lugar do
+      // callData final, já que o offset exato depende do encoding do bytes.
+      final callDataHex = bytesToHex(sentOp.callData);
+      expect(callDataHex.contains(bytesToHex(revokeSelector())), isTrue);
+    });
+
+    test('propaga erro se o envio ao bundler falhar', () async {
+      when(() => mockBundler.sendUserOperation(any()))
+          .thenThrow(Exception('bundler rejected the UserOperation'));
+
+      expect(
+        () => sessionCreator.revokeSession(
+          smartAccountAddress: smartAccountAddress,
+          sessionHash: sessionHash,
+        ),
+        throwsException,
+      );
+    });
+  });
+
+  group('withdraw', () {
+    final destination = EthereumAddress.fromHex(
+        '0xcccccccccccccccccccccccccccccccccccccccc');
+    final amountWei = BigInt.from(500000000000000000); // 0.5 ETH
+
+    test('monta, assina e envia a UserOp de saque com o value correto',
+        () async {
+      when(() => mockBundler.getUserOperationReceipt('0xUserOpHashXYZ'))
+          .thenAnswer((_) async => UserOperationReceipt(
+                userOpHash: '0xUserOpHashXYZ',
+                success: true,
+                actualGasCost: BigInt.from(1000),
+                actualGasUsed: BigInt.from(90000),
+                transactionHash: '0xTxHash',
+              ));
+
+      final result = await sessionCreator.withdraw(
+        smartAccountAddress: smartAccountAddress,
+        destination: destination,
+        amountWei: amountWei,
+      );
+
+      expect(result.userOpHash, '0xUserOpHashXYZ');
+      expect(result.transactionHash, '0xTxHash');
+
+      verify(() => mockBlockchain.getSmartAccountNonce(smartAccountAddress))
+          .called(1);
+
+      final sentOp = verify(() => mockBundler.sendUserOperation(captureAny()))
+          .captured
+          .single as UserOperationV07;
+      expect(sentOp.sender, smartAccountAddress);
+
+      // Reconstrói o callData esperado via encodeCall com os mesmos
+      // argumentos — mais confiável que recortar offsets manualmente, já
+      // que aqui (ao contrário de createSession/revokeSession) o `value`
+      // enviado a `execute` varia e precisa ser conferido também, não só
+      // o `dest`.
+      final truthidAccount = DeployedContract(
+        ContractAbi.fromJson(truthidAccountAbi, 'TruthIDAccount'),
+        smartAccountAddress,
+      );
+      final expectedCallData = truthidAccount.function('execute').encodeCall([
+        destination,
+        amountWei,
+        Uint8List(0),
+      ]);
+      expect(sentOp.callData, expectedCallData);
+    });
+
+    test('propaga erro se o envio ao bundler falhar', () async {
+      when(() => mockBundler.sendUserOperation(any()))
+          .thenThrow(Exception('bundler rejected the UserOperation'));
+
+      expect(
+        () => sessionCreator.withdraw(
+          smartAccountAddress: smartAccountAddress,
+          destination: destination,
+          amountWei: amountWei,
+        ),
+        throwsException,
+      );
+    });
   });
 }
