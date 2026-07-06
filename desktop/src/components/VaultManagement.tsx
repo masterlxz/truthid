@@ -8,7 +8,7 @@ import {
   useWaitForTransactionReceipt,
   useSignMessage,
 } from "wagmi";
-import { hexToSignature } from "viem";
+import { encodeFunctionData, hexToSignature } from "viem";
 import { useIdentity } from "../contexts/IdentityContext";
 import { useWalletModal } from "../contexts/WalletModalContext";
 import {
@@ -16,6 +16,7 @@ import {
   DEVICE_REGISTRY_ABI,
   VAULT_REGISTRY_ADDRESS,
   VAULT_REGISTRY_ABI,
+  TRUTHID_ACCOUNT_ABI,
 } from "../config/contracts";
 import type { DeviceInfo, VaultEntry, PinResult, DeviceVaultPermission } from "../types";
 import { VaultSettings } from "./VaultSettings";
@@ -179,7 +180,7 @@ function EntryForm({
 // ---------------------------------------------------------------------------
 
 export function VaultManagement() {
-  const { identityId } = useIdentity();
+  const { identityId, smartAccountAddress } = useIdentity();
   const { isConnected } = useAccount();
   const { openConnectModal } = useWalletModal();
 
@@ -327,14 +328,25 @@ export function VaultManagement() {
   useEffect(() => { loadAll(); }, []);
 
   // ── Dispara updateVault quando vault_publish retornar ────────────────────
+  // Roteado via TruthIDAccount.execute() contra a smart account — VaultRegistry
+  // só aceita chamadas de quem resolve como controller da identidade (débito #33).
   useEffect(() => {
     if (!pendingUpdate) return;
     if (!isConnected) { openConnectModal(); return; }
+    if (!smartAccountAddress) return;
     writeContract({
-      address: VAULT_REGISTRY_ADDRESS,
-      abi: VAULT_REGISTRY_ABI,
-      functionName: "updateVault",
-      args: [pendingUpdate.cid, pendingUpdate.contentHash],
+      address: smartAccountAddress,
+      abi: TRUTHID_ACCOUNT_ABI,
+      functionName: "execute",
+      args: [
+        VAULT_REGISTRY_ADDRESS,
+        0n,
+        encodeFunctionData({
+          abi: VAULT_REGISTRY_ABI,
+          functionName: "updateVault",
+          args: [pendingUpdate.cid, pendingUpdate.contentHash],
+        }),
+      ],
     });
     setPendingUpdate(null);
   }, [pendingUpdate]);
