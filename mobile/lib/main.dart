@@ -10,6 +10,8 @@ import 'screens/devices_screen.dart';
 import 'screens/scan_screen.dart';
 import 'screens/sessions_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/vault_screen.dart';
+import 'screens/vault_session_screen.dart';
 import 'screens/wallet_screen.dart';
 import 'theme.dart';
 
@@ -131,6 +133,10 @@ class _RootScreenState extends State<RootScreen> {
       Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => ApprovalScreen(payload: payload)),
       );
+    } else if (action == 'truthid-vault-session') {
+      Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => VaultSessionScreen(payload: payload)),
+      );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Unrecognized QR: ${action ?? "no action"}')),
@@ -171,7 +177,12 @@ class _RootScreenState extends State<RootScreen> {
           Expanded(
             child: IndexedStack(
               index: _currentIndex,
-              children: const [DevicesScreen(), SessionsScreen(), WalletScreen()],
+              children: const [
+                DevicesScreen(),
+                SessionsScreen(),
+                WalletScreen(),
+                VaultScreen(),
+              ],
             ),
           ),
         ],
@@ -203,14 +214,19 @@ class _RootScreenState extends State<RootScreen> {
               selected: _currentIndex == 1,
               onTap: () => setState(() => _currentIndex = 1),
             ),
-            // Espaço reservado pro notch do FAB central — mesmo valor usado
-            // quando havia só 2 abas, agora entre a 2ª e a 3ª.
+            // Espaço reservado pro notch do FAB central — 2 abas de cada lado.
             const SizedBox(width: 72),
             _NavTab(
               icon: Icons.account_balance_wallet,
               label: 'Wallet',
               selected: _currentIndex == 2,
               onTap: () => setState(() => _currentIndex = 2),
+            ),
+            _NavTab(
+              icon: Icons.lock_outline,
+              label: 'Vault',
+              selected: _currentIndex == 3,
+              onTap: () => setState(() => _currentIndex = 3),
             ),
           ],
         ),

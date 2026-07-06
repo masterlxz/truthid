@@ -14,6 +14,7 @@ import '../services/local_storage_service.dart';
 import '../services/pimlico_bundler_client.dart';
 import '../services/session_creator.dart';
 import '../theme.dart';
+import '../widgets/info_row.dart';
 
 // Estados possíveis da tela — do início ao fim do fluxo de login
 enum _Status {
@@ -319,12 +320,12 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
               style: TextStyle(color: AppColors.textMuted),
             ),
             const SizedBox(height: 32),
-            _InfoRow(label: 'Site', value: displaySite),
+            InfoRow(label: 'Site', value: displaySite),
             const SizedBox(height: 8),
-            _InfoRow(label: 'Time', value: time),
+            InfoRow(label: 'Time', value: time),
             if (_identityId != null) ...[
               const SizedBox(height: 8),
-              _InfoRow(label: 'Signing as', value: 'Identity #$_identityId'),
+              InfoRow(label: 'Signing as', value: 'Identity #$_identityId'),
             ],
             const SizedBox(height: 32),
             ElevatedButton.icon(
@@ -402,37 +403,6 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  final String label;
-  final String value;
-  const _InfoRow({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: AppColors.surfaceAlt,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(
-        children: [
-          Text(
-            '$label: ',
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(fontFamily: 'monospace', fontSize: 15),
-            ),
-          ),
-        ],
       ),
     );
   }

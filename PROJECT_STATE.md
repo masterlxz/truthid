@@ -78,22 +78,33 @@ Fase 14 — Smart Account (ERC-4337, Self-Funded)  [x] Concluída
 
 ## Checklist antes do próximo release oficial
 
-**Rodar `/code-review` (considerar `ultra`) sobre `contracts/` inteiro** antes de publicar
-qualquer versão que inclua a Fase 13 (Vault) ou a Fase 14 (Smart Account) em produção —
-não só revisar arquivo por arquivo conforme escrito, mas uma passada final olhando os
-contratos como um todo (interações entre `IdentityRegistry`/`DeviceRegistry`/
-`RecoveryManager`/`TruthIDAccount`/`VaultRegistry`).
+**Protocolo final: `/code-review` por pasta principal**, como última etapa antes de cortar
+a versão de produção (depois de todas as fases fechadas, incluindo 13.8/13.9). Cada revisão
+individual de débito/PR já cobriu o arquivo específico conforme foi escrito — o que falta é
+uma passada holística por pasta, olhando como as peças de cada uma interagem entre si, algo
+que só aparece quando se olha o conjunto de uma vez.
 
-**Por quê**: motivado pela Sessão 53 — o `/code-review` rodado sobre um único contrato
-recém-escrito (`TruthIDAccount.sol`) já achou uma falha crítica (device sequestrando a
-identidade via `IdentityRegistry`/`RecoveryManager`, ver débito resolvido na Sessão 53) e,
-durante a própria correção, uma tentativa de otimização introduziu um bug novo (bits não
-mascarados numa extração via assembly) que só foi pego numa releitura cuidadosa antes do
-commit. Contratos on-chain não têm "hotfix" depois de deployados na mainnet — o custo de
-revisar demais é só tempo; o custo de revisar de menos pode ser fundos ou identidades
-perdidos permanentemente. Ver também o débito #17 (aberto, não bloqueia o
-progresso mas deve ser resolvido ou conscientemente aceito antes do release) — #18 e o
-#20 (achado na mesma correção) já foram resolvidos na Sessão 55.
+1. **`contracts/`** — considerar `ultra`, é a pasta mais crítica (sem "hotfix" pós-deploy em
+   mainnet). Motivado pela Sessão 53: o `/code-review` rodado sobre um único contrato
+   recém-escrito (`TruthIDAccount.sol`) já achou uma falha crítica (device sequestrando a
+   identidade via `IdentityRegistry`/`RecoveryManager`) e, durante a própria correção, uma
+   tentativa de otimização introduziu um bug novo (bits não mascarados numa extração via
+   assembly) só pego numa releitura cuidadosa antes do commit. Olhar as interações entre
+   `IdentityRegistry`/`DeviceRegistry`/`RecoveryManager`/`TruthIDAccount`/`VaultRegistry`
+   como um todo, não só contrato a contrato. Débito #17 (aberto, não bloqueia o progresso
+   mas deve ser resolvido ou conscientemente aceito antes do release) — #18 e #20 (achados
+   na mesma correção) já foram resolvidos na Sessão 55.
+2. **`desktop/`** — maior superfície de UI e onde mais apareceram bugs de "cola" entre
+   frontend e contratos (débitos #33, #39, entre outros da leva #33-43 do Vault).
+3. **`mobile/`** — Flutter; fluxos de autenticação, pareamento e vault local.
+4. **`sdk/`** — as 3 linguagens (TypeScript, Python, Ruby) são API pública para integradores
+   externos; um bug aqui afeta qualquer app de terceiro que use o TruthID, não só o próprio
+   projeto.
+
+**Por quê como protocolo (não um único review geral)**: cada pasta tem uma superfície e um
+tipo de risco diferente (contratos = fundos/identidades perdidos permanentemente; SDK =
+quebra de integrações de terceiros; desktop/mobile = UX e bugs de integração local) — revisar
+por pasta deixa o escopo de cada passada gerenciável e comparável a reviews anteriores.
 
 ---
 
@@ -871,7 +882,7 @@ O usuário configura: `{ name, endpoint_url, api_key }` — o app não precisa s
 - [x] 13.5 — Botão "Enviar" com batching + upload multi-pin (2+ provedores externos) *(Sessão 51 — novo módulo `desktop/src-tauri/src/ipfs.rs`: struct `PinningProvider { name, kind, endpoint_url, api_key }` onde `kind` é `"kubo"` (upload via `/api/v0/add`) ou `"psa"` (pin via IPFS Pinning Service API `/pins`); `pin_vault()` faz upload para todos os Kubo providers e pina o CID nos PSA providers; `load_providers`/`save_providers` persistem config em `~/.truthid/pinning_providers.json`. Em `vault.rs`: `mark_published(version)` salva `~/.truthid/vault.meta.json`; `pending_changes()` retorna vault.version - last_published_version. 4 novos Tauri commands: `vault_publish` (async, lê vault.enc, chama pin_vault, marca publicado, retorna `{cid, content_hash, providers_ok, providers_failed}`), `vault_pending_changes`, `vault_get_providers`, `vault_set_providers`. content_hash = keccak256(blob cifrado) com prefixo "0x", pronto para passar direto ao `VaultRegistry.updateVault`. 14 testes Rust passando)*
 - [x] 13.6 — Configuração de provedores de pin: UI de adicionar/remover provedores (endpoint + API key), suporte à IPFS Pinning Service API como interface única (cobre terceiros como Pinata/Filebase/4EVERLAND e self-hosted via Kubo local), guia de setup do Kubo no app, health-check periódico por provedor + alerta na UI *(Sessão 51 — nova tab "Vault" em `App.tsx`; novo componente `desktop/src/components/VaultSettings.tsx`: lista de providers com badge kubo/psa + botão "Testar" (health-check via fetch GET/POST) + botão "✕" para remover; formulário de adição com campos nome/tipo/endpoint/api-key; botão "Adicionar Kubo local" quando lista vazia; guia collapsible de setup do Kubo com comandos exatos; tipo `PinningProvider` adicionado a `types.ts`)*
 - [x] 13.7 — UI Desktop: tela de gerenciamento do vault, permissão `canWriteVault` por Device *(Sessão 51 — breaking change: `profile: String` → `profiles: Vec<String>` no Rust e `List<String>` no Dart, com migração automática de vaults antigos; novo `permissions.rs` + 2 commands (`vault_get_device_permissions`, `vault_set_device_permission`), permissões em `~/.truthid/vault_permissions.json`; `VAULT_REGISTRY_ADDRESS` + ABI adicionados a `contracts.ts` (endereço placeholder — aguardando deploy); novo componente `VaultManagement.tsx`: lista de entradas com filtro, formulário add/edit inline, delete com confirm, seletor de grupos multi-select (Trabalho/Casa/Pessoal), fluxo "Enviar" em 2 fases (vault_publish → updateVault on-chain), status on-chain (versão + data), botão "⚙ Providers" → VaultSettings, seção colapsável de permissões por device; tab "Vault" em App.tsx aponta agora para VaultManagement. 14 testes Rust + 13 testes Dart passando)*
-- [ ] 13.8 — UI Mobile: leitura do vault, tela de perfil para scan da extensão
+- [x] 13.8 — UI Mobile: leitura do vault, tela de perfil para scan da extensão *(Sessão 89 — gap descoberto: o vault.enc local do mobile nunca era populado com conteúdo real, então a etapa precisou de um pipeline de sync completo, não só uma UI. Novo `BlockchainService.hasVault`/`getVault` (decode manual, mesmo padrão de `getIdentityByUsername`/débito #32 — `VaultRef.cid` é dinâmico e vem primeiro no struct). Novo `IpfsGatewayClient` (gateways públicos fixos `ipfs.io`/`dweb.link` com fallback, binary-safe via `consolidateHttpClientResponseBytes` de `package:flutter/foundation.dart`). Novo `VaultSyncService` orquestra hasVault→getVault→download→verifica keccak256 contra o contentHash on-chain→decifra (via novo `VaultRepository.overwriteCache` + `listEntries()` já existente) — hash não bate nunca é tratado como sucesso, sempre cai pro cache local (`VaultSyncStatus.offlineUsingCache`/`syncFailedNoCache`). Novo `VaultScreen` (4ª aba, leitura + busca por site/usuário/perfil, senha sempre mascarada com placeholder fixo) e `VaultEntryDetailScreen` (reveal/copy). Novo `VaultSessionScreen` — scan do QR da extensão (`action: 'truthid-vault-session'`) → escolhe um dos 3 perfis fixos (`kVaultProfiles`, paridade com `VaultManagement.tsx`) → mostra quantas entradas bateriam → termina em estado explícito "ainda não disponível (13.9)", sem fingir sucesso. `InfoRow` extraído de `approval_screen.dart` (era privado) pra reuso nas telas novas. `flutter analyze` limpo (0 erros novos) e `flutter test` verde (só as 5 falhas pré-existentes e não relacionadas de `vault_key_service_test.dart` isolado, confirmadas antes desta sessão via `git stash`))*
 - [ ] 13.9 — Extensão de navegador: sessão efêmera, autofill, revogação em cascata
 
 ---
@@ -3234,6 +3245,37 @@ Custo real: ~0.00015 ETH nas duas redes combinadas. `totalIdentities()` e `facto
 
 - **Débitos**: nenhum novo. Débito #42 (tabela de Débitos Técnicos) e as linhas #2/#4 da tabela de Pendências de Deploy marcados como resolvidos.
 - **Próximo passo**: Fase 13 (13.8/13.9 — UI mobile de leitura do vault + extensão de navegador), agora destravada com o `VaultRegistry` deployado nas duas redes. Opcionalmente investigar a falha pré-existente do `vault_key_service_test.dart` isolado.
+
+---
+
+### Sessão 89 — 2026-07-06: 13.8 — UI Mobile do Vault (leitura) + tela de perfil pra scan da extensão
+
+- **Objetivo**: implementar a 13.8 — dar ao mobile uma forma de ler o Vault, e uma tela que prepara o terreno pro scan do QR da extensão (13.9). Planejado via Plan Mode antes de implementar, dado o escopo maior que o nome da etapa sugeria.
+
+- **Gap descoberto na pesquisa (Explore + Plan agents)**: o `vault.enc` local do mobile nunca era populado com conteúdo real — o vault publicado só existe cifrado no IPFS, referenciado on-chain por `{cid, contentHash, updatedAt, version}` no `VaultRegistry`. O mobile não tinha nenhum código pra ler esse contrato, baixar do IPFS, ou verificar hash. A 13.8 precisou de um pipeline de sync completo, não só uma UI em cima do repositório já existente.
+
+- **`mobile/lib/services/blockchain_service.dart`**: novo `VaultRef` (cid/contentHashHex/updatedAt/version) + `hasVault(BigInt)`/`getVault(BigInt)`, decodificação manual (selector via keccak256, encode/decode por offset fixo) — mesmo padrão de `getIdentityByUsername` (débito #32): `VaultRef.cid` é o campo dinâmico do struct de retorno, então `ContractFunction`/`ContractAbi.fromJson` do web3dart não é confiável aqui. `getVault` reverte (`VaultNotFound`) se não existir vault — confirmado lendo `VaultRegistry.sol` antes de implementar; `hasVault` é o único seguro pra chamar especulativamente.
+
+- **`mobile/lib/services/ipfs_gateway_client.dart`** (novo): `IpfsGatewayClient.fetch(cid)` tenta gateways públicos em ordem (`ipfs.io`, `dweb.link`, injetáveis via construtor), leitura binária via `consolidateHttpClientResponseBytes` (`package:flutter/foundation.dart` — não `services.dart` como o plano original supôs; corrigido durante o `flutter analyze`).
+
+- **`mobile/lib/services/vault_repository.dart`**: novo `overwriteCache(Uint8List)` — grava um blob já cifrado vindo de fora (do sync) sem recifrar nada, reusando `_vaultPath()` já existente.
+
+- **`mobile/lib/services/vault_sync_service.dart`** (novo): `VaultSyncService.sync(identityId)` orquestra hasVaultKey (checagem local, sem rede) → hasVault → getVault → download IPFS → verifica `keccak256(bytes)` contra o `contentHash` on-chain → decifra. **Hash não bate nunca é tratado como sucesso** — cai pro fallback de cache local (`VaultSyncStatus.offlineUsingCache` se há cache, `syncFailedNoCache` se não há). Mesmo fallback pra qualquer falha de rede.
+
+- **`mobile/lib/constants/vault_profiles.dart`** (novo): `kVaultProfiles = ['Trabalho', 'Casa', 'Pessoal']`, paridade exata com `desktop/src/components/VaultManagement.tsx`.
+
+- **`mobile/lib/widgets/info_row.dart`** (novo): `InfoRow` extraído do `_InfoRow` privado de `approval_screen.dart`, reusado pelas telas novas abaixo.
+
+- **`mobile/lib/screens/vault_screen.dart`** (novo, 4ª aba): leitura + busca por site/usuário/perfil, estados de loading/not-paired/noVaultPublished/noVaultKey/syncFailedNoCache/offlineUsingCache/synced, senha sempre mostrada como `'••••••••'` fixo (não derivado do tamanho real). `mobile/lib/screens/vault_entry_detail_screen.dart` (novo): detalhe com reveal/copy, sem chamada de rede (entrada já em memória).
+
+- **`mobile/lib/main.dart`**: `VaultScreen` como 4ª aba (bottom nav rebalanceado de 2+gap+1 pra 2+gap+2); novo case `'truthid-vault-session'` no dispatch do `_openScanner()`.
+
+- **`mobile/lib/screens/vault_session_screen.dart`** (novo): scan → mostra `sessionId` (payload provisório, `{action, sessionId}` — o protocolo real é escopo da 13.9) → escolhe perfil (`kVaultProfiles`) → mostra contagem de entradas compatíveis (via `VaultSyncService` reusado) → termina em estado explícito **"Not available yet"** (depende da extensão, 13.9) — decisão confirmada com o usuário via AskUserQuestion durante o planejamento, ao invés de fingir sucesso ou adiar a tela inteira.
+
+- **Verificação**: `flutter analyze` via Docker — 0 erros novos (só os 5 avisos pré-existentes de sempre). `flutter test` via Docker — só as mesmas 5 falhas pré-existentes de `vault_key_service_test.dart` (não relacionadas, já confirmadas na Sessão 88); todos os testes novos passam: `vault_sync_service_test.dart` (9 casos, incluindo os pares red/green do mismatch de hash com/sem cache prévio — o caminho de segurança mais importante desta sessão), `ipfs_gateway_client_test.dart` (fallback entre gateways via `HttpServer` local), `vault_screen_test.dart`, `vault_entry_detail_screen_test.dart`, `vault_session_screen_test.dart`, e um teste novo de `overwriteCache` em `vault_repository_test.dart`. `approval_screen_test.dart` continua passando após a extração do `InfoRow` (mudança transparente).
+
+- **Débitos**: nenhum novo.
+- **Próximo passo**: 13.9 (extensão de navegador — sessão efêmera, autofill, revogação em cascata), última etapa da Fase 13. Opcionalmente investigar a falha pré-existente do `vault_key_service_test.dart` isolado (mencionada desde a Sessão 88, ainda não corrigida).
 
 ---
 

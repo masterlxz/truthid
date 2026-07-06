@@ -49,6 +49,23 @@ class IdentityInfo {
   const IdentityInfo({required this.id, required this.controller});
 }
 
+// Referência atual do vault publicado, lida do VaultRegistry — usado pelo
+// VaultSyncService (13.8) pra saber onde baixar o blob cifrado e como
+// verificar sua integridade antes de decifrar.
+class VaultRef {
+  final String cid;
+  final String contentHashHex; // "0x"-prefixed, keccak256 do blob cifrado
+  final DateTime updatedAt;
+  final int version;
+
+  const VaultRef({
+    required this.cid,
+    required this.contentHashHex,
+    required this.updatedAt,
+    required this.version,
+  });
+}
+
 class BlockchainService {
   // Endereços atualizados no redeploy de 2026-07-04 (corrige bug do
   // getAddress de 1 argumento no IdentityRegistry — ver PROJECT_STATE.md).
@@ -59,6 +76,10 @@ class BlockchainService {
       '0x4Fd53d70553df00D42c015EB35E2626cB80b1614';
   static const _identityRegistryAddress =
       '0xC11426fd1cB103bC56dD3263325b34f2AcEe9903';
+  // Primeiro deploy do VaultRegistry, Sessão 88 — mesmo endereço Mainnet já
+  // usado em desktop/src/config/contracts.ts.
+  static const _vaultRegistryAddress =
+      '0x602Fa39611960e5ef17D95a5d7b16816eE0ff734';
 
   // Exposto publicamente — a 14.9.5 (SessionCreator) precisa deste endereço
   // como `dest` da chamada `TruthIDAccount.execute`.
@@ -409,6 +430,66 @@ class BlockchainService {
     final hex = value.toRadixString(16).padLeft(64, '0');
     return Uint8List.fromList(List.generate(
         32, (i) => int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16)));
+  }
+
+  // Variante de _uint256Bytes pra identityId, que é BigInt no resto deste
+  // arquivo (ver getSessionsForIdentity) — _uint256Bytes só aceita int.
+  Uint8List _uint256BytesFromBigInt(BigInt value) {
+    final hex = value.toRadixString(16).padLeft(64, '0');
+    return Uint8List.fromList(List.generate(
+        32, (i) => int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16)));
+  }
+
+  // Retorna true se a identidade já tem um vault publicado. Seguro chamar
+  // especulativamente (ao contrário de getVault, que reverte se não existir).
+  Future<bool> hasVault(BigInt identityId) async {
+    final selector =
+        keccak256(Uint8List.fromList(utf8.encode('hasVault(uint256)')))
+            .sublist(0, 4);
+    final callData = BytesBuilder()
+      ..add(selector)
+      ..add(_uint256BytesFromBigInt(identityId));
+
+    final resultHex =
+        await _ethCallRawHex(_vaultRegistryAddress, callData.toBytes());
+    return BigInt.parse(resultHex.substring(0, 64), radix: 16) != BigInt.zero;
+  }
+
+  // Retorna a referência atual do vault publicado (cid/contentHash/versão).
+  // getVault REVERTE (VaultNotFound) se não houver vault — chame hasVault
+  // antes; uma exceção aqui é sempre erro real (rede ou revert), nunca um
+  // jeito de descobrir "não existe". Decodificação manual pelo mesmo motivo
+  // de getIdentityByUsername: VaultRef tem um campo dinâmico (`string cid`)
+  // na struct de retorno — o decoder de tuplas do web3dart não lida direito
+  // com isso (débito #32). Layout ABI conhecido pra essa struct:
+  // [outerOffset(32B)] [cidOffset(32B)] [contentHash(32B)] [updatedAt(32B)]
+  // [version(32B)] [exists(32B)] [cidLen(32B)] [cidBytes...] — exists não
+  // precisa ser decodificado: a chamada já teria revertido se fosse false.
+  Future<VaultRef> getVault(BigInt identityId) async {
+    final selector =
+        keccak256(Uint8List.fromList(utf8.encode('getVault(uint256)')))
+            .sublist(0, 4);
+    final callData = BytesBuilder()
+      ..add(selector)
+      ..add(_uint256BytesFromBigInt(identityId));
+
+    final resultHex =
+        await _ethCallRawHex(_vaultRegistryAddress, callData.toBytes());
+
+    final contentHash = resultHex.substring(128, 192);
+    final updatedAt = BigInt.parse(resultHex.substring(192, 256), radix: 16);
+    final version = BigInt.parse(resultHex.substring(256, 320), radix: 16);
+    final cidLength = int.parse(resultHex.substring(384, 448), radix: 16);
+    final cidHex = resultHex.substring(448, 448 + cidLength * 2);
+    final cidBytes = Uint8List.fromList(List.generate(cidHex.length ~/ 2,
+        (i) => int.parse(cidHex.substring(i * 2, i * 2 + 2), radix: 16)));
+
+    return VaultRef(
+      cid: utf8.decode(cidBytes),
+      contentHashHex: '0x$contentHash',
+      updatedAt: DateTime.fromMillisecondsSinceEpoch(updatedAt.toInt() * 1000),
+      version: version.toInt(),
+    );
   }
 
   // Lê o nonce atual da smart account no EntryPoint (key=0 — nonce

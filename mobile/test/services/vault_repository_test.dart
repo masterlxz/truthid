@@ -225,5 +225,34 @@ void main() {
       expect(entries, hasLength(1));
       expect(entries.first.profiles, equals(['Trabalho']));
     });
+
+    test('overwriteCache grava os bytes crus e listEntries decifra depois',
+        () async {
+      final plaintextJson = jsonEncode({
+        'version': 3,
+        'entries': [
+          {
+            'id': 'synced-1',
+            'site': 'example.com',
+            'url': '',
+            'username': 'u',
+            'password': 'p',
+            'notes': '',
+            'profiles': ['Trabalho'],
+            'created_at': 1700000000,
+            'updated_at': 1700000000,
+          }
+        ],
+      });
+      final bytes = Uint8List.fromList(utf8.encode(plaintextJson));
+
+      await repo.overwriteCache(bytes);
+
+      expect(await File(vaultPath).readAsBytes(), equals(bytes));
+      final entries = await repo.listEntries();
+      expect(entries, hasLength(1));
+      expect(entries.first.site, 'example.com');
+      expect(entries.first.profiles, equals(['Trabalho']));
+    });
   });
 }

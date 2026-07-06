@@ -175,6 +175,16 @@ class VaultRepository {
     await _save(_VaultData(version: newVersion, entries: entries));
   }
 
+  // Sobrescreve o cache local com um blob já cifrado vindo de fora (ex: o
+  // vault baixado do IPFS pelo VaultSyncService, já verificado por hash).
+  // Não recifra nada — o blob já está no formato correto (mesma chave), só
+  // grava. Uma chamada subsequente a listEntries()/_load() decifra e faz
+  // parse normalmente, sem duplicar essa lógica aqui.
+  Future<void> overwriteCache(Uint8List encryptedBlob) async {
+    final path = await _vaultPath();
+    await File(path).writeAsBytes(encryptedBlob);
+  }
+
   // -------------------------------------------------------------------------
   // Privado
   // -------------------------------------------------------------------------
