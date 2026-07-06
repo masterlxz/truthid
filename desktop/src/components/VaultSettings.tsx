@@ -68,11 +68,11 @@ export function VaultSettings() {
   function handleRemove(index: number) {
     const updated = providers.filter((_, i) => i !== index);
     save(updated);
-    setHealthStatus((prev) => {
-      const next = { ...prev };
-      delete next[index];
-      return next;
-    });
+    // healthStatus é indexado pela posição no array — remover do meio desloca
+    // os índices seguintes, então não dá pra só apagar a entrada removida
+    // (o status ficaria associado ao provider errado). Mais simples e correto
+    // limpar tudo e forçar um novo health-check.
+    setHealthStatus({});
   }
 
   async function handleCheck(index: number) {
