@@ -284,6 +284,13 @@ fn vault_delete_entry(id: String) -> Result<(), String> {
 /// derivar a mesma chave AES e decifrar a vault_key.
 #[tauri::command]
 fn encrypt_vault_key_for_device(device_pubkey_hex: String) -> Result<String, String> {
+    let vault_key = get_vault_key()?;
+    encrypt_bytes_for_device(&vault_key, &device_pubkey_hex)
+}
+
+// Lógica pura (sem keyring/filesystem) extraída de encrypt_vault_key_for_device
+// pra poder testar o round-trip ECIES sem precisar mockar get_vault_key().
+fn encrypt_bytes_for_device(vault_key: &[u8], device_pubkey_hex: &str) -> Result<String, String> {
     use base64::{engine::general_purpose::STANDARD, Engine as _};
     use k256::elliptic_curve::sec1::FromEncodedPoint;
 
@@ -301,9 +308,6 @@ fn encrypt_vault_key_for_device(device_pubkey_hex: String) -> Result<String, Str
         .into_option()
         .ok_or_else(|| "invalid public key".to_string())?;
 
-    // Lê a chave do vault do keyring
-    let vault_key = get_vault_key()?;
-
     // Gera par efêmero
     let ephemeral_priv = SigningKey::random(&mut OsRng);
     let ephemeral_pub = ephemeral_priv.verifying_key();
@@ -315,14 +319,20 @@ fn encrypt_vault_key_for_device(device_pubkey_hex: String) -> Result<String, Str
     );
     let shared_bytes = shared.raw_secret_bytes();
 
-    // Deriva chave AES do shared secret via SHA-256
-    let aes_key = Key::<Aes256Gcm>::from_slice(&shared_bytes);
+    // Deriva chave AES do shared secret via SHA-256 — sem isso, a chave AES
+    // era o segredo ECDH cru (32 bytes), diferente da chave que o mobile
+    // deriva (que sempre fez o hash corretamente em decryptVaultKeyFromPairing).
+    // Bug presente desde a Sessão 76: toda vault key entregue via pareamento
+    // falhava na decifra no mobile com erro de MAC, mesmo com o blob correto
+    // on-chain — só descoberto agora testando de ponta a ponta com dados reais.
+    let aes_key_bytes = Sha256::digest(shared_bytes);
+    let aes_key = Key::<Aes256Gcm>::from_slice(&aes_key_bytes);
 
     // Cifra a vault_key com AES-256-GCM
     let cipher = Aes256Gcm::new(aes_key);
     let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
     let ciphertext = cipher
-        .encrypt(&nonce, vault_key.as_slice())
+        .encrypt(&nonce, vault_key)
         .map_err(|_| "ECIES encrypt failed".to_string())?;
 
     // Formato do blob: ephemeral_pubkey(33 comprimida) || nonce(12) || ciphertext+tag
@@ -465,4 +475,59 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use aes_gcm::aead::Aead;
+    use k256::ecdsa::SigningKey;
+    use k256::elliptic_curve::ecdh::diffie_hellman;
+    use k256::elliptic_curve::sec1::FromEncodedPoint;
+    use k256::PublicKey;
+    use rand::rngs::OsRng;
+
+    // Round-trip completo: cifra com encrypt_bytes_for_device (lado Desktop) e
+    // decifra reimplementando exatamente o que decryptVaultKeyFromPairing faz
+    // no mobile (ECDH + SHA-256 + AES-256-GCM). Existe pra pegar exatamente o
+    // bug achado na Sessão 92: a chave AES era o segredo ECDH cru, sem o hash
+    // SHA-256 que o mobile sempre esperou — toda vault key entregue via
+    // pareamento falhava a decifra com erro de MAC, mesmo com o blob correto
+    // on-chain. Sem este teste, o mesmo bug pode voltar (ex: alguém "otimiza"
+    // e remove o Sha256::digest de novo) sem que `cargo test` reclame.
+    #[test]
+    fn encrypt_bytes_for_device_round_trips_with_mobile_side_decryption() {
+        let device_priv = SigningKey::random(&mut OsRng);
+        let device_pub_hex = hex::encode(
+            device_priv
+                .verifying_key()
+                .to_encoded_point(false) // uncompressed, 65 bytes — mesmo formato que o mobile envia
+                .as_bytes(),
+        );
+        let vault_key = b"0123456789abcdef0123456789abcdef"; // 32 bytes fake vault key
+
+        let blob_b64 = encrypt_bytes_for_device(vault_key, &format!("0x{device_pub_hex}"))
+            .expect("encryption should succeed");
+
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+        let blob = STANDARD.decode(blob_b64).expect("valid base64");
+
+        let ephemeral_pub_bytes = &blob[0..33];
+        let nonce_bytes = &blob[33..45];
+        let ciphertext = &blob[45..];
+
+        let point = k256::EncodedPoint::from_bytes(ephemeral_pub_bytes).expect("valid point");
+        let ephemeral_pub = PublicKey::from_encoded_point(&point).unwrap();
+
+        let shared = diffie_hellman(device_priv.as_nonzero_scalar(), ephemeral_pub.as_affine());
+        let aes_key_bytes = Sha256::digest(shared.raw_secret_bytes());
+        let aes_key = Key::<Aes256Gcm>::from_slice(&aes_key_bytes);
+        let cipher = Aes256Gcm::new(aes_key);
+
+        let plaintext = cipher
+            .decrypt(nonce_bytes.into(), ciphertext)
+            .expect("decryption should succeed with matching SHA-256-derived key");
+
+        assert_eq!(plaintext, vault_key);
+    }
 }

@@ -7,6 +7,7 @@ import 'package:truthid_mobile/screens/vault_screen.dart';
 import 'package:truthid_mobile/services/blockchain_service.dart';
 import 'package:truthid_mobile/services/device_key_service.dart';
 import 'package:truthid_mobile/services/local_storage_service.dart';
+import 'package:truthid_mobile/services/vault_key_service.dart';
 import 'package:truthid_mobile/services/vault_repository.dart';
 import 'package:truthid_mobile/services/vault_sync_service.dart';
 
@@ -18,11 +19,14 @@ class MockDeviceKeyService extends Mock implements DeviceKeyService {}
 
 class MockVaultSyncService extends Mock implements VaultSyncService {}
 
+class MockVaultKeyService extends Mock implements VaultKeyService {}
+
 void main() {
   late MockBlockchainService mockBlockchain;
   late MockLocalStorageService mockStorage;
   late MockDeviceKeyService mockKeyService;
   late MockVaultSyncService mockSyncService;
+  late MockVaultKeyService mockVaultKeyService;
 
   const deviceAddress = '0x1234567890123456789012345678901234567890';
 
@@ -35,6 +39,7 @@ void main() {
     mockStorage = MockLocalStorageService();
     mockKeyService = MockDeviceKeyService();
     mockSyncService = MockVaultSyncService();
+    mockVaultKeyService = MockVaultKeyService();
 
     when(() => mockKeyService.getDeviceAddress())
         .thenAnswer((_) async => deviceAddress);
@@ -55,6 +60,7 @@ void main() {
           localStorageService: mockStorage,
           deviceKeyService: mockKeyService,
           vaultSyncService: mockSyncService,
+          vaultKeyService: mockVaultKeyService,
         ),
       ),
     );
@@ -96,7 +102,8 @@ void main() {
     expect(find.text('No vault published yet'), findsOneWidget);
   });
 
-  testWidgets('noVaultKey mostra o texto certo', (tester) async {
+  testWidgets('noVaultKey mostra o texto certo e o botão de retry',
+      (tester) async {
     when(() => mockSyncService.sync(any())).thenAnswer((_) async =>
         const VaultSyncOutcome(
             status: VaultSyncStatus.noVaultKey, entries: []));
@@ -104,6 +111,50 @@ void main() {
     await tester.pumpWidget(buildScreen());
     await tester.pumpAndSettle();
 
+    expect(find.text('Vault key not available'), findsOneWidget);
+    expect(find.text('Try again'), findsOneWidget);
+  });
+
+  testWidgets('retry com sucesso busca a vault key on-chain de novo e recarrega',
+      (tester) async {
+    when(() => mockSyncService.sync(any())).thenAnswer((_) async =>
+        const VaultSyncOutcome(
+            status: VaultSyncStatus.noVaultKey, entries: []));
+    when(() => mockVaultKeyService.tryRecoverFromChain(mockBlockchain))
+        .thenAnswer((_) async => true);
+
+    await tester.pumpWidget(buildScreen());
+    await tester.pumpAndSettle();
+
+    when(() => mockSyncService.sync(any())).thenAnswer((_) async =>
+        VaultSyncOutcome(
+            status: VaultSyncStatus.synced,
+            entries: [buildEntry('example.com')]));
+
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+
+    verify(() => mockVaultKeyService.tryRecoverFromChain(mockBlockchain))
+        .called(1);
+    expect(find.text('example.com'), findsOneWidget);
+  });
+
+  testWidgets('retry sem sucesso mostra aviso e continua no estado noVaultKey',
+      (tester) async {
+    when(() => mockSyncService.sync(any())).thenAnswer((_) async =>
+        const VaultSyncOutcome(
+            status: VaultSyncStatus.noVaultKey, entries: []));
+    when(() => mockVaultKeyService.tryRecoverFromChain(mockBlockchain))
+        .thenAnswer((_) async => false);
+
+    await tester.pumpWidget(buildScreen());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Try again'));
+    await tester.pumpAndSettle();
+
+    expect(
+        find.text('Vault key still not available on-chain.'), findsOneWidget);
     expect(find.text('Vault key not available'), findsOneWidget);
   });
 

@@ -61,6 +61,19 @@ function App() {
   const isWrongNetwork = isConnected && chainId !== base.id;
   const { switchChain, isPending: isSwitching } = useSwitchChain();
 
+  // Nem ConnectWallet nem ConnectLedger fecham o modal sozinhos depois de
+  // conectar com sucesso — sem isso, a UI ficava parada na tela de conexão
+  // mesmo com a wallet já conectada (só um refresh/clique manual revelava
+  // que tinha funcionado). Centralizado aqui cobre os dois conectores
+  // (WalletConnect e Ledger) e os dois pontos de entrada do modal (topbar e
+  // qualquer ação que chame openConnectModal, ex: revoke/pair sem wallet).
+  useEffect(() => {
+    if (isConnected) {
+      setConnectModalOpen(false);
+      setLoginOpen(false);
+    }
+  }, [isConnected]);
+
   const smartAccountAddress = useMemo<Address | null>(() => {
     if (!address) return null;
     try {

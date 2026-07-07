@@ -136,5 +136,12 @@ const String deviceRegistryAbi = '''[
       ]
     }],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "deviceVaultKeys",
+    "inputs": [{"name": "", "type": "address"}],
+    "outputs": [{"name": "", "type": "bytes"}],
+    "stateMutability": "view"
   }
 ]''';

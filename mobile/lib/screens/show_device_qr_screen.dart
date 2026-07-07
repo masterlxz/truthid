@@ -77,16 +77,10 @@ class _ShowDeviceQrScreenState extends State<ShowDeviceQrScreen> {
       if (username != null) _storage.savePairedUsername(username);
     });
 
-    // Decrypt vault key from the pairing transaction data
-    final vaultKeyService = VaultKeyService();
-    final encryptedKey = await _blockchain.getDeviceVaultKey(address);
-    if (encryptedKey != null) {
-      try {
-        await vaultKeyService.decryptVaultKeyFromPairing(encryptedKey);
-      } catch (_) {
-        // Non-critical: vault key can be obtained later by pairing again
-      }
-    }
+    // Non-critical: se falhar aqui (ex: app derrubado em background), a
+    // VaultScreen oferece um retry que refaz este mesmo passo depois — os
+    // dados cifrados já estão on-chain, não é preciso parear de novo.
+    await VaultKeyService().tryRecoverFromChain(_blockchain);
 
     if (!mounted) return;
     setState(() => _confirmed = true);
@@ -133,7 +127,7 @@ class _ShowDeviceQrScreenState extends State<ShowDeviceQrScreen> {
       children: [
         const Text(
           'On your computer, open "Add device" and scan this QR code '
-          '(or paste the address below):',
+          '(or paste the fields below — the Desktop app has no camera):',
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 24),
@@ -148,11 +142,36 @@ class _ShowDeviceQrScreenState extends State<ShowDeviceQrScreen> {
           child: QrImageView(data: _qrPayload, size: 220),
         ),
         const SizedBox(height: 24),
+        const Text(
+          'Device address',
+          style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+        ),
+        const SizedBox(height: 4),
         SelectableText(
           _address!,
           textAlign: TextAlign.center,
           style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
         ),
+        // Sem isto copiável aqui, o campo "Encryption key" do Desktop nunca
+        // tinha como ser preenchido no caminho sem câmera (só colar) — o
+        // pareamento "funcionava" (endereço + label), mas a vault key nunca
+        // era cifrada/entregue, sempre em silêncio (encryptedVaultKey ficava
+        // vazio pra sempre em on-chain, sem chance de corrigir depois: ver
+        // DeviceRegistry.registerDevice, que reverte com
+        // DeviceAlreadyRegistered numa 2a tentativa pro mesmo endereço).
+        if (_encryptionPubKey != null) ...[
+          const SizedBox(height: 16),
+          const Text(
+            'Encryption key (needed to receive the Vault key)',
+            style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+          ),
+          const SizedBox(height: 4),
+          SelectableText(
+            _encryptionPubKey!,
+            textAlign: TextAlign.center,
+            style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+          ),
+        ],
         const SizedBox(height: 32),
         const CircularProgressIndicator(),
         const SizedBox(height: 12),

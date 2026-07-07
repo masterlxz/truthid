@@ -120,6 +120,7 @@ function setupMocks({
     isPending: false,
     isError: false,
     error: null,
+    reset: vi.fn(),
   } as ReturnType<typeof useWriteContract>);
 
   vi.mocked(useWaitForTransactionReceipt).mockReturnValue({
@@ -229,5 +230,29 @@ describe("PairDevice", () => {
         args: expect.arrayContaining(["0x0000000000000000000000000000000000000001", 0n]),
       })
     );
+  });
+
+  it("re-enables Register device after a commit/reveal error, instead of staying stuck disabled", async () => {
+    const { mockWriteContract } = setupMocks();
+    const { rerender } = render(<PairDevice onDeviceRegistered={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "+ Add device" }));
+    await userEvent.type(screen.getByPlaceholderText("0x..."), VALID_ADDRESS);
+    await userEvent.type(screen.getByPlaceholderText("ex: iPhone 15 Pro"), "My Phone");
+    await userEvent.click(screen.getByRole("button", { name: "Register device" }));
+
+    expect(mockWriteContract).toHaveBeenCalledOnce();
+
+    // Simulate the commit tx reverting on-chain (ex: address already registered)
+    vi.mocked(useWriteContract).mockReturnValue({
+      writeContract: mockWriteContract,
+      data: undefined,
+      isPending: false,
+      isError: true,
+      error: new Error("reverted"),
+      reset: vi.fn(),
+    } as ReturnType<typeof useWriteContract>);
+    rerender(<PairDevice onDeviceRegistered={vi.fn()} />);
+
+    expect(screen.getByRole("button", { name: "Register device" })).toBeEnabled();
   });
 });

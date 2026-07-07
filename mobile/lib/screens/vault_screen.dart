@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../services/blockchain_service.dart';
 import '../services/device_key_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/vault_key_service.dart';
 import '../services/vault_repository.dart';
 import '../services/vault_sync_service.dart';
 import '../theme.dart';
@@ -17,6 +18,7 @@ class VaultScreen extends StatefulWidget {
   final LocalStorageService? localStorageService;
   final DeviceKeyService? deviceKeyService;
   final VaultSyncService? vaultSyncService;
+  final VaultKeyService? vaultKeyService;
 
   const VaultScreen({
     super.key,
@@ -24,6 +26,7 @@ class VaultScreen extends StatefulWidget {
     this.localStorageService,
     this.deviceKeyService,
     this.vaultSyncService,
+    this.vaultKeyService,
   });
 
   @override
@@ -35,9 +38,11 @@ class _VaultScreenState extends State<VaultScreen> {
   late final BlockchainService _blockchain;
   late final DeviceKeyService _keyService;
   late final VaultSyncService _syncService;
+  late final VaultKeyService _vaultKeyService;
 
   bool _isLoading = true;
   bool _isPaired = false;
+  bool _isRetryingVaultKey = false;
   VaultSyncStatus? _status;
   List<VaultEntry> _entries = const [];
   String? _error;
@@ -51,7 +56,30 @@ class _VaultScreenState extends State<VaultScreen> {
     _keyService = widget.deviceKeyService ?? DeviceKeyService();
     _syncService = widget.vaultSyncService ??
         VaultSyncService(blockchainService: _blockchain);
+    _vaultKeyService = widget.vaultKeyService ??
+        VaultKeyService(deviceKeyService: _keyService);
     _load();
+  }
+
+  // Tenta buscar e decifrar de novo a vault key direto do que já está
+  // gravado on-chain (deviceVaultKeys) — não depende de re-parear o device.
+  // Cobre o caso em que a 1a tentativa (durante o pareamento) foi
+  // interrompida, ex: Android matou o app em background.
+  Future<void> _retryVaultKey() async {
+    setState(() => _isRetryingVaultKey = true);
+
+    final recovered = await _vaultKeyService.tryRecoverFromChain(_blockchain);
+    if (recovered) {
+      await _load();
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Vault key still not available on-chain.'),
+        ),
+      );
+    }
+
+    if (mounted) setState(() => _isRetryingVaultKey = false);
   }
 
   // Mesmo padrão de resolução device→identidade de sessions_screen.dart:
@@ -178,7 +206,15 @@ class _VaultScreenState extends State<VaultScreen> {
             _buildEmptyState(
               icon: Icons.key_off,
               title: 'Vault key not available',
-              subtitle: 'Re-pair this device with Desktop to receive it.',
+              subtitle:
+                  'This can happen if the app was interrupted during '
+                  'pairing. No need to re-pair — just try again.',
+              action: _isRetryingVaultKey
+                  ? const CircularProgressIndicator()
+                  : OutlinedButton(
+                      onPressed: _retryVaultKey,
+                      child: const Text('Try again'),
+                    ),
             )
           else if (_status == VaultSyncStatus.syncFailedNoCache)
             _buildEmptyState(
@@ -228,6 +264,7 @@ class _VaultScreenState extends State<VaultScreen> {
     required IconData icon,
     required String title,
     required String subtitle,
+    Widget? action,
   }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 48),
@@ -246,6 +283,7 @@ class _VaultScreenState extends State<VaultScreen> {
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 14, color: AppColors.textMuted),
             ),
+            if (action != null) ...[const SizedBox(height: 16), action],
           ],
         ),
       ),

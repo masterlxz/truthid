@@ -7,6 +7,7 @@ import 'package:elliptic/elliptic.dart';
 import 'package:elliptic/ecdh.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import 'blockchain_service.dart';
 import 'device_key_service.dart';
 
 class VaultKeyService {
@@ -68,6 +69,25 @@ class VaultKeyService {
       key: _storageKey,
       value: base64Encode(plaintext),
     );
+  }
+
+  // A vault key cifrada (ECIES) é gravada on-chain durante o registerDevice
+  // e fica lá pra sempre em deviceVaultKeys — não é um dado transiente que só
+  // existe durante a janela do pareamento. Isso permite tentar de novo a
+  // qualquer momento (ex: app foi derrubado em background antes de terminar
+  // a decifra na 1a tentativa) sem precisar revogar e parear o device de novo.
+  // Retorna false (sem lançar) se ainda não há nada on-chain pra decifrar.
+  Future<bool> tryRecoverFromChain(BlockchainService blockchain) async {
+    final address = await _deviceKeyService.getDeviceAddress();
+    final encryptedKey = await blockchain.getDeviceVaultKey(address);
+    if (encryptedKey == null) return false;
+
+    try {
+      await decryptVaultKeyFromPairing(encryptedKey);
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<Uint8List> _deriveLegacyKey() async {

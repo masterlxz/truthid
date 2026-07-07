@@ -47,6 +47,7 @@ export function PairDevice({ onDeviceRegistered }: {
     isPending: isCommitPending,
     isError: isCommitError,
     error: commitError,
+    reset: resetCommit,
   } = useWriteContract();
 
   const {
@@ -55,6 +56,7 @@ export function PairDevice({ onDeviceRegistered }: {
     isPending: isRegisterPending,
     isError: isRegisterError,
     error: registerError,
+    reset: resetRegister,
   } = useWriteContract();
 
   const { isLoading: isCommitConfirming, isSuccess: isCommitSuccess } =
@@ -124,6 +126,15 @@ export function PairDevice({ onDeviceRegistered }: {
     onDeviceRegistered();
   }, [isRegisterSuccess]);
 
+  // Sem isso, um commit ou reveal que reverte on-chain (ex: endereço já
+  // registrado antes) deixava registerPhase preso em "committing"/"registering"
+  // pra sempre — o botão "Register device" ficava desabilitado sem nenhuma
+  // forma de tentar de novo, mesmo com o formulário ainda preenchido. Mesma
+  // classe de bug já corrigida antes em CreateIdentity.tsx (débito #44).
+  useEffect(() => {
+    if (isCommitError || isRegisterError) setRegisterPhase("idle");
+  }, [isCommitError, isRegisterError]);
+
   function closePairing() {
     setIsOpen(false);
     setAddressInput("");
@@ -136,6 +147,9 @@ export function PairDevice({ onDeviceRegistered }: {
   function handleRegister() {
     if (!isConnected) { openConnectModal(); return; }
     if (!smartAccountAddress || !isAddress(addressInput) || !labelInput) return;
+
+    resetCommit();
+    resetRegister();
 
     const saltBytes = crypto.getRandomValues(new Uint8Array(32));
     const newSalt = `0x${Array.from(saltBytes)

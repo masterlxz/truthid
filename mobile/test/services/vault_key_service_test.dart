@@ -3,10 +3,13 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:truthid_mobile/services/blockchain_service.dart';
 import 'package:truthid_mobile/services/device_key_service.dart';
 import 'package:truthid_mobile/services/vault_key_service.dart';
 
 class MockDeviceKeyService extends Mock implements DeviceKeyService {}
+
+class MockBlockchainService extends Mock implements BlockchainService {}
 
 void main() {
   late MockDeviceKeyService mockKeyService;
@@ -81,6 +84,37 @@ void main() {
       final firstRun = vaultKey;
       final secondRun = await vaultKeyService.deriveVaultKey();
       expect(firstRun, equals(secondRun));
+    });
+  });
+
+  group('tryRecoverFromChain', () {
+    const address = '0x1234567890123456789012345678901234567890';
+    late MockBlockchainService mockBlockchain;
+
+    setUp(() {
+      mockBlockchain = MockBlockchainService();
+      when(() => mockKeyService.getDeviceAddress())
+          .thenAnswer((_) async => address);
+    });
+
+    test('retorna false quando não há vault key on-chain pro device', () async {
+      when(() => mockBlockchain.getDeviceVaultKey(address))
+          .thenAnswer((_) async => null);
+
+      final recovered =
+          await vaultKeyService.tryRecoverFromChain(mockBlockchain);
+
+      expect(recovered, isFalse);
+    });
+
+    test('retorna false quando o blob on-chain está corrompido/incompleto', () async {
+      when(() => mockBlockchain.getDeviceVaultKey(address))
+          .thenAnswer((_) async => Uint8List.fromList([1, 2, 3]));
+
+      final recovered =
+          await vaultKeyService.tryRecoverFromChain(mockBlockchain);
+
+      expect(recovered, isFalse);
     });
   });
 }
