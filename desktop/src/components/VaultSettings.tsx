@@ -305,7 +305,7 @@ curl -sSL https://dist.ipfs.tech/kubo/v0.29.0/kubo_v0.29.0_linux-amd64.tar.gz | 
 sudo bash kubo/install.sh`}</code>
             </pre>
 
-            <h4 style={{ marginBottom: "0.4rem" }}>2. Inicializar e iniciar</h4>
+            <h4 style={{ marginBottom: "0.4rem" }}>2. Inicializar</h4>
             <pre style={{
               background: "var(--color-bg)",
               border: "1px solid var(--color-border)",
@@ -315,11 +315,47 @@ sudo bash kubo/install.sh`}</code>
               overflowX: "auto",
               margin: "0 0 1rem",
             }}>
-              <code>{`ipfs init
-ipfs daemon`}</code>
+              <code>{`ipfs init`}</code>
             </pre>
 
-            <h4 style={{ marginBottom: "0.4rem" }}>3. Configurar no TruthID</h4>
+            <h4 style={{ marginBottom: "0.4rem" }}>3. Liberar CORS pro app</h4>
+            <p className="muted" style={{ marginBottom: "0.75rem" }}>
+              Sem isso o botão "Testar" abaixo falha mesmo com o daemon rodando
+              certo: o app roda em uma origem diferente (<code>localhost:1420</code>)
+              da API do Kubo (<code>localhost:5001</code>), e o navegador embutido
+              bloqueia a checagem por CORS.
+            </p>
+            <pre style={{
+              background: "var(--color-bg)",
+              border: "1px solid var(--color-border)",
+              borderRadius: "8px",
+              padding: "0.85rem 1rem",
+              fontSize: "0.82em",
+              overflowX: "auto",
+              margin: "0 0 1rem",
+            }}>
+              <code>{`ipfs config --json API.HTTPHeaders.Access-Control-Allow-Origin '["*"]'
+ipfs config --json API.HTTPHeaders.Access-Control-Allow-Methods '["PUT", "POST", "GET"]'`}</code>
+            </pre>
+
+            <h4 style={{ marginBottom: "0.4rem" }}>4. Iniciar o daemon</h4>
+            <pre style={{
+              background: "var(--color-bg)",
+              border: "1px solid var(--color-border)",
+              borderRadius: "8px",
+              padding: "0.85rem 1rem",
+              fontSize: "0.82em",
+              overflowX: "auto",
+              margin: "0 0 1rem",
+            }}>
+              <code>{`ipfs daemon`}</code>
+            </pre>
+            <p className="muted" style={{ marginBottom: "1rem" }}>
+              Se o daemon já estava rodando antes do passo 3, reinicie-o pra
+              aplicar a config nova.
+            </p>
+
+            <h4 style={{ marginBottom: "0.4rem" }}>5. Configurar no TruthID</h4>
             <p className="muted" style={{ marginBottom: "0.75rem" }}>
               Com o daemon rodando, clique em <strong>+ Adicionar Kubo local</strong>{" "}
               acima. O endpoint padrão é <code>http://localhost:5001</code> e nenhuma

@@ -80,6 +80,7 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
     isPending: tx2Pending,
     isError: tx2Error,
     error: tx2Err,
+    reset: resetTx2,
   } = useWriteContract();
 
   const {
@@ -93,6 +94,7 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
     isPending: tx3Pending,
     isError: tx3Error,
     error: tx3Err,
+    reset: resetTx3,
   } = useSendTransaction();
 
   const {
@@ -241,6 +243,16 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
     signConsent({ message: { raw: consentHash } });
   }
 
+  function handleRetry() {
+    if (step === 3 && tx2Error) {
+      tx2Submitted.current = false;
+      resetTx2();
+    } else if (step === 4 && tx3Error) {
+      tx3Submitted.current = false;
+      resetTx3();
+    }
+  }
+
   const isValidFormat = USERNAME_REGEX.test(username);
   const isFundingValid = (() => {
     try {
@@ -380,6 +392,12 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
             : `Error: ${overallError?.message?.split("\n")[0] ?? "operation failed"}`}
         </p>
       )}
+
+      {(step === 3 && tx2Error) || (step === 4 && tx3Error) ? (
+        <button type="button" onClick={handleRetry} style={{ marginTop: "0.5rem" }}>
+          Try again
+        </button>
+      ) : null}
 
       {step === 0 && (
         <button type="submit" disabled={!canSubmit}>
