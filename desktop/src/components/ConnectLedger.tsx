@@ -5,6 +5,32 @@ import { ledger, setLedgerAccountIndex } from "../connectors/ledger";
 
 type LedgerPhase = "detecting" | "account-select";
 
+// Achado real: o polling de detecção, a listagem de contas e o connect em si
+// competem pela mesma Ledger física — chamadas HID concorrentes travam o
+// dispositivo sem erro nenhum (mesmo bug já visto e corrigido em
+// CreateIdentity.tsx). `device.write()` no lado Rust também não tem timeout
+// (só a leitura tem), então uma chamada travada trava o botão pra sempre sem
+// jeito de tentar de novo. HID_TIMEOUT_MS dá um limite do lado do frontend
+// pra sempre poder desistir e tentar de novo, mesmo que o lado Rust nunca
+// retorne.
+const HID_TIMEOUT_MS = 8_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(message)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (err) => {
+        clearTimeout(timer);
+        reject(err);
+      },
+    );
+  });
+}
+
 // Maps the error string from Rust's classify_error to which step is active
 function statusToStep(status: string): number {
   if (status === "locked") return 1;
@@ -29,20 +55,32 @@ export function ConnectLedger({ onBack }: { onBack: () => void }) {
   const [connectError, setConnectError] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Garante no máximo 1 chamada HID em voo por vez a partir deste componente.
+  const hidBusyRef = useRef(false);
+
   // null = still loading, string = resolved address
   const [addresses, setAddresses] = useState<(string | null)[]>(
     Array(ACCOUNT_COUNT).fill(null)
   );
+  const [addressesLoading, setAddressesLoading] = useState(false);
 
   // Start polling on mount
   useEffect(() => {
     intervalRef.current = setInterval(async () => {
+      if (hidBusyRef.current) return; // já tem uma chamada em voo — pula esta rodada
+      hidBusyRef.current = true;
       try {
-        await invoke<string>("get_ledger_address", { accountIndex: 0 });
+        await withTimeout(
+          invoke<string>("get_ledger_address", { accountIndex: 0 }),
+          HID_TIMEOUT_MS,
+          "Ledger did not respond in time.",
+        );
         clearInterval(intervalRef.current!);
         setPhase("account-select");
       } catch (e) {
         setStatus(String(e));
+      } finally {
+        hidBusyRef.current = false;
       }
     }, 1000);
 
@@ -59,12 +97,19 @@ export function ConnectLedger({ onBack }: { onBack: () => void }) {
 
     let cancelled = false;
     setAddresses(Array(ACCOUNT_COUNT).fill(null));
+    setAddressesLoading(true);
 
     (async () => {
       for (let i = 0; i < ACCOUNT_COUNT; i++) {
         if (cancelled) break;
+        if (hidBusyRef.current) continue;
+        hidBusyRef.current = true;
         try {
-          const addr = await invoke<string>("get_ledger_address", { accountIndex: i });
+          const addr = await withTimeout(
+            invoke<string>("get_ledger_address", { accountIndex: i }),
+            HID_TIMEOUT_MS,
+            "Ledger did not respond in time.",
+          );
           if (!cancelled) {
             setAddresses((prev) => {
               const next = [...prev];
@@ -75,8 +120,11 @@ export function ConnectLedger({ onBack }: { onBack: () => void }) {
         } catch {
           // If the device disconnects mid-fetch, stop silently.
           break;
+        } finally {
+          hidBusyRef.current = false;
         }
       }
+      if (!cancelled) setAddressesLoading(false);
     })();
 
     return () => { cancelled = true; };
@@ -88,14 +136,22 @@ export function ConnectLedger({ onBack }: { onBack: () => void }) {
   }
 
   async function handleConnect() {
+    if (hidBusyRef.current) return;
+    hidBusyRef.current = true;
     setIsConnecting(true);
     setConnectError(null);
     try {
       setLedgerAccountIndex(selectedIndex);
-      await connectAsync({ connector: ledger });
+      await withTimeout(
+        connectAsync({ connector: ledger }),
+        HID_TIMEOUT_MS,
+        "Ledger did not respond in time. Make sure it's unlocked with the Ethereum app open, then try again.",
+      );
     } catch (e) {
-      setIsConnecting(false);
       setConnectError(String(e));
+    } finally {
+      setIsConnecting(false);
+      hidBusyRef.current = false;
     }
   }
 
@@ -168,7 +224,7 @@ export function ConnectLedger({ onBack }: { onBack: () => void }) {
             </div>
           )}
 
-          <button onClick={handleConnect} disabled={isConnecting}>
+          <button onClick={handleConnect} disabled={isConnecting || addressesLoading}>
             {isConnecting ? "Connecting..." : `Connect Account ${selectedIndex}`}
           </button>
         </>

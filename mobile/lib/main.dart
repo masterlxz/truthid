@@ -200,33 +200,40 @@ class _RootScreenState extends State<RootScreen> {
         notchMargin: 8,
         color: AppColors.surface,
         child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
-            _NavTab(
-              icon: Icons.phonelink_lock,
-              label: 'Devices',
-              selected: _currentIndex == 0,
-              onTap: () => setState(() => _currentIndex = 0),
+            Expanded(
+              child: _NavTab(
+                icon: Icons.phonelink_lock,
+                label: 'Devices',
+                selected: _currentIndex == 0,
+                onTap: () => setState(() => _currentIndex = 0),
+              ),
             ),
-            _NavTab(
-              icon: Icons.verified_user,
-              label: 'Sessions',
-              selected: _currentIndex == 1,
-              onTap: () => setState(() => _currentIndex = 1),
+            Expanded(
+              child: _NavTab(
+                icon: Icons.verified_user,
+                label: 'Sessions',
+                selected: _currentIndex == 1,
+                onTap: () => setState(() => _currentIndex = 1),
+              ),
             ),
             // Espaço reservado pro notch do FAB central — 2 abas de cada lado.
-            const SizedBox(width: 72),
-            _NavTab(
-              icon: Icons.account_balance_wallet,
-              label: 'Wallet',
-              selected: _currentIndex == 2,
-              onTap: () => setState(() => _currentIndex = 2),
+            const SizedBox(width: 56),
+            Expanded(
+              child: _NavTab(
+                icon: Icons.account_balance_wallet,
+                label: 'Wallet',
+                selected: _currentIndex == 2,
+                onTap: () => setState(() => _currentIndex = 2),
+              ),
             ),
-            _NavTab(
-              icon: Icons.lock_outline,
-              label: 'Vault',
-              selected: _currentIndex == 3,
-              onTap: () => setState(() => _currentIndex = 3),
+            Expanded(
+              child: _NavTab(
+                icon: Icons.lock_outline,
+                label: 'Vault',
+                selected: _currentIndex == 3,
+                onTap: () => setState(() => _currentIndex = 3),
+              ),
             ),
           ],
         ),
@@ -255,12 +262,17 @@ class _NavTab extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(icon, color: color, size: 24),
-            Text(label, style: TextStyle(color: color, fontSize: 11)),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(color: color, fontSize: 11),
+            ),
           ],
         ),
       ),
