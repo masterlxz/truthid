@@ -69,7 +69,18 @@ class VaultRef {
 class BlockchainService {
   // Endereços atualizados no redeploy de 2026-07-04 (corrige bug do
   // getAddress de 1 argumento no IdentityRegistry — ver PROJECT_STATE.md).
-  static const _rpcUrl = 'https://mainnet.base.org';
+  //
+  // RPCs públicos de Base Mainnet, na ordem em que são tentados — mesma lista
+  // já usada no fallback do Desktop (ver desktop/src/config/wagmi.ts). Antes
+  // o mobile dependia de um único RPC hardcoded sem fallback: um rate limit
+  // dele (erro -32016 "over rate limit", visto ao vivo na Sessão 92) derrubava
+  // toda leitura on-chain do app.
+  static const _rpcUrls = [
+    'https://mainnet.base.org',
+    'https://base-rpc.publicnode.com',
+    'https://base.drpc.org',
+  ];
+  static const _rpcTimeout = Duration(seconds: 10);
   static const _sessionRegistryAddress =
       '0x66F10F8c38b3F35551e90ACa3c675F5E3432C6Df';
   static const _deviceRegistryAddress =
@@ -96,8 +107,8 @@ class BlockchainService {
   static const deviceRegistryDeployBlock = 48294070;
   static const sessionRegistryDeployBlock = 48294090;
 
-  // Único RPC configurado hoje é Base Mainnet (ver _rpcUrl acima) — por isso
-  // um único chainId fixo, em vez de um mapa rede→chainId que nada usaria.
+  // Única rede configurada hoje é Base Mainnet (ver _rpcUrls acima) — por
+  // isso um único chainId fixo, em vez de um mapa rede→chainId que nada usaria.
   static final chainId = BigInt.from(8453);
 
   static final _sessionContract = DeployedContract(
@@ -134,18 +145,39 @@ class BlockchainService {
       String contractAddress, List<int> callData) async {
     final callDataHex =
         '0x${callData.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
+    final result = await _rpcCall('eth_call', [
+      {'to': contractAddress, 'data': callDataHex},
+      'latest',
+    ]);
+    return (result as String).substring(2);
+  }
 
+  // Faz uma chamada JSON-RPC tentando cada URL de _rpcUrls em ordem — mesmo
+  // esquema de fallback do IpfsGatewayClient (ver ipfs_gateway_client.dart):
+  // a primeira resposta bem-sucedida vence, qualquer falha (rede, timeout ou
+  // 'error' no corpo) passa pro próximo RPC da lista.
+  Future<dynamic> _rpcCall(String method, List<dynamic> params) async {
+    final errors = <String>[];
+    for (final url in _rpcUrls) {
+      try {
+        return await _rpcCallOnce(url, method, params).timeout(_rpcTimeout);
+      } catch (e) {
+        errors.add('$url: $e');
+      }
+    }
+    throw Exception('Todos os RPCs falharam para $method: ${errors.join('; ')}');
+  }
+
+  Future<dynamic> _rpcCallOnce(
+      String url, String method, List<dynamic> params) async {
     final client = HttpClient();
     try {
-      final request = await client.postUrl(Uri.parse(_rpcUrl));
+      final request = await client.postUrl(Uri.parse(url));
       request.headers.set('content-type', 'application/json');
       request.write(jsonEncode({
         'jsonrpc': '2.0',
-        'method': 'eth_call',
-        'params': [
-          {'to': contractAddress, 'data': callDataHex},
-          'latest',
-        ],
+        'method': method,
+        'params': params,
         'id': 1,
       }));
 
@@ -157,7 +189,7 @@ class BlockchainService {
         throw Exception('RPC error: ${json['error']}');
       }
 
-      return (json['result'] as String).substring(2);
+      return json['result'];
     } finally {
       client.close();
     }
@@ -267,25 +299,11 @@ class BlockchainService {
   // Exposto publicamente — o SmartAccountActivityScanner (aba Wallet) precisa
   // do bloco mais recente como `toBlock` do scan de histórico completo.
   Future<int?> getLatestBlockNumber() async {
-    final client = HttpClient();
     try {
-      final request = await client.postUrl(Uri.parse(_rpcUrl));
-      request.headers.set('content-type', 'application/json');
-      request.write(jsonEncode({
-        'jsonrpc': '2.0',
-        'method': 'eth_blockNumber',
-        'params': [],
-        'id': 1,
-      }));
-      final response = await request.close();
-      final body = await response.transform(utf8.decoder).join();
-      final json = jsonDecode(body) as Map<String, dynamic>;
-      if (json.containsKey('error')) return null;
-      return int.parse((json['result'] as String).substring(2), radix: 16);
+      final result = await _rpcCall('eth_blockNumber', []);
+      return int.parse((result as String).substring(2), radix: 16);
     } catch (_) {
       return null;
-    } finally {
-      client.close();
     }
   }
 
@@ -295,34 +313,18 @@ class BlockchainService {
     required int fromBlock,
     required int toBlock,
   }) async {
-    final client = HttpClient();
     try {
-      final request = await client.postUrl(Uri.parse(_rpcUrl));
-      request.headers.set('content-type', 'application/json');
-      request.write(jsonEncode({
-        'jsonrpc': '2.0',
-        'method': 'eth_getLogs',
-        'params': [
-          {
-            'address': _identityRegistryAddress,
-            'topics': [eventTopic, idTopic],
-            'fromBlock': '0x${fromBlock.toRadixString(16)}',
-            'toBlock': '0x${toBlock.toRadixString(16)}',
-          }
-        ],
-        'id': 1,
-      }));
-
-      final response = await request.close();
-      final body = await response.transform(utf8.decoder).join();
-      final json = jsonDecode(body) as Map<String, dynamic>;
-
-      if (json.containsKey('error')) return null;
-      return json['result'] as List<dynamic>;
+      final result = await _rpcCall('eth_getLogs', [
+        {
+          'address': _identityRegistryAddress,
+          'topics': [eventTopic, idTopic],
+          'fromBlock': '0x${fromBlock.toRadixString(16)}',
+          'toBlock': '0x${toBlock.toRadixString(16)}',
+        }
+      ]);
+      return result as List<dynamic>;
     } catch (_) {
       return null;
-    } finally {
-      client.close();
     }
   }
 
@@ -510,29 +512,8 @@ class BlockchainService {
   // eth_getBalance cru, mesmo padrão de JSON-RPC manual usado no resto deste
   // service (sem depender de Web3Client do web3dart).
   Future<BigInt> getBalance(EthereumAddress address) async {
-    final client = HttpClient();
-    try {
-      final request = await client.postUrl(Uri.parse(_rpcUrl));
-      request.headers.set('content-type', 'application/json');
-      request.write(jsonEncode({
-        'jsonrpc': '2.0',
-        'method': 'eth_getBalance',
-        'params': [address.hex, 'latest'],
-        'id': 1,
-      }));
-
-      final response = await request.close();
-      final body = await response.transform(utf8.decoder).join();
-      final json = jsonDecode(body) as Map<String, dynamic>;
-
-      if (json.containsKey('error')) {
-        throw Exception('RPC error: ${json['error']}');
-      }
-
-      return BigInt.parse((json['result'] as String).substring(2), radix: 16);
-    } finally {
-      client.close();
-    }
+    final result = await _rpcCall('eth_getBalance', [address.hex, 'latest']);
+    return BigInt.parse((result as String).substring(2), radix: 16);
   }
 
   // eth_getLogs genérico — generaliza _fetchIdentityCreatedLogs (endereço
@@ -548,100 +529,44 @@ class BlockchainService {
     required int fromBlock,
     required int toBlock,
   }) async {
-    final client = HttpClient();
-    try {
-      final request = await client.postUrl(Uri.parse(_rpcUrl));
-      request.headers.set('content-type', 'application/json');
-      request.write(jsonEncode({
-        'jsonrpc': '2.0',
-        'method': 'eth_getLogs',
-        'params': [
-          {
-            'address': address,
-            'topics': topics,
-            'fromBlock': '0x${fromBlock.toRadixString(16)}',
-            'toBlock': '0x${toBlock.toRadixString(16)}',
-          }
-        ],
-        'id': 1,
-      }));
-
-      final response = await request.close();
-      final body = await response.transform(utf8.decoder).join();
-      final json = jsonDecode(body) as Map<String, dynamic>;
-
-      if (json.containsKey('error')) {
-        throw Exception('RPC error: ${json['error']}');
+    final result = await _rpcCall('eth_getLogs', [
+      {
+        'address': address,
+        'topics': topics,
+        'fromBlock': '0x${fromBlock.toRadixString(16)}',
+        'toBlock': '0x${toBlock.toRadixString(16)}',
       }
-
-      return (json['result'] as List).cast<Map<String, dynamic>>();
-    } finally {
-      client.close();
-    }
+    ]);
+    return (result as List).cast<Map<String, dynamic>>();
   }
 
   // eth_getTransactionReceipt — novo nesta base de código. Usado pelo
   // SmartAccountActivityScanner pra calcular o custo (gasUsed *
   // effectiveGasPrice) da tx que emitiu cada evento de atividade.
   Future<TxReceiptInfo> getTransactionReceipt(String txHash) async {
-    final client = HttpClient();
-    try {
-      final request = await client.postUrl(Uri.parse(_rpcUrl));
-      request.headers.set('content-type', 'application/json');
-      request.write(jsonEncode({
-        'jsonrpc': '2.0',
-        'method': 'eth_getTransactionReceipt',
-        'params': [txHash],
-        'id': 1,
-      }));
-
-      final response = await request.close();
-      final body = await response.transform(utf8.decoder).join();
-      final json = jsonDecode(body) as Map<String, dynamic>;
-
-      if (json.containsKey('error') || json['result'] == null) {
-        throw Exception('RPC error fetching receipt for $txHash: ${json['error']}');
-      }
-
-      final result = json['result'] as Map<String, dynamic>;
-      return TxReceiptInfo(
-        gasUsed: BigInt.parse((result['gasUsed'] as String).substring(2), radix: 16),
-        effectiveGasPrice:
-            BigInt.parse((result['effectiveGasPrice'] as String).substring(2), radix: 16),
-      );
-    } finally {
-      client.close();
+    final result = await _rpcCall('eth_getTransactionReceipt', [txHash]);
+    if (result == null) {
+      throw Exception('RPC error fetching receipt for $txHash: result null');
     }
+    final map = result as Map<String, dynamic>;
+    return TxReceiptInfo(
+      gasUsed: BigInt.parse((map['gasUsed'] as String).substring(2), radix: 16),
+      effectiveGasPrice:
+          BigInt.parse((map['effectiveGasPrice'] as String).substring(2), radix: 16),
+    );
   }
 
   // eth_getBlockByNumber (sem transações completas — segundo parâmetro
   // `false`) — novo nesta base de código. Usado pelo SmartAccountActivityScanner
   // pra resolver o timestamp de cada evento de atividade a partir do bloco.
   Future<int> getBlockTimestamp(int blockNumber) async {
-    final client = HttpClient();
-    try {
-      final request = await client.postUrl(Uri.parse(_rpcUrl));
-      request.headers.set('content-type', 'application/json');
-      request.write(jsonEncode({
-        'jsonrpc': '2.0',
-        'method': 'eth_getBlockByNumber',
-        'params': ['0x${blockNumber.toRadixString(16)}', false],
-        'id': 1,
-      }));
-
-      final response = await request.close();
-      final body = await response.transform(utf8.decoder).join();
-      final json = jsonDecode(body) as Map<String, dynamic>;
-
-      if (json.containsKey('error') || json['result'] == null) {
-        throw Exception('RPC error fetching block $blockNumber: ${json['error']}');
-      }
-
-      final result = json['result'] as Map<String, dynamic>;
-      return int.parse((result['timestamp'] as String).substring(2), radix: 16);
-    } finally {
-      client.close();
+    final result = await _rpcCall(
+        'eth_getBlockByNumber', ['0x${blockNumber.toRadixString(16)}', false]);
+    if (result == null) {
+      throw Exception('RPC error fetching block $blockNumber: result null');
     }
+    final map = result as Map<String, dynamic>;
+    return int.parse((map['timestamp'] as String).substring(2), radix: 16);
   }
 }
 
