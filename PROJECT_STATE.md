@@ -1001,21 +1001,26 @@ A partir daí: Ledger assina UserOps off-chain → bundler submete → smart acc
 
 ---
 
-### Callback opcional no login (fallback on-chain) + Vault genérico — ideia externa (Sessão 94, 2026-07-12)
+### Callback opcional no login (fallback on-chain) — ideia externa (Sessão 94, 2026-07-12; corrigida Sessão 95, 2026-07-12)
 
-**Contexto**: durante uma conversa sobre o Practice Valuation (outro projeto do dono, app de valuation de ações/cripto, `~/Documents/workspace/practice-valuation`), surgiu a ideia de sincronizar dados entre dispositivos de forma descentralizada, reaproveitando a identidade do TruthID em vez de um sistema de conta próprio. Só brainstorm — nenhum `/plan` rodado, nada implementado. Duas lacunas do TruthID apareceram nessa conversa:
+**Contexto**: durante uma conversa sobre o Practice Valuation (outro projeto do dono, app de valuation de ações/cripto, `~/Documents/workspace/practice-valuation`), surgiu a necessidade de ele reaproveitar o login/identidade do TruthID em vez de um sistema de conta próprio. Só brainstorm — nenhum `/plan` rodado, nada implementado.
 
-**1. Login hoje exige callback HTTPS obrigatório — trava integradores sem backend público.**
+**Login hoje exige callback HTTPS obrigatório — trava integradores sem backend público.**
 `ApprovalScreen` (`approval_screen.dart:88-96`) recusa qualquer QR sem `callbackUrl` https — um app desktop local sem servidor próprio (como o Practice Valuation) fica de fora do fluxo de login atual.
 
 Achado ao investigar o código: a escrita da sessão on-chain (`SessionCreator` via UserOperation, dentro de `_approve()`) **já acontece incondicionalmente**, antes até do POST pro callback (ver comentário em `sdk/typescript/src/client.ts` sobre o mobile v14.9.5+). Ou seja, o "canal de fallback" que resolveria isso não precisa ser construído do zero, só **exposto**: tornar `callbackUrl` opcional no payload do QR e, quando ausente, pular só o `_postResponse` HTTPS — a escrita on-chain (que já ia rodar de qualquer forma) vira o único sinal de sucesso. Nesse modo, o integrador faria polling de `getSession`/`isSessionRevoked` (já expostos em `SessionRegistry`, leitura pública e gratuita) em vez de receber POST.
 
 **Ressalva de segurança**: o `https://` obrigatório existe pra impedir que um QR malicioso redirecione a resposta assinada pro servidor de um atacante. A extensão certa é permitir **omitir** o callback inteiramente — nunca afrouxar pra aceitar `http://` (ex: pensando numa LAN) como substituto, isso reabriria o mesmo risco que a checagem atual evita.
 
-**2. `VaultRegistry` (Fase 13) já é, na prática, "IPFS + ponteiro on-chain por identidade + criptografia local" — só falta ser genérico.**
-O Practice Valuation precisaria exatamente desse mecanismo (blob cifrado, CID versionado, múltiplos provedores de pin com health-check) pra sincronizar seus próprios dados entre dispositivos. Hoje `VaultRegistry.sol` é 1 vault por `identityId`, amarrado ao caso de uso do password manager. Reaproveitar pra outro app exigiria generalizar (`identityId + vaultKind/appId → VaultRef`, um mapeamento por slot) ou um contrato irmão no mesmo padrão — nenhuma das duas escolhida ainda.
+**Correção da Sessão 95 sobre o Vault**: a Sessão 94 também levantou generalizar o `VaultRegistry` (Fase 13) pra múltiplos vaults por identidade, pensando em servir o Practice Valuation. O dono do projeto corrigiu isso: **não é o que ele quer**. O `VaultRegistry` continua exatamente como está — 1 vault por `identityId`, uso exclusivo do password manager, sem alteração nenhuma. O Practice Valuation é outro software; ele só precisa do esquema de login/autenticação do TruthID (o item de callback opcional acima). Sincronização de dados do Practice Valuation via IPFS, se acontecer, é responsabilidade só dele — sem tocar em `VaultRegistry` nem na cifra ECIES derivada do pareamento.
 
-**Nada disso foi implementado ou planejado em etapas.** É uma ideia registrada, no mesmo estágio que outras entradas deste Roadmap antes de virarem Fase. Retomar quando o dono do projeto voltar ao assunto — provavelmente puxado pelo lado do Practice Valuation, que é quem tem o caso de uso concreto hoje (ver `PROJECT_STATE.md` de lá, Fase 8).
+**Design fechado na Sessão 95** (ainda não implementado, sem `/plan` rodado): ordem confirmada é POST HTTPS primeiro quando `callbackUrl` existir, escrita on-chain como sinal de fallback quando não existir. Como a escrita on-chain já é incondicional (roda antes/independente do POST), não precisa de lógica nova de retry ou detecção de falha — se o POST falhar (callback configurado mas servidor fora do ar), o comportamento atual (loga e desiste, sem retry) se mantém; o integrador pode cair pro polling on-chain por conta própria já que o dado está lá de qualquer forma. Resumo do escopo de implementação, quando for retomado:
+- Tornar `callbackUrl` opcional no payload do QR / schema de pareamento.
+- `ApprovalScreen` (`approval_screen.dart:88-96`): parar de rejeitar QR sem `callbackUrl`; pular só o `_postResponse` HTTPS quando ausente.
+- Manter a validação `https://` obrigatória quando o campo **está** presente (não afrouxar pra `http://`).
+- Documentar pro integrador (SDK/docs) o modo polling via `getSession`/`isSessionRevoked` como alternativa ao callback.
+
+Retomar quando o dono do projeto voltar ao assunto — provavelmente puxado pelo lado do Practice Valuation, que é quem tem o caso de uso concreto hoje (ver `PROJECT_STATE.md` de lá, Fase 8).
 
 ---
 
@@ -3420,8 +3425,17 @@ Ao validar o "Try again" com o celular físico de verdade (não só testes autom
 
 - Não foi trabalho no TruthID em si — o dono do projeto estava desenhando sync multi-dispositivo pro Practice Valuation (outro projeto dele) e queria reaproveitar a identidade/infra do TruthID. Duas lacunas do TruthID apareceram e foram investigadas contra o código real (`approval_screen.dart`, `client.ts`, `SessionRegistry.sol`, `VaultRegistry.sol`), não só de memória.
 - Achado 1: `callbackUrl` https é obrigatório no QR de login hoje (`approval_screen.dart:88-96`), mas a escrita da sessão on-chain já acontece incondicionalmente antes do POST — dá pra expor um modo "sem callback" (polling on-chain) barato, só tornando o campo opcional. Ressalva: não afrouxar pra `http://` (LAN) — reabriria o risco que o `https://` obrigatório existe pra evitar.
-- Achado 2: `VaultRegistry` (Fase 13) já resolve "CID + criptografia local + pinning redundante" — só é 1 vault por identidade hoje (password manager). Reaproveitar pra outro app exigiria generalizar pra múltiplos vaults por identidade, ou um contrato irmão.
+- Achado 2 (levantado nesta sessão, **corrigido na Sessão 95**): `VaultRegistry` (Fase 13) já resolve "CID + criptografia local + pinning redundante" — só é 1 vault por identidade hoje (password manager). Cheguei a propor generalizar pra múltiplos vaults por identidade pra servir o Practice Valuation.
 - Nada implementado, nenhum `/plan` rodado — registrado em "Roadmap de Evoluções Planejadas" pra quando o assunto voltar (ver também `PROJECT_STATE.md` do `practice-valuation`, Fase 8).
+
+---
+
+### Sessão 95 — 2026-07-12: Correção — Vault não muda, Practice Valuation só usa o login
+
+- O dono do projeto corrigiu o Achado 2 da Sessão 94: ele **não** quer generalizar o `VaultRegistry`. O Vault continua ligado diretamente à identidade, 1 vault por `identityId`, sem alteração — é exclusivo do password manager.
+- O Practice Valuation é outro software; ele só precisa do esquema de login/autenticação do TruthID (o "callback opcional no login" do Achado 1, que continua válido). Se ele sincronizar dados via IPFS, é mecanismo próprio dele, sem passar pelo `VaultRegistry` nem pela cifra ECIES derivada do pareamento do TruthID.
+- Entrada do Roadmap (`Callback opcional no login (fallback on-chain) + Vault genérico`) reescrita pra remover a parte do Vault genérico e deixar só o item de callback opcional, que é o único que segue relevante pro TruthID.
+- Nada implementado — só correção de registro/roadmap.
 
 ---
 
