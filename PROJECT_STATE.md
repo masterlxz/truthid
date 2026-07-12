@@ -1001,6 +1001,24 @@ A partir daí: Ledger assina UserOps off-chain → bundler submete → smart acc
 
 ---
 
+### Callback opcional no login (fallback on-chain) + Vault genérico — ideia externa (Sessão 94, 2026-07-12)
+
+**Contexto**: durante uma conversa sobre o Practice Valuation (outro projeto do dono, app de valuation de ações/cripto, `~/Documents/workspace/practice-valuation`), surgiu a ideia de sincronizar dados entre dispositivos de forma descentralizada, reaproveitando a identidade do TruthID em vez de um sistema de conta próprio. Só brainstorm — nenhum `/plan` rodado, nada implementado. Duas lacunas do TruthID apareceram nessa conversa:
+
+**1. Login hoje exige callback HTTPS obrigatório — trava integradores sem backend público.**
+`ApprovalScreen` (`approval_screen.dart:88-96`) recusa qualquer QR sem `callbackUrl` https — um app desktop local sem servidor próprio (como o Practice Valuation) fica de fora do fluxo de login atual.
+
+Achado ao investigar o código: a escrita da sessão on-chain (`SessionCreator` via UserOperation, dentro de `_approve()`) **já acontece incondicionalmente**, antes até do POST pro callback (ver comentário em `sdk/typescript/src/client.ts` sobre o mobile v14.9.5+). Ou seja, o "canal de fallback" que resolveria isso não precisa ser construído do zero, só **exposto**: tornar `callbackUrl` opcional no payload do QR e, quando ausente, pular só o `_postResponse` HTTPS — a escrita on-chain (que já ia rodar de qualquer forma) vira o único sinal de sucesso. Nesse modo, o integrador faria polling de `getSession`/`isSessionRevoked` (já expostos em `SessionRegistry`, leitura pública e gratuita) em vez de receber POST.
+
+**Ressalva de segurança**: o `https://` obrigatório existe pra impedir que um QR malicioso redirecione a resposta assinada pro servidor de um atacante. A extensão certa é permitir **omitir** o callback inteiramente — nunca afrouxar pra aceitar `http://` (ex: pensando numa LAN) como substituto, isso reabriria o mesmo risco que a checagem atual evita.
+
+**2. `VaultRegistry` (Fase 13) já é, na prática, "IPFS + ponteiro on-chain por identidade + criptografia local" — só falta ser genérico.**
+O Practice Valuation precisaria exatamente desse mecanismo (blob cifrado, CID versionado, múltiplos provedores de pin com health-check) pra sincronizar seus próprios dados entre dispositivos. Hoje `VaultRegistry.sol` é 1 vault por `identityId`, amarrado ao caso de uso do password manager. Reaproveitar pra outro app exigiria generalizar (`identityId + vaultKind/appId → VaultRef`, um mapeamento por slot) ou um contrato irmão no mesmo padrão — nenhuma das duas escolhida ainda.
+
+**Nada disso foi implementado ou planejado em etapas.** É uma ideia registrada, no mesmo estágio que outras entradas deste Roadmap antes de virarem Fase. Retomar quando o dono do projeto voltar ao assunto — provavelmente puxado pelo lado do Practice Valuation, que é quem tem o caso de uso concreto hoje (ver `PROJECT_STATE.md` de lá, Fase 8).
+
+---
+
 ### Interface e identidade visual (UI/UX)
 
 **Quando**: após Fase 4 (Mobile App completo) — pode ser uma Fase 5.5 intercalada com SDKs, ou uma Fase 8 dedicada pós-lançamento. A definir pelo dono do projeto.
@@ -3395,6 +3413,15 @@ Ao validar o "Try again" com o celular físico de verdade (não só testes autom
 - **Não validado**: Flutter não está instalado neste host (novo PC, roda via Docker — ver seção de ambiente), então não rodei `flutter analyze`/`flutter test` nem build. Revisão manual do arquivo inteiro, linha a linha, no lugar. Validação real (Docker build + teste no celular) fica pendente pro dono do projeto.
 - **Débitos**: #53 (nova, tabela de Débitos Técnicos) já nasce resolvida nesta mesma sessão.
 - **Próximo passo**: rodar `cd mobile && ./dev.sh build` pra confirmar que compila de verdade, e então repetir a validação da decifra da vault key (pendência restante da Sessão 92) — agora sem depender de uma única RPC.
+
+---
+
+### Sessão 94 — 2026-07-12: Ideia externa — login sem callback (fallback on-chain) + Vault genérico
+
+- Não foi trabalho no TruthID em si — o dono do projeto estava desenhando sync multi-dispositivo pro Practice Valuation (outro projeto dele) e queria reaproveitar a identidade/infra do TruthID. Duas lacunas do TruthID apareceram e foram investigadas contra o código real (`approval_screen.dart`, `client.ts`, `SessionRegistry.sol`, `VaultRegistry.sol`), não só de memória.
+- Achado 1: `callbackUrl` https é obrigatório no QR de login hoje (`approval_screen.dart:88-96`), mas a escrita da sessão on-chain já acontece incondicionalmente antes do POST — dá pra expor um modo "sem callback" (polling on-chain) barato, só tornando o campo opcional. Ressalva: não afrouxar pra `http://` (LAN) — reabriria o risco que o `https://` obrigatório existe pra evitar.
+- Achado 2: `VaultRegistry` (Fase 13) já resolve "CID + criptografia local + pinning redundante" — só é 1 vault por identidade hoje (password manager). Reaproveitar pra outro app exigiria generalizar pra múltiplos vaults por identidade, ou um contrato irmão.
+- Nada implementado, nenhum `/plan` rodado — registrado em "Roadmap de Evoluções Planejadas" pra quando o assunto voltar (ver também `PROJECT_STATE.md` do `practice-valuation`, Fase 8).
 
 ---
 
