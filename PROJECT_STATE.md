@@ -773,7 +773,7 @@ Desktop (root/controller)
 
 **Permissão granular por Device**: `canWriteVault` (bool, ou enum `read` / `read_write`) por Device, configurável apenas pelo Desktop. Decisão de implementação aberta: campo on-chain (no `DeviceRegistry` ou no novo `VaultRegistry`) vs. estado local controlado só pelo Desktop — como não há terceiros desconfiados, local é provavelmente suficiente e mais barato.
 
-**Perfis (Trabalho / Casa / outros)**: metadado local de cada entrada do vault (tag), não algo on-chain. O Mobile decide, no momento do scan do QR da extensão, qual perfil está ativo e filtra o payload antes de enviar. v1 usa perfis fixos pré-definidos.
+**Perfis (nomeados pelo usuário — mudança de escopo pedida na Sessão 97)**: metadado local de cada entrada do vault (tag), não algo on-chain. O Mobile decide, no momento do scan do QR da extensão, qual perfil está ativo e filtra o payload antes de enviar. **v1 não usa mais perfis fixos pré-definidos** (`Trabalho`/`Casa`/`Pessoal` hardcoded) — o dono do projeto quer criar/nomear perfis livremente e marcar cada senha em quantos perfis quiser (já suportado pelo schema, `profiles: Vec<String>`/`List<String>` por entrada já é uma lista, não um valor único, desde a 13.7). Falta: UI de criar/renomear/apagar perfis (Desktop `VaultManagement.tsx` e Mobile), e decidir onde a *lista de perfis existentes* mora — via schema explícito (novo campo no `Vault`/`Vault` do Mobile listando os nomes criados, permite perfil vazio sem nenhuma entrada ainda) ou derivada implicitamente (o perfil "existe" só enquanto alguma entrada o referencia) — primeira opção parece mais amigável (dá pra criar um perfil vazio antes de marcar qualquer senha), decisão final de UX fica pra quando isso for implementado. `kVaultProfiles` (mobile) e `PROFILES` (`desktop/src/components/VaultManagement.tsx`) deixam de ser constantes fixas.
 
 **Revogação em cascata**: revogar um Device (ex: Mobile perdido) via Desktop precisa invalidar em cascata qualquer sessão de extensão que aquele Device tenha aberto. O Desktop precisa manter localmente o registro de qual Device originou qual sessão ativa, para conseguir notificar/expirar essas sessões no momento da revogação.
 
@@ -896,6 +896,7 @@ O usuário configura: `{ name, endpoint_url, api_key }` — o app não precisa s
 - Tela no Mobile de seleção/confirmação de perfil antes do scan da extensão.
 - Registro local (no Desktop) de qual Device originou qual sessão de extensão (para revogação em cascata).
 - Canal P2P efêmero Mobile→Extensão para entregar o subconjunto de senhas já filtrado por perfil (mantido — mesmo padrão do login via QR já em produção).
+- **UI de gerenciar perfis nomeados pelo usuário** (criar/renomear/apagar), em vez dos 3 fixos atuais — Desktop (`VaultManagement.tsx`) e Mobile. Decisão de schema pendente (campo explícito de "perfis existentes" vs. derivar da união das tags em uso). Pedido pelo dono do projeto na Sessão 97, é pré-requisito antes de 13.9 poder mostrar a lista real de perfis pro usuário escolher no scan da extensão.
 
 #### Não-escopo explícito (por agora)
 
@@ -904,7 +905,6 @@ O usuário configura: `{ name, endpoint_url, api_key }` — o app não precisa s
 - Import/export de outros password managers.
 - Compartilhamento de credenciais entre identidades diferentes (multi-usuário/empresa).
 - Qualquer flow que exija o usuário digitar uma senha mestre.
-- Perfis ad-hoc por site (v1 usa perfis fixos pré-definidos).
 
 #### Ordem sugerida de implementação
 
@@ -3508,8 +3508,9 @@ Ao validar o "Try again" com o celular físico de verdade (não só testes autom
 - Expliquei a restrição física real por trás da rejeição: uma extensão de navegador nunca consegue escutar conexão de entrada (limite de sandbox da plataforma, não escolha de design) — só faz requisição de saída.
 - Desenhados dois transportes, mesma prioridade, tentados em sequência (não mutuamente exclusivos, a pedido do dono do projeto): **descoberta automática na LAN** (extensão varre a sub-rede local procurando um servidor HTTP efêmero que o mobile sobe, mais simples/rápido mas exige rede compartilhada) e **dead-drop via IPFS/IPNS público** (reaproveita a infra de pinning já usada pelo Vault, funciona em qualquer rede mas com propagação lenta e suporte incerto em provedores PSA simples sem Kubo). Detalhes completos na seção de desenho acima.
 - Pendência nova gerada por essa escolha: a "revogação em cascata" do desenho original assumia o Desktop no meio do transporte pra saber qual Device abriu qual sessão — sem o Desktop no caminho, isso não vale mais como estava escrito. Provável resposta é TTL curto sem canal de revogação ativa, mas fica como decisão de produto pra confirmar quando 13.9 for implementada.
+- **Mudança de escopo pedida na mesma sessão**: perfis deixam de ser os 3 fixos pré-definidos (`Trabalho`/`Casa`/`Pessoal`) — o dono do projeto quer criar/nomear perfis livremente e marcar cada senha em quantos perfis quiser. O schema por entrada já suporta isso (`profiles` já é lista desde a 13.7); falta UI de criar/gerenciar perfis (Desktop + Mobile) e decidir onde a lista de perfis existentes mora. Vira pré-requisito da 13.9, já que a tela de escolha de perfil no scan da extensão precisa mostrar a lista real do usuário, não mais a constante fixa. Detalhe completo na seção "Perfis" acima.
 - Só desenho, nenhum código escrito nesta sessão.
-- **Próximo passo**: implementar 13.9 (extensão de navegador) com os dois transportes, quando o dono do projeto retomar.
+- **Próximo passo**: implementar a UI de perfis nomeados (pré-requisito) e depois 13.9 (extensão de navegador) com os dois transportes, quando o dono do projeto retomar.
 
 ---
 
