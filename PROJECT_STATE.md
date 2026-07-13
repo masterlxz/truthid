@@ -1024,6 +1024,30 @@ Retomar quando o dono do projeto voltar ao assunto — provavelmente puxado pelo
 
 ---
 
+### Vault genérico multi-app + delegação de assinatura via session key — brainstorm (Sessão 96, 2026-07-13)
+
+**Só brainstorm — nenhum `/plan` rodado, nada implementado. Reabre, sob um desenho diferente, a parte de "Vault genérico" que a Sessão 95 tinha fechado como "não é o que o dono do projeto quer".** A diferença desta vez: não é mais "generalizar o Vault de senhas", é um mecanismo novo — apps terceiros (Practice Valuation sendo o primeiro caso real) sincronizando dados próprios via IPFS com o CID atual registrado on-chain, no mesmo padrão que o `VaultRegistry` já usa (`identityId → {cid, contentHash, version}`), mas sem tocar no vault de senhas existente.
+
+**Problema original**: Practice Valuation (Fase 8 do `PROJECT_STATE.md` dele) quer sincronizar valuations/alertas salvos entre desktop e celular via IPFS, com o CID atual registrado on-chain.
+
+**Por que não dá pra só reaproveitar o `VaultRegistry` como está**: ele é 1 vault por identidade, dedicado ao password manager (ver `#### O que é aproveitável do código já existente`, Fase 13). Serviria um segundo app só generalizando pra algo tipo `identityId + appId → VaultRef`, permitindo múltiplos apps terceiros registrarem seu próprio slot de CID sob a mesma identidade.
+
+**Segunda questão, mais sensível — como o app terceiro paga gas pra atualizar seu CID**: sem o usuário precisar da Ledger toda hora, e sem abrir brecha onde qualquer app "logado com TruthID" ganharia poder de assinar transação. Consenso da conversa (direção, não decisão final):
+
+1. Login com TruthID (prova de identidade) e capacidade de assinar transação via smart account são coisas completamente separadas — login nunca deve dar poder de assinatura.
+2. Apps terceiros como o Practice Valuation não devem ter chave privada própria nem assinar UserOperations diretamente. Fluxo proposto: o app terceiro monta a UserOperation (ex: "atualizar CID X no slot practice-valuation") sem assinar, manda o pedido pro TruthID (IPC/deep link se for o mesmo device; QR/P2P se forem devices diferentes — ex: celular com Practice Valuation pedindo aprovação pro TruthID do desktop), o TruthID mostra uma tela de aprovação clara ("Practice Valuation quer atualizar o vault dele. Permitir?" — mesmo padrão do approval screen que já existe pro browser extension, ver `#### Hierarquia de confiança: Devices vs. sessões de extensão`, Fase 13), o usuário aprova com um clique, e só então o TruthID assina com uma **chave de sessão escopada**, nunca com a chave raiz/Ledger. Paymaster cobre o gas via UserOperation patrocinada (mesma infra da Fase 14).
+3. A chave de sessão precisa ser fortemente escopada: contrato de destino permitido (só o `VaultRegistry` generalizado), função permitida (só o método de update de CID), escopo/slot (só o `appId` do Practice Valuation, sem autoridade sobre o vault de senhas ou qualquer outro slot), expiração/revogação em cascata (revogar o device/app no TruthID mata a chave na hora — mesmo princípio de revogação em cascata já desenhado pra sessões de extensão na Fase 13).
+
+**Em aberto, pra decidir num `/plan` futuro (não decidir sozinho, trazer opções pro dono escolher)**:
+- `VaultRegistry` generalizado (`identityId + appId → VaultRef`) vs. contrato irmão dedicado — trade-off complexidade vs. reuso.
+- O canal de "app terceiro pede pro TruthID assinar" reaproveita o approval flow que já existe pra extensão, ou precisa de canal novo — IPC local (mesmo device) vs. QR/P2P (devices diferentes)?
+- UX da aprovação: clique único a cada update (mais seguro, mais fricção) vs. sessão válida por N usos/tempo após a primeira aprovação (menos fricção, janela de exposição maior) — configurável no escopo da própria session key, mas é decisão de produto.
+- Onde mora o "registro de apps terceiros autorizados" — nova entidade no schema do TruthID (tipo um `SessionRegistry` por app), ou estende algo que já existe.
+
+Retomar quando o dono do projeto quiser rodar um `/plan` de verdade sobre isso — provavelmente puxado de novo pelo lado do Practice Valuation.
+
+---
+
 ### Interface e identidade visual (UI/UX)
 
 **Quando**: após Fase 4 (Mobile App completo) — pode ser uma Fase 5.5 intercalada com SDKs, ou uma Fase 8 dedicada pós-lançamento. A definir pelo dono do projeto.
@@ -3436,6 +3460,15 @@ Ao validar o "Try again" com o celular físico de verdade (não só testes autom
 - O Practice Valuation é outro software; ele só precisa do esquema de login/autenticação do TruthID (o "callback opcional no login" do Achado 1, que continua válido). Se ele sincronizar dados via IPFS, é mecanismo próprio dele, sem passar pelo `VaultRegistry` nem pela cifra ECIES derivada do pareamento do TruthID.
 - Entrada do Roadmap (`Callback opcional no login (fallback on-chain) + Vault genérico`) reescrita pra remover a parte do Vault genérico e deixar só o item de callback opcional, que é o único que segue relevante pro TruthID.
 - Nada implementado — só correção de registro/roadmap.
+
+---
+
+### Sessão 96 — 2026-07-13: Brainstorm — Vault genérico multi-app + delegação de assinatura via session key (reabre parte da Sessão 95)
+
+- De novo puxado pelo Practice Valuation (Fase 8 do `PROJECT_STATE.md` dele): sincronizar valuations/alertas entre desktop e celular via IPFS, com o CID registrado on-chain no mesmo padrão do `VaultRegistry` do TruthID.
+- Reabre, sob desenho diferente, a parte que a Sessão 95 tinha fechado ("Vault não muda"): agora não é generalizar o vault de senhas em si, é um mecanismo de `identityId + appId → VaultRef` pra apps terceiros terem seu próprio slot de CID, deixando o slot do password manager intocado.
+- Questão nova levantada nesta sessão (não estava nas 94/95): como um app terceiro paga gas pra atualizar seu CID sem o usuário precisar da Ledger toda hora e sem dar poder de assinatura a qualquer app "logado". Direção que fez mais sentido na conversa: login (prova de identidade) e assinatura (smart account) continuam separados; o app terceiro monta a UserOperation sem assinar, pede aprovação ao TruthID (IPC local ou QR/P2P entre devices), o TruthID mostra tela de aprovação (mesmo padrão do approval screen da extensão) e assina com uma **session key escopada** (contrato + função + slot do `appId`, com expiração/revogação em cascata) — nunca com a chave raiz/Ledger. Paymaster cobre o gas.
+- Só brainstorm, nenhum `/plan` rodado, nada implementado. Registrado em "Roadmap de Evoluções Planejadas" com os pontos em aberto (contrato generalizado vs. irmão dedicado; canal de aprovação; UX de clique único vs. sessão; onde mora o registro de apps autorizados) pra decidir num `/plan` futuro.
 
 ---
 
