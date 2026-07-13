@@ -12,12 +12,6 @@ import { useVaultPublish } from "../hooks/useVaultPublish";
 const VAULT_KEY_MESSAGE = "TruthID Vault Key v1";
 
 // ---------------------------------------------------------------------------
-// Constantes
-// ---------------------------------------------------------------------------
-
-const PROFILES = ["Trabalho", "Casa", "Pessoal"];
-
-// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -55,16 +49,21 @@ function emptyForm(): FormState {
 function ProfilePicker({
   value,
   onChange,
+  options,
 }: {
   value: string[];
   onChange: (v: string[]) => void;
+  options: string[];
 }) {
   function toggle(p: string) {
     onChange(value.includes(p) ? value.filter((x) => x !== p) : [...value, p]);
   }
+  if (options.length === 0) {
+    return <p className="muted" style={{ margin: 0, fontSize: "0.85em" }}>Nenhum perfil criado ainda — crie um em "Gerenciar perfis" abaixo.</p>;
+  }
   return (
     <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
-      {PROFILES.map((p) => (
+      {options.map((p) => (
         <button
           key={p}
           type="button"
@@ -93,11 +92,13 @@ function EntryForm({
   onSave,
   onCancel,
   saving,
+  profileOptions,
 }: {
   initial: FormState;
   onSave: (f: FormState) => void;
   onCancel: () => void;
   saving: boolean;
+  profileOptions: string[];
 }) {
   const [form, setForm] = useState<FormState>(initial);
   const [showPw, setShowPw] = useState(false);
@@ -143,7 +144,7 @@ function EntryForm({
       </div>
       <div className="field">
         <label>Grupos</label>
-        <ProfilePicker value={form.profiles} onChange={(v) => set("profiles", v)} />
+        <ProfilePicker value={form.profiles} onChange={(v) => set("profiles", v)} options={profileOptions} />
       </div>
       <div className="actions-row">
         <button
@@ -256,18 +257,26 @@ export function VaultManagement() {
   const [permsOpen, setPermsOpen] = useState(false);
   const [permError, setPermError] = useState<string | null>(null);
 
+  // ── Perfis nomeados pelo usuário ─────────────────────────────────────────
+  const [profiles, setProfiles] = useState<string[]>([]);
+  const [profilesOpen, setProfilesOpen] = useState(false);
+  const [profileError, setProfileError] = useState<string | null>(null);
+  const [newProfileName, setNewProfileName] = useState("");
+
   // ── Carregamento inicial ──────────────────────────────────────────────────
   async function loadAll() {
     setLoadingEntries(true);
     try {
-      const [e, p, perms] = await Promise.all([
+      const [e, p, perms, prof] = await Promise.all([
         invoke<VaultEntry[]>("vault_list_entries"),
         invoke<number>("vault_pending_changes"),
         invoke<DeviceVaultPermission[]>("vault_get_device_permissions"),
+        invoke<string[]>("vault_list_profiles"),
       ]);
       setEntries(e);
       setPendingCount(p);
       setPermissions(perms);
+      setProfiles(prof);
     } catch {
       // sem vault ainda — tudo vazio é ok
     } finally {
@@ -347,6 +356,43 @@ export function VaultManagement() {
       });
     } catch (e) {
       setPermError(String(e));
+    }
+  }
+
+  // ── Gerenciar perfis ─────────────────────────────────────────────────────
+  async function handleAddProfile() {
+    const name = newProfileName.trim();
+    if (!name) return;
+    setProfileError(null);
+    try {
+      await invoke<void>("vault_add_profile", { name });
+      setNewProfileName("");
+      await loadAll();
+    } catch (e) {
+      setProfileError(String(e));
+    }
+  }
+
+  async function handleRenameProfile(oldName: string) {
+    const newName = window.prompt(`Renomear perfil "${oldName}" para:`, oldName)?.trim();
+    if (!newName || newName === oldName) return;
+    setProfileError(null);
+    try {
+      await invoke<void>("vault_rename_profile", { oldName, newName });
+      await loadAll();
+    } catch (e) {
+      setProfileError(String(e));
+    }
+  }
+
+  async function handleDeleteProfile(name: string) {
+    if (!window.confirm(`Apagar o perfil "${name}"? Ele será removido de todas as senhas que o usam.`)) return;
+    setProfileError(null);
+    try {
+      await invoke<void>("vault_delete_profile", { name });
+      await loadAll();
+    } catch (e) {
+      setProfileError(String(e));
     }
   }
 
@@ -493,6 +539,7 @@ export function VaultManagement() {
                     onSave={(f) => handleEdit(entry.id, f)}
                     onCancel={() => setEditingId(null)}
                     saving={mutating}
+                    profileOptions={profiles}
                   />
                 </div>
               );
@@ -568,11 +615,71 @@ export function VaultManagement() {
             onSave={handleAdd}
             onCancel={() => setAddOpen(false)}
             saving={mutating}
+            profileOptions={profiles}
           />
         </div>
       )}
 
       <hr />
+
+      {/* Gerenciar perfis */}
+      <div style={{ marginBottom: "0.75rem" }}>
+        <button
+          onClick={() => setProfilesOpen((v) => !v)}
+          style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)", fontSize: "0.9em", padding: "0.4em 1em" }}
+        >
+          {profilesOpen ? "▼" : "▶"} Gerenciar perfis ({profiles.length})
+        </button>
+
+        {profilesOpen && (
+          <div className="card" style={{ marginTop: "0.75rem" }}>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Crie perfis com o nome que quiser e marque cada senha em quantos perfis fizer sentido.
+            </p>
+            {profileError && <p className="error-text">{profileError}</p>}
+            {profiles.length === 0 ? (
+              <p className="muted">Nenhum perfil criado ainda.</p>
+            ) : (
+              <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
+                {profiles.map((p) => (
+                  <span
+                    key={p}
+                    className="status-badge"
+                    style={{ display: "inline-flex", alignItems: "center", gap: "0.4em", fontSize: "0.85em", padding: "0.2em 0.6em" }}
+                  >
+                    <button
+                      onClick={() => handleRenameProfile(p)}
+                      style={{ border: "none", background: "none", padding: 0, font: "inherit", color: "inherit", cursor: "pointer" }}
+                      title="Renomear"
+                    >
+                      {p}
+                    </button>
+                    <button
+                      onClick={() => handleDeleteProfile(p)}
+                      style={{ border: "none", background: "none", padding: 0, font: "inherit", color: "var(--color-danger)", cursor: "pointer" }}
+                      title="Apagar"
+                    >
+                      ✕
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <input
+                value={newProfileName}
+                onChange={(e) => setNewProfileName(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") handleAddProfile(); }}
+                placeholder="Nome do novo perfil"
+                style={{ flex: 1 }}
+              />
+              <button onClick={handleAddProfile} disabled={!newProfileName.trim()}>
+                Adicionar
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Permissões por device */}
       <div>

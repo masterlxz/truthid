@@ -5,12 +5,22 @@ import 'package:url_launcher/url_launcher.dart';
 import '../services/vault_repository.dart';
 import '../theme.dart';
 import '../widgets/info_row.dart';
+import 'vault_entry_form_screen.dart';
 
-// Detalhe de uma entrada do Vault — só exibição, sem chamada nenhuma (a
-// entrada já veio em memória da VaultScreen). Senha escondida por padrão.
+// Detalhe de uma entrada do Vault. Editar/apagar só aparece quando o device
+// tem canWriteVault (ver PROJECT_STATE.md, Sessão 97) — quem navega pra cá
+// já checou isso (vault_screen.dart). Senha escondida por padrão.
 class VaultEntryDetailScreen extends StatefulWidget {
   final VaultEntry entry;
-  const VaultEntryDetailScreen({super.key, required this.entry});
+  final bool canWrite;
+  final VaultRepository? repository;
+
+  const VaultEntryDetailScreen({
+    super.key,
+    required this.entry,
+    this.canWrite = false,
+    this.repository,
+  });
 
   @override
   State<VaultEntryDetailScreen> createState() =>
@@ -18,7 +28,17 @@ class VaultEntryDetailScreen extends StatefulWidget {
 }
 
 class _VaultEntryDetailScreenState extends State<VaultEntryDetailScreen> {
+  late final VaultRepository _repository;
+  late VaultEntry _entry;
   bool _passwordVisible = false;
+  bool _deleting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _repository = widget.repository ?? VaultRepository();
+    _entry = widget.entry;
+  }
 
   void _copy(String label, String value) {
     Clipboard.setData(ClipboardData(text: value));
@@ -27,12 +47,60 @@ class _VaultEntryDetailScreenState extends State<VaultEntryDetailScreen> {
     );
   }
 
+  Future<void> _edit() async {
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => VaultEntryFormScreen(entry: _entry, repository: _repository),
+      ),
+    );
+    if (saved == true) {
+      final entries = await _repository.listEntries();
+      final updated = entries.where((e) => e.id == _entry.id).toList();
+      if (mounted && updated.isNotEmpty) {
+        setState(() => _entry = updated.first);
+      }
+    }
+  }
+
+  Future<void> _delete() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete entry?'),
+        content: Text('This will remove "${_entry.site}" from your vault.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Delete', style: TextStyle(color: AppColors.danger)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _deleting = true);
+    await _repository.deleteEntry(_entry.id);
+    if (mounted) Navigator.of(context).pop(true);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final entry = widget.entry;
+    final entry = _entry;
 
     return Scaffold(
-      appBar: AppBar(title: Text(entry.site)),
+      appBar: AppBar(
+        title: Text(entry.site),
+        actions: widget.canWrite
+            ? [
+                IconButton(icon: const Icon(Icons.edit), onPressed: _deleting ? null : _edit),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline),
+                  onPressed: _deleting ? null : _delete,
+                ),
+              ]
+            : null,
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(

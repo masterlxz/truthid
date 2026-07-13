@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'vault_cipher_service.dart';
@@ -96,6 +97,24 @@ class VaultEntry {
       );
 }
 
+/// Permissão de escrita de um device no vault (`pubKey` = endereço do device).
+/// Concedida só pelo Desktop/controller — o Mobile só lê, nunca escreve esse
+/// campo (ver PROJECT_STATE.md, Sessão 97).
+class VaultDevicePermission {
+  final String pubKey;
+  final bool canWrite;
+
+  const VaultDevicePermission({required this.pubKey, required this.canWrite});
+
+  factory VaultDevicePermission.fromJson(Map<String, dynamic> json) =>
+      VaultDevicePermission(
+        pubKey: json['pub_key'] as String,
+        canWrite: json['can_write'] as bool,
+      );
+
+  Map<String, dynamic> toJson() => {'pub_key': pubKey, 'can_write': canWrite};
+}
+
 // ---------------------------------------------------------------------------
 // Container interno (não exposto fora do arquivo)
 // ---------------------------------------------------------------------------
@@ -103,7 +122,18 @@ class VaultEntry {
 class _VaultData {
   final int version;
   final List<VaultEntry> entries;
-  const _VaultData({required this.version, required this.entries});
+  /// Nomes de perfis criados pelo usuário (ex: ["Trabalho", "Banco"]) — geridos
+  /// só pelo Desktop (Mobile é somente-leitura pro Vault), ver PROJECT_STATE.md
+  /// Sessão 97.
+  final List<String> profileNames;
+  /// Permissões de escrita por device — Mobile só lê (ver VaultDevicePermission).
+  final List<VaultDevicePermission> devicePermissions;
+  const _VaultData({
+    required this.version,
+    required this.entries,
+    this.profileNames = const [],
+    this.devicePermissions = const [],
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -122,6 +152,78 @@ class VaultRepository {
   Future<List<VaultEntry>> listEntries() async {
     final data = await _load();
     return data.entries;
+  }
+
+  Future<List<String>> listProfileNames() async {
+    final data = await _load();
+    return data.profileNames;
+  }
+
+  Future<int> currentVersion() async {
+    final data = await _load();
+    return data.version;
+  }
+
+  // Cria um novo perfil (nome livre, sem duplicatas). No-op se já existir.
+  // Mirror de Vault::add_profile (desktop/src-tauri/src/vault.rs).
+  Future<void> addProfile(String name) async {
+    final data = await _load();
+    if (data.profileNames.contains(name)) return;
+    await _save(_VaultData(
+      version: data.version + 1,
+      entries: data.entries,
+      profileNames: [...data.profileNames, name],
+      devicePermissions: data.devicePermissions,
+    ));
+  }
+
+  // Renomeia um perfil na lista e em cascata em todas as entradas que o usam.
+  // Mirror de Vault::rename_profile.
+  Future<void> renameProfile(String oldName, String newName) async {
+    final data = await _load();
+    if (!data.profileNames.contains(oldName)) return;
+    final profileNames =
+        data.profileNames.map((p) => p == oldName ? newName : p).toList();
+    final entries = data.entries
+        .map((e) => e.profiles.contains(oldName)
+            ? e.copyWith(profiles: e.profiles.map((p) => p == oldName ? newName : p).toList())
+            : e)
+        .toList();
+    await _save(_VaultData(
+      version: data.version + 1,
+      entries: entries,
+      profileNames: profileNames,
+      devicePermissions: data.devicePermissions,
+    ));
+  }
+
+  // Remove um perfil da lista e limpa essa tag de todas as entradas que a
+  // usam. Mirror de Vault::delete_profile.
+  Future<void> deleteProfile(String name) async {
+    final data = await _load();
+    if (!data.profileNames.contains(name)) return;
+    final profileNames = data.profileNames.where((p) => p != name).toList();
+    final entries = data.entries
+        .map((e) => e.profiles.contains(name)
+            ? e.copyWith(profiles: e.profiles.where((p) => p != name).toList())
+            : e)
+        .toList();
+    await _save(_VaultData(
+      version: data.version + 1,
+      entries: entries,
+      profileNames: profileNames,
+      devicePermissions: data.devicePermissions,
+    ));
+  }
+
+  // Permissão de escrita do device `myPubKey`. `false` por padrão — um
+  // device precisa ter sido explicitamente autorizado pelo Desktop.
+  Future<bool> canWriteVault(String myPubKey) async {
+    final data = await _load();
+    for (final p in data.devicePermissions) {
+      if (p.pubKey.toLowerCase() == myPubKey.toLowerCase()) return p.canWrite;
+    }
+    return false;
   }
 
   Future<VaultEntry> addEntry({
@@ -148,6 +250,8 @@ class VaultRepository {
     await _save(_VaultData(
       version: data.version + 1,
       entries: [...data.entries, entry],
+      profileNames: data.profileNames,
+      devicePermissions: data.devicePermissions,
     ));
     return entry;
   }
@@ -161,7 +265,12 @@ class VaultRepository {
     final entries = data.entries
         .map((e) => e.id == entry.id ? updated : e)
         .toList();
-    await _save(_VaultData(version: data.version + 1, entries: entries));
+    await _save(_VaultData(
+      version: data.version + 1,
+      entries: entries,
+      profileNames: data.profileNames,
+      devicePermissions: data.devicePermissions,
+    ));
     return updated;
   }
 
@@ -172,7 +281,12 @@ class VaultRepository {
     final newVersion = entries.length < data.entries.length
         ? data.version + 1
         : data.version;
-    await _save(_VaultData(version: newVersion, entries: entries));
+    await _save(_VaultData(
+      version: newVersion,
+      entries: entries,
+      profileNames: data.profileNames,
+      devicePermissions: data.devicePermissions,
+    ));
   }
 
   // Sobrescreve o cache local com um blob já cifrado vindo de fora (ex: o
@@ -183,6 +297,37 @@ class VaultRepository {
   Future<void> overwriteCache(Uint8List encryptedBlob) async {
     final path = await _vaultPath();
     await File(path).writeAsBytes(encryptedBlob);
+  }
+
+  // Lê o vault.enc cru (ainda cifrado) — é isso que se pina no IPFS e se
+  // hasheia pro VaultRegistry, mesmo formato que o Desktop publica
+  // (nunca decifra pra publicar, só pra exibir localmente).
+  Future<Uint8List> readRawBlob() async {
+    final path = await _vaultPath();
+    return File(path).readAsBytes();
+  }
+
+  // Rastreio de publicação — mirror de mark_published/pending_changes do
+  // Desktop (desktop/src-tauri/src/vault.rs), guardado localmente via
+  // flutter_secure_storage em vez de um arquivo separado.
+  static const _publishedVersionKey = 'vault_last_published_version';
+  static const _storage = FlutterSecureStorage();
+
+  Future<void> markPublished(int version) async {
+    await _storage.write(
+      key: _publishedVersionKey,
+      value: version.toString(),
+    );
+  }
+
+  // Quantas versões do vault local ainda não foram publicadas. 0 = nada
+  // pendente.
+  Future<int> pendingChanges() async {
+    final data = await _load();
+    final raw = await _storage.read(key: _publishedVersionKey);
+    final last = raw != null ? int.tryParse(raw) ?? 0 : 0;
+    final pending = data.version - last;
+    return pending > 0 ? pending : 0;
   }
 
   // -------------------------------------------------------------------------
@@ -207,13 +352,28 @@ class VaultRepository {
     final entries = (map['entries'] as List)
         .map((e) => VaultEntry.fromJson(e as Map<String, dynamic>))
         .toList();
-    return _VaultData(version: (map['version'] as int?) ?? 0, entries: entries);
+    final profileNames = map['profile_names'] != null
+        ? List<String>.from(map['profile_names'] as List)
+        : const <String>[];
+    final devicePermissions = map['device_permissions'] != null
+        ? (map['device_permissions'] as List)
+            .map((p) => VaultDevicePermission.fromJson(p as Map<String, dynamic>))
+            .toList()
+        : const <VaultDevicePermission>[];
+    return _VaultData(
+      version: (map['version'] as int?) ?? 0,
+      entries: entries,
+      profileNames: profileNames,
+      devicePermissions: devicePermissions,
+    );
   }
 
   Future<void> _save(_VaultData data) async {
     final map = {
       'version': data.version,
       'entries': data.entries.map((e) => e.toJson()).toList(),
+      'profile_names': data.profileNames,
+      'device_permissions': data.devicePermissions.map((p) => p.toJson()).toList(),
     };
     final json = utf8.encode(jsonEncode(map));
     final blob = await _cipherService.encrypt(Uint8List.fromList(json));

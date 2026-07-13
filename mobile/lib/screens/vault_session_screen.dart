@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../constants/vault_profiles.dart';
 import '../services/blockchain_service.dart';
 import '../services/device_key_service.dart';
 import '../services/local_storage_service.dart';
@@ -50,6 +49,7 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
   String? _selectedProfile;
   int _matchCount = 0;
   VaultSyncStatus? _syncStatus;
+  VaultSyncOutcome? _outcome;
 
   late final BlockchainService _blockchain;
   late final VaultSyncService _syncService;
@@ -75,11 +75,12 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
     _status = _Status.info;
   }
 
-  Future<void> _selectProfile(String profile) async {
-    setState(() {
-      _selectedProfile = profile;
-      _status = _Status.loadingMatches;
-    });
+  // Sincroniza o vault (uma vez) pra saber a lista real de perfis do usuário
+  // antes de mostrar o picker — os perfis fixos hardcoded foram removidos
+  // (ver PROJECT_STATE.md, Sessão 97). A escolha do perfil em si (abaixo) só
+  // filtra o resultado já sincronizado, sem precisar sincronizar de novo.
+  Future<void> _loadProfiles() async {
+    setState(() => _status = _Status.loadingMatches);
 
     final address = await _keyService.getDeviceAddress();
     var identityId = await _storage.getPairedIdentityId();
@@ -91,25 +92,32 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
     if (identityId == null) {
       if (mounted) {
         setState(() {
-          _matchCount = 0;
-          _syncStatus = null;
-          _status = _Status.showingMatches;
+          _outcome = null;
+          _status = _Status.selectingProfile;
         });
       }
       return;
     }
 
     final outcome = await _syncService.sync(BigInt.parse(identityId));
-    final matches =
-        outcome.entries.where((e) => e.profiles.contains(profile)).length;
-
     if (mounted) {
       setState(() {
-        _matchCount = matches;
-        _syncStatus = outcome.status;
-        _status = _Status.showingMatches;
+        _outcome = outcome;
+        _status = _Status.selectingProfile;
       });
     }
+  }
+
+  void _selectProfile(String profile) {
+    final matches =
+        _outcome?.entries.where((e) => e.profiles.contains(profile)).length ??
+            0;
+    setState(() {
+      _selectedProfile = profile;
+      _matchCount = matches;
+      _syncStatus = _outcome?.status;
+      _status = _Status.showingMatches;
+    });
   }
 
   @override
@@ -153,8 +161,7 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
             InfoRow(label: 'Session', value: _sessionId!),
             const SizedBox(height: 32),
             ElevatedButton(
-              onPressed: () =>
-                  setState(() => _status = _Status.selectingProfile),
+              onPressed: _loadProfiles,
               child: const Text('Continue'),
             ),
           ],
@@ -164,6 +171,7 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
   }
 
   Widget _buildProfilePickerUI() {
+    final profileNames = _outcome?.profileNames ?? const <String>[];
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -179,18 +187,25 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
             style: TextStyle(color: AppColors.textMuted),
           ),
           const SizedBox(height: 24),
-          ...kVaultProfiles.map(
-            (p) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: OutlinedButton(
-                onPressed: () => _selectProfile(p),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(p),
+          if (profileNames.isEmpty)
+            const Text(
+              'No profiles created yet — create one from the Desktop app '
+              'and sync again.',
+              style: TextStyle(color: AppColors.textMuted),
+            )
+          else
+            ...profileNames.map(
+              (p) => Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: OutlinedButton(
+                  onPressed: () => _selectProfile(p),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(p),
+                  ),
                 ),
               ),
             ),
-          ),
         ],
       ),
     );

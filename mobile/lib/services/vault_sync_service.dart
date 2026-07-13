@@ -16,12 +16,17 @@ enum VaultSyncStatus {
 class VaultSyncOutcome {
   final VaultSyncStatus status;
   final List<VaultEntry> entries;
+  /// Nomes de perfis criados pelo usuário no Desktop (ver PROJECT_STATE.md,
+  /// Sessão 97) — vazio quando o sync não chegou a ler o vault (ex: sem chave,
+  /// sem vault publicado, falha sem cache).
+  final List<String> profileNames;
   final DateTime? updatedAt; // on-chain updatedAt, só quando status == synced
   final String? error; // motivo, pros banners de offline/falha
 
   const VaultSyncOutcome({
     required this.status,
     required this.entries,
+    this.profileNames = const [],
     this.updatedAt,
     this.error,
   });
@@ -95,9 +100,11 @@ class VaultSyncService {
 
       await _repository.overwriteCache(bytes);
       final entries = await _repository.listEntries();
+      final profileNames = await _repository.listProfileNames();
       return VaultSyncOutcome(
         status: VaultSyncStatus.synced,
         entries: entries,
+        profileNames: profileNames,
         updatedAt: ref.updatedAt,
       );
     } catch (e) {
@@ -109,9 +116,11 @@ class VaultSyncService {
     try {
       final entries = await _repository.listEntries();
       if (entries.isNotEmpty) {
+        final profileNames = await _repository.listProfileNames();
         return VaultSyncOutcome(
           status: VaultSyncStatus.offlineUsingCache,
           entries: entries,
+          profileNames: profileNames,
           error: error,
         );
       }

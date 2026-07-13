@@ -118,6 +118,23 @@ const String entryPointAbi = '''[
   }
 ]''';
 
+// VaultRegistry — só `updateVault`, usado pela publicação do vault a partir
+// do Mobile (Sessão 97). Roteado via TruthIDAccount.execute(), mesmo padrão
+// já usado pelo Desktop (desktop/src/hooks/useVaultPublish.ts).
+// Source: contracts/src/VaultRegistry.sol
+const String vaultRegistryAbi = '''[
+  {
+    "type": "function",
+    "name": "updateVault",
+    "inputs": [
+      {"name": "cid", "type": "string"},
+      {"name": "contentHash", "type": "bytes32"}
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  }
+]''';
+
 const String deviceRegistryAbi = '''[
   {
     "type": "function",

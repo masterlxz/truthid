@@ -11,7 +11,6 @@ use k256::elliptic_curve::ecdh::diffie_hellman;
 
 mod ipfs;
 mod ledger;
-mod permissions;
 mod vault;
 
 const SERVICE: &str = "truthid";
@@ -273,6 +272,36 @@ fn vault_delete_entry(id: String) -> Result<(), String> {
     vault::save(&v)
 }
 
+/// Lista os nomes de perfis criados pelo usuário.
+#[tauri::command]
+fn vault_list_profiles() -> Result<Vec<String>, String> {
+    Ok(vault::load()?.profile_names)
+}
+
+/// Cria um novo perfil (nome livre). Persiste em disco.
+#[tauri::command]
+fn vault_add_profile(name: String) -> Result<(), String> {
+    let mut v = vault::load()?;
+    v.add_profile(&name);
+    vault::save(&v)
+}
+
+/// Renomeia um perfil e atualiza em cascata as entradas que o usam. Persiste em disco.
+#[tauri::command]
+fn vault_rename_profile(old_name: String, new_name: String) -> Result<(), String> {
+    let mut v = vault::load()?;
+    v.rename_profile(&old_name, &new_name);
+    vault::save(&v)
+}
+
+/// Remove um perfil e limpa a tag das entradas que o usam. Persiste em disco.
+#[tauri::command]
+fn vault_delete_profile(name: String) -> Result<(), String> {
+    let mut v = vault::load()?;
+    v.delete_profile(&name);
+    vault::save(&v)
+}
+
 /// Cifra a chave do vault com a chave pública de um device (ECIES secp256k1)
 /// para compartilhamento durante o pareamento.
 ///
@@ -394,16 +423,21 @@ fn vault_set_providers(providers: Vec<ipfs::PinningProvider>) -> Result<(), Stri
     ipfs::save_providers(&providers)
 }
 
-/// Retorna a permissão canWriteVault de cada device registrado localmente.
+/// Retorna a permissão canWriteVault de cada device — mora dentro do próprio
+/// vault desde a Sessão 97 (antes era um arquivo local separado), pra viajar
+/// no blob sincronizado e o Mobile conseguir ler a própria permissão.
 #[tauri::command]
-fn vault_get_device_permissions() -> Result<Vec<permissions::DeviceVaultPermission>, String> {
-    Ok(permissions::load())
+fn vault_get_device_permissions() -> Result<Vec<vault::DeviceVaultPermission>, String> {
+    Ok(vault::load()?.device_permissions)
 }
 
 /// Define ou atualiza a permissão canWriteVault de um device (por pubKey).
+/// Persiste em disco.
 #[tauri::command]
 fn vault_set_device_permission(pub_key: String, can_write: bool) -> Result<(), String> {
-    permissions::set(&pub_key, can_write)
+    let mut v = vault::load()?;
+    v.set_device_permission(&pub_key, can_write);
+    vault::save(&v)
 }
 
 /// Decifra um blob gerado por vault_encrypt.
@@ -460,6 +494,10 @@ pub fn run() {
             vault_list_entries,
             vault_upsert_entry,
             vault_delete_entry,
+            vault_list_profiles,
+            vault_add_profile,
+            vault_rename_profile,
+            vault_delete_profile,
             vault_encrypt,
             vault_decrypt,
             vault_publish,

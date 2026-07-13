@@ -254,5 +254,114 @@ void main() {
       expect(entries.first.site, 'example.com');
       expect(entries.first.profiles, equals(['Trabalho']));
     });
+
+    // --- perfis nomeados pelo usuário (Sessão 97) ---
+
+    test('listProfileNames em vault vazio retorna lista vazia', () async {
+      expect(await repo.listProfileNames(), isEmpty);
+    });
+
+    test('listProfileNames lê profile_names do blob sincronizado', () async {
+      final plaintextJson = jsonEncode({
+        'version': 1,
+        'entries': [],
+        'profile_names': ['Trabalho', 'Banco'],
+      });
+      final bytes = Uint8List.fromList(utf8.encode(plaintextJson));
+
+      await repo.overwriteCache(bytes);
+
+      expect(await repo.listProfileNames(), equals(['Trabalho', 'Banco']));
+    });
+
+    test('blob sem profile_names (formato anterior à Sessão 97) não quebra',
+        () async {
+      final plaintextJson = jsonEncode({
+        'version': 1,
+        'entries': [
+          {
+            'id': 'abc',
+            'site': 'github.com',
+            'url': '',
+            'username': 'fab',
+            'password': 'pass',
+            'notes': '',
+            'profiles': ['Trabalho'],
+            'created_at': 1700000000,
+            'updated_at': 1700000000,
+          }
+        ],
+      });
+      final bytes = Uint8List.fromList(utf8.encode(plaintextJson));
+
+      await repo.overwriteCache(bytes);
+
+      expect(await repo.listProfileNames(), isEmpty);
+      expect(await repo.listEntries(), hasLength(1));
+    });
+
+    test('addEntry preserva profile_names já existente no vault', () async {
+      final plaintextJson = jsonEncode({
+        'version': 1,
+        'entries': [],
+        'profile_names': ['Trabalho'],
+      });
+      await repo.overwriteCache(
+        Uint8List.fromList(utf8.encode(plaintextJson)),
+      );
+
+      await repo.addEntry(site: 'github.com', username: 'fab', password: 'x');
+
+      expect(await repo.listProfileNames(), equals(['Trabalho']));
+    });
+
+    test('addProfile adiciona um novo nome', () async {
+      await repo.addProfile('Trabalho');
+      expect(await repo.listProfileNames(), equals(['Trabalho']));
+    });
+
+    test('addProfile é no-op pra nome duplicado', () async {
+      await repo.addProfile('Trabalho');
+      await repo.addProfile('Trabalho');
+      expect(await repo.listProfileNames(), equals(['Trabalho']));
+    });
+
+    test('renameProfile atualiza a lista e propaga pras entradas', () async {
+      await repo.addProfile('Trabalho');
+      final entry = await repo.addEntry(
+        site: 'github.com',
+        username: 'fab',
+        password: 'x',
+        profiles: ['Trabalho', 'Pessoal'],
+      );
+
+      await repo.renameProfile('Trabalho', 'Banco');
+
+      expect(await repo.listProfileNames(), equals(['Banco']));
+      final updated = (await repo.listEntries()).firstWhere((e) => e.id == entry.id);
+      expect(updated.profiles, equals(['Banco', 'Pessoal']));
+    });
+
+    test('renameProfile de nome inexistente não faz nada', () async {
+      await repo.addProfile('Trabalho');
+      await repo.renameProfile('Inexistente', 'Novo');
+      expect(await repo.listProfileNames(), equals(['Trabalho']));
+    });
+
+    test('deleteProfile remove da lista e das entradas', () async {
+      await repo.addProfile('Trabalho');
+      final entry = await repo.addEntry(
+        site: 'github.com',
+        username: 'fab',
+        password: 'x',
+        profiles: ['Trabalho', 'Pessoal'],
+      );
+
+      await repo.deleteProfile('Trabalho');
+
+      expect(await repo.listProfileNames(), isEmpty);
+      final updated = (await repo.listEntries()).firstWhere((e) => e.id == entry.id);
+      expect(updated.profiles, equals(['Pessoal']));
+    });
   });
 }

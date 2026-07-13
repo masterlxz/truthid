@@ -89,11 +89,15 @@ void main() {
       'escolher perfil mostra a contagem correta e sempre termina em "not available"',
       (tester) async {
     when(() => mockSyncService.sync(any())).thenAnswer((_) async =>
-        VaultSyncOutcome(status: VaultSyncStatus.synced, entries: [
-          buildEntry('github.com', ['Trabalho']),
-          buildEntry('netflix.com', ['Casa']),
-          buildEntry('slack.com', ['Trabalho']),
-        ]));
+        VaultSyncOutcome(
+          status: VaultSyncStatus.synced,
+          entries: [
+            buildEntry('github.com', ['Trabalho']),
+            buildEntry('netflix.com', ['Casa']),
+            buildEntry('slack.com', ['Trabalho']),
+          ],
+          profileNames: const ['Trabalho', 'Casa'],
+        ));
 
     await tester.pumpWidget(buildScreen({
       'action': 'truthid-vault-session',

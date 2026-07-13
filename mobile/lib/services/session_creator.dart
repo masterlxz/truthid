@@ -61,6 +61,11 @@ class SessionCreator {
   static final _truthidAccountAbiParsed =
       ContractAbi.fromJson(truthidAccountAbi, 'TruthIDAccount');
 
+  static final _vaultRegistryContract = DeployedContract(
+    ContractAbi.fromJson(vaultRegistryAbi, 'VaultRegistry'),
+    EthereumAddress.fromHex(BlockchainService.vaultRegistryAddress),
+  );
+
   // Polling do recibo: 30 tentativas de 2s (~60s) por padrão — generoso o
   // bastante pra um bloco confirmar em L2 sem travar o app indefinidamente.
   // Configurável pra permitir testes rápidos (intervalo mínimo/poucas tentativas).
@@ -149,6 +154,37 @@ class SessionCreator {
       dest: destination,
       value: amountWei,
       innerCallData: Uint8List(0),
+    );
+  }
+
+  // Publica a referência do vault (CID + hash do conteúdo) via
+  // VaultRegistry.updateVault — mesmo caminho de createSession/revokeSession
+  // (device tier assina, smart account paga o gas). VaultRegistry não está
+  // bloqueado pra devices em TruthIDAccount._isDeviceCallAllowed (só
+  // DeviceRegistry/IdentityRegistry/RecoveryManager estão), e o próprio
+  // Desktop já roteia updateVault do mesmo jeito (via TruthIDAccount.execute,
+  // desktop/src/hooks/useVaultPublish.ts) — aqui só quem assina muda (device
+  // key em vez da Ledger). Ver PROJECT_STATE.md, Sessão 97.
+  Future<SessionCreationResult> updateVault({
+    required EthereumAddress smartAccountAddress,
+    required String cid,
+    required String contentHashHex,
+  }) {
+    final contentHash = hexToBytes(contentHashHex);
+    assert(
+      contentHash.length == 32,
+      'contentHash deveria ter 32 bytes, recebeu ${contentHash.length}',
+    );
+
+    final updateVaultCallData = _vaultRegistryContract
+        .function('updateVault')
+        .encodeCall([cid, Uint8List.fromList(contentHash)]);
+
+    return _executeViaUserOp(
+      smartAccountAddress: smartAccountAddress,
+      dest: EthereumAddress.fromHex(BlockchainService.vaultRegistryAddress),
+      value: BigInt.zero,
+      innerCallData: updateVaultCallData,
     );
   }
 

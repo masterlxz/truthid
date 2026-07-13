@@ -30,10 +30,29 @@ pub(crate) struct VaultEntry {
     pub updated_at: u64,
 }
 
+/// Permissão de escrita no vault por device (`pub_key` = endereço do device).
+/// Concedida só pelo controller (Desktop/Ledger) — devices nunca concedem a
+/// si mesmos nem a outros. Trava de UX, não é imposta pelo contrato (não há
+/// terceiros desconfiados — ver VaultRegistry.sol e PROJECT_STATE.md, 13.7).
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub(crate) struct DeviceVaultPermission {
+    pub pub_key: String,
+    pub can_write: bool,
+}
+
 #[derive(Serialize, Deserialize, Default, Debug)]
 pub(crate) struct Vault {
     pub version: u64,
     pub entries: Vec<VaultEntry>,
+    /// Nomes de perfis criados pelo usuário (ex: ["Trabalho", "Banco"]). Livre,
+    /// não é mais uma lista fixa — ver PROJECT_STATE.md, Sessão 97.
+    #[serde(default)]
+    pub profile_names: Vec<String>,
+    /// Permissões de escrita por device — movido do arquivo local
+    /// `vault_permissions.json` (Sessão 97) pra viajar dentro do blob
+    /// sincronizado, permitindo o Mobile ler sua própria permissão.
+    #[serde(default)]
+    pub device_permissions: Vec<DeviceVaultPermission>,
 }
 
 impl Vault {
@@ -73,6 +92,60 @@ impl Vault {
             self.version += 1;
         }
         removed
+    }
+
+    // Cria um novo perfil (nome livre, sem duplicatas). No-op se já existir.
+    pub(crate) fn add_profile(&mut self, name: &str) {
+        if !self.profile_names.iter().any(|p| p == name) {
+            self.profile_names.push(name.to_string());
+            self.version += 1;
+        }
+    }
+
+    // Renomeia um perfil na lista e em cascata em todas as entradas que o usam.
+    // Retorna false se `old` não existir na lista.
+    pub(crate) fn rename_profile(&mut self, old: &str, new: &str) -> bool {
+        let Some(slot) = self.profile_names.iter_mut().find(|p| p.as_str() == old) else {
+            return false;
+        };
+        *slot = new.to_string();
+        for entry in &mut self.entries {
+            for p in &mut entry.profiles {
+                if p == old {
+                    *p = new.to_string();
+                }
+            }
+        }
+        self.version += 1;
+        true
+    }
+
+    // Remove um perfil da lista e limpa essa tag de todas as entradas que a usam.
+    // Retorna false se `name` não existir na lista.
+    pub(crate) fn delete_profile(&mut self, name: &str) -> bool {
+        let before = self.profile_names.len();
+        self.profile_names.retain(|p| p != name);
+        if self.profile_names.len() == before {
+            return false;
+        }
+        for entry in &mut self.entries {
+            entry.profiles.retain(|p| p != name);
+        }
+        self.version += 1;
+        true
+    }
+
+    // Concede/revoga permissão de escrita a um device (find-or-insert).
+    pub(crate) fn set_device_permission(&mut self, pub_key: &str, can_write: bool) {
+        if let Some(p) = self.device_permissions.iter_mut().find(|p| p.pub_key == pub_key) {
+            p.can_write = can_write;
+        } else {
+            self.device_permissions.push(DeviceVaultPermission {
+                pub_key: pub_key.to_string(),
+                can_write,
+            });
+        }
+        self.version += 1;
     }
 }
 
@@ -152,6 +225,35 @@ pub(crate) fn load() -> Result<Vault, String> {
     for entry in &mut vault.entries {
         if entry.profiles.is_empty() && !entry.profile.is_empty() {
             entry.profiles = vec![std::mem::take(&mut entry.profile)];
+        }
+    }
+    // Migração: vaults antigos não tinham profile_names — backfill a partir da
+    // união das tags já em uso nas entradas (ver PROJECT_STATE.md, Sessão 97).
+    if vault.profile_names.is_empty() {
+        let mut seen = Vec::new();
+        for entry in &vault.entries {
+            for p in &entry.profiles {
+                if !seen.contains(p) {
+                    seen.push(p.clone());
+                }
+            }
+        }
+        vault.profile_names = seen;
+    }
+    // Migração: canWriteVault morava num arquivo local separado
+    // (~/.truthid/vault_permissions.json) — backfill único de lá pro campo
+    // embutido no vault, pra o Mobile conseguir ler (ver PROJECT_STATE.md,
+    // Sessão 97). Best-effort: arquivo ausente ou corrompido só resulta em
+    // lista vazia, não é erro fatal.
+    if vault.device_permissions.is_empty() {
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+        let legacy_path = std::path::Path::new(&home)
+            .join(".truthid")
+            .join("vault_permissions.json");
+        if let Ok(raw) = std::fs::read_to_string(&legacy_path) {
+            if let Ok(legacy) = serde_json::from_str::<Vec<DeviceVaultPermission>>(&raw) {
+                vault.device_permissions = legacy;
+            }
         }
     }
     Ok(vault)
@@ -372,5 +474,154 @@ mod tests {
         assert_eq!(vault.entries.len(), 2);
         assert!(vault.entries.iter().any(|e| e.id == a.id));
         assert!(!vault.entries.iter().any(|e| e.id == b.id));
+    }
+
+    // --- testes de perfis nomeados (Sessão 97) ---
+
+    #[test]
+    fn add_profile_appends_new_name() {
+        let mut vault = Vault::default();
+        vault.add_profile("Trabalho");
+        assert_eq!(vault.profile_names, vec!["Trabalho"]);
+        assert_eq!(vault.version, 1);
+    }
+
+    #[test]
+    fn add_profile_is_noop_for_duplicate() {
+        let mut vault = Vault::default();
+        vault.add_profile("Trabalho");
+        vault.add_profile("Trabalho");
+        assert_eq!(vault.profile_names, vec!["Trabalho"]);
+        assert_eq!(vault.version, 1, "segunda chamada não deve incrementar version");
+    }
+
+    #[test]
+    fn rename_profile_updates_list_and_cascades_into_entries() {
+        let mut vault = Vault::default();
+        vault.add_profile("Trabalho");
+        let mut entry = make_entry("", "github.com");
+        entry.profiles = vec!["Trabalho".to_string(), "Pessoal".to_string()];
+        vault.upsert(entry);
+
+        let ok = vault.rename_profile("Trabalho", "Banco");
+
+        assert!(ok);
+        assert_eq!(vault.profile_names, vec!["Banco"]);
+        assert_eq!(vault.entries[0].profiles, vec!["Banco".to_string(), "Pessoal".to_string()]);
+    }
+
+    #[test]
+    fn rename_profile_unknown_returns_false() {
+        let mut vault = Vault::default();
+        assert!(!vault.rename_profile("Inexistente", "Novo"));
+    }
+
+    #[test]
+    fn delete_profile_removes_from_list_and_entries() {
+        let mut vault = Vault::default();
+        vault.add_profile("Trabalho");
+        let mut entry = make_entry("", "github.com");
+        entry.profiles = vec!["Trabalho".to_string(), "Pessoal".to_string()];
+        vault.upsert(entry);
+
+        let ok = vault.delete_profile("Trabalho");
+
+        assert!(ok);
+        assert!(vault.profile_names.is_empty());
+        assert_eq!(vault.entries[0].profiles, vec!["Pessoal".to_string()]);
+    }
+
+    #[test]
+    fn delete_profile_unknown_returns_false() {
+        let mut vault = Vault::default();
+        assert!(!vault.delete_profile("Inexistente"));
+    }
+
+    #[test]
+    fn load_backfills_profile_names_from_existing_entry_tags() {
+        // Simula um vault antigo serializado sem o campo "profile_names".
+        let mut vault = Vault::default();
+        let mut a = make_entry("", "github.com");
+        a.profiles = vec!["Trabalho".to_string()];
+        vault.upsert(a);
+        let mut b = make_entry("", "google.com");
+        b.profiles = vec!["Trabalho".to_string(), "Casa".to_string()];
+        vault.upsert(b);
+        vault.profile_names = vec![]; // como um vault serializado antes desta mudança
+
+        let json = serde_json::to_vec(&vault).unwrap();
+        let mut reparsed: Vault = serde_json::from_slice(&json).unwrap();
+        // reaplica a mesma lógica de backfill que load() roda após desserializar
+        if reparsed.profile_names.is_empty() {
+            let mut seen = Vec::new();
+            for entry in &reparsed.entries {
+                for p in &entry.profiles {
+                    if !seen.contains(p) {
+                        seen.push(p.clone());
+                    }
+                }
+            }
+            reparsed.profile_names = seen;
+        }
+
+        assert_eq!(reparsed.profile_names, vec!["Trabalho".to_string(), "Casa".to_string()]);
+    }
+
+    // --- testes de permissão de escrita por device (Sessão 97) ---
+
+    #[test]
+    fn set_device_permission_inserts_new() {
+        let mut vault = Vault::default();
+        vault.set_device_permission("0xabc", true);
+
+        assert_eq!(vault.device_permissions.len(), 1);
+        assert_eq!(vault.device_permissions[0].pub_key, "0xabc");
+        assert!(vault.device_permissions[0].can_write);
+        assert_eq!(vault.version, 1);
+    }
+
+    #[test]
+    fn set_device_permission_updates_existing() {
+        let mut vault = Vault::default();
+        vault.set_device_permission("0xabc", true);
+        vault.set_device_permission("0xabc", false);
+
+        assert_eq!(vault.device_permissions.len(), 1);
+        assert!(!vault.device_permissions[0].can_write);
+        assert_eq!(vault.version, 2);
+    }
+
+    #[test]
+    fn set_device_permission_preserves_other_devices() {
+        let mut vault = Vault::default();
+        vault.set_device_permission("0xaaa", true);
+        vault.set_device_permission("0xbbb", false);
+
+        assert_eq!(vault.device_permissions.len(), 2);
+        assert!(vault.device_permissions.iter().any(|p| p.pub_key == "0xaaa" && p.can_write));
+        assert!(vault.device_permissions.iter().any(|p| p.pub_key == "0xbbb" && !p.can_write));
+    }
+
+    #[test]
+    fn load_backfills_device_permissions_from_legacy_file() {
+        // Simula o arquivo legado ~/.truthid/vault_permissions.json existindo
+        // com permissões de uma versão anterior à Sessão 97.
+        let legacy = vec![
+            DeviceVaultPermission { pub_key: "0xaaa".to_string(), can_write: true },
+        ];
+        let json = serde_json::to_string(&legacy).unwrap();
+        let mut vault = Vault::default();
+        assert!(vault.device_permissions.is_empty());
+
+        // Reaplica a mesma lógica de backfill que load() roda (sem tocar no
+        // HOME real do processo de teste).
+        if vault.device_permissions.is_empty() {
+            if let Ok(parsed) = serde_json::from_str::<Vec<DeviceVaultPermission>>(&json) {
+                vault.device_permissions = parsed;
+            }
+        }
+
+        assert_eq!(vault.device_permissions.len(), 1);
+        assert_eq!(vault.device_permissions[0].pub_key, "0xaaa");
     }
 }

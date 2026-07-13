@@ -1,24 +1,34 @@
 import 'package:flutter/material.dart';
+import 'package:web3dart/web3dart.dart' show EthereumAddress;
 
 import '../services/blockchain_service.dart';
+import '../services/bundler_config_service.dart';
 import '../services/device_key_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/pimlico_bundler_client.dart';
+import '../services/session_creator.dart';
 import '../services/vault_key_service.dart';
+import '../services/vault_publish_service.dart';
 import '../services/vault_repository.dart';
 import '../services/vault_sync_service.dart';
 import '../theme.dart';
 import 'vault_entry_detail_screen.dart';
+import 'vault_entry_form_screen.dart';
+import 'vault_profiles_screen.dart';
 
-// Leitura do Vault no mobile (13.8) — só leitura, sem add/edit/delete (isso
-// continua exclusivo do Desktop, ver PROJECT_STATE.md). O conteúdo real vem
-// do VaultSyncService (on-chain → IPFS → verificação de hash → decifra),
-// nunca de um vault local que ninguém popularia.
+// Leitura + escrita do Vault no mobile — 13.8 trouxe a leitura, a Sessão 97
+// trouxe criar/editar/apagar senha e publicar, condicionado a canWriteVault
+// (concedido só pelo Desktop, ver PROJECT_STATE.md). O conteúdo real vem do
+// VaultSyncService (on-chain → IPFS → verificação de hash → decifra).
 class VaultScreen extends StatefulWidget {
   final BlockchainService? blockchainService;
   final LocalStorageService? localStorageService;
   final DeviceKeyService? deviceKeyService;
   final VaultSyncService? vaultSyncService;
   final VaultKeyService? vaultKeyService;
+  final VaultRepository? vaultRepository;
+  final BundlerConfigService? bundlerConfigService;
+  final VaultPublishService? vaultPublishService;
 
   const VaultScreen({
     super.key,
@@ -27,6 +37,9 @@ class VaultScreen extends StatefulWidget {
     this.deviceKeyService,
     this.vaultSyncService,
     this.vaultKeyService,
+    this.vaultRepository,
+    this.bundlerConfigService,
+    this.vaultPublishService,
   });
 
   @override
@@ -39,6 +52,9 @@ class _VaultScreenState extends State<VaultScreen> {
   late final DeviceKeyService _keyService;
   late final VaultSyncService _syncService;
   late final VaultKeyService _vaultKeyService;
+  late final VaultRepository _repository;
+  late final BundlerConfigService _bundlerConfigService;
+  VaultPublishService? _publishService;
 
   bool _isLoading = true;
   bool _isPaired = false;
@@ -47,6 +63,13 @@ class _VaultScreenState extends State<VaultScreen> {
   List<VaultEntry> _entries = const [];
   String? _error;
   String _query = '';
+
+  bool _canWrite = false;
+  int _pendingChanges = 0;
+  EthereumAddress? _smartAccountAddress;
+  bool _publishing = false;
+  String? _publishError;
+  bool _justPublished = false;
 
   @override
   void initState() {
@@ -58,6 +81,9 @@ class _VaultScreenState extends State<VaultScreen> {
         VaultSyncService(blockchainService: _blockchain);
     _vaultKeyService = widget.vaultKeyService ??
         VaultKeyService(deviceKeyService: _keyService);
+    _repository = widget.vaultRepository ?? VaultRepository();
+    _bundlerConfigService = widget.bundlerConfigService ?? BundlerConfigService();
+    _publishService = widget.vaultPublishService;
     _load();
   }
 
@@ -114,6 +140,8 @@ class _VaultScreenState extends State<VaultScreen> {
     }
 
     final outcome = await _syncService.sync(BigInt.parse(identityId));
+    final canWrite = await _repository.canWriteVault(address);
+    final pending = await _repository.pendingChanges();
     if (mounted) {
       setState(() {
         _isPaired = true;
@@ -121,8 +149,73 @@ class _VaultScreenState extends State<VaultScreen> {
         _entries = outcome.entries;
         _error = outcome.error;
         _isLoading = false;
+        _canWrite = canWrite;
+        _pendingChanges = pending;
       });
     }
+
+    // Resolver a smart account depende do username — segue em paralelo, sem
+    // bloquear a tela (mesmo padrão de sessions_screen.dart). Necessária só
+    // pro botão Publicar (sender da UserOp de updateVault).
+    final username = await _storage.getPairedUsername();
+    if (username != null) _resolveSmartAccount(username);
+  }
+
+  Future<void> _resolveSmartAccount(String username) async {
+    try {
+      final identity = await _blockchain.getIdentityByUsername(username);
+      if (identity == null) return;
+      if (mounted) setState(() => _smartAccountAddress = identity.controller);
+    } catch (_) {
+      // Informativo — falha de rede aqui só desabilita o botão de publicar.
+    }
+  }
+
+  Future<void> _publish() async {
+    final smartAccountAddress = _smartAccountAddress;
+    if (smartAccountAddress == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Could not resolve your smart account. Check your connection.')),
+      );
+      return;
+    }
+
+    setState(() { _publishing = true; _publishError = null; });
+    try {
+      if (_publishService == null) {
+        final bundlerConfig = await _bundlerConfigService.getConfig();
+        _publishService = VaultPublishService(
+          repository: _repository,
+          sessionCreator: SessionCreator(
+            blockchainService: _blockchain,
+            deviceKeyService: _keyService,
+            bundlerClient: PimlicoBundlerClient(
+              bundlerUrl: pimlicoBundlerUrl(
+                apiKey: bundlerConfig.apiKey,
+                network: bundlerConfig.network,
+              ),
+            ),
+          ),
+        );
+      }
+      await _publishService!.publish(smartAccountAddress);
+      final pending = await _repository.pendingChanges();
+      if (mounted) {
+        setState(() { _publishing = false; _pendingChanges = pending; _justPublished = true; });
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) setState(() => _justPublished = false);
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() { _publishing = false; _publishError = '$e'; });
+    }
+  }
+
+  Future<void> _openNewEntry() async {
+    final saved = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => VaultEntryFormScreen(repository: _repository)),
+    );
+    if (saved == true) _load();
   }
 
   List<VaultEntry> get _filteredEntries {
@@ -175,13 +268,40 @@ class _VaultScreenState extends State<VaultScreen> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          const Text('Vault',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 4),
-          const Text(
-            'Read-only here — manage entries from the Desktop app.',
-            style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+          Row(
+            children: [
+              const Expanded(
+                child: Text('Vault',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              ),
+              if (_canWrite) ...[
+                IconButton(
+                  icon: const Icon(Icons.sell_outlined),
+                  tooltip: 'Manage profiles',
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => VaultProfilesScreen(repository: _repository),
+                    ),
+                  ).then((_) => _load()),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.add),
+                  tooltip: 'New entry',
+                  onPressed: _openNewEntry,
+                ),
+              ],
+            ],
           ),
+          Text(
+            _canWrite
+                ? 'You can add, edit and publish entries from this device.'
+                : 'Read-only here — manage entries from the Desktop app.',
+            style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+          ),
+          if (_canWrite) ...[
+            const SizedBox(height: 12),
+            _buildPublishBanner(),
+          ],
           const SizedBox(height: 12),
           if (_status == VaultSyncStatus.offlineUsingCache) ...[
             Card(
@@ -247,15 +367,54 @@ class _VaultScreenState extends State<VaultScreen> {
               ..._filteredEntries.map(
                 (e) => _VaultEntryCard(
                   entry: e,
-                  onTap: () => Navigator.of(context).push(
+                  onTap: () => Navigator.of(context).push<bool>(
                     MaterialPageRoute(
-                      builder: (_) => VaultEntryDetailScreen(entry: e),
+                      builder: (_) => VaultEntryDetailScreen(
+                        entry: e,
+                        canWrite: _canWrite,
+                        repository: _repository,
+                      ),
                     ),
-                  ),
+                  ).then((deleted) { if (deleted == true) _load(); }),
                 ),
               ),
           ],
         ],
+      ),
+    );
+  }
+
+  Widget _buildPublishBanner() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _justPublished
+                        ? 'Published ✓'
+                        : _pendingChanges > 0
+                            ? '$_pendingChanges pending change${_pendingChanges > 1 ? "s" : ""}'
+                            : 'Everything published',
+                    style: const TextStyle(color: AppColors.textMuted),
+                  ),
+                ),
+                ElevatedButton(
+                  onPressed: (_publishing || _pendingChanges == 0) ? null : _publish,
+                  child: Text(_publishing ? 'Publishing...' : 'Publish'),
+                ),
+              ],
+            ),
+            if (_publishError != null) ...[
+              const SizedBox(height: 8),
+              Text(_publishError!, style: const TextStyle(color: AppColors.danger, fontSize: 12)),
+            ],
+          ],
+        ),
       ),
     );
   }

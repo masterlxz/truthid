@@ -96,6 +96,10 @@ class BlockchainService {
   // como `dest` da chamada `TruthIDAccount.execute`.
   static const sessionRegistryAddress = _sessionRegistryAddress;
 
+  // Exposto publicamente — SessionCreator.updateVault (Sessão 97) precisa
+  // deste endereço como `dest` da chamada `TruthIDAccount.execute`.
+  static const vaultRegistryAddress = _vaultRegistryAddress;
+
   // Exposto publicamente — o SmartAccountActivityScanner (aba Wallet) precisa
   // deste endereço pra escanear os eventos DeviceRegistered/DeviceRevoked.
   static const deviceRegistryAddress = _deviceRegistryAddress;

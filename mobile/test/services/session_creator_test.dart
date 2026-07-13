@@ -325,4 +325,63 @@ void main() {
       );
     });
   });
+
+  group('updateVault', () {
+    // Selector de `updateVault(string,bytes32)` — mesma convenção de _executeSelector.
+    Uint8List updateVaultSelector() => keccak256(
+          Uint8List.fromList(utf8.encode('updateVault(string,bytes32)')),
+        ).sublist(0, 4);
+
+    const cid = 'QmTestCid123';
+    final contentHashHex = '0x${'ab' * 32}';
+
+    test('monta, assina e envia a UserOp de publicação, e devolve o recibo',
+        () async {
+      when(() => mockBundler.getUserOperationReceipt('0xUserOpHashXYZ'))
+          .thenAnswer((_) async => UserOperationReceipt(
+                userOpHash: '0xUserOpHashXYZ',
+                success: true,
+                actualGasCost: BigInt.from(1000),
+                actualGasUsed: BigInt.from(90000),
+                transactionHash: '0xTxHash',
+              ));
+
+      final result = await sessionCreator.updateVault(
+        smartAccountAddress: smartAccountAddress,
+        cid: cid,
+        contentHashHex: contentHashHex,
+      );
+
+      expect(result.userOpHash, '0xUserOpHashXYZ');
+      expect(result.transactionHash, '0xTxHash');
+
+      verify(() => mockBlockchain.getSmartAccountNonce(smartAccountAddress))
+          .called(1);
+      verify(() => mockKeyService.signHash(any())).called(1);
+
+      final sentOp = verify(() => mockBundler.sendUserOperation(captureAny()))
+          .captured
+          .single as UserOperationV07;
+      expect(sentOp.sender, smartAccountAddress);
+
+      // callData é `execute(VaultRegistry, 0, updateVault(cid, contentHash))`.
+      expect(sentOp.callData.sublist(0, 4), _executeSelector());
+      final callDataHex = bytesToHex(sentOp.callData);
+      expect(callDataHex.contains(bytesToHex(updateVaultSelector())), isTrue);
+    });
+
+    test('propaga erro se o envio ao bundler falhar', () async {
+      when(() => mockBundler.sendUserOperation(any()))
+          .thenThrow(Exception('bundler rejected the UserOperation'));
+
+      expect(
+        () => sessionCreator.updateVault(
+          smartAccountAddress: smartAccountAddress,
+          cid: cid,
+          contentHashHex: contentHashHex,
+        ),
+        throwsException,
+      );
+    });
+  });
 }
