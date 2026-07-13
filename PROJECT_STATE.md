@@ -788,6 +788,35 @@ Desktop (root/controller)
 
 **Nota de implementação**: como não há mais P2P nem handshake direto entre devices para sincronizar o conteúdo do vault, a complexidade de implementação cai bastante — não é preciso WebRTC, descoberta de peer, nem re-criptografia por device de destino para o fluxo Desktop/Mobile de sync. Isso é diferente do canal P2P efêmero do login via QR (já em produção) e do fluxo Mobile→Extensão (ambos mantidos, entregam payload já pronto/filtrado).
 
+#### Transporte Mobile→Extensão — desenho fechado na Sessão 97 (2026-07-13)
+
+O parágrafo acima deixava o transporte como "ex: WebRTC", nunca decidido de verdade. Investigação na Sessão 97 confirmou: não existe WebRTC, sinalização nem scaffold de extensão em lugar nenhum do repo — 13.9 é greenfield puro.
+
+**Três rotas propostas e rejeitadas pelo dono do projeto**: (1) ponte via Desktop usando Native Messaging + servidor HTTP local na LAN — rejeitada porque exigiria o Desktop instalado no computador onde a extensão roda, e o caso de uso real inclui "computador aleatório" sem o Desktop; (2) WebRTC com handshake por 2 QR codes (extensão gera oferta, mostra QR; mobile responde, mostra 2º QR; extensão escaneia de volta) — rejeitada porque a extensão nunca deve precisar de câmera; (3) servidor de sinalização próprio (ex: Cloudflare Worker só pra troca de SDP/ICE, sem o payload do vault passar por ele) — rejeitada por introduzir infraestrutura operada por nós, contra o princípio "sem relay" que o projeto mantém desde o início (ver README).
+
+**Restrição física por trás da rejeição das 3**: uma extensão de navegador (Chrome/Firefox) nunca consegue **escutar** conexão de entrada — só faz requisição de saída. É limite de sandbox da plataforma, não escolha de design. Isso elimina qualquer desenho onde o Mobile "empurra" dados direto pra extensão sem ela primeiro conseguir ser alcançada por algum meio.
+
+**Dois transportes desenhados, mesma prioridade — tentados em sequência, não mutuamente exclusivos**:
+
+1. **Descoberta automática na LAN** (tentado primeiro — mais simples e rápido):
+   1. Extensão gera um par de chaves efêmero (mesmo padrão ECIES já usado na entrega da vault key no pareamento, Sessão 92) + um `sessionId` aleatório. Mostra um QR: `{action: 'truthid-vault-session', sessionId, ephemeralPubKey}`.
+   2. Mobile escaneia (reaproveita `VaultSessionScreen`, que já faz esse scan hoje e termina num estado "not available yet" explícito — esse é o ponto de plugue da 13.9). Usuário escolhe o perfil ativo (`kVaultProfiles`, já existe).
+   3. Mobile filtra o vault local (`VaultSyncService`/`VaultRepository.listEntries()`, já existem) pelo perfil, cifra o subconjunto via ECIES pra `ephemeralPubKey` — mobile hoje só *decifra* ECIES (chave do device no pareamento); cifrar é capacidade nova, espelhando o que o Desktop já faz em `lib.rs` na direção oposta.
+   4. Mobile sobe um servidor HTTP local efêmero (porta aleatória, bind em `0.0.0.0`) servindo o payload cifrado em `/session/<sessionId>`, só por alguns minutos ou até ser servido uma vez.
+   5. Extensão varre a sub-rede local (descobre sua própria faixa via WebRTC local ICE candidate gathering — não precisa de STUN pra isso, só descobrir o próprio IP local — e tenta `192.168.x.1..254:<portas comuns>/session/<sessionId>` em paralelo) até achar a resposta.
+   6. Extensão decifra em memória com a chave privada efêmera, guarda só em RAM, morre ao fechar a aba/browser ou por timeout.
+   - **Trade-offs**: só funciona na mesma rede Wi-Fi/LAN (não funciona com o celular no 4G, nem em wifi de convidado com isolamento de cliente); a varredura de sub-rede pode disparar alerta de firewall/antivírus em alguns computadores.
+
+2. **Dead-drop via IPFS/IPNS público** (fallback quando a LAN falha — funciona em qualquer rede):
+   1. Mesmo QR da rota LAN — não precisa de esquema diferente; os dois transportes competem pelo mesmo payload de sessão.
+   2. Mobile cifra o subconjunto via ECIES pra `ephemeralPubKey` — payload cifrado idêntico ao da rota LAN, só muda o transporte.
+   3. Mobile deriva um par de chaves IPNS a partir do `sessionId` (determinístico, sem trocar nada a mais com a extensão) e publica o blob cifrado nesse nome IPNS via um dos provedores de pin já configurados. Capacidade nova pro mobile: hoje só o Desktop publica em IPFS (`ipfs.rs`); mobile só lê, via `IpfsGatewayClient`. Precisa também de UI no mobile pra configurar provedor(es) de pin — hoje só existe no Desktop (`VaultSettings.tsx`/13.6).
+   4. Extensão calcula o mesmo nome IPNS localmente (deriva de `ephemeralPubKey`/`sessionId` que ela mesma gerou) e faz polling num gateway público (`ipfs.io`, `dweb.link` — mesmo padrão de fallback que `IpfsGatewayClient` já usa no mobile) a cada poucos segundos, timeout generoso (~1–2 min).
+   5. Extensão decifra em memória com a chave privada efêmera, mesmo destino final da rota LAN.
+   - **Trade-offs**: propagação de IPNS é lenta e variável (segundos a ~1 minuto, às vezes mais). Publish de IPNS via a API REST simples da spec PSA (Pinata/Filebase/4EVERLAND) tem suporte incerto — a spec é sobre pinning de conteúdo, não sobre publicar registro IPNS mutável; funciona com confiança só via Kubo self-hosted (que expõe `ipfs name publish` de verdade). Se o usuário só tiver provedores PSA configurados (sem Kubo), essa rota pode não estar disponível — vai precisar de UI honesta avisando isso, não fingir que sempre funciona.
+
+**Pendência em aberto gerada por essa escolha**: o parágrafo de "Revogação em cascata" acima assumia que o Desktop manteria localmente o registro de qual Device abriu qual sessão de extensão, porque estaria no meio do transporte. Com o Desktop fora do caminho nos dois transportes desenhados, essa premissa não vale mais tal como estava escrita — não há mais um ponto natural que veja a sessão sendo aberta em tempo real. Resposta provável: aceitar TTL curto (sessão morre sozinha em minutos, sem canal de revogação ativa) como o próprio modelo de segurança, em vez de construir infraestrutura de revogação ativa — mas é decisão de produto a confirmar com o dono do projeto quando a 13.9 for implementada de fato, não algo a decidir sozinho agora.
+
 ---
 
 #### Fluxo de sincronização (Desktop ↔ Mobile)
@@ -3469,6 +3498,18 @@ Ao validar o "Try again" com o celular físico de verdade (não só testes autom
 - Reabre, sob desenho diferente, a parte que a Sessão 95 tinha fechado ("Vault não muda"): agora não é generalizar o vault de senhas em si, é um mecanismo de `identityId + appId → VaultRef` pra apps terceiros terem seu próprio slot de CID, deixando o slot do password manager intocado.
 - Questão nova levantada nesta sessão (não estava nas 94/95): como um app terceiro paga gas pra atualizar seu CID sem o usuário precisar da Ledger toda hora e sem dar poder de assinatura a qualquer app "logado". Direção que fez mais sentido na conversa: login (prova de identidade) e assinatura (smart account) continuam separados; o app terceiro monta a UserOperation sem assinar, pede aprovação ao TruthID (IPC local ou QR/P2P entre devices), o TruthID mostra tela de aprovação (mesmo padrão do approval screen da extensão) e assina com uma **session key escopada** (contrato + função + slot do `appId`, com expiração/revogação em cascata) — nunca com a chave raiz/Ledger. Paymaster cobre o gas.
 - Só brainstorm, nenhum `/plan` rodado, nada implementado. Registrado em "Roadmap de Evoluções Planejadas" com os pontos em aberto (contrato generalizado vs. irmão dedicado; canal de aprovação; UX de clique único vs. sessão; onde mora o registro de apps autorizados) pra decidir num `/plan` futuro.
+
+---
+
+### Sessão 97 — 2026-07-13: Transporte da extensão de navegador (13.9) — dois canais desenhados, descoberta na LAN + dead-drop via IPFS/IPNS
+
+- 13.9 é a única etapa pendente da Fase 13 (Vault) — ver seção "Hierarquia de confiança: Devices vs. sessões de extensão". O desenho existente só dizia "canal P2P efêmero (ex: WebRTC)", nunca decidido de verdade; confirmado que não existe WebRTC, sinalização nem scaffold de extensão em lugar nenhum do repo — greenfield puro.
+- Propus 3 rotas de transporte (ponte via Desktop/Native Messaging, WebRTC com handshake por 2 QR, servidor de sinalização próprio) e o dono do projeto rejeitou as três: não quer depender do Desktop instalado no computador onde a extensão roda, não quer câmera na extensão, não quer servidor operado por nós.
+- Expliquei a restrição física real por trás da rejeição: uma extensão de navegador nunca consegue escutar conexão de entrada (limite de sandbox da plataforma, não escolha de design) — só faz requisição de saída.
+- Desenhados dois transportes, mesma prioridade, tentados em sequência (não mutuamente exclusivos, a pedido do dono do projeto): **descoberta automática na LAN** (extensão varre a sub-rede local procurando um servidor HTTP efêmero que o mobile sobe, mais simples/rápido mas exige rede compartilhada) e **dead-drop via IPFS/IPNS público** (reaproveita a infra de pinning já usada pelo Vault, funciona em qualquer rede mas com propagação lenta e suporte incerto em provedores PSA simples sem Kubo). Detalhes completos na seção de desenho acima.
+- Pendência nova gerada por essa escolha: a "revogação em cascata" do desenho original assumia o Desktop no meio do transporte pra saber qual Device abriu qual sessão — sem o Desktop no caminho, isso não vale mais como estava escrito. Provável resposta é TTL curto sem canal de revogação ativa, mas fica como decisão de produto pra confirmar quando 13.9 for implementada.
+- Só desenho, nenhum código escrito nesta sessão.
+- **Próximo passo**: implementar 13.9 (extensão de navegador) com os dois transportes, quando o dono do projeto retomar.
 
 ---
 
