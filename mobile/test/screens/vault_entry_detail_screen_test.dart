@@ -1,20 +1,16 @@
-import 'dart:io';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 
 import 'package:truthid_mobile/screens/vault_entry_detail_screen.dart';
-import 'package:truthid_mobile/services/vault_cipher_service.dart';
 import 'package:truthid_mobile/services/vault_repository.dart';
 
-class _FakeCipherService extends VaultCipherService {
-  @override
-  Future<Uint8List> encrypt(Uint8List plaintext) async => plaintext;
-
-  @override
-  Future<Uint8List> decrypt(Uint8List blob) async => blob;
-}
+// Repositório mockado, não real — VaultRepository faz I/O real de arquivo
+// (dart:io), que nunca resolve dentro da zona FakeAsync de um widget test
+// (achado da Sessão 98, validação manual dos testes escritos na Sessão 97:
+// travava pumpAndSettle indefinidamente). O CRUD real do repositório já é
+// coberto por vault_repository_test.dart (testes puros, sem widget).
+class MockVaultRepository extends Mock implements VaultRepository {}
 
 void main() {
   final entry = VaultEntry(
@@ -91,20 +87,11 @@ void main() {
     });
 
     testWidgets('apagar pede confirmação e remove a entrada', (tester) async {
-      final tempDir = await Directory.systemTemp.createTemp('vault_detail_test_');
-      final repo = VaultRepository(
-        cipherService: _FakeCipherService(),
-        testPath: '${tempDir.path}/vault.enc',
-      );
-      await repo.addEntry(
-        site: entry.site,
-        username: entry.username,
-        password: entry.password,
-      );
-      final saved = (await repo.listEntries()).first;
+      final repo = MockVaultRepository();
+      when(() => repo.deleteEntry(entry.id)).thenAnswer((_) async {});
 
       await tester.pumpWidget(MaterialApp(
-        home: VaultEntryDetailScreen(entry: saved, canWrite: true, repository: repo),
+        home: VaultEntryDetailScreen(entry: entry, canWrite: true, repository: repo),
       ));
 
       await tester.tap(find.byIcon(Icons.delete_outline));
@@ -114,9 +101,7 @@ void main() {
       await tester.tap(find.text('Delete'));
       await tester.pumpAndSettle();
 
-      expect(await repo.listEntries(), isEmpty);
-
-      await tempDir.delete(recursive: true);
+      verify(() => repo.deleteEntry(entry.id)).called(1);
     });
   });
 }

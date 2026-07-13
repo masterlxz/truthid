@@ -3538,6 +3538,19 @@ Ao validar o "Try again" com o celular físico de verdade (não só testes autom
 
 ---
 
+### Sessão 98 — 2026-07-13: `flutter test`/`flutter analyze` rodados de verdade — 20 falhas achadas e corrigidas (regressão de teste, não de produto)
+
+- Retomando a pendência da Sessão 97: disco tinha só 6.4GB livres em `/` (sda2, 32GB, separada de `/home`). Com autorização do dono do projeto, `docker image prune -a` liberou ~9GB de imagens de outros projetos (`desktop-desktop`, `practice-valuation-desktop`) não usadas no momento — rebuildáveis a qualquer hora. Build da imagem Docker do Flutter (1ª vez desta sessão, a da Sessão 97 tinha sido removida no prune de disco daquela sessão) completou normal, deixando ~9GB livres.
+- `flutter analyze`: limpo, 0 erros — só 6 avisos de estilo pré-existentes (`prefer_initializing_formals`, 1 `unnecessary_non_null_assertion`), nenhum novo.
+- `flutter test` (suíte completa): travou de verdade — rodou 10+ minutos sem terminar, 20 falhas em `vault_screen_test.dart`, `vault_profiles_screen_test.dart` e `vault_entry_detail_screen_test.dart` (todos os testes que passam por essas telas, exceto os que retornam antes de tocar o repositório), todas com "pumpAndSettle timed out" ou timeout real de 10 minutos.
+- **Causa raiz isolada por reprodução controlada** (não é bug de produto — o app funciona normal no engine real): esses 3 arquivos de teste, escritos na Sessão 97, usam um `VaultRepository` **real** (I/O real de arquivo via `dart:io`, só com `testPath`/cipher fake) diretamente dentro do `initState()`/`_load()` das telas (`canWriteVault`, `pendingChanges`, `listProfileNames`, `deleteEntry` etc). Testes de widget do Flutter (`testWidgets`) rodam dentro de uma zona `FakeAsync` que nunca deixa uma operação real de I/O (fora de `tester.runAsync()`) completar — ela fica pendurada pra sempre, não apenas lenta. Confirmado com um teste mínimo isolado: um `test()` puro (não-widget) fazendo o mesmo I/O terminou em milissegundos; o mesmo I/O disparado de dentro de um `testWidgets` nunca resolveu, nem depois de 20 pumps manuais. Antes da Sessão 97, essas telas só usavam serviços 100% mockados no `initState`, por isso o problema nunca tinha aparecido.
+- **Fix aplicado**: converter os 3 arquivos de teste pra usar `MockVaultRepository` (mocktail) em vez do repositório real, com `verify()` no lugar de reler o estado real do repo. O CRUD de verdade do `VaultRepository` já é coberto por `vault_repository_test.dart` (testes `test()` puros, sem widget, onde I/O real funciona sem problema). Não foi preciso tocar em nenhum código de produto — o bug era só na forma de testar.
+- **Dois débitos pré-existentes, sem relação com a Sessão 97, achados no caminho e também corrigidos**: (1) `vault_key_service_test.dart` (já documentado como falha conhecida, "Binding has not yet been initialized") e (2) `vault_publish_service_test.dart` (2 testes, mesmo erro de binding em `VaultRepository.markPublished`, mascarado antes por um `registerFallbackValue` faltando pra `Uint8List`) — ambos usam o campo estático `FlutterSecureStorage()` de `VaultKeyService`/`VaultRepository`, não injetável; corrigido com `TestWidgetsFlutterBinding.ensureInitialized()` + `setMockMethodCallHandler` simulando o canal `plugins.it_nomads.com/flutter_secure_storage` (leitura/escrita num Map em memória).
+- **Resultado final**: suíte completa 100% verde — 155/155 testes, ~18 segundos (antes: nunca terminava). `flutter analyze` limpo.
+- **Próximo passo**: 13.9 (extensão de navegador) — transporte já desenhado na Sessão 97 (LAN + IPFS/IPNS), agora com a suíte de testes finalmente validada e servindo de rede de segurança pra próximas mudanças no Vault.
+
+---
+
 ## Como Usar Este Arquivo
 
 1. **Ao começar uma sessão**: Diga ao Claude Code "leia o PROJECT_STATE.md e me ajude a continuar"

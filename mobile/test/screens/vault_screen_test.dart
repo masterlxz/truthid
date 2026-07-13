@@ -1,6 +1,3 @@
-import 'dart:io';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
@@ -10,7 +7,6 @@ import 'package:truthid_mobile/screens/vault_screen.dart';
 import 'package:truthid_mobile/services/blockchain_service.dart';
 import 'package:truthid_mobile/services/device_key_service.dart';
 import 'package:truthid_mobile/services/local_storage_service.dart';
-import 'package:truthid_mobile/services/vault_cipher_service.dart';
 import 'package:truthid_mobile/services/vault_key_service.dart';
 import 'package:truthid_mobile/services/vault_repository.dart';
 import 'package:truthid_mobile/services/vault_sync_service.dart';
@@ -25,17 +21,14 @@ class MockVaultSyncService extends Mock implements VaultSyncService {}
 
 class MockVaultKeyService extends Mock implements VaultKeyService {}
 
-// Cipher no-op — mesmo padrão de vault_repository_test.dart. Injetado pra
-// canWriteVault()/pendingChanges() (chamados incondicionalmente por
-// VaultScreen._load() desde a Sessão 97) não dependerem de path_provider
-// real, que não está disponível no ambiente de widget test.
-class _FakeCipherService extends VaultCipherService {
-  @override
-  Future<Uint8List> encrypt(Uint8List plaintext) async => plaintext;
-
-  @override
-  Future<Uint8List> decrypt(Uint8List blob) async => blob;
-}
+// Repositório mockado, não real — VaultRepository faz I/O real de arquivo
+// (dart:io), que nunca resolve dentro da zona FakeAsync de um widget test
+// (achado da Sessão 98, validação manual dos testes escritos na Sessão 97:
+// travava pumpAndSettle indefinidamente, tanto canWriteVault() quanto
+// pendingChanges() chamados incondicionalmente por VaultScreen._load()). O
+// CRUD real do repositório já é coberto por vault_repository_test.dart
+// (testes puros, sem widget).
+class MockVaultRepository extends Mock implements VaultRepository {}
 
 void main() {
   late MockBlockchainService mockBlockchain;
@@ -43,8 +36,7 @@ void main() {
   late MockDeviceKeyService mockKeyService;
   late MockVaultSyncService mockSyncService;
   late MockVaultKeyService mockVaultKeyService;
-  late Directory tempDir;
-  late VaultRepository repo;
+  late MockVaultRepository repo;
 
   const deviceAddress = '0x1234567890123456789012345678901234567890';
 
@@ -52,17 +44,13 @@ void main() {
     registerFallbackValue(BigInt.one);
   });
 
-  setUp(() async {
+  setUp(() {
     mockBlockchain = MockBlockchainService();
     mockStorage = MockLocalStorageService();
     mockKeyService = MockDeviceKeyService();
     mockSyncService = MockVaultSyncService();
     mockVaultKeyService = MockVaultKeyService();
-    tempDir = await Directory.systemTemp.createTemp('vault_screen_test_');
-    repo = VaultRepository(
-      cipherService: _FakeCipherService(),
-      testPath: '${tempDir.path}/vault.enc',
-    );
+    repo = MockVaultRepository();
 
     when(() => mockKeyService.getDeviceAddress())
         .thenAnswer((_) async => deviceAddress);
@@ -77,10 +65,8 @@ void main() {
       (_) async =>
           DeviceInfo(identityId: BigInt.one, revoked: false, exists: true),
     );
-  });
-
-  tearDown(() async {
-    await tempDir.delete(recursive: true);
+    when(() => repo.canWriteVault(any())).thenAnswer((_) async => false);
+    when(() => repo.pendingChanges()).thenAnswer((_) async => 0);
   });
 
   Widget buildScreen() {

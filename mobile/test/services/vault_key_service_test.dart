@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
@@ -12,6 +13,8 @@ class MockDeviceKeyService extends Mock implements DeviceKeyService {}
 class MockBlockchainService extends Mock implements BlockchainService {}
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late MockDeviceKeyService mockKeyService;
   late VaultKeyService vaultKeyService;
 
@@ -20,9 +23,28 @@ void main() {
   // Chave diferente para testar sensibilidade
   final otherKey = Uint8List.fromList(List.generate(32, (i) => i + 1));
 
+  // VaultKeyService._storage é um FlutterSecureStorage real (campo estático,
+  // não injetável) — sem mock do canal, a chamada trava/lança
+  // "Binding has not yet been initialized" fora do ambiente real de app
+  // (achado da Sessão 98). `null` simula "sem chave cacheada", forçando o
+  // fallback pra derivação legada, que é o que estes testes verificam.
+  const secureStorageChannel =
+      MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
+
   setUp(() {
     mockKeyService = MockDeviceKeyService();
     vaultKeyService = VaultKeyService(deviceKeyService: mockKeyService);
+
+    TestWidgetsFlutterBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(secureStorageChannel, (call) async {
+      if (call.method == 'read') return null;
+      return null;
+    });
+  });
+
+  tearDown(() {
+    TestWidgetsFlutterBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(secureStorageChannel, null);
   });
 
   group('deriveVaultKey', () {

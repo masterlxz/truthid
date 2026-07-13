@@ -1,40 +1,29 @@
-import 'dart:io';
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:mocktail/mocktail.dart';
 
 import 'package:truthid_mobile/screens/vault_profiles_screen.dart';
-import 'package:truthid_mobile/services/vault_cipher_service.dart';
 import 'package:truthid_mobile/services/vault_repository.dart';
 
-class _FakeCipherService extends VaultCipherService {
-  @override
-  Future<Uint8List> encrypt(Uint8List plaintext) async => plaintext;
-
-  @override
-  Future<Uint8List> decrypt(Uint8List blob) async => blob;
-}
+// Repositório mockado, não real — VaultRepository faz I/O real de arquivo
+// (dart:io), que nunca resolve dentro da zona FakeAsync de um widget test
+// (achado da Sessão 98, validação manual dos testes escritos na Sessão 97:
+// travava pumpAndSettle indefinidamente). O CRUD real do repositório já é
+// coberto por vault_repository_test.dart (testes puros, sem widget).
+class MockVaultRepository extends Mock implements VaultRepository {}
 
 void main() {
-  late Directory tempDir;
-  late VaultRepository repo;
+  late MockVaultRepository repo;
 
-  setUp(() async {
-    tempDir = await Directory.systemTemp.createTemp('vault_profiles_test_');
-    repo = VaultRepository(
-      cipherService: _FakeCipherService(),
-      testPath: '${tempDir.path}/vault.enc',
-    );
-  });
-
-  tearDown(() async {
-    await tempDir.delete(recursive: true);
+  setUp(() {
+    repo = MockVaultRepository();
   });
 
   Widget buildScreen() => MaterialApp(home: VaultProfilesScreen(repository: repo));
 
   testWidgets('mostra "nenhum perfil" em vault vazio', (tester) async {
+    when(() => repo.listProfileNames()).thenAnswer((_) async => []);
+
     await tester.pumpWidget(buildScreen());
     await tester.pumpAndSettle();
 
@@ -42,21 +31,30 @@ void main() {
   });
 
   testWidgets('adiciona um perfil novo', (tester) async {
+    when(() => repo.listProfileNames()).thenAnswer((_) async => []);
+    when(() => repo.addProfile('Trabalho')).thenAnswer((_) async {});
+
     await tester.pumpWidget(buildScreen());
     await tester.pumpAndSettle();
+
+    when(() => repo.listProfileNames()).thenAnswer((_) async => ['Trabalho']);
 
     await tester.enterText(find.byType(TextField), 'Trabalho');
     await tester.tap(find.text('Add'));
     await tester.pumpAndSettle();
 
     expect(find.text('Trabalho'), findsOneWidget);
-    expect(await repo.listProfileNames(), equals(['Trabalho']));
+    verify(() => repo.addProfile('Trabalho')).called(1);
   });
 
   testWidgets('apaga um perfil com confirmação', (tester) async {
-    await repo.addProfile('Trabalho');
+    when(() => repo.listProfileNames()).thenAnswer((_) async => ['Trabalho']);
+    when(() => repo.deleteProfile('Trabalho')).thenAnswer((_) async {});
+
     await tester.pumpWidget(buildScreen());
     await tester.pumpAndSettle();
+
+    when(() => repo.listProfileNames()).thenAnswer((_) async => []);
 
     await tester.tap(find.byIcon(Icons.delete_outline));
     await tester.pumpAndSettle();
@@ -66,6 +64,6 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('No profiles created yet.'), findsOneWidget);
-    expect(await repo.listProfileNames(), isEmpty);
+    verify(() => repo.deleteProfile('Trabalho')).called(1);
   });
 }

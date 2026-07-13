@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:web3dart/web3dart.dart' show EthereumAddress;
@@ -28,6 +29,8 @@ class _FakeCipherService extends VaultCipherService {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late Directory tempDir;
   late VaultRepository repo;
   late MockIpfsPinClient mockPinClient;
@@ -43,11 +46,35 @@ void main() {
     endpointUrl: 'http://localhost:5001',
   );
 
+  // markPublished()/pendingChanges() do VaultRepository usam
+  // FlutterSecureStorage real (campo estático, não injetável) — mockar o
+  // canal aqui pelo mesmo motivo de vault_key_service_test.dart (Sessão 98):
+  // sem isso, trava/lança "Binding has not yet been initialized" fora do
+  // ambiente real de app. Um Map em memória simula o storage real o
+  // suficiente pra refletir o valor gravado numa leitura seguinte.
+  const secureStorageChannel =
+      MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
+  final fakeSecureStorage = <String, String>{};
+
   setUpAll(() {
     registerFallbackValue(smartAccountAddress);
+    registerFallbackValue(Uint8List(0));
   });
 
   setUp(() async {
+    fakeSecureStorage.clear();
+    TestWidgetsFlutterBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(secureStorageChannel, (call) async {
+      switch (call.method) {
+        case 'write':
+          fakeSecureStorage[call.arguments['key']] = call.arguments['value'];
+          return null;
+        case 'read':
+          return fakeSecureStorage[call.arguments['key']];
+        default:
+          return null;
+      }
+    });
     tempDir = await Directory.systemTemp.createTemp('vault_publish_test_');
     repo = VaultRepository(
       cipherService: _FakeCipherService(),
@@ -66,6 +93,8 @@ void main() {
   });
 
   tearDown(() async {
+    TestWidgetsFlutterBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(secureStorageChannel, null);
     await tempDir.delete(recursive: true);
   });
 
