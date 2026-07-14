@@ -1,6 +1,8 @@
 import { secp256k1 } from '@noble/curves/secp256k1';
 import { sha256 } from '@noble/hashes/sha256';
 
+import { hexToBytes } from '../util/bytes';
+
 /**
  * ECIES genérico (secp256k1 ECDH + SHA-256 + AES-256-GCM) — espelha
  * `encrypt_bytes_for_device` em `desktop/src-tauri/src/lib.rs` e
@@ -27,7 +29,7 @@ export async function encrypt(
   plaintext: Uint8Array,
   recipientPubKeyHex: string,
 ): Promise<Uint8Array> {
-  const recipientPubKey = hexToBytes(normalizeHex(recipientPubKeyHex));
+  const recipientPubKey = hexToBytes(recipientPubKeyHex);
 
   const ephemeralPrivKey = secp256k1.utils.randomPrivateKey();
   const ephemeralPubKey = secp256k1.getPublicKey(ephemeralPrivKey, true);
@@ -84,14 +86,3 @@ async function deriveAesKey(
   ]);
 }
 
-function normalizeHex(hex: string): string {
-  return hex.startsWith('0x') ? hex.slice(2) : hex;
-}
-
-function hexToBytes(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  }
-  return bytes;
-}

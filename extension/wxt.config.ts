@@ -23,7 +23,7 @@ export default defineConfig({
   manifest: {
     name: 'TruthID Vault',
     description:
-      'Recebe um subconjunto do seu vault de senhas do app TruthID Mobile via LAN.',
+      'Recebe um subconjunto do seu vault de senhas do app TruthID Mobile via LAN ou IPFS/IPNS.',
     permissions: ['storage', 'alarms'],
     optional_host_permissions: ['http://*/*'],
   },

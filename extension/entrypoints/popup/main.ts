@@ -23,24 +23,14 @@ import {
 } from '../../src/storage/sessionStore';
 import { renderEntries } from '../../src/ui/renderEntries';
 import { renderQrToCanvas } from '../../src/ui/renderQr';
+import { bytesToHex, hexToBytes } from '../../src/util/bytes';
 
 const SESSION_EXPIRY_ALARM = 'truthid-vault-session-expiry';
+const START_DEAD_DROP_POLL_MESSAGE = 'truthid-start-dead-drop-poll';
+const DEAD_DROP_RESOLVED_MESSAGE = 'truthid-dead-drop-resolved';
 const HOST_PERMISSION: chrome.permissions.Permissions = {
   origins: ['http://*/*'],
 };
-
-function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-function hexToBytes(hex: string): Uint8Array {
-  const clean = hex.startsWith('0x') ? hex.slice(2) : hex;
-  const out = new Uint8Array(clean.length / 2);
-  for (let i = 0; i < out.length; i++) {
-    out[i] = parseInt(clean.slice(i * 2, i * 2 + 2), 16);
-  }
-  return out;
-}
 
 function base64ToBytes(base64: string): Uint8Array {
   return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
@@ -61,6 +51,13 @@ async function createNewSession(): Promise<SessionState> {
   };
   await saveSession(state);
   chrome.alarms.create(SESSION_EXPIRY_ALARM, { when: state.expiresAt });
+  // 13.9, fatia 2b: o dead-drop já começa a ser resolvido em background
+  // (chrome.alarms, sobrevive à popup fechada) assim que o QR aparece, sem
+  // esperar o usuário clicar em "Find" — esconde a latência de propagação
+  // do IPNS atrás do tempo que ele já vai gastar escaneando/escolhendo
+  // perfil no celular. Best-effort: se o listener do background não
+  // responder por algum motivo, a sessão ainda funciona via LAN normalmente.
+  void chrome.runtime.sendMessage({ type: START_DEAD_DROP_POLL_MESSAGE }).catch(() => {});
   return state;
 }
 
@@ -86,7 +83,9 @@ let currentState: SessionState | null = null;
 async function showQr(state: SessionState): Promise<void> {
   els.qrSection.hidden = false;
   els.entriesSection.hidden = true;
-  els.statusText.textContent = '';
+  els.statusText.textContent =
+    'A backup delivery is already trying in the background — click "Find" ' +
+    "for a faster local-network delivery once you've scanned the code.";
 
   const payload = toQrPayload(
     state.sessionId,
@@ -102,9 +101,13 @@ function showEntries(entries: VaultEntry[]): void {
   renderEntries(els.entriesList, entries);
 }
 
-async function handleBlob(blobBase64: string): Promise<void> {
+// Ponto comum pra "cheguei num blob cifrado, decifra e mostra" — o LAN
+// entrega um JSON `{blob: base64}` (ver `handleBlob` abaixo), o dead-drop
+// entrega os bytes crus do gateway diretamente (mesmo blob ECIES sem
+// nenhum envelope extra — confirmado em `vault_session_screen.dart`, é o
+// mesmo `encryptedBlob` usado nos dois transportes).
+async function handleBlobBytes(blob: Uint8Array): Promise<void> {
   if (!currentState) return;
-  const blob = base64ToBytes(blobBase64);
   const priv = hexToBytes(currentState.ephemeralPrivateKeyHex);
   const plaintext = await decrypt(blob, priv);
   const entries = JSON.parse(new TextDecoder().decode(plaintext)) as VaultEntry[];
@@ -113,6 +116,28 @@ async function handleBlob(blobBase64: string): Promise<void> {
   await saveSession(currentState);
   showEntries(entries);
 }
+
+async function handleBlob(blobBase64: string): Promise<void> {
+  await handleBlobBytes(base64ToBytes(blobBase64));
+}
+
+// O dead-drop é decifrado dentro do background (não aqui — ver
+// `entrypoints/background.ts`, é o que permite resolver mesmo com a popup
+// fechada). Esse listener só recarrega o resultado do storage pra
+// atualizar a UI ao vivo se a popup estiver aberta no momento — não é
+// necessário pra correção: reabrir a popup já mostra as entradas via
+// `init()` de qualquer forma.
+chrome.runtime.onMessage.addListener((message: { type?: string } | undefined) => {
+  if (message?.type !== DEAD_DROP_RESOLVED_MESSAGE) return;
+  void (async () => {
+    if (!currentState || currentState.status === 'received') return;
+    const stored = await loadSession();
+    if (stored?.status === 'received' && stored.sessionId === currentState.sessionId && stored.entries) {
+      currentState = stored;
+      showEntries(stored.entries);
+    }
+  })();
+});
 
 async function ensureHostPermission(): Promise<boolean> {
   const granted = await chrome.permissions.contains(HOST_PERMISSION);
@@ -164,8 +189,12 @@ els.findButton.addEventListener('click', async () => {
     return;
   }
 
+  if (currentState.status === 'received') return; // dead-drop já resolveu em background enquanto o sweep rodava
+
   els.statusText.textContent =
-    "Couldn't find your phone automatically. Enter its IP manually below.";
+    "Couldn't find your phone automatically. Enter its IP manually below, or " +
+    'wait — a backup delivery is still trying in the background (can take a ' +
+    'couple of minutes).';
 });
 
 els.manualConnectButton.addEventListener('click', async () => {
