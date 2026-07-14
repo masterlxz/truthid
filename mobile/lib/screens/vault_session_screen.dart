@@ -1,33 +1,47 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../services/blockchain_service.dart';
 import '../services/device_key_service.dart';
+import '../services/ecies_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/vault_lan_server_service.dart';
+import '../services/vault_repository.dart';
 import '../services/vault_sync_service.dart';
 import '../theme.dart';
 import '../widgets/info_row.dart';
 
-// Estados possíveis da tela — do QR escaneado até o aviso final. A entrega
-// real pra extensão (transporte P2P) é escopo da 13.9; esta tela só prepara
-// o terreno (scan → escolher perfil → ver quantas entradas bateriam).
+// Estados possíveis da tela — do QR escaneado até o envio de verdade pra
+// extensão via LAN (13.9, fatia 1: só transporte LAN, sem dead-drop
+// IPFS/IPNS ainda).
 enum _Status {
   info,
   selectingProfile,
   loadingMatches,
   showingMatches,
-  unavailable,
+  sending,
+  sent,
+  timeout,
   error,
 }
 
-// Tela de "perfil pra scan da extensão" (13.8). Payload do QR provisório —
-// { action: 'truthid-vault-session', sessionId } — o protocolo real (o que a
-// extensão de fato precisa trocar) é escopo da 13.9, não inventado aqui.
+// Tela de "perfil pra scan da extensão" (13.8) + envio real via LAN (13.9,
+// fatia 1). Schema do QR v1:
+//   { action: 'truthid-vault-session', v: 1, sessionId, ephemeralPubKey, expiresAt }
+// `sessionId` funciona como path HTTP e como bearer token — não há campo
+// separado de "discoveryToken". `expiresAt` é timestamp absoluto (unix ms),
+// evita ambiguidade de clock-skew entre os dois aparelhos.
 class VaultSessionScreen extends StatefulWidget {
   final Map<String, dynamic> payload;
   final BlockchainService? blockchainService;
   final VaultSyncService? vaultSyncService;
   final LocalStorageService? localStorageService;
   final DeviceKeyService? deviceKeyService;
+  final EciesService? eciesService;
+  final VaultLanServerService? lanServerService;
 
   const VaultSessionScreen({
     super.key,
@@ -36,6 +50,8 @@ class VaultSessionScreen extends StatefulWidget {
     this.vaultSyncService,
     this.localStorageService,
     this.deviceKeyService,
+    this.eciesService,
+    this.lanServerService,
   });
 
   @override
@@ -45,16 +61,21 @@ class VaultSessionScreen extends StatefulWidget {
 class _VaultSessionScreenState extends State<VaultSessionScreen> {
   late _Status _status;
   String? _sessionId;
+  String? _extensionPubKeyHex;
+  DateTime? _expiresAt;
   String? _errorMsg;
   String? _selectedProfile;
-  int _matchCount = 0;
+  List<VaultEntry> _matchingEntries = [];
   VaultSyncStatus? _syncStatus;
   VaultSyncOutcome? _outcome;
+  List<String> _localIps = [];
 
   late final BlockchainService _blockchain;
   late final VaultSyncService _syncService;
   late final LocalStorageService _storage;
   late final DeviceKeyService _keyService;
+  late final EciesService _ecies;
+  late final VaultLanServerService _lanServer;
 
   @override
   void initState() {
@@ -64,23 +85,69 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
         VaultSyncService(blockchainService: _blockchain);
     _storage = widget.localStorageService ?? LocalStorageService();
     _keyService = widget.deviceKeyService ?? DeviceKeyService();
+    _ecies = widget.eciesService ?? EciesService();
+    _lanServer = widget.lanServerService ?? VaultLanServerService();
+
+    _status = _validatePayload() ?? _Status.info;
+  }
+
+  // Valida o schema v1 do QR — sessionId, ephemeralPubKey e expiresAt são
+  // todos obrigatórios; um QR já expirado (ex: foto velha de tela) é
+  // rejeitado aqui, antes de gastar tempo sincronizando o vault.
+  _Status? _validatePayload() {
+    final v = widget.payload['v'];
+    if (v != 1) {
+      _errorMsg = 'Invalid QR: unsupported schema version.';
+      return _Status.error;
+    }
 
     final sessionId = widget.payload['sessionId'] as String?;
     if (sessionId == null || sessionId.isEmpty) {
-      _status = _Status.error;
       _errorMsg = 'Invalid QR: missing sessionId.';
-      return;
+      return _Status.error;
     }
+
+    final ephemeralPubKey = widget.payload['ephemeralPubKey'] as String?;
+    if (ephemeralPubKey == null || ephemeralPubKey.isEmpty) {
+      _errorMsg = 'Invalid QR: missing ephemeralPubKey.';
+      return _Status.error;
+    }
+
+    final expiresAtMs = widget.payload['expiresAt'];
+    if (expiresAtMs is! int) {
+      _errorMsg = 'Invalid QR: missing expiresAt.';
+      return _Status.error;
+    }
+    final expiresAt = DateTime.fromMillisecondsSinceEpoch(expiresAtMs);
+    if (expiresAt.isBefore(DateTime.now())) {
+      _errorMsg = 'This QR code has expired — go back to the extension and '
+          'scan a fresh one.';
+      return _Status.error;
+    }
+
     _sessionId = sessionId;
-    _status = _Status.info;
+    _extensionPubKeyHex = ephemeralPubKey;
+    _expiresAt = expiresAt;
+    return null;
   }
 
   // Sincroniza o vault (uma vez) pra saber a lista real de perfis do usuário
   // antes de mostrar o picker — os perfis fixos hardcoded foram removidos
   // (ver PROJECT_STATE.md, Sessão 97). A escolha do perfil em si (abaixo) só
   // filtra o resultado já sincronizado, sem precisar sincronizar de novo.
+  //
+  // Também dispara aqui (não só na hora de enviar) uma leitura das interfaces
+  // de rede — no iOS isso é o que aciona o diálogo do sistema de Local
+  // Network Privacy; disparar cedo evita que ele apareça competindo com o
+  // timeout do TTL bem no meio do envio (ver PROJECT_STATE.md, 13.9).
   Future<void> _loadProfiles() async {
     setState(() => _status = _Status.loadingMatches);
+
+    unawaited(
+      VaultLanServerService.getLocalIpAddresses()
+          .then((ips) => _localIps = ips)
+          .catchError((_) => <String>[]),
+    );
 
     final address = await _keyService.getDeviceAddress();
     var identityId = await _storage.getPairedIdentityId();
@@ -109,15 +176,53 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
   }
 
   void _selectProfile(String profile) {
-    final matches =
-        _outcome?.entries.where((e) => e.profiles.contains(profile)).length ??
-            0;
+    final matches = _outcome?.entries
+            .where((e) => e.profiles.contains(profile))
+            .toList() ??
+        const <VaultEntry>[];
     setState(() {
       _selectedProfile = profile;
-      _matchCount = matches;
+      _matchingEntries = matches;
       _syncStatus = _outcome?.status;
       _status = _Status.showingMatches;
     });
+  }
+
+  Future<void> _sendToExtension() async {
+    setState(() => _status = _Status.sending);
+    try {
+      final expiresAt = _expiresAt!;
+      if (expiresAt.isBefore(DateTime.now())) {
+        setState(() {
+          _status = _Status.error;
+          _errorMsg = 'Session expired before sending — scan the QR again.';
+        });
+        return;
+      }
+
+      final plaintext = Uint8List.fromList(
+        utf8.encode(
+          jsonEncode(_matchingEntries.map((e) => e.toJson()).toList()),
+        ),
+      );
+      final encryptedBlob =
+          await _ecies.encrypt(plaintext, _extensionPubKeyHex!);
+
+      final served = await _lanServer.serveOnce(
+        encryptedBlob: encryptedBlob,
+        sessionId: _sessionId!,
+        expiresAt: expiresAt,
+      );
+
+      if (!mounted) return;
+      setState(() => _status = served ? _Status.sent : _Status.timeout);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _status = _Status.error;
+        _errorMsg = 'Failed to send to the extension: $e';
+      });
+    }
   }
 
   @override
@@ -129,7 +234,9 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
         _Status.selectingProfile => _buildProfilePickerUI(),
         _Status.loadingMatches => _buildLoadingUI(),
         _Status.showingMatches => _buildMatchesUI(),
-        _Status.unavailable => _buildUnavailableUI(),
+        _Status.sending => _buildSendingUI(),
+        _Status.sent => _buildSentUI(),
+        _Status.timeout => _buildTimeoutUI(),
         _Status.error => _buildErrorUI(),
       },
     );
@@ -226,7 +333,7 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
             const SizedBox(height: 16),
             InfoRow(label: 'Profile', value: _selectedProfile ?? ''),
             const SizedBox(height: 8),
-            InfoRow(label: 'Matching entries', value: '$_matchCount'),
+            InfoRow(label: 'Matching entries', value: '${_matchingEntries.length}'),
             if (offline) ...[
               const SizedBox(height: 16),
               const Text(
@@ -236,8 +343,8 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
             ],
             const SizedBox(height: 32),
             ElevatedButton(
-              onPressed: () => setState(() => _status = _Status.unavailable),
-              child: const Text('Continue'),
+              onPressed: _sendToExtension,
+              child: const Text('Send to extension'),
             ),
           ],
         ),
@@ -245,23 +352,74 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
     );
   }
 
-  Widget _buildUnavailableUI() {
+  Widget _buildSendingUI() {
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const SizedBox(height: 48),
+            const Center(child: CircularProgressIndicator()),
+            const SizedBox(height: 24),
+            const Text(
+              'Waiting for your browser to connect...',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Make sure your phone and computer are on the same Wi-Fi '
+              'network.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.textMuted),
+            ),
+            if (_localIps.isNotEmpty) ...[
+              const SizedBox(height: 24),
+              const Text(
+                'If your browser can\'t find your phone automatically, enter '
+                'this IP address manually:',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.textMuted),
+              ),
+              const SizedBox(height: 8),
+              ..._localIps.map(
+                (ip) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Text(
+                    ip,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSentUI() {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.construction, size: 72, color: AppColors.textMuted),
+            const Icon(Icons.check_circle_outline,
+                size: 72, color: AppColors.accent),
             const SizedBox(height: 16),
             const Text(
-              'Not available yet',
+              'Sent',
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             const Text(
-              'Sending this to the browser extension requires the TruthID '
-              'extension, which is not built yet. Nothing was sent.',
+              'Your browser extension received the vault entries.',
               textAlign: TextAlign.center,
               style: TextStyle(color: AppColors.textMuted),
             ),
@@ -269,6 +427,38 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
               child: const Text('Done'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimeoutUI() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.wifi_off, size: 72, color: AppColors.textMuted),
+            const SizedBox(height: 16),
+            const Text(
+              'Nothing arrived',
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Your browser extension never connected before this session '
+              'expired. Make sure both devices are on the same Wi-Fi '
+              'network and try again.',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _sendToExtension,
+              child: const Text('Try again'),
             ),
           ],
         ),

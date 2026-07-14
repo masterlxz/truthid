@@ -568,4 +568,58 @@ mod tests {
 
         assert_eq!(plaintext, vault_key);
     }
+
+    // Vetor cruzado fixo, gerado uma vez rodando o EciesService.encrypt real
+    // do Dart (mobile/tool/gen_ecies_vector.dart, descartado depois de gerar
+    // este vetor) contra uma chave privada de teste determinística
+    // (SHA-256("truthid-ecies-fixed-test-vector-v1")). O mesmo trio
+    // {recipientPrivateKeyHex, blobBase64, expectedPlaintextHex} também é
+    // usado em `mobile/test/services/ecies_service_test.dart` e em
+    // `extension/src/crypto/ecies.test.ts` — os três decifram o mesmo blob e
+    // conferem o mesmo plaintext, provando interoperabilidade determinística
+    // entre Rust, Dart e JS sem precisar de dois dispositivos reais (fecha o
+    // sentido que o teste acima não cobre: o mobile agora também cifra, não
+    // só decifra). Achado no caminho, ao gerar este vetor: o
+    // `decryptVaultKeyFromPairing` do Dart usava `SecretBox(ciphertext, mac:
+    // Mac.empty)` com o tag já concatenado ao ciphertext — o pacote
+    // `cryptography` recalcula o MAC sobre o `cipherText` inteiro e nunca
+    // bate contra `Mac.empty`, então essa chamada sempre lançava erro de MAC
+    // em runtime real. Corrigido no Dart pra usar `SecretBox.fromConcatenation`.
+    // A Sessão 92 nunca pegou isso porque o teste Rust de lá reimplementa o
+    // decrypt em Rust puro, sem nunca chamar o código Dart de verdade.
+    #[test]
+    fn dart_produced_blob_decrypts_correctly() {
+        let recipient_priv_hex =
+            "ebea44b99557c83965e6152a1393a5c6d74fe114f0a626f51bb2349e815136b2";
+        let blob_b64 = "AqQAXxG3rw53DVihUXbTzqHcENoLZGbHFsnNHPFvZduk0FF00QwiZMLWLCs8q19CzAj4kYiWXr1jUTn0tUxh1ibNVbwPQiCSBZAJdH1eqE86qT1Na5ytsA==";
+        let expected_plaintext_hex =
+            "747275746869642d7661756c742d656e7472792d66697874757265";
+
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+        let recipient_priv_bytes = hex::decode(recipient_priv_hex).expect("valid hex");
+        let recipient_priv = SigningKey::from_bytes(recipient_priv_bytes.as_slice().into())
+            .expect("valid private key");
+
+        let blob = STANDARD.decode(blob_b64).expect("valid base64");
+        let ephemeral_pub_bytes = &blob[0..33];
+        let nonce_bytes = &blob[33..45];
+        let ciphertext = &blob[45..];
+
+        let point = k256::EncodedPoint::from_bytes(ephemeral_pub_bytes).expect("valid point");
+        let ephemeral_pub = PublicKey::from_encoded_point(&point).unwrap();
+
+        let shared = diffie_hellman(
+            recipient_priv.as_nonzero_scalar(),
+            ephemeral_pub.as_affine(),
+        );
+        let aes_key_bytes = Sha256::digest(shared.raw_secret_bytes());
+        let aes_key = Key::<Aes256Gcm>::from_slice(&aes_key_bytes);
+        let cipher = Aes256Gcm::new(aes_key);
+
+        let plaintext = cipher
+            .decrypt(nonce_bytes.into(), ciphertext)
+            .expect("Rust should decrypt a blob produced by the real Dart EciesService.encrypt");
+
+        assert_eq!(hex::encode(&plaintext), expected_plaintext_hex);
+    }
 }

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>TruthID Vault</title>
+    <style>
+      body {
+        width: 320px;
+        font-family: system-ui, sans-serif;
+        padding: 16px;
+        margin: 0;
+      }
+      h1 {
+        font-size: 16px;
+        margin: 0 0 12px;
+      }
+      .muted {
+        color: #666;
+        font-size: 13px;
+      }
+      #qr-canvas {
+        display: block;
+        margin: 12px auto;
+      }
+      #status-text {
+        min-height: 18px;
+        font-size: 13px;
+        margin: 8px 0;
+      }
+      .manual-row {
+        display: flex;
+        gap: 6px;
+        margin-top: 8px;
+      }
+      .manual-row input {
+        flex: 1;
+        min-width: 0;
+      }
+      button {
+        cursor: pointer;
+      }
+      .entry-row {
+        border-bottom: 1px solid #ddd;
+        padding: 8px 0;
+      }
+      .entry-site {
+        font-weight: bold;
+        margin-bottom: 4px;
+      }
+      .entry-field {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        margin: 2px 0;
+      }
+      .entry-field span {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>TruthID Vault</h1>
+
+    <section id="qr-section">
+      <p class="muted">Scan this QR code from the TruthID Mobile app.</p>
+      <canvas id="qr-canvas"></canvas>
+      <p id="status-text"></p>
+      <button id="find-button">I scanned it — look for my phone</button>
+      <div class="manual-row">
+        <input id="manual-ip" type="text" placeholder="Phone IP (e.g. 192.168.1.42)" />
+        <button id="manual-connect">Connect</button>
+      </div>
+      <p class="muted" style="margin-top: 12px">
+        <button id="new-session">Generate a new QR code</button>
+      </p>
+    </section>
+
+    <section id="entries-section" hidden>
+      <div id="entries-list"></div>
+      <p class="muted" style="margin-top: 12px">
+        <button id="new-session-2">Start a new session</button>
+      </p>
+    </section>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

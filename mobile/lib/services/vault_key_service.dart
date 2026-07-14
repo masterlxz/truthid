@@ -2,13 +2,11 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' as crypto;
-import 'package:cryptography/cryptography.dart' as crypt;
-import 'package:elliptic/elliptic.dart';
-import 'package:elliptic/ecdh.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'blockchain_service.dart';
 import 'device_key_service.dart';
+import 'ecies_service.dart';
 
 class VaultKeyService {
   static const _storage = FlutterSecureStorage();
@@ -17,10 +15,11 @@ class VaultKeyService {
   static const _legacyInfo = 'vault-key-v1';
 
   final DeviceKeyService _deviceKeyService;
-  final _ec = getSecp256k1();
+  final EciesService _ecies;
 
-  VaultKeyService({DeviceKeyService? deviceKeyService})
-      : _deviceKeyService = deviceKeyService ?? DeviceKeyService();
+  VaultKeyService({DeviceKeyService? deviceKeyService, EciesService? ecies})
+      : _deviceKeyService = deviceKeyService ?? DeviceKeyService(),
+        _ecies = ecies ?? EciesService();
 
   Future<Uint8List> deriveVaultKey() async {
     final stored = await _storage.read(key: _storageKey);
@@ -36,34 +35,8 @@ class VaultKeyService {
   }
 
   Future<void> decryptVaultKeyFromPairing(Uint8List encryptedBlob) async {
-    if (encryptedBlob.length < 33 + 12 + 16) {
-      throw Exception('encryptedBlob too short');
-    }
-
-    final ephemeralPubBytes = encryptedBlob.sublist(0, 33);
-    final nonceBytes = encryptedBlob.sublist(33, 45);
-    final ciphertext = encryptedBlob.sublist(45);
-
     final devicePrivBytes = await _deviceKeyService.getPrivateKeyBytes();
-
-    // ECDH via elliptic package
-    final devicePriv = PrivateKey.fromBytes(_ec, devicePrivBytes);
-    final ephemeralPub = PublicKey.fromHex(_ec, _bytesToHex(ephemeralPubBytes));
-    final sharedSecretBytes = computeSecret(devicePriv, ephemeralPub);
-    final sharedSecret = Uint8List.fromList(sharedSecretBytes);
-
-    // Derive AES-256 key via SHA-256(shared_secret)
-    final aesKey = crypto.sha256.convert(sharedSecret).bytes;
-
-    // AES-256-GCM decryption via cryptography package
-    final cipher = crypt.AesGcm.with256bits();
-    final secretKey = crypt.SecretKey(aesKey);
-    final secretBox = crypt.SecretBox(
-      ciphertext,
-      nonce: nonceBytes,
-      mac: crypt.Mac.empty,
-    );
-    final plaintext = await cipher.decrypt(secretBox, secretKey: secretKey);
+    final plaintext = await _ecies.decrypt(encryptedBlob, devicePrivBytes);
 
     await _storage.write(
       key: _storageKey,
@@ -112,9 +85,5 @@ class VaultKeyService {
     final t1 = crypto.Hmac(crypto.sha256, prk).convert([...info, 0x01]).bytes;
 
     return Uint8List.fromList(t1.sublist(0, length));
-  }
-
-  static String _bytesToHex(Uint8List bytes) {
-    return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
   }
 }
