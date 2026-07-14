@@ -9,6 +9,7 @@ use aes_gcm::{Aes256Gcm, Key};
 use aes_gcm::aead::{Aead, AeadCore, KeyInit};
 use k256::elliptic_curve::ecdh::diffie_hellman;
 
+mod bundler;
 mod ipfs;
 mod ledger;
 mod vault;
@@ -212,6 +213,34 @@ fn get_or_create_device_key() -> Result<String, String> {
     Ok(address)
 }
 
+/// Assina um hash de 32 bytes já pronto com o prefixo EIP-191 personal_sign
+/// (keccak256("\x19Ethereum Signed Message:\n32" + hash)) — o mesmo
+/// procedimento que `TruthIDAccount._validateSignature` espera pra
+/// reconhecer a device key, seja o hash de uma sessão (`SessionRegistry`)
+/// ou de uma UserOperation ERC-4337. Função pura (sem I/O de keyring), pra
+/// poder ser testada com uma chave conhecida sem tocar o keyring do SO —
+/// `sign_session_hash`/`sign_user_op_hash` (comandos Tauri) só buscam a
+/// device key e formatam a saída.
+fn sign_eip191_hash_raw(
+    priv_bytes: &[u8],
+    hash_bytes: &[u8],
+) -> Result<(k256::ecdsa::Signature, k256::ecdsa::RecoveryId), String> {
+    if hash_bytes.len() != 32 {
+        return Err(format!("hash must be 32 bytes, got {}", hash_bytes.len()));
+    }
+    let signing_key = SigningKey::from_bytes(priv_bytes.into()).map_err(|e| e.to_string())?;
+
+    let prefix = b"\x19Ethereum Signed Message:\n32";
+    let mut msg = Vec::with_capacity(prefix.len() + 32);
+    msg.extend_from_slice(prefix);
+    msg.extend_from_slice(hash_bytes);
+    let digest = Keccak256::digest(&msg);
+
+    signing_key
+        .sign_prehash_recoverable(&digest)
+        .map_err(|e| e.to_string())
+}
+
 /// Signs a 32-byte session hash for on-chain createSession.
 /// The contract verifies: ecrecover(keccak256("\x19Ethereum Signed Message:\n32" + hash), v, r, s) == devicePubKey
 /// Returns (r, s, v) as separate values so the caller can pass them as distinct ABI arguments.
@@ -219,26 +248,9 @@ fn get_or_create_device_key() -> Result<String, String> {
 fn sign_session_hash(hash: String) -> Result<(String, String, u8), String> {
     let hash_bytes = hex::decode(hash.trim_start_matches("0x"))
         .map_err(|e| format!("invalid hash hex: {e}"))?;
-    if hash_bytes.len() != 32 {
-        return Err(format!("hash must be 32 bytes, got {}", hash_bytes.len()));
-    }
-
     let priv_hex = get_device_key_hex()?;
     let priv_bytes = hex::decode(&priv_hex).map_err(|e| e.to_string())?;
-    let signing_key = SigningKey::from_bytes(priv_bytes.as_slice().into())
-        .map_err(|e| e.to_string())?;
-
-    // Ethereum personal_sign of 32 raw bytes — same prefix the contract uses:
-    // keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", hash))
-    let prefix = b"\x19Ethereum Signed Message:\n32";
-    let mut msg = Vec::with_capacity(prefix.len() + 32);
-    msg.extend_from_slice(prefix);
-    msg.extend_from_slice(&hash_bytes);
-    let digest = Keccak256::digest(&msg);
-
-    let (signature, recovery_id) = signing_key
-        .sign_prehash_recoverable(&digest)
-        .map_err(|e| e.to_string())?;
+    let (signature, recovery_id) = sign_eip191_hash_raw(&priv_bytes, &hash_bytes)?;
 
     let sig_bytes = signature.to_bytes();
     let r = format!("0x{}", hex::encode(&sig_bytes[..32]));
@@ -246,6 +258,24 @@ fn sign_session_hash(hash: String) -> Result<(String, String, u8), String> {
     let v = recovery_id.to_byte() + 27u8;
 
     Ok((r, s, v))
+}
+
+/// Assina o hash de uma UserOperation ERC-4337 v0.7 com a device key — mesmo
+/// procedimento de `sign_session_hash`, hash de aplicação diferente (dá ao
+/// Desktop a mesma capacidade que o Mobile já tem via
+/// `DeviceKeyService.signHash`, ver `mobile/lib/services/user_operation_signer.dart`).
+/// Devolve a assinatura já concatenada em 65 bytes hex (r||s||v), formato
+/// que o campo `signature` da UserOp espera direto, sem re-split do lado TS.
+#[tauri::command]
+fn sign_user_op_hash(hash: String) -> Result<String, String> {
+    let hash_bytes = hex::decode(hash.trim_start_matches("0x"))
+        .map_err(|e| format!("invalid hash hex: {e}"))?;
+    let priv_hex = get_device_key_hex()?;
+    let priv_bytes = hex::decode(&priv_hex).map_err(|e| e.to_string())?;
+    let (signature, recovery_id) = sign_eip191_hash_raw(&priv_bytes, &hash_bytes)?;
+
+    let v = recovery_id.to_byte() + 27u8;
+    Ok(format!("0x{}{:02x}", hex::encode(signature.to_bytes()), v))
 }
 
 /// Lista todas as entradas do vault local (decifrado em memória).
@@ -423,6 +453,19 @@ fn vault_set_providers(providers: Vec<ipfs::PinningProvider>) -> Result<(), Stri
     ipfs::save_providers(&providers)
 }
 
+/// Retorna a config do bundler Pimlico (chave de API + rede) usada pra
+/// assinar/enviar UserOperations via device key.
+#[tauri::command]
+fn get_bundler_config() -> Result<bundler::BundlerConfig, String> {
+    Ok(bundler::load_config())
+}
+
+/// Salva a config do bundler Pimlico.
+#[tauri::command]
+fn save_bundler_config(config: bundler::BundlerConfig) -> Result<(), String> {
+    bundler::save_config(&config)
+}
+
 /// Retorna a permissão canWriteVault de cada device — mora dentro do próprio
 /// vault desde a Sessão 97 (antes era um arquivo local separado), pra viajar
 /// no blob sincronizado e o Mobile conseguir ler a própria permissão.
@@ -488,6 +531,9 @@ pub fn run() {
             get_or_create_device_key,
             sign_challenge,
             sign_session_hash,
+            sign_user_op_hash,
+            get_bundler_config,
+            save_bundler_config,
             vault_key_exists,
             derive_vault_key_from_wallet,
             encrypt_vault_key_for_device,
@@ -621,5 +667,32 @@ mod tests {
             .expect("Rust should decrypt a blob produced by the real Dart EciesService.encrypt");
 
         assert_eq!(hex::encode(&plaintext), expected_plaintext_hex);
+    }
+
+    // Vetor cruzado fixo, o mesmo de
+    // `mobile/test/services/device_key_signature_vector_test.dart` (chave
+    // #0 padrão do Anvil/Hardhat, pública, sem fundos reais) — prova que
+    // `sign_eip191_hash_raw` (usada por `sign_session_hash` e
+    // `sign_user_op_hash`) produz byte a byte a mesma assinatura que
+    // `EthPrivateKey.signPersonalMessageToUint8List` no Dart (que por sua
+    // vez já bate com `viem`'s `signMessage`) pro mesmo par (chave, hash).
+    #[test]
+    fn sign_eip191_hash_raw_matches_known_vector_from_dart_and_viem() {
+        let priv_bytes =
+            hex::decode("ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80")
+                .expect("valid hex");
+        let hash_bytes = Keccak256::digest(b"truthid-14.9.4-known-signature-vector");
+
+        let (signature, recovery_id) = sign_eip191_hash_raw(&priv_bytes, &hash_bytes)
+            .expect("signing should succeed");
+        let v = recovery_id.to_byte() + 27u8;
+        let sig_hex = format!("0x{}{:02x}", hex::encode(signature.to_bytes()), v);
+
+        assert_eq!(
+            sig_hex,
+            "0xc957aeb33d6e8289d733442cf9b44fbafc6c1c07fbb71eef974c724cc087dea\
+e0a4be53c6a97b8f41e53559d6327017adcf62341fc176583751ab61f1020f85\
+51c"
+        );
     }
 }

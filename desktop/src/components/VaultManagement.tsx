@@ -296,6 +296,9 @@ export function VaultManagement() {
     buttonLabel,
     buttonDisabled,
     handleEnviar,
+    deviceKeyPublishState,
+    deviceKeyError,
+    handleEnviarViaDeviceKey,
   } = useVaultPublish(pendingCount, () => setPendingCount(0));
 
   // ── CRUD de entradas ──────────────────────────────────────────────────────
@@ -489,14 +492,34 @@ export function VaultManagement() {
               <span className="muted">Vault ainda não registrado on-chain</span>
             )}
           </div>
-          <button onClick={handleEnviar} disabled={buttonDisabled}>
-            {buttonLabel}
-          </button>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button onClick={handleEnviar} disabled={buttonDisabled}>
+              {buttonLabel}
+            </button>
+            {/* Segundo caminho, via device key (sem Ledger) — prova de que o
+                pipeline UserOp+bundler funciona no Desktop. Sem UI polida de
+                propósito, é validação, não feature acabada pra usuário final
+                (ver PROJECT_STATE.md, "Desktop ganha assinatura via device key"). */}
+            <button
+              onClick={handleEnviarViaDeviceKey}
+              disabled={deviceKeyPublishState === "publishing"}
+              title="Publica o vault assinando com a device key local, sem toque na Ledger — requer ~/.truthid/bundler_config.json configurado"
+            >
+              {deviceKeyPublishState === "publishing"
+                ? "Publicando via device key..."
+                : "Publicar via device key (sem Ledger)"}
+            </button>
+          </div>
         </div>
 
         {publishError && (
           <p className="error-text" style={{ marginBottom: 0, marginTop: "0.5rem" }}>
             {publishError}
+          </p>
+        )}
+        {deviceKeyError && (
+          <p className="error-text" style={{ marginBottom: 0, marginTop: "0.5rem" }}>
+            {deviceKeyError}
           </p>
         )}
         {pinWarning && (

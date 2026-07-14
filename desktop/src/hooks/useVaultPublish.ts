@@ -9,7 +9,13 @@ import {
   VAULT_REGISTRY_ABI,
   TRUTHID_ACCOUNT_ABI,
 } from "../config/contracts";
+import { executeViaUserOp } from "../services/userOpExecutor";
 import type { PinResult } from "../types";
+
+interface BundlerConfig {
+  api_key: string;
+  network: string;
+}
 
 // Débito #43: máquina de estados de "publicar o vault" (vault_publish local +
 // updateVault on-chain) extraída do VaultManagement.tsx, mesmo padrão já usado
@@ -26,6 +32,9 @@ export function useVaultPublish(
   buttonLabel: string;
   buttonDisabled: boolean;
   handleEnviar: () => Promise<void>;
+  deviceKeyPublishState: "idle" | "publishing" | "error";
+  deviceKeyError: string | null;
+  handleEnviarViaDeviceKey: () => Promise<void>;
 } {
   const { identityId, smartAccountAddress } = useIdentity();
   const { isConnected } = useAccount();
@@ -39,6 +48,18 @@ export function useVaultPublish(
     contentHash: `0x${string}`;
   } | null>(null);
   const [justPublished, setJustPublished] = useState(false);
+
+  // Segundo caminho de publicação, ao lado do já existente (Ledger via
+  // writeContract acima): assina via device key, sem toque físico, usando o
+  // motor novo `executeViaUserOp` (13.9-irmã — ver PROJECT_STATE.md, "Desktop
+  // ganha assinatura via device key"). Prova real de que o pipeline
+  // UserOp+bundler funciona no Desktop, reaproveitando a mesma ação
+  // (updateVault) que o caminho Ledger já usa — não substitui o caminho
+  // existente, soma.
+  const [deviceKeyPublishState, setDeviceKeyPublishState] = useState<
+    "idle" | "publishing" | "error"
+  >("idle");
+  const [deviceKeyError, setDeviceKeyError] = useState<string | null>(null);
 
   const {
     writeContract,
@@ -125,6 +146,59 @@ export function useVaultPublish(
     }
   }
 
+  async function handleEnviarViaDeviceKey() {
+    setDeviceKeyError(null);
+    setDeviceKeyPublishState("publishing");
+    try {
+      if (!smartAccountAddress) {
+        throw new Error("Nenhuma identidade carregada.");
+      }
+
+      const result = await invoke<PinResult>("vault_publish");
+      if (result.providers_failed.length > 0 && result.providers_ok.length === 0) {
+        throw new Error(`Todos os providers falharam: ${result.providers_failed.join(", ")}`);
+      }
+
+      const bundlerConfig = await invoke<BundlerConfig>("get_bundler_config");
+      if (!bundlerConfig.api_key) {
+        throw new Error(
+          "Bundler não configurado — grave api_key/network em ~/.truthid/bundler_config.json."
+        );
+      }
+
+      const callData = encodeFunctionData({
+        abi: VAULT_REGISTRY_ABI,
+        functionName: "updateVault",
+        args: [result.cid, result.content_hash as `0x${string}`],
+      });
+
+      const { transactionHash } = await executeViaUserOp({
+        smartAccountAddress,
+        dest: VAULT_REGISTRY_ADDRESS,
+        value: 0n,
+        callData,
+        bundlerApiKey: bundlerConfig.api_key,
+        bundlerNetwork: bundlerConfig.network || "base",
+      });
+
+      if (!transactionHash) {
+        throw new Error(
+          "UserOperation enviada mas não confirmada a tempo — pode confirmar depois, não é necessariamente um erro."
+        );
+      }
+
+      refetchHasVault();
+      refetchVaultRef();
+      onPublished();
+      setJustPublished(true);
+      setTimeout(() => setJustPublished(false), 3000);
+      setDeviceKeyPublishState("idle");
+    } catch (e) {
+      setDeviceKeyError(String(e));
+      setDeviceKeyPublishState("error");
+    }
+  }
+
   function buttonLabel(): string {
     if (publishState === "publishing") return "Publicando no IPFS...";
     if (isTxPending) return "Confirmar na carteira...";
@@ -143,5 +217,8 @@ export function useVaultPublish(
     buttonLabel: buttonLabel(),
     buttonDisabled: publishState === "publishing" || isTxPending || isConfirming || justPublished,
     handleEnviar,
+    deviceKeyPublishState,
+    deviceKeyError,
+    handleEnviarViaDeviceKey,
   };
 }
