@@ -1,12 +1,12 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'blockchain_service.dart';
 import 'device_key_service.dart';
 import 'ecies_service.dart';
+import 'hkdf_util.dart';
 
 class VaultKeyService {
   static const _storage = FlutterSecureStorage();
@@ -65,25 +65,11 @@ class VaultKeyService {
 
   Future<Uint8List> _deriveLegacyKey() async {
     final ikm = await _deviceKeyService.getPrivateKeyBytes();
-    return _hkdfSha256(
+    return hkdfSha256(
       ikm: ikm,
       salt: utf8.encode(_legacySalt),
       info: utf8.encode(_legacyInfo),
       length: 32,
     );
-  }
-
-  static Uint8List _hkdfSha256({
-    required List<int> ikm,
-    required List<int> salt,
-    required List<int> info,
-    required int length,
-  }) {
-    assert(length <= 32, 'length must be <= 32 for single-block HKDF');
-
-    final prk = crypto.Hmac(crypto.sha256, salt).convert(ikm).bytes;
-    final t1 = crypto.Hmac(crypto.sha256, prk).convert([...info, 0x01]).bytes;
-
-    return Uint8List.fromList(t1.sublist(0, length));
   }
 }

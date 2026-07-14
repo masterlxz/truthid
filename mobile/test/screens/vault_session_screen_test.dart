@@ -9,6 +9,7 @@ import 'package:truthid_mobile/services/blockchain_service.dart';
 import 'package:truthid_mobile/services/device_key_service.dart';
 import 'package:truthid_mobile/services/ecies_service.dart';
 import 'package:truthid_mobile/services/local_storage_service.dart';
+import 'package:truthid_mobile/services/pinning_provider_service.dart';
 import 'package:truthid_mobile/services/vault_lan_server_service.dart';
 import 'package:truthid_mobile/services/vault_repository.dart';
 import 'package:truthid_mobile/services/vault_sync_service.dart';
@@ -26,6 +27,9 @@ class MockEciesService extends Mock implements EciesService {}
 class MockVaultLanServerService extends Mock
     implements VaultLanServerService {}
 
+class MockPinningProviderService extends Mock
+    implements PinningProviderService {}
+
 void main() {
   late MockBlockchainService mockBlockchain;
   late MockLocalStorageService mockStorage;
@@ -33,6 +37,7 @@ void main() {
   late MockVaultSyncService mockSyncService;
   late MockEciesService mockEcies;
   late MockVaultLanServerService mockLanServer;
+  late MockPinningProviderService mockPinningProviderService;
 
   const deviceAddress = '0x1234567890123456789012345678901234567890';
   final farFuture = DateTime.now().add(const Duration(minutes: 3));
@@ -66,6 +71,13 @@ void main() {
     mockSyncService = MockVaultSyncService();
     mockEcies = MockEciesService();
     mockLanServer = MockVaultLanServerService();
+    mockPinningProviderService = MockPinningProviderService();
+
+    // Sem provider Kubo configurado por padrão — o dead-drop (13.9, fatia
+    // 2a) fica no early-return silencioso do IpfsPinClient.publishDeadDrop
+    // sem nenhuma chamada de rede, então os testes de LAN abaixo não
+    // precisam mockar IpfsPinClient também.
+    when(() => mockPinningProviderService.load()).thenAnswer((_) async => []);
 
     when(() => mockKeyService.getDeviceAddress())
         .thenAnswer((_) async => deviceAddress);
@@ -88,6 +100,7 @@ void main() {
         vaultSyncService: mockSyncService,
         eciesService: mockEcies,
         lanServerService: mockLanServer,
+        pinningProviderService: mockPinningProviderService,
       ),
     );
   }

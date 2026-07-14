@@ -7,7 +7,9 @@ import 'package:flutter/material.dart';
 import '../services/blockchain_service.dart';
 import '../services/device_key_service.dart';
 import '../services/ecies_service.dart';
+import '../services/ipfs_pin_client.dart';
 import '../services/local_storage_service.dart';
+import '../services/pinning_provider_service.dart';
 import '../services/vault_lan_server_service.dart';
 import '../services/vault_repository.dart';
 import '../services/vault_sync_service.dart';
@@ -15,8 +17,9 @@ import '../theme.dart';
 import '../widgets/info_row.dart';
 
 // Estados possíveis da tela — do QR escaneado até o envio de verdade pra
-// extensão via LAN (13.9, fatia 1: só transporte LAN, sem dead-drop
-// IPFS/IPNS ainda).
+// extensão. 13.9, fatia 1 (LAN) e fatia 2a (dead-drop IPFS/IPNS, só o lado
+// Mobile publica — a extensão ainda não consome isso, ver fatia 2b) rodam
+// em paralelo a partir do mesmo botão "Send to extension".
 enum _Status {
   info,
   selectingProfile,
@@ -42,6 +45,8 @@ class VaultSessionScreen extends StatefulWidget {
   final DeviceKeyService? deviceKeyService;
   final EciesService? eciesService;
   final VaultLanServerService? lanServerService;
+  final IpfsPinClient? ipfsPinClient;
+  final PinningProviderService? pinningProviderService;
 
   const VaultSessionScreen({
     super.key,
@@ -52,6 +57,8 @@ class VaultSessionScreen extends StatefulWidget {
     this.deviceKeyService,
     this.eciesService,
     this.lanServerService,
+    this.ipfsPinClient,
+    this.pinningProviderService,
   });
 
   @override
@@ -69,6 +76,8 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
   VaultSyncStatus? _syncStatus;
   VaultSyncOutcome? _outcome;
   List<String> _localIps = [];
+  String? _deadDropIpnsName;
+  String? _deadDropError;
 
   late final BlockchainService _blockchain;
   late final VaultSyncService _syncService;
@@ -76,6 +85,8 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
   late final DeviceKeyService _keyService;
   late final EciesService _ecies;
   late final VaultLanServerService _lanServer;
+  late final IpfsPinClient _ipfsPinClient;
+  late final PinningProviderService _pinningProviderService;
 
   @override
   void initState() {
@@ -87,6 +98,9 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
     _keyService = widget.deviceKeyService ?? DeviceKeyService();
     _ecies = widget.eciesService ?? EciesService();
     _lanServer = widget.lanServerService ?? VaultLanServerService();
+    _ipfsPinClient = widget.ipfsPinClient ?? IpfsPinClient();
+    _pinningProviderService =
+        widget.pinningProviderService ?? PinningProviderService();
 
     _status = _validatePayload() ?? _Status.info;
   }
@@ -189,7 +203,11 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
   }
 
   Future<void> _sendToExtension() async {
-    setState(() => _status = _Status.sending);
+    setState(() {
+      _status = _Status.sending;
+      _deadDropIpnsName = null;
+      _deadDropError = null;
+    });
     try {
       final expiresAt = _expiresAt!;
       if (expiresAt.isBefore(DateTime.now())) {
@@ -208,11 +226,19 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
       final encryptedBlob =
           await _ecies.encrypt(plaintext, _extensionPubKeyHex!);
 
+      // Dispara os dois transportes em paralelo (decisão travada da 13.9:
+      // dead-drop nunca é fallback sequencial, sempre corre junto do LAN,
+      // pra esconder a latência de propagação do IPNS atrás do tempo que o
+      // usuário já ia esperar de qualquer forma). O dead-drop nunca lança —
+      // é best-effort, isolado do try/catch que cobre o caminho de LAN.
+      final deadDropFuture = _publishDeadDrop(encryptedBlob);
+
       final served = await _lanServer.serveOnce(
         encryptedBlob: encryptedBlob,
         sessionId: _sessionId!,
         expiresAt: expiresAt,
       );
+      await deadDropFuture;
 
       if (!mounted) return;
       setState(() => _status = served ? _Status.sent : _Status.timeout);
@@ -222,6 +248,27 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
         _status = _Status.error;
         _errorMsg = 'Failed to send to the extension: $e';
       });
+    }
+  }
+
+  // 13.9, fatia 2a: publica o blob cifrado num nome IPNS que a extensão vai
+  // aprender a recalcular sozinha numa fatia futura (2b) — aqui só o lado
+  // Mobile existe, não há consumidor ainda. Nunca lança: uma falha (sem
+  // provider Kubo configurado, Kubo fora do ar) não pode derrubar o
+  // transporte LAN, que já funciona sozinho.
+  Future<void> _publishDeadDrop(Uint8List encryptedBlob) async {
+    try {
+      final providers = await _pinningProviderService.load();
+      final ipnsName = await _ipfsPinClient.publishDeadDrop(
+        _sessionId!,
+        encryptedBlob,
+        providers,
+      );
+      if (!mounted) return;
+      setState(() => _deadDropIpnsName = ipnsName);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _deadDropError = '$e');
     }
   }
 
@@ -423,6 +470,21 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
               textAlign: TextAlign.center,
               style: TextStyle(color: AppColors.textMuted),
             ),
+            if (_deadDropIpnsName != null) ...[
+              const SizedBox(height: 8),
+              const Text(
+                'Dead-drop backup published (IPFS/IPNS).',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+              ),
+            ] else if (_deadDropError != null) ...[
+              const SizedBox(height: 8),
+              const Text(
+                'Dead-drop backup unavailable this time.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+              ),
+            ],
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
