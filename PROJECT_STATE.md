@@ -1201,15 +1201,15 @@ Valuation) nunca rodaram ao mesmo tempo de verdade: colidem na porta 1420 do Vit
 Practice Valuation trava fora do Docker dela (`unable to open database file`) — não subi o Docker
 dela sem pedir, dado o histórico de disco cheio compartilhado entre os 2 projetos.
 
-**Lacuna de transparência achada, não corrigida**: quando a verificação de seletor falha, o
-`SignRequestModal.tsx` mostra bytes crus + aviso mas nunca exibe a `functionSignature` que o app
-terceiro declarou — o humano não vê o que foi *alegado*, só que não bateu. Registrado como
-pendência, fora do escopo negociado da fatia 2b/3.
+**Lacuna de transparência corrigida (Sessão 104)**: quando a verificação de seletor falha, o
+`SignRequestModal.tsx` agora mostra a `functionSignature` que o app terceiro declarou (rotulada
+"unverified — does not match callData") além dos bytes crus do `callData` — o humano vê o que foi
+*alegado*, não só que não bateu. `tsc --noEmit` limpo, `vitest run` 56/56.
 
 **Fica pra uma fatia futura**: validação E2E real dos 2 apps rodando juntos (precisa resolver o
-setup Docker da Practice Valuation e/ou a colisão de porta); corrigir a lacuna de transparência
-acima; validação real em Mainnet (bundler + pareamento do device, pendência antiga da fatia 1);
-integração de fato/produção do lado do Practice Valuation (hoje é só prova de conceito).
+setup Docker da Practice Valuation e/ou a colisão de porta); validação real em Mainnet (bundler +
+pareamento do device, pendência antiga da fatia 1); integração de fato/produção do lado do
+Practice Valuation (hoje é só prova de conceito).
 
 **Problema original**: Practice Valuation (Fase 8 do `PROJECT_STATE.md` dele) quer sincronizar valuations/alertas salvos entre desktop e celular via IPFS, com o CID atual registrado on-chain.
 
@@ -3735,6 +3735,13 @@ Ao validar o "Try again" com o celular físico de verdade (não só testes autom
 - **Duas coisas nunca validadas, registradas como pendência**: (1) nenhum clique real na UI do Desktop foi observado (janela do Tauri não é capturável pelas ferramentas de screenshot deste ambiente) — toda validação de UI foi via curl+testes automatizados; (2) os 2 apps nunca rodaram juntos de verdade — colidem na porta 1420 do Vite, e a Practice Valuation trava fora do Docker dela (`unable to open database file`). Não subi o Docker dela sem pedir (disco compartilhado entre os 2 projetos, histórico de disco cheio).
 - **Achado de UX/transparência não corrigido**: `SignRequestModal.tsx` nunca mostra a `functionSignature` declarada pelo app terceiro quando a verificação de seletor falha — só o aviso + bytes crus. Fora do escopo negociado, registrado como pendência.
 - **Próximo passo**: validar E2E real com os 2 apps rodando juntos (resolver Docker/porta da Practice Valuation); validação em Mainnet (pendência antiga da fatia 1 — bundler + pareamento); corrigir a lacuna de transparência do `SignRequestModal.tsx`; decidir se/quando a fatia 3 vira integração de produção de verdade (hoje é só prova de conceito).
+
+### Sessão 104 — 2026-07-15: corrigida a lacuna de transparência do `SignRequestModal.tsx`
+
+- **Objetivo**: das 4 pendências deixadas pela Sessão 103, o dono do projeto escolheu a única que não depende dele (Docker/porta da Practice Valuation e Mainnet ficam pra depois) — mostrar a `functionSignature` declarada pelo app terceiro quando o seletor não bate contra o `callData`.
+- **Fix pequeno e isolado**: no branch `!decoded.verified` do JSX, adicionado `request.functionSignature` (rotulado como não verificado) antes do `callData` cru já existente — nenhuma mudança em `decodeIncomingCall` nem no protocolo Rust, o campo já chegava no `IncomingSignRequest` mas não era renderizado.
+- **`tsc --noEmit` limpo, `vitest run` 56/56** (sem testes novos — é puramente uma mudança de apresentação num branch já coberto indiretamente pelos testes de decodificação existentes; nenhum teste unitário isola o JSX do modal ainda).
+- **Próximo passo**: as outras 3 pendências continuam abertas — validação E2E real (Docker/porta da Practice Valuation), validação em Mainnet (bundler + pareamento, ação do dono do projeto), e decidir se a fatia 3 vira integração de produção.
 
 ---
 

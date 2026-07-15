@@ -153,7 +153,16 @@ export function SignRequestModal({ smartAccountAddress }: { smartAccountAddress:
               <span className="status-badge status-badge--revoked">
                 ⚠ Could not verify declared function ({decoded.reason})
               </span>
-              <code className="address" style={{ display: "block", marginTop: "0.5rem" }}>
+              <p className="muted" style={{ marginTop: "0.5rem" }}>
+                App claims this function (unverified — does not match callData):
+              </p>
+              <code className="address" style={{ display: "block" }}>
+                {request.functionSignature}
+              </code>
+              <p className="muted" style={{ marginTop: "0.5rem" }}>
+                Raw call data:
+              </p>
+              <code className="address" style={{ display: "block" }}>
                 {request.callData}
               </code>
             </>
