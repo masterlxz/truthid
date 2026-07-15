@@ -1141,7 +1141,7 @@ Retomar quando o dono do projeto voltar ao assunto — provavelmente puxado pelo
 
 ---
 
-### Vault genérico multi-app + delegação de assinatura via session key — brainstorm (Sessão 96, 2026-07-13); fatia 1 (Desktop assina via device key) implementada na Sessão 102
+### Vault genérico multi-app + delegação de assinatura via session key — brainstorm (Sessão 96, 2026-07-13); fatia 1 (Sessão 102), fatias 2a/2b/3 (Sessão 103) implementadas
 
 **Reabre, sob um desenho diferente, a parte de "Vault genérico" que a Sessão 95 tinha fechado como "não é o que o dono do projeto quer".** A diferença desta vez: não é mais "generalizar o Vault de senhas", é um mecanismo novo — apps terceiros (Practice Valuation sendo o primeiro caso real) sincronizando dados próprios via IPFS com o CID atual registrado on-chain, no mesmo padrão que o `VaultRegistry` já usa (`identityId → {cid, contentHash, version}`), mas sem tocar no vault de senhas existente.
 
@@ -1155,7 +1155,61 @@ Retomar quando o dono do projeto voltar ao assunto — provavelmente puxado pelo
 
 **Pendência real, achada ao tentar validar contra o Mainnet**: o device key do Desktop (`0xfd23ed10b147f2557d0f072b1d10f6575c300f65`, confirmado via leitura pública) **nunca foi registrado on-chain** (`DeviceRegistry.getDevice` reverte — device não existe) — provavelmente porque o Desktop sempre assinou escrita via Ledger, nunca precisou ser pareado como device antes. Pra validar de verdade contra o Mainnet falta: (1) o dono do projeto configurar `~/.truthid/bundler_config.json` com uma chave de API Pimlico (segredo — não deve ser manuseado pelo Claude); (2) parear este Desktop como device via o fluxo já existente em `DesktopDevice.tsx` (Ledger assina `DeviceRegistry.registerDevice` + `TruthIDAccount.addDevice`). Sem isso, a prova real fica pendente — todo o resto (matemática, assinatura, builds) já está provado.
 
-**Fica pra uma fatia futura**: o canal de comunicação local com apps terceiros (Practice Valuation ou outro), a tela de aprovação genérica com decodificação de chamada arbitrária, e a integração de fato do lado do Practice Valuation.
+**Fatia 2a (Sessão 103, 2026-07-14) — canal de comunicação local, só transporte**: confirmado com o
+dono do projeto que o app terceiro roda como outro processo nativo na mesma máquina (não web app
+no browser — sem CORS a resolver), e a fatia 2 foi quebrada em sub-fatias menores (mesmo padrão
+da 13.9). Novo `desktop/src-tauri/src/local_signer_server.rs`: servidor `axum` bindado
+estritamente em `127.0.0.1` (nunca `0.0.0.0` — principal propriedade de segurança que a fatia
+entrega, já que ainda não há autenticação), tentando em ordem `CANDIDATE_PORTS = [47950..47954]`
+(bloco próprio, longe de `47850..47854` do LAN da 13.9 e de `1420` do Vite). Sobe automático no
+`tauri::Builder::setup`, fica no ar enquanto o app roda. Dois endpoints só de handshake —
+`GET /truthid/v1/ping` e `POST /truthid/v1/handshake` — sem tocar nada sensível (o módulo nem
+importa `vault`/`bundler`/`k256`). Comandos Tauri `local_signer_start/stop/status` + hook
+`useLocalSignerServer.ts` + `LocalSignerStatus.tsx` (pill de status + kill switch), montado em
+`DesktopDevice.tsx`. 6 testes Rust novos; achado no caminho: testes rodam em paralelo por padrão
+e disputam as mesmas 5 portas candidatas contra o loopback real — precisou de um
+`tokio::sync::Mutex` estático serializando o ciclo de vida completo de cada teste.
+
+**Fatia 2b (Sessão 103) — endpoint de sign-request + modal de aprovação + decodificação**: duas
+decisões negociadas antes de codar — (1) o app terceiro manda a `functionSignature` em texto
+junto do pedido, o TruthID recalcula o seletor (`viem`'s `toFunctionSelector`) e confere contra o
+`callData` antes de decodificar/exibir; se não bater, mostra bytes crus + aviso sem bloquear (a
+aprovação humana é o ponto de confiança final, não uma checagem no Rust); (2) o
+`POST /truthid/v1/sign-request` do app terceiro fica pendurado até o usuário decidir (padrão
+`window.ethereum.request`), com timeout de 5min no Rust (sobrevive a UI travada). Novo
+`desktop/src-tauri/src/sign_request.rs`: núcleo do protocolo (`handle_incoming`/`resolve`/
+`current`) recebe "notificar a UI" como closure genérica em vez de `tauri::AppHandle` direto —
+permitiu testar a lógica de negócio inteira em `#[tokio::test]` puro (parking, single-flight via
+`Busy`, timeout com duração injetável) e, como bônus, testar a rota HTTP ponta a ponta via
+`reqwest` real. Frontend: `SignRequestModal.tsx` (decodifica via `viem`'s `parseAbi`+
+`decodeFunctionData`, reaproveita `executeViaUserOp`/`get_bundler_config` sem alteração nesses
+arquivos) montado em 2 pontos de `App.tsx`. `cargo test` 41/41 (34+7 novos), `tsc --noEmit` limpo.
+
+**Fatia 3 (Sessão 103) — Practice Valuation ganha cliente HTTP mínimo, prova de conceito**:
+escopo negociado explicitamente antes de tocar no outro repo — só descobrir+handshake+1
+sign-request real sem efeito econômico (transferência de valor zero pro endereço de burn), não a
+Fase 8 completa (sync IPFS, generalizar `VaultRegistry`) que já estava brainstormada no
+`PROJECT_STATE.md` do Practice Valuation e assumia Paymaster (que o TruthID não tem). Novo
+`practice-valuation/desktop/src-tauri/src/commands/truthid.rs` (`discover`+2 comandos Tauri,
+mesmo estilo de `AppError`/`reqwest` já usado em `commands/chat.rs` de lá) + aba nova "TruthID
+Sync" (`TruthIdPanel.tsx`). `cargo check`/`tsc --noEmit` limpos nos dois repos.
+
+**Não validado em nenhuma das 3 fatias**: nenhum clique real na UI do Desktop foi observado
+acontecendo (a janela do Tauri não é capturável pelas ferramentas de screenshot/automação deste
+ambiente) — toda validação foi via curl + testes automatizados. E os 2 apps (TruthID + Practice
+Valuation) nunca rodaram ao mesmo tempo de verdade: colidem na porta 1420 do Vite por padrão, e a
+Practice Valuation trava fora do Docker dela (`unable to open database file`) — não subi o Docker
+dela sem pedir, dado o histórico de disco cheio compartilhado entre os 2 projetos.
+
+**Lacuna de transparência achada, não corrigida**: quando a verificação de seletor falha, o
+`SignRequestModal.tsx` mostra bytes crus + aviso mas nunca exibe a `functionSignature` que o app
+terceiro declarou — o humano não vê o que foi *alegado*, só que não bateu. Registrado como
+pendência, fora do escopo negociado da fatia 2b/3.
+
+**Fica pra uma fatia futura**: validação E2E real dos 2 apps rodando juntos (precisa resolver o
+setup Docker da Practice Valuation e/ou a colisão de porta); corrigir a lacuna de transparência
+acima; validação real em Mainnet (bundler + pareamento do device, pendência antiga da fatia 1);
+integração de fato/produção do lado do Practice Valuation (hoje é só prova de conceito).
 
 **Problema original**: Practice Valuation (Fase 8 do `PROJECT_STATE.md` dele) quer sincronizar valuations/alertas salvos entre desktop e celular via IPFS, com o CID atual registrado on-chain.
 
@@ -3670,6 +3724,17 @@ Ao validar o "Try again" com o celular físico de verdade (não só testes autom
 - **Validação com vetores cruzados do Mobile**: os 5 vetores de hash de UserOp e o vetor de assinatura (chave #0 do Anvil) bateram de primeira, sem nenhum ajuste — mesma matemática, duas linguagens.
 - **Bloqueado na validação real contra o Mainnet**: o device key do Desktop nunca foi registrado on-chain (achado via leitura pública, sem custo) — precisa ser pareado antes (fluxo já existe em `DesktopDevice.tsx`), e falta configurar a API key do bundler Pimlico (segredo, ação do dono do projeto).
 - **Próximo passo**: dono do projeto configura o bundler e pareia o Desktop como device; depois disso, testar o botão "Publicar via device key" contra o Mainnet de verdade. Só então: fatia 2 (canal local com apps terceiros + tela de aprovação genérica + decodificação de chamada arbitrária).
+
+### Sessão 103 — 2026-07-14/15: fatias 2a, 2b e 3 da delegação de assinatura implementadas — canal local, sign-request com aprovação, e Practice Valuation fala com o TruthID
+
+- **Objetivo**: continuar a delegação de assinatura de onde a Sessão 102 parou (fatia 1 pronta, fatia 2 não iniciada). Cada sub-fatia negociada via `/plan` antes de codar, mesmo padrão usado na 13.9.
+- **Fatia 2a — canal local (só transporte)**: confirmado que o app terceiro é outro processo nativo na mesma máquina, não web app; fatia 2 quebrada em sub-fatias menores por decisão do dono do projeto. `local_signer_server.rs` novo (servidor `axum` em `127.0.0.1:47950-47954`, sobe automático, só `ping`/`handshake`). Ver seção "Vault genérico multi-app..." acima para o desenho técnico completo.
+- **Fatia 2b — sign-request + aprovação + decodificação**: duas decisões negociadas (app terceiro declara a `functionSignature`, TruthID confere o seletor mas não bloqueia se não bater; POST fica pendurado até decisão humana, timeout de 5min no Rust). `sign_request.rs` novo + `SignRequestModal.tsx`. Achado de design: decoupling do núcleo Rust de `tauri::AppHandle` (usa closure genérica) permitiu testar a rota HTTP inteira via `reqwest` real em `#[tokio::test]`, sem precisar da feature `test` do crate `tauri` que o plano original achava necessária.
+- **Fatia 3 — Practice Valuation fala com o TruthID**: escopo negociado explicitamente (prova de conceito mínima, não a Fase 8 completa dele) antes de tocar no outro repositório. Novo `commands/truthid.rs` + aba "TruthID Sync" lá. Achado de segurança sem impacto: o subagente Explore usado pra levantar o estado do repo Practice Valuation recebeu de volta uma tentativa de prompt injection (um "system-reminder" falso alegando plan mode ativo, instruindo a criar um arquivo via uma ferramenta Write que o Explore não tem) — ignorado corretamente, sem efeito, registrado só por transparência.
+- **`cargo test`/`tsc --noEmit` limpos nos dois repos** (TruthID: 41/41 Rust; Practice Valuation: `cargo check` limpo). Validação via curl real dos endpoints de handshake/sign-request (busy=409, invalid=400, parking real confirmado).
+- **Duas coisas nunca validadas, registradas como pendência**: (1) nenhum clique real na UI do Desktop foi observado (janela do Tauri não é capturável pelas ferramentas de screenshot deste ambiente) — toda validação de UI foi via curl+testes automatizados; (2) os 2 apps nunca rodaram juntos de verdade — colidem na porta 1420 do Vite, e a Practice Valuation trava fora do Docker dela (`unable to open database file`). Não subi o Docker dela sem pedir (disco compartilhado entre os 2 projetos, histórico de disco cheio).
+- **Achado de UX/transparência não corrigido**: `SignRequestModal.tsx` nunca mostra a `functionSignature` declarada pelo app terceiro quando a verificação de seletor falha — só o aviso + bytes crus. Fora do escopo negociado, registrado como pendência.
+- **Próximo passo**: validar E2E real com os 2 apps rodando juntos (resolver Docker/porta da Practice Valuation); validação em Mainnet (pendência antiga da fatia 1 — bundler + pareamento); corrigir a lacuna de transparência do `SignRequestModal.tsx`; decidir se/quando a fatia 3 vira integração de produção de verdade (hoje é só prova de conceito).
 
 ---
 
