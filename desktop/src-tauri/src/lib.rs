@@ -12,6 +12,7 @@ use k256::elliptic_curve::ecdh::diffie_hellman;
 mod bundler;
 mod ipfs;
 mod ledger;
+mod local_signer_server;
 mod vault;
 
 const SERVICE: &str = "truthid";
@@ -523,10 +524,46 @@ fn sign_challenge(challenge: String) -> Result<String, String> {
     Ok(sig_hex)
 }
 
+#[tauri::command]
+async fn local_signer_start(
+    state: tauri::State<'_, local_signer_server::LocalSignerServerState>,
+) -> Result<local_signer_server::LocalSignerStatus, String> {
+    local_signer_server::start(&state).await
+}
+
+#[tauri::command]
+async fn local_signer_stop(
+    state: tauri::State<'_, local_signer_server::LocalSignerServerState>,
+) -> Result<local_signer_server::LocalSignerStatus, String> {
+    Ok(local_signer_server::stop(&state).await)
+}
+
+#[tauri::command]
+async fn local_signer_status(
+    state: tauri::State<'_, local_signer_server::LocalSignerServerState>,
+) -> Result<local_signer_server::LocalSignerStatus, String> {
+    Ok(local_signer_server::status(&state).await)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .manage(local_signer_server::LocalSignerServerState::default())
+        .setup(|app| {
+            // AppHandle (não State) porque a closure/future precisa ser 'static
+            // pra rodar em tauri::async_runtime::spawn — um State<'_, T> tomado
+            // aqui ficaria preso ao lifetime do `app` desta closure de setup.
+            use tauri::Manager;
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let state = handle.state::<local_signer_server::LocalSignerServerState>();
+                if let Err(e) = local_signer_server::start(&state).await {
+                    eprintln!("failed to start local signer server: {e}");
+                }
+            });
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_or_create_device_key,
             sign_challenge,
@@ -552,6 +589,9 @@ pub fn run() {
             vault_set_providers,
             vault_get_device_permissions,
             vault_set_device_permission,
+            local_signer_start,
+            local_signer_stop,
+            local_signer_status,
             ledger::is_ledger_connected,
             ledger::get_ledger_address,
             ledger::sign_ledger_transaction,

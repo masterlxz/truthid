@@ -12,6 +12,7 @@ import { DEVICE_REGISTRY_ADDRESS, DEVICE_REGISTRY_ABI, TRUTHID_ACCOUNT_ABI } fro
 import { useWalletModal } from "../contexts/WalletModalContext";
 import { useIdentity } from "../contexts/IdentityContext";
 import { buildAccountCalls } from "../utils/buildAccountCalls";
+import { LocalSignerStatus } from "./LocalSignerStatus";
 
 // invoke() é a ponte entre React e Rust.
 // Quando chamamos invoke("get_or_create_device_key"), o Tauri executa a
@@ -154,6 +155,7 @@ export function DesktopDevice({ onRegistered }: { onRegistered: () => void }) {
   }
 
   return (
+    <>
     <div className="card">
       <h3 style={{ marginTop: 0 }}>This desktop</h3>
       <code className="address">
@@ -189,5 +191,7 @@ export function DesktopDevice({ onRegistered }: { onRegistered: () => void }) {
         )}
       </div>
     </div>
+    <LocalSignerStatus />
+    </>
   );
 }
