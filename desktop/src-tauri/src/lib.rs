@@ -13,6 +13,7 @@ mod bundler;
 mod ipfs;
 mod ledger;
 mod local_signer_server;
+mod sign_request;
 mod vault;
 
 const SERVICE: &str = "truthid";
@@ -526,9 +527,16 @@ fn sign_challenge(challenge: String) -> Result<String, String> {
 
 #[tauri::command]
 async fn local_signer_start(
+    app: tauri::AppHandle,
     state: tauri::State<'_, local_signer_server::LocalSignerServerState>,
+    sign_requests: tauri::State<'_, std::sync::Arc<sign_request::SignRequestState>>,
 ) -> Result<local_signer_server::LocalSignerStatus, String> {
-    local_signer_server::start(&state).await
+    use tauri::Emitter;
+    let sign_requests = sign_requests.inner().clone();
+    local_signer_server::start(&state, sign_requests, move |payload| {
+        let _ = app.emit("truthid://sign-request", payload);
+    })
+    .await
 }
 
 #[tauri::command]
@@ -545,20 +553,46 @@ async fn local_signer_status(
     Ok(local_signer_server::status(&state).await)
 }
 
+#[tauri::command]
+async fn get_pending_sign_request(
+    state: tauri::State<'_, std::sync::Arc<sign_request::SignRequestState>>,
+) -> Result<Option<sign_request::SignRequestPayload>, String> {
+    Ok(sign_request::current(state.inner()).await)
+}
+
+#[tauri::command]
+async fn respond_to_sign_request(
+    id: String,
+    decision: sign_request::SignRequestDecision,
+    state: tauri::State<'_, std::sync::Arc<sign_request::SignRequestState>>,
+) -> Result<(), String> {
+    sign_request::resolve(state.inner(), &id, decision).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(local_signer_server::LocalSignerServerState::default())
+        .manage(std::sync::Arc::new(sign_request::SignRequestState::default()))
         .setup(|app| {
             // AppHandle (não State) porque a closure/future precisa ser 'static
             // pra rodar em tauri::async_runtime::spawn — um State<'_, T> tomado
             // aqui ficaria preso ao lifetime do `app` desta closure de setup.
-            use tauri::Manager;
+            use tauri::{Emitter, Manager};
             let handle = app.handle().clone();
+            let notify_handle = handle.clone();
             tauri::async_runtime::spawn(async move {
                 let state = handle.state::<local_signer_server::LocalSignerServerState>();
-                if let Err(e) = local_signer_server::start(&state).await {
+                let sign_requests = handle
+                    .state::<std::sync::Arc<sign_request::SignRequestState>>()
+                    .inner()
+                    .clone();
+                let result = local_signer_server::start(&state, sign_requests, move |payload| {
+                    let _ = notify_handle.emit("truthid://sign-request", payload);
+                })
+                .await;
+                if let Err(e) = result {
                     eprintln!("failed to start local signer server: {e}");
                 }
             });
@@ -592,6 +626,8 @@ pub fn run() {
             local_signer_start,
             local_signer_stop,
             local_signer_status,
+            get_pending_sign_request,
+            respond_to_sign_request,
             ledger::is_ledger_connected,
             ledger::get_ledger_address,
             ledger::sign_ledger_transaction,

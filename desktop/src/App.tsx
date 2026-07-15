@@ -21,6 +21,7 @@ import {
   FACTORY_IMMUTABLES,
 } from "./config/truthidAccount";
 import { computeSmartAccountAddressSync } from "./utils/computeSmartAccountAddress";
+import { SignRequestModal } from "./components/SignRequestModal";
 import "./App.css";
 
 type Tab = "dashboard" | "devices" | "sessions" | "vault";
@@ -113,8 +114,16 @@ function App() {
   const isLoadingIdentity = isConnected && !isWrongNetwork && isLoadingUsername && !storedUsername;
 
   // ── No identity at all → full-screen login ───────────────────────────────
+  // SignRequestModal fica montado nos dois caminhos de retorno (aqui e no
+  // shell principal abaixo) porque um pedido de assinatura pode chegar a
+  // qualquer momento, inclusive antes do usuário conectar a wallet.
   if (!displayUsername && !isConnected) {
-    return <ConnectWallet />;
+    return (
+      <>
+        <SignRequestModal smartAccountAddress={smartAccountAddress} />
+        <ConnectWallet />
+      </>
+    );
   }
 
   function handleLogout() {
@@ -125,6 +134,7 @@ function App() {
   // ── App shell ─────────────────────────────────────────────────────────────
   return (
     <WalletModalContext.Provider value={{ openConnectModal: () => setConnectModalOpen(true) }}>
+      <SignRequestModal smartAccountAddress={smartAccountAddress} />
       <div className="app-shell">
         <header className="topbar">
           <div className="topbar-left">

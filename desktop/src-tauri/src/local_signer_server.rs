@@ -1,9 +1,25 @@
 use std::net::{Ipv4Addr, SocketAddr};
+use std::sync::Arc;
 
-use axum::{extract::Json, http::StatusCode, routing::get, routing::post, Router};
+use axum::{extract::Json, extract::State, http::StatusCode, routing::get, routing::post, Router};
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tokio::sync::{oneshot, Mutex};
+
+use crate::sign_request::{self, SignRequestState};
+
+/// Callback chamado sempre que um /sign-request novo chega, pra quem estiver
+/// rodando o servidor decidir como notificar a UI (normalmente app.emit do
+/// Tauri). Injetado como closure (não um tauri::AppHandle direto) pra manter
+/// este módulo e o sign_request.rs testáveis sem precisar de um app Tauri de
+/// verdade rodando.
+type SignRequestNotifier = Arc<dyn Fn(&sign_request::SignRequestPayload) + Send + Sync>;
+
+#[derive(Clone)]
+struct SignRequestRouterState {
+    sign_requests: Arc<SignRequestState>,
+    on_sign_request: SignRequestNotifier,
+}
 
 /// Portas candidatas para o canal local Desktop<->app terceiro. Bloco próprio,
 /// distinto de 47850..47854 (LAN do Mobile/extensão, Fase 13.9) e de 1420
@@ -95,17 +111,43 @@ async fn handshake(
     )
 }
 
-fn router() -> Router {
+async fn sign_request_handler(
+    State(router_state): State<SignRequestRouterState>,
+    Json(body): Json<sign_request::SignRequestBody>,
+) -> (StatusCode, Json<sign_request::SignRequestResponse>) {
+    // Best-effort: se não houver nenhuma janela ouvindo agora, o frontend
+    // ainda consegue pegar o pedido via get_pending_sign_request ao montar
+    // (ver useIncomingSignRequest.ts).
+    let outcome = sign_request::handle_incoming(&router_state.sign_requests, body, |payload| {
+        (router_state.on_sign_request)(payload);
+    })
+    .await;
+    let (status, body) = outcome.into_response();
+    (status, Json(body))
+}
+
+fn router(router_state: SignRequestRouterState) -> Router {
     Router::new()
         .route("/truthid/v1/ping", get(ping))
         .route("/truthid/v1/handshake", post(handshake))
+        .route("/truthid/v1/sign-request", post(sign_request_handler))
+        .with_state(router_state)
 }
 
 /// Sobe o servidor na primeira porta livre de CANDIDATE_PORTS, bindada em
 /// 127.0.0.1 (nunca 0.0.0.0 — os dois processos estão sempre na mesma
 /// máquina, então loopback já é suficiente e é bem mais seguro). Idempotente:
 /// se já estiver rodando, devolve o status atual sem religar.
-pub async fn start(state: &LocalSignerServerState) -> Result<LocalSignerStatus, String> {
+///
+/// `sign_requests` é o mesmo SignRequestState gerenciado pelo Tauri (pra
+/// get_pending_sign_request/respond_to_sign_request enxergarem os mesmos
+/// pedidos que chegam via HTTP); `on_sign_request` é chamado sempre que um
+/// pedido novo chega (normalmente app.emit, injetado por quem chama start()).
+pub async fn start(
+    state: &LocalSignerServerState,
+    sign_requests: Arc<SignRequestState>,
+    on_sign_request: impl Fn(&sign_request::SignRequestPayload) + Send + Sync + 'static,
+) -> Result<LocalSignerStatus, String> {
     let mut guard = state.0.lock().await;
     if let Some(running) = guard.as_ref() {
         return Ok(LocalSignerStatus {
@@ -125,9 +167,14 @@ pub async fn start(state: &LocalSignerServerState) -> Result<LocalSignerStatus, 
     let (listener, port) =
         bound.ok_or_else(|| "no candidate port available for local signer server".to_string())?;
 
+    let router_state = SignRequestRouterState {
+        sign_requests,
+        on_sign_request: Arc::new(on_sign_request),
+    };
+
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
     let join_handle = tauri::async_runtime::spawn(async move {
-        let _ = axum::serve(listener, router())
+        let _ = axum::serve(listener, router(router_state))
             .with_graceful_shutdown(async {
                 let _ = shutdown_rx.await;
             })
@@ -192,12 +239,19 @@ mod tests {
         format!("http://127.0.0.1:{}", status.port.expect("port set while running"))
     }
 
+    // Testes que só exercitam ping/handshake não se importam com o
+    // sign_request::SignRequestState nem com notificação — esse helper
+    // isola esse boilerplate.
+    async fn start_for_test(state: &LocalSignerServerState) -> Result<LocalSignerStatus, String> {
+        start(state, Arc::new(SignRequestState::default()), |_| {}).await
+    }
+
     #[tokio::test]
     async fn start_binds_to_a_candidate_port_and_status_reflects_it() {
         let _guard = PORT_TEST_LOCK.lock().await;
         let state = LocalSignerServerState::default();
 
-        let started = start(&state).await.expect("start should succeed");
+        let started = start_for_test(&state).await.expect("start should succeed");
         assert!(started.running);
         assert!(CANDIDATE_PORTS.contains(&started.port.expect("port set")));
 
@@ -211,7 +265,7 @@ mod tests {
     async fn ping_endpoint_returns_expected_service_identifier() {
         let _guard = PORT_TEST_LOCK.lock().await;
         let state = LocalSignerServerState::default();
-        let started = start(&state).await.expect("start should succeed");
+        let started = start_for_test(&state).await.expect("start should succeed");
 
         let resp = reqwest::get(format!("{}/truthid/v1/ping", base_url(&started)))
             .await
@@ -228,7 +282,7 @@ mod tests {
     async fn handshake_endpoint_accepts_valid_payload() {
         let _guard = PORT_TEST_LOCK.lock().await;
         let state = LocalSignerServerState::default();
-        let started = start(&state).await.expect("start should succeed");
+        let started = start_for_test(&state).await.expect("start should succeed");
 
         let resp = reqwest::Client::new()
             .post(format!("{}/truthid/v1/handshake", base_url(&started)))
@@ -248,7 +302,7 @@ mod tests {
     async fn handshake_endpoint_rejects_missing_app_name() {
         let _guard = PORT_TEST_LOCK.lock().await;
         let state = LocalSignerServerState::default();
-        let started = start(&state).await.expect("start should succeed");
+        let started = start_for_test(&state).await.expect("start should succeed");
 
         let resp = reqwest::Client::new()
             .post(format!("{}/truthid/v1/handshake", base_url(&started)))
@@ -267,7 +321,7 @@ mod tests {
     async fn unknown_path_returns_404() {
         let _guard = PORT_TEST_LOCK.lock().await;
         let state = LocalSignerServerState::default();
-        let started = start(&state).await.expect("start should succeed");
+        let started = start_for_test(&state).await.expect("start should succeed");
 
         let resp = reqwest::get(format!("{}/truthid/v1/nope", base_url(&started)))
             .await
@@ -282,16 +336,104 @@ mod tests {
         let _guard = PORT_TEST_LOCK.lock().await;
         let state = LocalSignerServerState::default();
 
-        let first = start(&state).await.expect("first start should succeed");
+        let first = start_for_test(&state).await.expect("first start should succeed");
         stop(&state).await;
 
-        let second = start(&state).await.expect("second start should succeed");
+        let second = start_for_test(&state).await.expect("second start should succeed");
         assert_eq!(first.port, second.port);
 
         let resp = reqwest::get(format!("{}/truthid/v1/ping", base_url(&second)))
             .await
             .expect("server should respond after restart");
         assert_eq!(resp.status(), 200);
+
+        stop(&state).await;
+    }
+
+    #[tokio::test]
+    async fn sign_request_endpoint_parks_until_resolved() {
+        let _guard = PORT_TEST_LOCK.lock().await;
+        let state = LocalSignerServerState::default();
+        let sign_requests = Arc::new(SignRequestState::default());
+        let started = start(&state, sign_requests.clone(), |_| {})
+            .await
+            .expect("start should succeed");
+
+        let url = format!("{}/truthid/v1/sign-request", base_url(&started));
+        let request = reqwest::Client::new().post(&url).json(&serde_json::json!({
+            "appName": "Practice Valuation",
+            "dest": "0x0000000000000000000000000000000000000001",
+            "value": "0",
+            "callData": "0xa9059cbb",
+            "functionSignature": "transfer(address,uint256)",
+        }));
+
+        let (resp, _) = tokio::join!(request.send(), async {
+            // Espera o pedido aparecer no state compartilhado, então resolve
+            // como se o usuário tivesse aprovado na UI.
+            let id = loop {
+                if let Some(payload) = sign_request::current(&sign_requests).await {
+                    break payload.id;
+                }
+                tokio::task::yield_now().await;
+            };
+            sign_request::resolve(
+                &sign_requests,
+                &id,
+                sign_request::SignRequestDecision::Rejected,
+            )
+            .await
+            .expect("resolve should succeed");
+        });
+
+        let resp = resp.expect("request should succeed");
+        assert_eq!(resp.status(), 403);
+        let body: serde_json::Value = resp.json().await.expect("valid json");
+        assert_eq!(body["status"], "rejected");
+
+        stop(&state).await;
+    }
+
+    #[tokio::test]
+    async fn sign_request_endpoint_rejects_concurrent_second_request() {
+        let _guard = PORT_TEST_LOCK.lock().await;
+        let state = LocalSignerServerState::default();
+        let sign_requests = Arc::new(SignRequestState::default());
+        let started = start(&state, sign_requests.clone(), |_| {})
+            .await
+            .expect("start should succeed");
+
+        let url = format!("{}/truthid/v1/sign-request", base_url(&started));
+        let body = serde_json::json!({
+            "appName": "Practice Valuation",
+            "dest": "0x0000000000000000000000000000000000000001",
+            "value": "0",
+            "callData": "0xa9059cbb",
+            "functionSignature": "transfer(address,uint256)",
+        });
+
+        let first_request = reqwest::Client::new().post(&url).json(&body).send();
+        let second_request = async {
+            let id = loop {
+                if let Some(payload) = sign_request::current(&sign_requests).await {
+                    break payload.id;
+                }
+                tokio::task::yield_now().await;
+            };
+            let resp = reqwest::Client::new().post(&url).json(&body).send().await;
+            sign_request::resolve(
+                &sign_requests,
+                &id,
+                sign_request::SignRequestDecision::Rejected,
+            )
+            .await
+            .expect("resolve should succeed");
+            resp
+        };
+
+        let (first, second) = tokio::join!(first_request, second_request);
+        assert_eq!(second.expect("request should succeed").status(), 409);
+        assert_eq!(first.expect("request should succeed").status(), 403);
 
         stop(&state).await;
     }
