@@ -1227,7 +1227,38 @@ Practice Valuation (hoje é só prova de conceito).
 - UX da aprovação: clique único a cada update (mais seguro, mais fricção) vs. sessão válida por N usos/tempo após a primeira aprovação (menos fricção, janela de exposição maior) — configurável no escopo da própria session key, mas é decisão de produto.
 - Onde mora o "registro de apps terceiros autorizados" — nova entidade no schema do TruthID (tipo um `SessionRegistry` por app), ou estende algo que já existe.
 
+**Nota (Sessão 106): os 4 pontos acima são o texto original da Sessão 96, desatualizado — todos já foram resolvidos pelas Fatias 1-3 (Sessões 102-103) na direção mais simples que venceu no reescopo da Sessão 102** (nada de session key/`VaultRegistry` generalizado/registro de apps: contrato é do app terceiro, canal é o `local_signer_server.rs` local já implementado, aprovação é sempre por clique único, sem sessão). Deixado como está por valor histórico; ver Sessão 106 abaixo pro que continua de fato em aberto.
+
 Retomar quando o dono do projeto quiser rodar um `/plan` de verdade sobre isso — provavelmente puxado de novo pelo lado do Practice Valuation.
+
+---
+
+### Sessão 106 (2026-07-15, ideia externa — do lado do Practice Valuation) — duas capacidades genéricas novas propostas: `/sign-message` e `/pin`
+
+**Contexto**: retomando a Fase 8 do Practice Valuation (sync de dados via IPFS), agora que o canal de assinatura delegada (Fatias 1-3 acima) já existe e já foi validado. Só brainstorm/registro — nenhum `/plan` rodado deste lado, nenhum código tocado no TruthID.
+
+**Princípio confirmado pelo dono do projeto, explicitamente**: o que falta não deve virar privilégio específico do Practice Valuation — tem que ser capacidade **genérica**, disponível a qualquer app terceiro construído sobre o TruthID, seguindo o mesmo molde do `/sign-request` já existente (app nunca segura o segredo, só pede pro TruthID agir por ele, com aprovação humana no meio).
+
+**1. `POST /truthid/v1/sign-message` (novo, não implementado)** — hoje o canal só assina UserOperations; sincronizar dados via IPFS precisa de uma chave simétrica compartilhada entre os dispositivos do usuário, e a forma natural de obter isso sem inventar segredo novo é assinar uma mensagem fixa e derivar a chave da assinatura (mesmo princípio que `useVaultKey.ts` já usa internamente pro password manager, assinando `"TruthID Vault Key v1"` — só que isso não é exposto a apps terceiros). Desenho proposto, espelhando `sign_request.rs`:
+- App terceiro manda `{appName, purpose}` (`purpose` é um identificador curto, não texto livre)
+- TruthID monta a mensagem final de forma padronizada no próprio Rust, não manipulável pelo chamador — ex. `"TruthID Message Signing: {appName}:{purpose}"` (domain separation, evita colisão entre apps/propósitos)
+- Mesmo padrão de parking+aprovação do `sign_request.rs` (evento pro frontend, timeout 5min, single-flight), com uma tela genérica ("**{appName}** quer derivar uma chave de assinatura pra si — aprovar?")
+- Assina via `personal_sign` reaproveitando a primitiva já usada por `useVaultKey.ts`/`sign_eip191_hash_raw`, devolve só a assinatura — quem deriva a chave (HKDF) é o app chamador, localmente; o TruthID nunca sabe pra que serve
+- Canal isolado do password manager — mensagem própria, nunca reaproveita `"TruthID Vault Key v1"`
+
+**2. `POST /truthid/v1/pin` (novo, não implementado) — ideia levantada pelo dono do projeto nesta sessão, não estava em nenhum brainstorm anterior**: como o TruthID já é a porta única que qualquer app descentralizado construído sobre ele precisa passar, o mesmo raciocínio de "não duplicar segredo" vale pro pinning de IPFS. Em vez de cada app terceiro pedir pro usuário configurar/pagar um provider de pinning próprio, o TruthID poderia oferecer os providers que o usuário **já tem configurados** (`ipfs.rs`/`pin_vault`, sem alteração na lógica existente) como serviço:
+- App terceiro manda o blob **já cifrado** (a cifra é sempre responsabilidade do chamador — o TruthID nunca vê conteúdo em claro)
+- TruthID faz o upload usando os próprios providers configurados e devolve só `{cid, contentHash}` — a API key do provider (Pinata/PSA/Kubo) nunca sai do TruthID
+- **Estritamente opcional** pro app terceiro — pode preferir trazer e pagar o próprio provider em vez de usar o do usuário via TruthID
+- **Em aberto, não decidido**: modelo de consentimento. Assinar transação é raro (poucas aprovações esperadas); pinning pode ser frequente (ex: toda vez que o app salva um dado) — repetir aprovação por chamada, no mesmo padrão do `/sign-request`, pode ser fricção desnecessária aqui (diferente de assinar, que envolve fundos/autoridade real). Risco de abuso (app malicioso/com bug esgotando cota ou fatura do provider do usuário em loop) é real e precisa de algum limite — aprovação por chamada (simples, consistente) vs. aprovação única por app com teto de uso (menos fricção, mais lógica nova) fica pra decidir num `/plan` futuro.
+
+**Nenhuma das duas rotas foi implementada** — só registradas aqui como pendência, pra retomar quando o dono do projeto quiser rodar um `/plan` de verdade de um dos dois lados (provavelmente TruthID primeiro, já que o Practice Valuation depende delas pra fechar a Fase 8 dele — ver `PROJECT_STATE.md` de lá).
+
+**3. Correção feita ainda na mesma sessão, a partir de uma pergunta do dono do projeto**: as duas rotas acima (e o `/sign-request` já existente) hoje só funcionam quando o app terceiro roda **na mesma máquina** que o TruthID — `local_signer_server.rs` escuta estritamente em `127.0.0.1`. Cenário real levantado: e se o usuário só tiver o Practice Valuation no computador e o TruthID só no celular? Hoje **não tem canal nenhum** pra esse caso — uma versão anterior deste mesmo registro (do lado do Practice Valuation) chegou a marcar essa questão como resolvida/desnecessária, o que estava errado e foi corrigido ainda nesta sessão.
+
+O TruthID já resolveu exatamente esse tipo de problema pra outro caso de uso — a extensão de navegador (Fase 13.9, Sessões 97-101): dois transportes tentados em paralelo, **descoberta na mesma rede local** (`vault_lan_server_service.dart`, servidor efêmero de 1 request, portas 47850-47854) e **dead-drop assíncrono via IPFS/IPNS** (funciona entre redes diferentes, propagação mais lenta). Segurança não depende de estar na mesma rede ser suficiente: o QR carrega um `sessionId` de 128 bits imprevisível, o servidor LAN devolve 404 uniforme pra path errado (sem oracle), e o payload é cifrado via ECIES pra uma chave pública efêmera que só existe no QR — só quem escaneou o QR de verdade consegue achar e decifrar o blob. Vale lembrar que essa mesma peça de ECIES teve um bug real que ficou sem detecção por várias sessões até ser pego contra hardware real (Sessão 99) — reforça que qualquer reaproveitamento precisa de validação em hardware real antes de confiar, não só round-trip interno.
+
+**Em aberto, não decidido**: estender `/sign-message`/`/pin` (e possivelmente `/sign-request`) pra também aceitar esses dois transportes, no mesmo molde da 13.9, é trabalho novo — nada desenhado em detalhe ainda. Fica registrado junto com as outras duas pendências, pra um `/plan` futuro decidir.
 
 ---
 
