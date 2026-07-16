@@ -3857,6 +3857,41 @@ Ao validar o "Try again" com o celular físico de verdade (não só testes autom
 
 ---
 
+### Sessão 109 — 2026-07-16: cross-device `/sign-message` fatia 2 — dead-drop IPFS/IPNS ao lado da LAN
+
+- **Objetivo**: das opções deixadas em aberto pela Sessão 108, o dono do projeto escolheu a fatia 2
+  (dead-drop IPFS/IPNS) em vez do lado requisitante de referência ou do transporte pro
+  `/sign-request` — mesma sequência que a 13.9 seguiu (LAN primeiro, dead-drop depois). Só o lado
+  Mobile de novo (publicar); não existe consumidor de referência em nenhum repositório, mesmo
+  princípio já registrado na Sessão 108.
+- **Achado que encurtou o trabalho**: `IpfsPinClient.publishDeadDrop(sessionIdHex, content,
+  providers)` (`mobile/lib/services/ipfs_pin_client.dart`, feito na 13.9 fatia 2a) já é uma
+  primitiva genérica — não amarrada a vault — então não foi preciso nenhum código novo de
+  IPFS/IPNS, só reaproveitar a mesma chamada que `vault_session_screen.dart` já faz.
+- **`sign_message_approval_screen.dart`**: mirror exato do padrão de `vault_session_screen.dart` —
+  novos campos `ipfsPinClient`/`pinningProviderService` (injetáveis, default real), `_deadDropIpnsName`/
+  `_deadDropError` de estado, e `_deliver` agora dispara `_publishDeadDrop` em paralelo com
+  `_lanServer.serveOnce` (nunca sequencial, nunca lança — mesma decisão travada da 13.9: uma falha
+  do dead-drop, ex. sem provider Kubo configurado, não pode derrubar o transporte LAN que já
+  funciona sozinho). Tela de "Sent" ganhou a mesma nota condicional ("Dead-drop backup published"
+  vs "unavailable this time") que `vault_session_screen.dart` já mostra.
+- **Testes**: `test/screens/sign_message_approval_screen_test.dart` ganhou `MockIpfsPinClient`/
+  `MockPinningProviderService` + grupo novo "Dead-drop (IPFS/IPNS)" (provider configurado publica
+  em paralelo e mostra a mensagem certa; erro no dead-drop não impede o "Sent" via LAN). Setup
+  default estabiliza `publishDeadDrop` pra devolver `null` (mimetiza o early-return real sem
+  provider), evitando que os testes já existentes (Approve/Reject/timeout) acidentalmente
+  exercitem o caminho de erro do dead-drop sem querer. `flutter test` 190/190 (188 + 2 novos),
+  `flutter analyze` limpo (mesmos 8 avisos pré-existentes).
+- **Não validado nesta sessão** (mesma pendência da Sessão 108, sem mudança): nenhuma troca real
+  ponta a ponta — não existe app terceiro de referência que gere QR e consuma a resposta via
+  IPNS, só testes automatizados e o mesmo Kubo real que já validou a derivação IPNS na 13.9.
+- **Próximo passo**: lado requisitante de referência (Practice Valuation ou demo no TruthID
+  Desktop) continua sendo o item que mais destrava validação E2E real, tanto pro `/sign-message`
+  quanto pra decidir se vale a pena levar o mesmo transporte cross-device pro `/sign-request`.
+  `/pin` continua como pendência separada, não atacada.
+
+---
+
 ## Como Usar Este Arquivo
 
 1. **Ao começar uma sessão**: Diga ao Claude Code "leia o PROJECT_STATE.md e me ajude a continuar"
