@@ -10,7 +10,9 @@ import 'package:truthid_mobile/screens/sign_request_approval_screen.dart';
 import 'package:truthid_mobile/services/blockchain_service.dart';
 import 'package:truthid_mobile/services/bundler_config_service.dart';
 import 'package:truthid_mobile/services/ecies_service.dart';
+import 'package:truthid_mobile/services/ipfs_pin_client.dart';
 import 'package:truthid_mobile/services/local_storage_service.dart';
+import 'package:truthid_mobile/services/pinning_provider_service.dart';
 import 'package:truthid_mobile/services/remote_signer_lan_server.dart';
 import 'package:truthid_mobile/services/session_creator.dart';
 
@@ -27,6 +29,11 @@ class MockRemoteSignerLanServer extends Mock
 
 class MockSessionCreator extends Mock implements SessionCreator {}
 
+class MockIpfsPinClient extends Mock implements IpfsPinClient {}
+
+class MockPinningProviderService extends Mock
+    implements PinningProviderService {}
+
 // keccak256("transfer(address,uint256)")[0:4] — mesma técnica que a tela usa
 // pra verificar o seletor declarado contra o callData recebido.
 final _transferSelector = bytesToHex(
@@ -42,6 +49,8 @@ void main() {
   late MockEciesService mockEcies;
   late MockRemoteSignerLanServer mockLanServer;
   late MockSessionCreator mockSessionCreator;
+  late MockIpfsPinClient mockIpfsPinClient;
+  late MockPinningProviderService mockPinningProviderService;
 
   final farFuture = DateTime.now().add(const Duration(minutes: 3));
   final validEphemeralPubKey = '0x02${'ab' * 32}';
@@ -79,6 +88,8 @@ void main() {
     registerFallbackValue(smartAccountAddress);
     registerFallbackValue(destAddress);
     registerFallbackValue(BigInt.zero);
+    registerFallbackValue(DateTime.now());
+    registerFallbackValue(<PinningProvider>[]);
   });
 
   setUp(() {
@@ -88,6 +99,8 @@ void main() {
     mockEcies = MockEciesService();
     mockLanServer = MockRemoteSignerLanServer();
     mockSessionCreator = MockSessionCreator();
+    mockIpfsPinClient = MockIpfsPinClient();
+    mockPinningProviderService = MockPinningProviderService();
 
     when(() => mockStorage.getPairedIdentityId())
         .thenAnswer((_) async => '1');
@@ -99,6 +112,12 @@ void main() {
     );
     when(() => mockEcies.encrypt(any(), any()))
         .thenAnswer((_) async => Uint8List.fromList([1, 2, 3]));
+    // Sem provider Kubo configurado por padrão — mimetiza o early-return
+    // silencioso do IpfsPinClient.publishDeadDrop real; testes específicos
+    // do grupo "Dead-drop" sobrescrevem o stub.
+    when(() => mockPinningProviderService.load()).thenAnswer((_) async => []);
+    when(() => mockIpfsPinClient.publishDeadDrop(any(), any(), any()))
+        .thenAnswer((_) async => null);
   });
 
   Widget buildScreen(Map<String, dynamic> payload) {
@@ -111,6 +130,8 @@ void main() {
         bundlerConfigService: mockBundlerConfig,
         eciesService: mockEcies,
         lanServer: mockLanServer,
+        ipfsPinClient: mockIpfsPinClient,
+        pinningProviderService: mockPinningProviderService,
       ),
     );
   }
@@ -279,6 +300,81 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Nothing arrived'), findsOneWidget);
+    });
+  });
+
+  group('Dead-drop (IPFS/IPNS)', () {
+    testWidgets(
+        'com provider Kubo configurado, publica em paralelo com o LAN e '
+        'mostra "Dead-drop backup published"', (tester) async {
+      final providers = [
+        const PinningProvider(
+          name: 'local-kubo',
+          kind: 'kubo',
+          endpointUrl: 'http://127.0.0.1:5001',
+        ),
+      ];
+      when(() => mockPinningProviderService.load())
+          .thenAnswer((_) async => providers);
+      when(() => mockIpfsPinClient.publishDeadDrop(any(), any(), any()))
+          .thenAnswer((_) async => 'k51abc');
+      when(() => mockSessionCreator.executeArbitraryCall(
+            smartAccountAddress: any(named: 'smartAccountAddress'),
+            dest: any(named: 'dest'),
+            value: any(named: 'value'),
+            innerCallData: any(named: 'innerCallData'),
+          )).thenAnswer((_) async => const SessionCreationResult(
+            userOpHash: '0xUserOpHashXYZ',
+            transactionHash: '0xTxHash',
+          ));
+      when(() => mockLanServer.serveOnce(
+            encryptedBlob: any(named: 'encryptedBlob'),
+            sessionId: any(named: 'sessionId'),
+            expiresAt: any(named: 'expiresAt'),
+          )).thenAnswer((_) async => true);
+
+      await tester.pumpWidget(buildScreen(validPayload()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Approve'));
+      await tester.pumpAndSettle();
+
+      verify(() =>
+              mockIpfsPinClient.publishDeadDrop('session-abc', any(), providers))
+          .called(1);
+      expect(find.text('Dead-drop backup published (IPFS/IPNS).'),
+          findsOneWidget);
+    });
+
+    testWidgets(
+        'erro no dead-drop não impede o envio via LAN, mostra "unavailable"',
+        (tester) async {
+      when(() => mockPinningProviderService.load())
+          .thenThrow(Exception('boom'));
+      when(() => mockSessionCreator.executeArbitraryCall(
+            smartAccountAddress: any(named: 'smartAccountAddress'),
+            dest: any(named: 'dest'),
+            value: any(named: 'value'),
+            innerCallData: any(named: 'innerCallData'),
+          )).thenAnswer((_) async => const SessionCreationResult(
+            userOpHash: '0xUserOpHashXYZ',
+            transactionHash: '0xTxHash',
+          ));
+      when(() => mockLanServer.serveOnce(
+            encryptedBlob: any(named: 'encryptedBlob'),
+            sessionId: any(named: 'sessionId'),
+            expiresAt: any(named: 'expiresAt'),
+          )).thenAnswer((_) async => true);
+
+      await tester.pumpWidget(buildScreen(validPayload()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Approve'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Sent'), findsOneWidget);
+      expect(find.text('Dead-drop backup unavailable this time.'),
+          findsOneWidget);
     });
   });
 

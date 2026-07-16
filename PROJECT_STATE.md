@@ -3954,6 +3954,37 @@ transporte LAN
 
 ---
 
+### Sessão 111 — 2026-07-16: cross-device `/sign-request` fatia 2 — dead-drop IPFS/IPNS ao lado da LAN
+
+- **Objetivo**: das pendências deixadas pela Sessão 110, o dono do projeto escolheu fatia 2
+  (dead-drop IPFS/IPNS) do `/sign-request` em vez do app requisitante de referência ou de `/pin`
+  — fecha o mesmo padrão de dois transportes em paralelo (LAN + dead-drop) nos dois canais
+  genéricos (`/sign-message` e `/sign-request`), mesma sequência que a Sessão 109 já fez pro
+  `/sign-message`.
+- **Mudança mecânica**: `IpfsPinClient.publishDeadDrop` já era genérico (achado da Sessão 109),
+  então a fatia foi um mirror exato do que `sign_message_approval_screen.dart` já tinha —
+  `sign_request_approval_screen.dart` ganhou os mesmos campos injetáveis
+  (`ipfsPinClient`/`pinningProviderService`), estado (`_deadDropIpnsName`/`_deadDropError`), e
+  `_deliver` passou a disparar `_publishDeadDrop` em paralelo com `_lanServer.serveOnce` (nunca
+  sequencial, nunca lança) tanto no caminho de Approve (sucesso ou falha de execução) quanto no
+  de Reject — igual ao `/sign-message`, o dead-drop nunca decide o status (`sent`/`timeout`),
+  só é best-effort ao lado. Tela de "Sent" ganhou a mesma nota condicional ("Dead-drop backup
+  published" vs "unavailable this time"). Nenhum código novo de IPFS/IPNS foi necessário.
+- **Testes**: `sign_request_approval_screen_test.dart` ganhou `MockIpfsPinClient`/
+  `MockPinningProviderService` + grupo "Dead-drop (IPFS/IPNS)" (mirror exato dos 2 testes do
+  `/sign-message`: provider configurado publica em paralelo e mostra a mensagem certa; erro no
+  dead-drop não impede o "Sent" via LAN). `flutter analyze` limpo (mesmos 8 avisos
+  pré-existentes), `flutter test` 207/207 (205 + 2 novos).
+- **Não validado nesta sessão** (mesma pendência de toda fatia anterior, sem mudança): nenhuma
+  troca real ponta a ponta — não existe app requisitante de referência em nenhum repositório
+  ainda, só testes automatizados.
+- **Próximo passo**: com LAN + dead-drop fechados nos dois canais genéricos
+  (`/sign-message` e `/sign-request`), o item que mais destrava validação E2E real de tudo passa
+  a ser só um: o app requisitante de referência (Practice Valuation ou um demo no TruthID
+  Desktop). `/pin` continua como pendência separada, não atacada.
+
+---
+
 ## Como Usar Este Arquivo
 
 1. **Ao começar uma sessão**: Diga ao Claude Code "leia o PROJECT_STATE.md e me ajude a continuar"

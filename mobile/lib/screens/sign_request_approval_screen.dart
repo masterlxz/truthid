@@ -9,8 +9,10 @@ import 'package:web3dart/web3dart.dart' show EthereumAddress;
 import '../services/blockchain_service.dart';
 import '../services/bundler_config_service.dart';
 import '../services/ecies_service.dart';
+import '../services/ipfs_pin_client.dart';
 import '../services/local_storage_service.dart';
 import '../services/pimlico_bundler_client.dart';
+import '../services/pinning_provider_service.dart';
 import '../services/remote_signer_lan_server.dart';
 import '../services/session_creator.dart';
 import '../services/vault_lan_server_service.dart';
@@ -67,9 +69,10 @@ bool _selectorMatches(String functionSignature, String callDataHex) {
 ///   { action: 'truthid-sign-request', v: 1, sessionId, ephemeralPubKey,
 ///     expiresAt, appName, dest, value, callData, functionSignature }
 ///
-/// Transporte: só LAN nesta fatia (`RemoteSignerLanServer`, mesmo bloco de
-/// portas `48050-48054` que sign-message já usa). Dead-drop IPFS/IPNS fica
-/// pra uma fatia 2, mesma sequência que sign-message seguiu.
+/// Transporte: dois em paralelo, mesmo padrão que sign-message já usa —
+/// `RemoteSignerLanServer` (bloco de portas `48050-48054`) decide
+/// `sent`/`timeout`, e um dead-drop IPFS/IPNS best-effort
+/// (`IpfsPinClient.publishDeadDrop`) roda ao lado, nunca decide o status.
 class SignRequestApprovalScreen extends StatefulWidget {
   final Map<String, dynamic> payload;
   final SessionCreator? sessionCreator;
@@ -78,6 +81,8 @@ class SignRequestApprovalScreen extends StatefulWidget {
   final BundlerConfigService? bundlerConfigService;
   final EciesService? eciesService;
   final RemoteSignerLanServer? lanServer;
+  final IpfsPinClient? ipfsPinClient;
+  final PinningProviderService? pinningProviderService;
 
   const SignRequestApprovalScreen({
     super.key,
@@ -88,6 +93,8 @@ class SignRequestApprovalScreen extends StatefulWidget {
     this.bundlerConfigService,
     this.eciesService,
     this.lanServer,
+    this.ipfsPinClient,
+    this.pinningProviderService,
   });
 
   @override
@@ -109,6 +116,8 @@ class _SignRequestApprovalScreenState
   bool _selectorVerified = false;
   String? _errorMsg;
   List<String> _localIps = [];
+  String? _deadDropIpnsName;
+  String? _deadDropError;
 
   EthereumAddress? _smartAccountAddress;
   SessionCreator? _sessionCreator;
@@ -121,6 +130,8 @@ class _SignRequestApprovalScreenState
   late final BundlerConfigService _bundlerConfigService;
   late final EciesService _ecies;
   late final RemoteSignerLanServer _lanServer;
+  late final IpfsPinClient _ipfsPinClient;
+  late final PinningProviderService _pinningProviderService;
 
   @override
   void initState() {
@@ -131,6 +142,9 @@ class _SignRequestApprovalScreenState
         widget.bundlerConfigService ?? BundlerConfigService();
     _ecies = widget.eciesService ?? EciesService();
     _lanServer = widget.lanServer ?? RemoteSignerLanServer();
+    _ipfsPinClient = widget.ipfsPinClient ?? IpfsPinClient();
+    _pinningProviderService =
+        widget.pinningProviderService ?? PinningProviderService();
     _sessionCreator = widget.sessionCreator;
 
     final invalid = _validatePayload();
@@ -293,7 +307,11 @@ class _SignRequestApprovalScreenState
   }
 
   Future<void> _deliver(Map<String, dynamic> result) async {
-    setState(() => _status = _Status.sending);
+    setState(() {
+      _status = _Status.sending;
+      _deadDropIpnsName = null;
+      _deadDropError = null;
+    });
 
     unawaited(
       VaultLanServerService.getLocalIpAddresses()
@@ -315,11 +333,18 @@ class _SignRequestApprovalScreenState
       final encryptedBlob =
           await _ecies.encrypt(plaintext, _requesterPubKeyHex!);
 
+      // Mesma decisão travada da 13.9/sign-message: o dead-drop corre em
+      // paralelo com o LAN, nunca como fallback sequencial, e nunca lança —
+      // uma falha (sem provider Kubo configurado, Kubo fora do ar) não pode
+      // derrubar o transporte LAN, que já funciona sozinho.
+      final deadDropFuture = _publishDeadDrop(encryptedBlob);
+
       final served = await _lanServer.serveOnce(
         encryptedBlob: encryptedBlob,
         sessionId: _sessionId!,
         expiresAt: expiresAt,
       );
+      await deadDropFuture;
 
       if (!mounted) return;
       setState(() => _status = served ? _Status.sent : _Status.timeout);
@@ -329,6 +354,22 @@ class _SignRequestApprovalScreenState
         _status = _Status.error;
         _errorMsg = 'Failed to respond to the app: $e';
       });
+    }
+  }
+
+  Future<void> _publishDeadDrop(Uint8List encryptedBlob) async {
+    try {
+      final providers = await _pinningProviderService.load();
+      final ipnsName = await _ipfsPinClient.publishDeadDrop(
+        _sessionId!,
+        encryptedBlob,
+        providers,
+      );
+      if (!mounted) return;
+      setState(() => _deadDropIpnsName = ipnsName);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _deadDropError = '$e');
     }
   }
 
@@ -536,6 +577,21 @@ class _SignRequestApprovalScreenState
               textAlign: TextAlign.center,
               style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
             ),
+            if (_deadDropIpnsName != null) ...[
+              const SizedBox(height: 8),
+              const Text(
+                'Dead-drop backup published (IPFS/IPNS).',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+              ),
+            ] else if (_deadDropError != null) ...[
+              const SizedBox(height: 8),
+              const Text(
+                'Dead-drop backup unavailable this time.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+              ),
+            ],
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
