@@ -22,6 +22,7 @@ import {
 } from "./config/truthidAccount";
 import { computeSmartAccountAddressSync } from "./utils/computeSmartAccountAddress";
 import { SignRequestModal } from "./components/SignRequestModal";
+import { SignMessageModal } from "./components/SignMessageModal";
 import "./App.css";
 
 type Tab = "dashboard" | "devices" | "sessions" | "vault";
@@ -121,6 +122,7 @@ function App() {
     return (
       <>
         <SignRequestModal smartAccountAddress={smartAccountAddress} />
+        <SignMessageModal />
         <ConnectWallet />
       </>
     );
@@ -135,6 +137,7 @@ function App() {
   return (
     <WalletModalContext.Provider value={{ openConnectModal: () => setConnectModalOpen(true) }}>
       <SignRequestModal smartAccountAddress={smartAccountAddress} />
+      <SignMessageModal />
       <div className="app-shell">
         <header className="topbar">
           <div className="topbar-left">

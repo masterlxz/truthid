@@ -13,6 +13,7 @@ mod bundler;
 mod ipfs;
 mod ledger;
 mod local_signer_server;
+mod sign_message;
 mod sign_request;
 mod vault;
 
@@ -31,7 +32,7 @@ fn fallback_key_path() -> Result<std::path::PathBuf, String> {
 
 /// Lê a chave privada do keyring ou do arquivo de fallback.
 /// Gera e salva uma nova chave se nenhuma existir.
-fn get_device_key_hex() -> Result<String, String> {
+pub(crate) fn get_device_key_hex() -> Result<String, String> {
     // 1. Tenta keyring do SO
     if let Ok(entry) = Entry::new(SERVICE, ACCOUNT) {
         if let Ok(hex) = entry.get_password() {
@@ -495,19 +496,19 @@ fn vault_decrypt(blob_b64: String) -> Result<String, String> {
     Ok(STANDARD.encode(plaintext))
 }
 
-/// Signs a challenge with this desktop's private key.
-/// Returns the signature in Ethereum format: 0x + r (32 bytes) + s (32 bytes) + v (1 byte).
-#[tauri::command]
-fn sign_challenge(challenge: String) -> Result<String, String> {
-    let priv_hex = get_device_key_hex()?;
-
-    let priv_bytes = hex::decode(&priv_hex).map_err(|e| e.to_string())?;
-    let signing_key = SigningKey::from_bytes(priv_bytes.as_slice().into())
-        .map_err(|e| e.to_string())?;
+/// Núcleo puro de `personal_sign`/EIP-191 pra uma mensagem string arbitrária —
+/// separado de `sign_personal_message` pra ser testável com uma chave fixa,
+/// sem tocar keyring (mesmo padrão de `sign_eip191_hash_raw`, que já isola a
+/// primitiva de assinatura pré-hash da leitura da device key).
+pub(crate) fn sign_personal_message_raw(
+    priv_bytes: &[u8],
+    message: &str,
+) -> Result<String, String> {
+    let signing_key = SigningKey::from_bytes(priv_bytes.into()).map_err(|e| e.to_string())?;
 
     // Ethereum personal_sign format: keccak256("\x19Ethereum Signed Message:\n{len}{message}")
     // Matches what viem's recoverMessageAddress() expects on the server side.
-    let msg_bytes = challenge.as_bytes();
+    let msg_bytes = message.as_bytes();
     let prefix = format!("\x19Ethereum Signed Message:\n{}", msg_bytes.len());
     let mut prefixed = Vec::with_capacity(prefix.len() + msg_bytes.len());
     prefixed.extend_from_slice(prefix.as_bytes());
@@ -520,9 +521,23 @@ fn sign_challenge(challenge: String) -> Result<String, String> {
 
     // v = 27 ou 28 (convenção Ethereum)
     let v = recovery_id.to_byte() + 27u8;
-    let sig_hex = format!("0x{}{:02x}", hex::encode(signature.to_bytes()), v);
+    Ok(format!("0x{}{:02x}", hex::encode(signature.to_bytes()), v))
+}
 
-    Ok(sig_hex)
+/// Assina uma mensagem arbitrária com a device key deste desktop. Usada pelo
+/// comando `sign_challenge` e injetada em `sign_message::handle_incoming` como
+/// a closure `sign` do canal `/truthid/v1/sign-message`.
+pub(crate) fn sign_personal_message(message: &str) -> Result<String, String> {
+    let priv_hex = get_device_key_hex()?;
+    let priv_bytes = hex::decode(&priv_hex).map_err(|e| e.to_string())?;
+    sign_personal_message_raw(&priv_bytes, message)
+}
+
+/// Signs a challenge with this desktop's private key.
+/// Returns the signature in Ethereum format: 0x + r (32 bytes) + s (32 bytes) + v (1 byte).
+#[tauri::command]
+fn sign_challenge(challenge: String) -> Result<String, String> {
+    sign_personal_message(&challenge)
 }
 
 #[tauri::command]
@@ -530,12 +545,23 @@ async fn local_signer_start(
     app: tauri::AppHandle,
     state: tauri::State<'_, local_signer_server::LocalSignerServerState>,
     sign_requests: tauri::State<'_, std::sync::Arc<sign_request::SignRequestState>>,
+    sign_messages: tauri::State<'_, std::sync::Arc<sign_message::SignMessageState>>,
 ) -> Result<local_signer_server::LocalSignerStatus, String> {
     use tauri::Emitter;
     let sign_requests = sign_requests.inner().clone();
-    local_signer_server::start(&state, sign_requests, move |payload| {
-        let _ = app.emit("truthid://sign-request", payload);
-    })
+    let sign_messages = sign_messages.inner().clone();
+    let app_for_message = app.clone();
+    local_signer_server::start(
+        &state,
+        sign_requests,
+        move |payload| {
+            let _ = app.emit("truthid://sign-request", payload);
+        },
+        sign_messages,
+        move |payload| {
+            let _ = app_for_message.emit("truthid://sign-message", payload);
+        },
+    )
     .await
 }
 
@@ -569,12 +595,29 @@ async fn respond_to_sign_request(
     sign_request::resolve(state.inner(), &id, decision).await
 }
 
+#[tauri::command]
+async fn get_pending_sign_message(
+    state: tauri::State<'_, std::sync::Arc<sign_message::SignMessageState>>,
+) -> Result<Option<sign_message::SignMessagePayload>, String> {
+    Ok(sign_message::current(state.inner()).await)
+}
+
+#[tauri::command]
+async fn respond_to_sign_message(
+    id: String,
+    decision: sign_message::SignMessageDecision,
+    state: tauri::State<'_, std::sync::Arc<sign_message::SignMessageState>>,
+) -> Result<(), String> {
+    sign_message::resolve(state.inner(), &id, decision).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(local_signer_server::LocalSignerServerState::default())
         .manage(std::sync::Arc::new(sign_request::SignRequestState::default()))
+        .manage(std::sync::Arc::new(sign_message::SignMessageState::default()))
         .setup(|app| {
             // AppHandle (não State) porque a closure/future precisa ser 'static
             // pra rodar em tauri::async_runtime::spawn — um State<'_, T> tomado
@@ -582,15 +625,28 @@ pub fn run() {
             use tauri::{Emitter, Manager};
             let handle = app.handle().clone();
             let notify_handle = handle.clone();
+            let notify_handle_message = handle.clone();
             tauri::async_runtime::spawn(async move {
                 let state = handle.state::<local_signer_server::LocalSignerServerState>();
                 let sign_requests = handle
                     .state::<std::sync::Arc<sign_request::SignRequestState>>()
                     .inner()
                     .clone();
-                let result = local_signer_server::start(&state, sign_requests, move |payload| {
-                    let _ = notify_handle.emit("truthid://sign-request", payload);
-                })
+                let sign_messages = handle
+                    .state::<std::sync::Arc<sign_message::SignMessageState>>()
+                    .inner()
+                    .clone();
+                let result = local_signer_server::start(
+                    &state,
+                    sign_requests,
+                    move |payload| {
+                        let _ = notify_handle.emit("truthid://sign-request", payload);
+                    },
+                    sign_messages,
+                    move |payload| {
+                        let _ = notify_handle_message.emit("truthid://sign-message", payload);
+                    },
+                )
                 .await;
                 if let Err(e) = result {
                     eprintln!("failed to start local signer server: {e}");
@@ -628,6 +684,8 @@ pub fn run() {
             local_signer_status,
             get_pending_sign_request,
             respond_to_sign_request,
+            get_pending_sign_message,
+            respond_to_sign_message,
             ledger::is_ledger_connected,
             ledger::get_ledger_address,
             ledger::sign_ledger_transaction,

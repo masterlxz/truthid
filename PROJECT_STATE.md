@@ -1141,7 +1141,7 @@ Retomar quando o dono do projeto voltar ao assunto — provavelmente puxado pelo
 
 ---
 
-### Vault genérico multi-app + delegação de assinatura via session key — brainstorm (Sessão 96, 2026-07-13); fatia 1 (Sessão 102), fatias 2a/2b/3 (Sessão 103) implementadas
+### Vault genérico multi-app + delegação de assinatura via session key — brainstorm (Sessão 96, 2026-07-13); fatia 1 (Sessão 102), fatias 2a/2b/3 (Sessão 103), `/sign-message` (Sessão 107) implementadas
 
 **Reabre, sob um desenho diferente, a parte de "Vault genérico" que a Sessão 95 tinha fechado como "não é o que o dono do projeto quer".** A diferença desta vez: não é mais "generalizar o Vault de senhas", é um mecanismo novo — apps terceiros (Practice Valuation sendo o primeiro caso real) sincronizando dados próprios via IPFS com o CID atual registrado on-chain, no mesmo padrão que o `VaultRegistry` já usa (`identityId → {cid, contentHash, version}`), mas sem tocar no vault de senhas existente.
 
@@ -1239,7 +1239,7 @@ Retomar quando o dono do projeto quiser rodar um `/plan` de verdade sobre isso �
 
 **Princípio confirmado pelo dono do projeto, explicitamente**: o que falta não deve virar privilégio específico do Practice Valuation — tem que ser capacidade **genérica**, disponível a qualquer app terceiro construído sobre o TruthID, seguindo o mesmo molde do `/sign-request` já existente (app nunca segura o segredo, só pede pro TruthID agir por ele, com aprovação humana no meio).
 
-**1. `POST /truthid/v1/sign-message` (novo, não implementado)** — hoje o canal só assina UserOperations; sincronizar dados via IPFS precisa de uma chave simétrica compartilhada entre os dispositivos do usuário, e a forma natural de obter isso sem inventar segredo novo é assinar uma mensagem fixa e derivar a chave da assinatura (mesmo princípio que `useVaultKey.ts` já usa internamente pro password manager, assinando `"TruthID Vault Key v1"` — só que isso não é exposto a apps terceiros). Desenho proposto, espelhando `sign_request.rs`:
+**1. `POST /truthid/v1/sign-message` (implementado na Sessão 107 — ver entrada abaixo)** — hoje o canal só assina UserOperations; sincronizar dados via IPFS precisa de uma chave simétrica compartilhada entre os dispositivos do usuário, e a forma natural de obter isso sem inventar segredo novo é assinar uma mensagem fixa e derivar a chave da assinatura (mesmo princípio que `useVaultKey.ts` já usa internamente pro password manager, assinando `"TruthID Vault Key v1"` — só que isso não é exposto a apps terceiros). Desenho proposto, espelhando `sign_request.rs`:
 - App terceiro manda `{appName, purpose}` (`purpose` é um identificador curto, não texto livre)
 - TruthID monta a mensagem final de forma padronizada no próprio Rust, não manipulável pelo chamador — ex. `"TruthID Message Signing: {appName}:{purpose}"` (domain separation, evita colisão entre apps/propósitos)
 - Mesmo padrão de parking+aprovação do `sign_request.rs` (evento pro frontend, timeout 5min, single-flight), com uma tela genérica ("**{appName}** quer derivar uma chave de assinatura pra si — aprovar?")
@@ -1259,6 +1259,8 @@ Retomar quando o dono do projeto quiser rodar um `/plan` de verdade sobre isso �
 O TruthID já resolveu exatamente esse tipo de problema pra outro caso de uso — a extensão de navegador (Fase 13.9, Sessões 97-101): dois transportes tentados em paralelo, **descoberta na mesma rede local** (`vault_lan_server_service.dart`, servidor efêmero de 1 request, portas 47850-47854) e **dead-drop assíncrono via IPFS/IPNS** (funciona entre redes diferentes, propagação mais lenta). Segurança não depende de estar na mesma rede ser suficiente: o QR carrega um `sessionId` de 128 bits imprevisível, o servidor LAN devolve 404 uniforme pra path errado (sem oracle), e o payload é cifrado via ECIES pra uma chave pública efêmera que só existe no QR — só quem escaneou o QR de verdade consegue achar e decifrar o blob. Vale lembrar que essa mesma peça de ECIES teve um bug real que ficou sem detecção por várias sessões até ser pego contra hardware real (Sessão 99) — reforça que qualquer reaproveitamento precisa de validação em hardware real antes de confiar, não só round-trip interno.
 
 **Em aberto, não decidido**: estender `/sign-message`/`/pin` (e possivelmente `/sign-request`) pra também aceitar esses dois transportes, no mesmo molde da 13.9, é trabalho novo — nada desenhado em detalhe ainda. Fica registrado junto com as outras duas pendências, pra um `/plan` futuro decidir.
+
+**Nota (Sessão 108): fatia 1 do transporte cross-device (só LAN) implementada do lado Mobile — ver entrada da Sessão 108 abaixo.** Dead-drop IPFS/IPNS (fatia 2), `/pin`, e qualquer lado requisitante (app terceiro que gera o QR) continuam em aberto.
 
 ---
 
@@ -3785,6 +3787,73 @@ Ao validar o "Try again" com o celular físico de verdade (não só testes autom
 - **Caminho de Approve testado até onde dá sem Ledger/WalletConnect real**: clicar Approve abre o modal `ConnectWallet` (WalletConnect/Ledger) em vez de assinar direto — confirma que o gate de `smartAccountAddress` no `handleApprove` funciona corretamente mesmo com uma identidade já logada no dashboard (login e conexão de wallet são coisas distintas, como o desenho original já prescrevia). Não fui adiante (fecharia exigindo Ledger físico ou uma sessão WalletConnect real) — bate com a pendência de Mainnet já conhecida, agora confirmada via UI real em vez de só inferida lendo código. Segundo sign-request também rejeitado pra deixar o estado limpo.
 - **Nenhum segredo tocado**: só confirmei que `~/.truthid/bundler_config.json` não existe (`test -f`), nunca li nem escrevi conteúdo.
 - **Próximo passo**: reverter a porta temporária da Practice Valuation (`1420` → `1425` em `vite.config.ts`/`tauri.conf.json`) quando a sessão de validação terminar — deixada de pé de propósito pro dono do projeto poder testar o Approve com Ledger/WalletConnect real se quiser. Caminho de Approve (assinatura real via UserOp) continua não confirmado de ponta a ponta — precisa Ledger físico ou WalletConnect real, mais o bundler configurado (pendência antiga da fatia 1, segredo do dono do projeto). Decidir se/quando a fatia 3 vira integração de produção continua em aberto.
+
+---
+
+### Sessão 107 — 2026-07-16: `/truthid/v1/sign-message` implementado — assinatura genérica de mensagem pra apps terceiros
+
+- **Objetivo**: destravar a pendência mais barata registrada pela Sessão 106 (Practice Valuation, Fase 8 dele) — a rota genérica que qualquer app terceiro usa pra pedir uma assinatura `personal_sign` sobre uma mensagem própria, sem nunca segurar segredo, no mesmo molde do `/sign-request` já implementado. `/pin` e o transporte cross-device continuam como pendência separada, não atacados nesta sessão. `/plan` rodado antes de codar.
+- **Diferença de desenho em relação ao `/sign-request`**: lá o Rust só aprova/rejeita e o frontend monta/executa a UserOperation; aqui não tem bundler nem wallet — a mensagem final é montada no próprio Rust (`format!("TruthID Message Signing: {appName}:{purpose}")`, nunca vinda direto do chamador, garantindo domain separation e nunca colidindo com o `"TruthID Vault Key v1"` interno do password manager) e a assinatura é feita com a mesma **device key** que `sign_challenge` já usa — sem round-trip pro frontend. O clique de aprovação só libera o oneshot que o Rust está esperando; a resposta HTTP pro app terceiro já sai com a assinatura, resolvida dentro da mesma requisição.
+- **Novo módulo `sign_message.rs`** (mirror de `sign_request.rs`): mesmo protocolo de parking/single-flight/timeout (5min) via oneshot, mas com uma segunda closure injetada (`sign`, além do `notify` que já existia) — chamada só depois de um `Approved`, o que manteve o módulo testável sem tocar o keyring do SO (testes usam uma assinatura fake). `purpose` validado contra `^[A-Za-z0-9_.-]{1,64}$` (identificador curto, não texto livre, conforme a nota da Sessão 106).
+- **Extração em `lib.rs`**: `sign_challenge` (que já implementava `personal_sign`/EIP-191 pra mensagem string arbitrária) virou um wrapper fino sobre duas funções novas reutilizáveis — `sign_personal_message_raw(priv_bytes, message)` (lógica pura, testável com chave fixa, mesmo padrão de `sign_eip191_hash_raw`) e `sign_personal_message(message)` (busca a device key e chama a anterior) — é essa última que `sign_message.rs` injeta como `sign`. `get_device_key_hex` virou `pub(crate)`.
+- **`local_signer_server.rs`**: `SignRequestRouterState` ganhou `sign_messages`/`on_sign_message` ao lado dos campos já existentes de sign-request; `start()` ganhou dois parâmetros novos (mesma forma que os de sign-request); nova rota `/truthid/v1/sign-message`. Todos os call sites de teste existentes (`start_for_test`, os dois testes de sign-request que chamam `start()` direto) ajustados pra passar o estado/notifier novos — nenhum teste pré-existente mudou de comportamento.
+- **`lib.rs`**: novo `mod sign_message`, comandos `get_pending_sign_message`/`respond_to_sign_message`, `.manage(Arc<SignMessageState>)`, wiring do evento `"truthid://sign-message"` tanto em `local_signer_start` quanto no `setup()` (mesmo padrão duplicado que já existia pro sign-request, por conta do app rodar o servidor automaticamente no boot e também expor um comando manual).
+- **Frontend**: `useIncomingSignMessage.ts` (mirror exato de `useIncomingSignRequest.ts`) + `SignMessageModal.tsx` — bem mais simples que o `SignRequestModal` (sem gate de wallet, sem estágio "signing", sem `smartAccountAddress`), já que a assinatura inteira acontece no Rust. Por transparência (mesma filosofia da correção da Sessão 104 no outro modal), mostra a `message` exata que será assinada, não só o `purpose`. Montado em `App.tsx` ao lado do `SignRequestModal`, nos dois pontos de retorno.
+- **Testes**: `cargo test` 49/49 (eram 41 na Sessão 103 + 8 novos: 6 em `sign_message.rs` — parking/assinatura via `sign` injetado/rejeição nunca chama `sign`/concorrência/id errado/timeout — e 2 em `local_signer_server.rs`, round-trip HTTP real via `reqwest` mirror dos testes de `/sign-request`). `npx tsc --noEmit` limpo.
+- **Não validado nesta sessão** (mesma situação das fatias 2a/2b originais do `/sign-request`, que só foram validadas de ponta a ponta duas sessões depois, na Sessão 105): nenhum clique real na UI nem chamada HTTP de ponta a ponta contra um app terceiro de verdade — só testes automatizados e revisão manual.
+- **Próximo passo**: validar manualmente (curl local + clique real no modal, técnica do `GDK_BACKEND=x11` já destravada na Sessão 105) quando o dono do projeto quiser; depois, `/pin` (proxy de pinning) e o transporte cross-device (LAN/dead-drop) continuam como pendências registradas na Sessão 106, ainda não atacadas.
+
+---
+
+### Sessão 108 — 2026-07-16: cross-device `/sign-message` fatia 1 — Mobile ganha o canal via transporte LAN
+
+- **Objetivo**: destravar a pergunta do dono do projeto ("isso funciona na rede?") sobre o
+  `/sign-message` implementado na Sessão 107 (só loopback, `127.0.0.1`). Confirmado que ele quer os
+  dois transportes da 13.9 (LAN + dead-drop IPFS/IPNS) eventualmente; pediu pra já começar a
+  primeira fatia. `/plan` rodado antes de codar.
+- **Investigação encontrou um gap real**: o Mobile não tinha nenhum equivalente ao
+  `local_signer_server.rs`/`sign_request.rs` do Desktop — o único servidor HTTP do Mobile era o
+  `VaultLanServerService`, 100% específico da entrega da vault key no pareamento. Confirmado
+  também, via leitura de `scan_screen.dart`/`popup/main.ts` (extensão), que na 13.9 quem **mostra**
+  o QR é o lado sem câmera (a extensão) e quem **escaneia** é o celular — o mesmo padrão vale aqui:
+  o app terceiro mostra um QR com o pedido inteiro (`{appName, purpose}` cabe fácil), o celular
+  escaneia, e só a resposta (assinatura/rejeição) precisa viajar de volta via LAN.
+- **Escopo desta fatia, negociado via `/plan`**: só o lado Mobile + só transporte LAN (dead-drop
+  IPFS/IPNS fica pra uma fatia 2, mesma sequência que a 13.9 seguiu) + só `/sign-message` (não
+  `/sign-request`, mais simples, sem bundler/UserOp envolvidos). O lado "requisitante" (app
+  terceiro que gera o QR e varre a LAN) não existe em nenhum repositório ainda — fora de escopo,
+  mesmo princípio já registrado em `local_signer_server.rs` ("precisa ser espelhado manualmente do
+  lado do app terceiro").
+- **Novo `mobile/lib/services/remote_signer_lan_server.dart`**: mirror estrutural exato do
+  `VaultLanServerService` (bind na primeira porta livre, serve 1 `GET /session/<id>` com
+  `{"blob": base64}`, 404 uniforme, fecha no timeout) — módulo separado, bloco de portas próprio
+  (`48050-48054`, distinto de `47850-54` Vault LAN e `47950-54` Desktop local_signer), mesma razão
+  que o Desktop já mantém o canal de terceiros fora de tudo que é Vault.
+- **Novo `mobile/lib/screens/sign_message_approval_screen.dart`**: schema de QR v1
+  (`action: 'truthid-sign-message', v, sessionId, ephemeralPubKey, expiresAt, appName, purpose`),
+  validação de `purpose` com a **mesma regex exata** do Rust (`^[A-Za-z0-9_.-]{1,64}$`) e a mesma
+  construção de mensagem (`'TruthID Message Signing: $appName:$purpose'`, nunca aceita pronta do
+  QR — mesmo motivo de domain separation do lado Desktop). Approve assina via
+  `DeviceKeyService.signChallenge` (já existia, `personal_sign` genérico) e cifra via
+  `EciesService.encrypt` (já existia) antes de servir; Reject serve `{"status":"rejected"}` cifrado
+  do mesmo jeito — os dois usam os mesmos nomes de campo (`status`/`message`/`signature`) que o
+  `SignMessageResponse` do Rust, pra um app terceiro reconhecer o mesmo formato nos dois canais.
+- **Roteamento**: `main.dart._openScanner` ganhou `else if (action == 'truthid-sign-message')` ao
+  lado dos dois já existentes (`truthid-auth`, `truthid-vault-session`).
+- **Testes**: novo `test/services/remote_signer_lan_server_test.dart` (`test()` puro, bind e HTTP
+  reais via `HttpClient`/`Socket` — não `testWidgets`, pra evitar o travamento de I/O real dentro de
+  `FakeAsync` já documentado na Sessão 98) + novo
+  `test/screens/sign_message_approval_screen_test.dart` (`testWidgets`, `DeviceKeyService`/
+  `EciesService`/`RemoteSignerLanServer` mockados via `mocktail`, nunca I/O real). `flutter test`
+  188/188 (era 174 + 14 novos), `flutter analyze` limpo (mesmos 8 avisos pré-existentes).
+- **Não validado nesta sessão** (mesma situação de toda fatia da 13.9 até validação em hardware
+  real numa sessão futura): nenhuma troca de ponta a ponta com um app terceiro de verdade — não
+  existe lado requisitante em nenhum repositório ainda, então não há como gerar um QR real e
+  escanear no celular físico.
+- **Próximo passo**: lado requisitante de referência (Practice Valuation ou um demo no TruthID
+  Desktop) pra validar de ponta a ponta em hardware real; depois, fatia 2 (dead-drop IPFS/IPNS,
+  mesmo padrão da 13.9 fatia 2a/2b) e o mesmo transporte pro canal `/sign-request`. `/pin` continua
+  como pendência separada.
 
 ---
 

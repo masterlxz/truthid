@@ -10,6 +10,7 @@ import 'screens/devices_screen.dart';
 import 'screens/scan_screen.dart';
 import 'screens/sessions_screen.dart';
 import 'screens/settings_screen.dart';
+import 'screens/sign_message_approval_screen.dart';
 import 'screens/vault_screen.dart';
 import 'screens/vault_session_screen.dart';
 import 'screens/wallet_screen.dart';
@@ -136,6 +137,12 @@ class _RootScreenState extends State<RootScreen> {
     } else if (action == 'truthid-vault-session') {
       Navigator.of(context).push(
         MaterialPageRoute(builder: (_) => VaultSessionScreen(payload: payload)),
+      );
+    } else if (action == 'truthid-sign-message') {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => SignMessageApprovalScreen(payload: payload),
+        ),
       );
     } else {
       ScaffoldMessenger.of(context).showSnackBar(

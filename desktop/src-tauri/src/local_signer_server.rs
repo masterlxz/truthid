@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tokio::sync::{oneshot, Mutex};
 
+use crate::sign_message::{self, SignMessageState};
 use crate::sign_request::{self, SignRequestState};
 
 /// Callback chamado sempre que um /sign-request novo chega, pra quem estiver
@@ -15,10 +16,15 @@ use crate::sign_request::{self, SignRequestState};
 /// verdade rodando.
 type SignRequestNotifier = Arc<dyn Fn(&sign_request::SignRequestPayload) + Send + Sync>;
 
+/// Mesma ideia de SignRequestNotifier, só que pro canal /sign-message.
+type SignMessageNotifier = Arc<dyn Fn(&sign_message::SignMessagePayload) + Send + Sync>;
+
 #[derive(Clone)]
 struct SignRequestRouterState {
     sign_requests: Arc<SignRequestState>,
     on_sign_request: SignRequestNotifier,
+    sign_messages: Arc<SignMessageState>,
+    on_sign_message: SignMessageNotifier,
 }
 
 /// Portas candidatas para o canal local Desktop<->app terceiro. Bloco próprio,
@@ -126,11 +132,27 @@ async fn sign_request_handler(
     (status, Json(body))
 }
 
+async fn sign_message_handler(
+    State(router_state): State<SignRequestRouterState>,
+    Json(body): Json<sign_message::SignMessageBody>,
+) -> (StatusCode, Json<sign_message::SignMessageResponse>) {
+    let outcome = sign_message::handle_incoming(
+        &router_state.sign_messages,
+        body,
+        |payload| (router_state.on_sign_message)(payload),
+        crate::sign_personal_message,
+    )
+    .await;
+    let (status, body) = outcome.into_response();
+    (status, Json(body))
+}
+
 fn router(router_state: SignRequestRouterState) -> Router {
     Router::new()
         .route("/truthid/v1/ping", get(ping))
         .route("/truthid/v1/handshake", post(handshake))
         .route("/truthid/v1/sign-request", post(sign_request_handler))
+        .route("/truthid/v1/sign-message", post(sign_message_handler))
         .with_state(router_state)
 }
 
@@ -143,10 +165,14 @@ fn router(router_state: SignRequestRouterState) -> Router {
 /// get_pending_sign_request/respond_to_sign_request enxergarem os mesmos
 /// pedidos que chegam via HTTP); `on_sign_request` é chamado sempre que um
 /// pedido novo chega (normalmente app.emit, injetado por quem chama start()).
+/// `sign_messages`/`on_sign_message` são o equivalente pro canal
+/// /truthid/v1/sign-message.
 pub async fn start(
     state: &LocalSignerServerState,
     sign_requests: Arc<SignRequestState>,
     on_sign_request: impl Fn(&sign_request::SignRequestPayload) + Send + Sync + 'static,
+    sign_messages: Arc<SignMessageState>,
+    on_sign_message: impl Fn(&sign_message::SignMessagePayload) + Send + Sync + 'static,
 ) -> Result<LocalSignerStatus, String> {
     let mut guard = state.0.lock().await;
     if let Some(running) = guard.as_ref() {
@@ -170,6 +196,8 @@ pub async fn start(
     let router_state = SignRequestRouterState {
         sign_requests,
         on_sign_request: Arc::new(on_sign_request),
+        sign_messages,
+        on_sign_message: Arc::new(on_sign_message),
     };
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
@@ -243,7 +271,14 @@ mod tests {
     // sign_request::SignRequestState nem com notificação — esse helper
     // isola esse boilerplate.
     async fn start_for_test(state: &LocalSignerServerState) -> Result<LocalSignerStatus, String> {
-        start(state, Arc::new(SignRequestState::default()), |_| {}).await
+        start(
+            state,
+            Arc::new(SignRequestState::default()),
+            |_| {},
+            Arc::new(SignMessageState::default()),
+            |_| {},
+        )
+        .await
     }
 
     #[tokio::test]
@@ -355,9 +390,15 @@ mod tests {
         let _guard = PORT_TEST_LOCK.lock().await;
         let state = LocalSignerServerState::default();
         let sign_requests = Arc::new(SignRequestState::default());
-        let started = start(&state, sign_requests.clone(), |_| {})
-            .await
-            .expect("start should succeed");
+        let started = start(
+            &state,
+            sign_requests.clone(),
+            |_| {},
+            Arc::new(SignMessageState::default()),
+            |_| {},
+        )
+        .await
+        .expect("start should succeed");
 
         let url = format!("{}/truthid/v1/sign-request", base_url(&started));
         let request = reqwest::Client::new().post(&url).json(&serde_json::json!({
@@ -399,9 +440,15 @@ mod tests {
         let _guard = PORT_TEST_LOCK.lock().await;
         let state = LocalSignerServerState::default();
         let sign_requests = Arc::new(SignRequestState::default());
-        let started = start(&state, sign_requests.clone(), |_| {})
-            .await
-            .expect("start should succeed");
+        let started = start(
+            &state,
+            sign_requests.clone(),
+            |_| {},
+            Arc::new(SignMessageState::default()),
+            |_| {},
+        )
+        .await
+        .expect("start should succeed");
 
         let url = format!("{}/truthid/v1/sign-request", base_url(&started));
         let body = serde_json::json!({
@@ -428,6 +475,92 @@ mod tests {
             )
             .await
             .expect("resolve should succeed");
+            resp
+        };
+
+        let (first, second) = tokio::join!(first_request, second_request);
+        assert_eq!(second.expect("request should succeed").status(), 409);
+        assert_eq!(first.expect("request should succeed").status(), 403);
+
+        stop(&state).await;
+    }
+
+    #[tokio::test]
+    async fn sign_message_endpoint_parks_until_resolved_and_returns_signature() {
+        let _guard = PORT_TEST_LOCK.lock().await;
+        let state = LocalSignerServerState::default();
+        let sign_messages = Arc::new(SignMessageState::default());
+        let started = start(
+            &state,
+            Arc::new(SignRequestState::default()),
+            |_| {},
+            sign_messages.clone(),
+            |_| {},
+        )
+        .await
+        .expect("start should succeed");
+
+        let url = format!("{}/truthid/v1/sign-message", base_url(&started));
+        let request = reqwest::Client::new().post(&url).json(&serde_json::json!({
+            "appName": "Practice Valuation",
+            "purpose": "vault-sync-key",
+        }));
+
+        let (resp, _) = tokio::join!(request.send(), async {
+            let id = loop {
+                if let Some(payload) = sign_message::current(&sign_messages).await {
+                    break payload.id;
+                }
+                tokio::task::yield_now().await;
+            };
+            sign_message::resolve(&sign_messages, &id, sign_message::SignMessageDecision::Approved)
+                .await
+                .expect("resolve should succeed");
+        });
+
+        let resp = resp.expect("request should succeed");
+        assert_eq!(resp.status(), 200);
+        let body: serde_json::Value = resp.json().await.expect("valid json");
+        assert_eq!(body["status"], "signed");
+        assert_eq!(body["message"], "TruthID Message Signing: Practice Valuation:vault-sync-key");
+        assert!(body["signature"].as_str().is_some_and(|s| s.starts_with("0x")));
+
+        stop(&state).await;
+    }
+
+    #[tokio::test]
+    async fn sign_message_endpoint_rejects_concurrent_second_request() {
+        let _guard = PORT_TEST_LOCK.lock().await;
+        let state = LocalSignerServerState::default();
+        let sign_messages = Arc::new(SignMessageState::default());
+        let started = start(
+            &state,
+            Arc::new(SignRequestState::default()),
+            |_| {},
+            sign_messages.clone(),
+            |_| {},
+        )
+        .await
+        .expect("start should succeed");
+
+        let url = format!("{}/truthid/v1/sign-message", base_url(&started));
+        let body = serde_json::json!({
+            "appName": "Practice Valuation",
+            "purpose": "vault-sync-key",
+        });
+
+        let first_request = reqwest::Client::new().post(&url).json(&body).send();
+        let second_request = async {
+            let id = loop {
+                if let Some(payload) = sign_message::current(&sign_messages).await {
+                    break payload.id;
+                }
+                tokio::task::yield_now().await;
+            };
+            let resp = reqwest::Client::new().post(&url).json(&body).send().await;
+            sign_message::resolve(&sign_messages, &id, sign_message::SignMessageDecision::Rejected)
+                .await
+                .expect("resolve should succeed");
             resp
         };
 
