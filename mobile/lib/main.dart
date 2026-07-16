@@ -11,6 +11,7 @@ import 'screens/scan_screen.dart';
 import 'screens/sessions_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/sign_message_approval_screen.dart';
+import 'screens/sign_request_approval_screen.dart';
 import 'screens/vault_screen.dart';
 import 'screens/vault_session_screen.dart';
 import 'screens/wallet_screen.dart';
@@ -142,6 +143,12 @@ class _RootScreenState extends State<RootScreen> {
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => SignMessageApprovalScreen(payload: payload),
+        ),
+      );
+    } else if (action == 'truthid-sign-request') {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => SignRequestApprovalScreen(payload: payload),
         ),
       );
     } else {

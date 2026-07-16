@@ -3892,6 +3892,68 @@ Ao validar o "Try again" com o celular físico de verdade (não só testes autom
 
 ---
 
+### Sessão 110 — 2026-07-16: cross-device `/sign-request` fatia 1 — Mobile ganha o canal via
+transporte LAN
+
+- **Objetivo**: das pendências deixadas pela Sessão 109, o dono do projeto escolheu levar o
+  mesmo padrão cross-device do `/sign-message` (Mobile como "responder" via QR + LAN) pro
+  `/sign-request` — que hoje só funciona em loopback no Desktop. `/plan` rodado antes de codar;
+  duas perguntas negociadas explicitamente: (1) confirmado que o Mobile vira o responder remoto
+  (o Desktop nunca abre `local_signer_server.rs` pra LAN — decisão de segurança deliberada da
+  fatia 2a, "nunca `0.0.0.0`"); (2) escopo desta sessão é só transporte **LAN**, dead-drop
+  IPFS/IPNS fica marcado como fatia 2 pra depois (mesma sequência do sign-message).
+- **Diferença real em relação ao `/sign-message`**: lá o Mobile só assina (a resposta HTTP já
+  sai assinada). Aqui o Mobile precisa **assinar E executar** a UserOperation (bundler + espera
+  de recibo, até ~60s) antes de responder — é isso que o Desktop já faz em
+  `SignRequestModal.tsx`/`userOpExecutor.ts`. Investigação confirmou que o núcleo genérico já
+  existia: `SessionCreator._executeViaUserOp({smartAccountAddress, dest, value, innerCallData})`
+  (`mobile/lib/services/session_creator.dart`) já é o mesmo motor usado por
+  `createSession`/`revokeSession`/`withdraw`/`updateVault` — só faltava expor um método público
+  fino (`executeArbitraryCall`) que repassa os mesmos parâmetros sem lógica nova.
+- **Novo `mobile/lib/screens/sign_request_approval_screen.dart`** (mirror estrutural de
+  `SignMessageApprovalScreen`, com duas diferenças reais): schema de QR v1
+  (`action: 'truthid-sign-request', v, sessionId, ephemeralPubKey, expiresAt, appName, dest,
+  value, callData, functionSignature` — nunca `smartAccountAddress`, resolvido sempre localmente
+  a partir da identidade pareada no celular, mesma postura de `SignRequestBody` no Rust, que nem
+  tem esse campo). Dois estados novos no enum: `loading` (resolve a smart account via
+  `LocalStorageService.getPairedIdentityId/Username` + `BlockchainService.getIdentityByUsername`,
+  mirror do padrão já usado em `wallet_screen.dart`) e `executing` (roda a UserOp de verdade).
+  Verificação de seletor (`keccak256(functionSignature)[0:4]` vs `callData`, mesma técnica já
+  usada em `blockchain_service.dart` pra outros seletores) rotula `functionSignature` como
+  verified/unverified sem bloquear — mesma decisão consciente da fatia 2b do Desktop (aprovação
+  humana é o ponto de confiança final). **Achado de design importante, espelhando o
+  `SignRequestModal.tsx` do Desktop**: uma falha de execução (bundler rejeitar, etc.) não vira um
+  erro local silencioso — ainda assim dispara `_deliver({'status': 'failed', 'error': ...})`, pra
+  o app terceiro saber o que aconteceu, exatamente como o Desktop já faz (`respond_to_sign_request`
+  com `outcome: "failed"` mesmo quando a execução lança). Os nomes de campo da resposta
+  (`status`/`userOpHash`/`transactionHash`/`error`) espelham exatamente `SignRequestResponse` do
+  Rust, pra um futuro app requisitante tratar os dois canais de forma uniforme. `RemoteSignerLanServer`
+  (porta `48050-48054`) reaproveitado sem nenhuma mudança — já era genérico o bastante.
+- **Roteamento**: `main.dart._openScanner` ganhou `else if (action == 'truthid-sign-request')`
+  ao lado dos 3 já existentes.
+- **Testes**: `mobile/test/services/session_creator_test.dart` ganhou grupo `executeArbitraryCall`
+  (2 testes, mesmo padrão do grupo `withdraw`). Novo
+  `mobile/test/screens/sign_request_approval_screen_test.dart` (mocka `SessionCreator`/
+  `BlockchainService`/`LocalStorageService`/`BundlerConfigService`/`EciesService`/
+  `RemoteSignerLanServer` via `mocktail`), casos: validação de schema, não pareado, seletor
+  batendo/não batendo, Approve com sucesso (mostra `userOpHash` no "Sent"), Approve com exceção
+  (ainda assim entrega `status: failed`), timeout, Reject nunca chama `executeArbitraryCall`.
+  **Achado no caminho**: o teste de Reject falhava com "would not hit test" — a tela pendente tem
+  mais conteúdo que a de sign-message (3 `InfoRow` + callData cru), então o botão Reject cai fora
+  do viewport padrão de teste (800×600) sem rolar primeiro; corrigido com
+  `tester.ensureVisible(find.text('Reject'))` antes do `tap`. `flutter analyze` limpo (mesmos 8
+  avisos pré-existentes), `flutter test` 205/205 (190 + 13 novos: 2 em `session_creator_test.dart`
+  + ~23 na tela nova, contando `setUpAll`/`tearDownAll`).
+- **Não validado nesta sessão** (mesma situação de toda fatia anterior): nenhuma troca real ponta
+  a ponta — não existe app requisitante de referência em nenhum repositório ainda, só testes
+  automatizados e revisão manual do fluxo lendo o código.
+- **Próximo passo**: fatia 2 (dead-drop IPFS/IPNS) pro `/sign-request`, reaproveitando
+  `IpfsPinClient.publishDeadDrop` sem código novo de IPFS (mesma economia que a fatia 2 do
+  sign-message teve); lado requisitante de referência continua sendo o item que mais destrava
+  validação E2E real de tudo; `/pin` continua como pendência separada, não atacada.
+
+---
+
 ## Como Usar Este Arquivo
 
 1. **Ao começar uma sessão**: Diga ao Claude Code "leia o PROJECT_STATE.md e me ajude a continuar"

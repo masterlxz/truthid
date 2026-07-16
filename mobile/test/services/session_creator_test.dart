@@ -326,6 +326,74 @@ void main() {
     });
   });
 
+  group('executeArbitraryCall', () {
+    final dest = EthereumAddress.fromHex(
+        '0xdddddddddddddddddddddddddddddddddddddddd');
+    final value = BigInt.from(1000000000000000); // 0.001 ETH
+    final innerCallData =
+        Uint8List.fromList([0xa9, 0x05, 0x9c, 0xbb, 0x01, 0x02]);
+
+    test('monta, assina e envia a UserOp com dest/value/callData recebidos',
+        () async {
+      when(() => mockBundler.getUserOperationReceipt('0xUserOpHashXYZ'))
+          .thenAnswer((_) async => UserOperationReceipt(
+                userOpHash: '0xUserOpHashXYZ',
+                success: true,
+                actualGasCost: BigInt.from(1000),
+                actualGasUsed: BigInt.from(90000),
+                transactionHash: '0xTxHash',
+              ));
+
+      final result = await sessionCreator.executeArbitraryCall(
+        smartAccountAddress: smartAccountAddress,
+        dest: dest,
+        value: value,
+        innerCallData: innerCallData,
+      );
+
+      expect(result.userOpHash, '0xUserOpHashXYZ');
+      expect(result.transactionHash, '0xTxHash');
+
+      verify(() => mockBlockchain.getSmartAccountNonce(smartAccountAddress))
+          .called(1);
+      verify(() => mockKeyService.signHash(any())).called(1);
+
+      final sentOp = verify(() => mockBundler.sendUserOperation(captureAny()))
+          .captured
+          .single as UserOperationV07;
+      expect(sentOp.sender, smartAccountAddress);
+
+      // Reconstrói o callData esperado via encodeCall com os mesmos
+      // argumentos recebidos de fora — mesma técnica do teste de withdraw,
+      // já que aqui dest/value/callData variam todos juntos.
+      final truthidAccount = DeployedContract(
+        ContractAbi.fromJson(truthidAccountAbi, 'TruthIDAccount'),
+        smartAccountAddress,
+      );
+      final expectedCallData = truthidAccount.function('execute').encodeCall([
+        dest,
+        value,
+        innerCallData,
+      ]);
+      expect(sentOp.callData, expectedCallData);
+    });
+
+    test('propaga erro se o envio ao bundler falhar', () async {
+      when(() => mockBundler.sendUserOperation(any()))
+          .thenThrow(Exception('bundler rejected the UserOperation'));
+
+      expect(
+        () => sessionCreator.executeArbitraryCall(
+          smartAccountAddress: smartAccountAddress,
+          dest: dest,
+          value: value,
+          innerCallData: innerCallData,
+        ),
+        throwsException,
+      );
+    });
+  });
+
   group('updateVault', () {
     // Selector de `updateVault(string,bytes32)` — mesma convenção de _executeSelector.
     Uint8List updateVaultSelector() => keccak256(

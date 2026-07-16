@@ -188,6 +188,25 @@ class SessionCreator {
     );
   }
 
+  // Executa uma chamada arbitrária (dest/value/callData decididos por quem
+  // chama, não pelo SessionCreator) via `execute` na smart account — usado
+  // pelo canal cross-device de `/sign-request` (SignRequestApprovalScreen),
+  // que recebe esses campos de um app terceiro depois de aprovação humana.
+  // Repassa direto pro núcleo já existente, sem lógica nova.
+  Future<SessionCreationResult> executeArbitraryCall({
+    required EthereumAddress smartAccountAddress,
+    required EthereumAddress dest,
+    required BigInt value,
+    required Uint8List innerCallData,
+  }) {
+    return _executeViaUserOp(
+      smartAccountAddress: smartAccountAddress,
+      dest: dest,
+      value: value,
+      innerCallData: innerCallData,
+    );
+  }
+
   // Monta, assina e envia a UserOp que chama `execute(dest, value, innerCallData)`
   // na smart account — núcleo compartilhado por createSession/revokeSession/withdraw.
   Future<SessionCreationResult> _executeViaUserOp({
