@@ -268,7 +268,11 @@ impl Default for PinState {
 
 #[cfg(test)]
 impl PinState {
-    fn with_authorizations_path(path: PathBuf) -> Self {
+    /// pub(crate) (não privado): também usado pelos testes de
+    /// local_signer_server.rs, que precisam da mesma isolação de arquivo
+    /// (ver o comentário em `temp_authorizations_path`, no módulo de testes
+    /// abaixo, sobre por que isso não pode ser $HOME global).
+    pub(crate) fn with_authorizations_path(path: PathBuf) -> Self {
         Self {
             pending: Mutex::new(None),
             quota: Mutex::new(()),
@@ -336,23 +340,33 @@ async fn record_approval(
 /// de sign_message::handle_incoming. `notify` só é chamado quando este
 /// pedido específico precisa de aprovação humana (app novo ou cota
 /// estourada); no caminho rápido (autorizado, dentro da cota) nunca é
-/// chamado. `pin` é injetado pra este módulo ser testável sem HTTP real.
-pub async fn handle_incoming(
+/// chamado. `pin` é injetado pra este módulo ser testável sem HTTP real — é
+/// assíncrono (não `FnOnce` síncrono como o `sign` de sign_message.rs)
+/// porque `ipfs::pin_vault`, a implementação real, faz chamadas HTTP.
+pub async fn handle_incoming<F, Fut>(
     state: &PinState,
     body: PinRequestBody,
     notify: impl FnOnce(&PinApprovalPayload),
-    pin: impl FnOnce(&[u8]) -> Result<(String, String, Vec<String>, Vec<String>), String>,
-) -> PinOutcome {
+    pin: F,
+) -> PinOutcome
+where
+    F: FnOnce(Vec<u8>) -> Fut,
+    Fut: std::future::Future<Output = Result<(String, String, Vec<String>, Vec<String>), String>>,
+{
     handle_incoming_with_timeout(state, body, notify, pin, PIN_REQUEST_TIMEOUT).await
 }
 
-async fn handle_incoming_with_timeout(
+async fn handle_incoming_with_timeout<F, Fut>(
     state: &PinState,
     body: PinRequestBody,
     notify: impl FnOnce(&PinApprovalPayload),
-    pin: impl FnOnce(&[u8]) -> Result<(String, String, Vec<String>, Vec<String>), String>,
+    pin: F,
     timeout: Duration,
-) -> PinOutcome {
+) -> PinOutcome
+where
+    F: FnOnce(Vec<u8>) -> Fut,
+    Fut: std::future::Future<Output = Result<(String, String, Vec<String>, Vec<String>), String>>,
+{
     use base64::{engine::general_purpose::STANDARD, Engine as _};
 
     let app_name = body.app_name.trim().to_string();
@@ -373,7 +387,7 @@ async fn handle_incoming_with_timeout(
     };
 
     let Some(reason) = reason else {
-        return match pin(&content) {
+        return match pin(content).await {
             Ok((cid, content_hash, providers_ok, providers_failed)) => PinOutcome::Pinned {
                 cid,
                 content_hash,
@@ -412,7 +426,7 @@ async fn handle_incoming_with_timeout(
             if let Err(e) = record_approval(state, &app_name, &payload.reason).await {
                 return PinOutcome::Failed(e);
             }
-            match pin(&content) {
+            match pin(content).await {
                 Ok((cid, content_hash, providers_ok, providers_failed)) => PinOutcome::Pinned {
                     cid,
                     content_hash,
@@ -470,7 +484,9 @@ mod tests {
         }
     }
 
-    fn fake_pin(content: &[u8]) -> Result<(String, String, Vec<String>, Vec<String>), String> {
+    async fn fake_pin(
+        content: Vec<u8>,
+    ) -> Result<(String, String, Vec<String>, Vec<String>), String> {
         Ok((
             format!("cid-{}", content.len()),
             "0xhash".to_string(),
@@ -540,7 +556,7 @@ mod tests {
                 &state_bg,
                 body("Sketchy App", b"hello"),
                 |_| {},
-                |_| panic!("pin should never be called on rejection"),
+                |_| async { panic!("pin should never be called on rejection") },
             )
             .await
         });

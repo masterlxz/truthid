@@ -541,17 +541,42 @@ fn sign_challenge(challenge: String) -> Result<String, String> {
     sign_personal_message(&challenge)
 }
 
+/// Pina `content` nos providers de pinning que o usuário já configurou —
+/// injetada em `pin::handle_incoming` como a closure `pin` do canal
+/// `/truthid/v1/pin`. Mesma mensagem de erro de `vault_publish` quando não há
+/// provider configurado (mesmo caminho de código, mesma UX).
+pub(crate) async fn pin_content(
+    content: Vec<u8>,
+) -> Result<(String, String, Vec<String>, Vec<String>), String> {
+    let providers = ipfs::load_providers();
+    if providers.is_empty() {
+        return Err(
+            "nenhum provider de pinning configurado — use vault_set_providers primeiro".to_string(),
+        );
+    }
+    let result = ipfs::pin_vault(&content, &providers).await?;
+    Ok((
+        result.cid,
+        result.content_hash,
+        result.providers_ok,
+        result.providers_failed,
+    ))
+}
+
 #[tauri::command]
 async fn local_signer_start(
     app: tauri::AppHandle,
     state: tauri::State<'_, local_signer_server::LocalSignerServerState>,
     sign_requests: tauri::State<'_, std::sync::Arc<sign_request::SignRequestState>>,
     sign_messages: tauri::State<'_, std::sync::Arc<sign_message::SignMessageState>>,
+    pin_requests: tauri::State<'_, std::sync::Arc<pin::PinState>>,
 ) -> Result<local_signer_server::LocalSignerStatus, String> {
     use tauri::Emitter;
     let sign_requests = sign_requests.inner().clone();
     let sign_messages = sign_messages.inner().clone();
+    let pin_requests = pin_requests.inner().clone();
     let app_for_message = app.clone();
+    let app_for_pin = app.clone();
     local_signer_server::start(
         &state,
         sign_requests,
@@ -561,6 +586,10 @@ async fn local_signer_start(
         sign_messages,
         move |payload| {
             let _ = app_for_message.emit("truthid://sign-message", payload);
+        },
+        pin_requests,
+        move |payload| {
+            let _ = app_for_pin.emit("truthid://pin", payload);
         },
     )
     .await
@@ -612,6 +641,22 @@ async fn respond_to_sign_message(
     sign_message::resolve(state.inner(), &id, decision).await
 }
 
+#[tauri::command]
+async fn get_pending_pin_request(
+    state: tauri::State<'_, std::sync::Arc<pin::PinState>>,
+) -> Result<Option<pin::PinApprovalPayload>, String> {
+    Ok(pin::current(state.inner()).await)
+}
+
+#[tauri::command]
+async fn respond_to_pin_request(
+    id: String,
+    decision: pin::PinDecision,
+    state: tauri::State<'_, std::sync::Arc<pin::PinState>>,
+) -> Result<(), String> {
+    pin::resolve(state.inner(), &id, decision).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -619,6 +664,7 @@ pub fn run() {
         .manage(local_signer_server::LocalSignerServerState::default())
         .manage(std::sync::Arc::new(sign_request::SignRequestState::default()))
         .manage(std::sync::Arc::new(sign_message::SignMessageState::default()))
+        .manage(std::sync::Arc::new(pin::PinState::default()))
         .setup(|app| {
             // AppHandle (não State) porque a closure/future precisa ser 'static
             // pra rodar em tauri::async_runtime::spawn — um State<'_, T> tomado
@@ -627,6 +673,7 @@ pub fn run() {
             let handle = app.handle().clone();
             let notify_handle = handle.clone();
             let notify_handle_message = handle.clone();
+            let notify_handle_pin = handle.clone();
             tauri::async_runtime::spawn(async move {
                 let state = handle.state::<local_signer_server::LocalSignerServerState>();
                 let sign_requests = handle
@@ -635,6 +682,10 @@ pub fn run() {
                     .clone();
                 let sign_messages = handle
                     .state::<std::sync::Arc<sign_message::SignMessageState>>()
+                    .inner()
+                    .clone();
+                let pin_requests = handle
+                    .state::<std::sync::Arc<pin::PinState>>()
                     .inner()
                     .clone();
                 let result = local_signer_server::start(
@@ -646,6 +697,10 @@ pub fn run() {
                     sign_messages,
                     move |payload| {
                         let _ = notify_handle_message.emit("truthid://sign-message", payload);
+                    },
+                    pin_requests,
+                    move |payload| {
+                        let _ = notify_handle_pin.emit("truthid://pin", payload);
                     },
                 )
                 .await;
@@ -687,6 +742,8 @@ pub fn run() {
             respond_to_sign_request,
             get_pending_sign_message,
             respond_to_sign_message,
+            get_pending_pin_request,
+            respond_to_pin_request,
             ledger::is_ledger_connected,
             ledger::get_ledger_address,
             ledger::sign_ledger_transaction,

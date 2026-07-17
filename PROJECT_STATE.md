@@ -4401,6 +4401,65 @@ app + cota diária), sem rota HTTP nem UI ainda
   projeto quiser continuar essa frente — ou o checklist de pré-release, ou o redeploy pendente do
   débito #52 (Sessão 118), que seguem abertos em paralelo.
 
+### Sessão 120 — 2026-07-17: `/truthid/v1/pin` fatia 2 — rota HTTP, comandos Tauri e tela de
+aprovação no frontend
+
+- **Objetivo**: conectar o núcleo da fatia 1 (Sessão 119) de ponta a ponta — rota HTTP de
+  verdade, wiring Tauri, e UI. Ainda sem agentes de review (mesmo pedido do dono do projeto).
+- **`pin.rs` ganhou o único ajuste estrutural que faltava**: `handle_incoming`/
+  `handle_incoming_with_timeout` esperavam um closure `pin` síncrono (`FnOnce(&[u8]) -> Result<...>`),
+  copiado do molde de `sign_message.rs` — mas a implementação real (`ipfs::pin_vault`) é
+  assíncrona (chamadas HTTP pros providers Kubo/PSA), diferente de assinar (CPU-bound, sem I/O).
+  Assinatura trocada pra genérica `F: FnOnce(Vec<u8>) -> Fut, Fut: Future<Output = Result<...>>`
+  — os 2 call-sites (caminho rápido autorizado, e depois de aprovar) passaram a `.await` o
+  resultado. `PinState::with_authorizations_path` (test-only) virou `pub(crate)` pra também ser
+  usada pelos testes novos de `local_signer_server.rs` (mesmo motivo de isolamento de `$HOME` já
+  registrado na Sessão 119).
+- **`local_signer_server.rs`**: nova rota `POST /truthid/v1/pin`, mesmo padrão de
+  `sign_message_handler` — `pin_handler` injeta `crate::pin_content` (a implementação real,
+  definida no `lib.rs`) como a closure `pin`. `SignRequestRouterState` ganhou
+  `pin_requests`/`on_pin_request`; `start()` ganhou 2 parâmetros novos (mesmo formato de
+  `sign_messages`/`on_sign_message`) — atualizado em todos os 6 call-sites já existentes (5 nos
+  testes + `lib.rs`). 2 testes novos (`pin_endpoint_new_app_request_parks_and_can_be_rejected`,
+  `pin_endpoint_rejects_concurrent_second_request`) — **deliberadamente só exercitam o caminho
+  `Rejected`**: ao contrário de `sign_message` (assinar é CPU puro, sempre determinístico), o
+  `pin` real faz chamadas HTTP pros providers configurados no `$HOME` de verdade — testar o
+  caminho `Approved`/`Pinned` pela rota HTTP dependeria de infraestrutura de IPFS real, não-
+  determinístico entre máquinas. `Rejected` nunca chama `pin`, cobrindo o roteamento/wiring sem
+  essa dependência.
+- **`lib.rs`**: nova `pub(crate) async fn pin_content(content: Vec<u8>) -> Result<(String, String,
+  Vec<String>, Vec<String>), String>` — carrega os providers já configurados
+  (`ipfs::load_providers()`) e chama `ipfs::pin_vault`, mesma mensagem de erro de "nenhum
+  provider configurado" que `vault_publish` já usa (mesmo caminho de código, mesma UX). Comandos
+  `get_pending_pin_request`/`respond_to_pin_request` (idênticos em forma aos de sign-message).
+  `.manage(std::sync::Arc::new(pin::PinState::default()))` adicionado; `local_signer_start`
+  (comando chamado pelo frontend) e o `setup()` (auto-start ao abrir o app) ganharam o terceiro
+  par state/notifier, emitindo o evento `truthid://pin`.
+- **Frontend**: `hooks/useIncomingPinRequest.ts` (mirror de `useIncomingSignMessage.ts`) e
+  `components/PinApprovalModal.tsx` (mirror de `SignMessageModal.tsx`), montado nos 2 pontos do
+  `App.tsx` onde `SignMessageModal` já está (login e shell principal). Copy diferenciada por
+  `reason` (`newApp` mostra o limite diário sugerido; `quotaExceeded` explica que aprovar libera
+  uma nova janela de N pins a partir de agora) — sem prometer nada que ainda não existe (cortei
+  uma frase de rascunho que mencionava "revogar em Settings", já que essa tela não existe ainda).
+- **Testado**: `cargo build`/`cargo clippy --all-targets` limpos (só 1 warning pré-existente em
+  `ipfs.rs`, não tocado nesta sessão). `cargo test`: **59/59** no crate (era 57, +2). `tsc --noEmit`
+  limpo. `npx vitest run`: 56/56 (sem teste novo de frontend — `SignRequestModal`/`SignMessageModal`,
+  os componentes irmãos, também não têm teste dedicado; mesma cobertura do padrão já existente).
+  `cargo fmt --check` conferido manualmente linha por linha nos 3 arquivos Rust tocados — só
+  débito de formatação pré-existente sobrou (não introduzido nesta sessão); aprendida a lição da
+  Sessão 119, não rodei `cargo fmt` sem escopo de novo.
+- **Não validado com clique real nem com provider de pinning real** (mesmo padrão já registrado
+  pra `/sign-message` na Sessão 107 — "curl local + clique real quando o dono do projeto
+  quiser"). O que garante corretude do roteamento sem isso: os testes de
+  `local_signer_server.rs` sobem o servidor axum de verdade e batem via `reqwest`.
+- **Não implementado ainda (fatia 3, futura, se o dono do projeto quiser)**: tela de
+  Settings pra ver/editar/revogar autorizações por app (hoje só existe o arquivo
+  `~/.truthid/pin_authorizations.json`, sem UI nenhuma pra inspecionar ou editar o limite
+  diário depois da primeira aprovação).
+- **Próximo passo**: validação manual (curl + clique real, técnica do `GDK_BACKEND=x11` já
+  destravada na Sessão 105) quando o dono do projeto quiser; ou fatia 3 (Settings); ou as outras
+  frentes já em aberto (checklist de pré-release, redeploy do débito #52).
+
 ---
 
 ## Como Usar Este Arquivo

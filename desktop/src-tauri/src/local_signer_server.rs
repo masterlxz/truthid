@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tokio::sync::{oneshot, Mutex};
 
+use crate::pin::{self, PinState};
 use crate::sign_message::{self, SignMessageState};
 use crate::sign_request::{self, SignRequestState};
 
@@ -19,12 +20,17 @@ type SignRequestNotifier = Arc<dyn Fn(&sign_request::SignRequestPayload) + Send 
 /// Mesma ideia de SignRequestNotifier, só que pro canal /sign-message.
 type SignMessageNotifier = Arc<dyn Fn(&sign_message::SignMessagePayload) + Send + Sync>;
 
+/// Mesma ideia de SignRequestNotifier, só que pro canal /pin.
+type PinNotifier = Arc<dyn Fn(&pin::PinApprovalPayload) + Send + Sync>;
+
 #[derive(Clone)]
 struct SignRequestRouterState {
     sign_requests: Arc<SignRequestState>,
     on_sign_request: SignRequestNotifier,
     sign_messages: Arc<SignMessageState>,
     on_sign_message: SignMessageNotifier,
+    pin_requests: Arc<PinState>,
+    on_pin_request: PinNotifier,
 }
 
 /// Portas candidatas para o canal local Desktop<->app terceiro. Bloco próprio,
@@ -147,12 +153,28 @@ async fn sign_message_handler(
     (status, Json(body))
 }
 
+async fn pin_handler(
+    State(router_state): State<SignRequestRouterState>,
+    Json(body): Json<pin::PinRequestBody>,
+) -> (StatusCode, Json<pin::PinResponse>) {
+    let outcome = pin::handle_incoming(
+        &router_state.pin_requests,
+        body,
+        |payload| (router_state.on_pin_request)(payload),
+        crate::pin_content,
+    )
+    .await;
+    let (status, body) = outcome.into_response();
+    (status, Json(body))
+}
+
 fn router(router_state: SignRequestRouterState) -> Router {
     Router::new()
         .route("/truthid/v1/ping", get(ping))
         .route("/truthid/v1/handshake", post(handshake))
         .route("/truthid/v1/sign-request", post(sign_request_handler))
         .route("/truthid/v1/sign-message", post(sign_message_handler))
+        .route("/truthid/v1/pin", post(pin_handler))
         .with_state(router_state)
 }
 
@@ -166,13 +188,15 @@ fn router(router_state: SignRequestRouterState) -> Router {
 /// pedidos que chegam via HTTP); `on_sign_request` é chamado sempre que um
 /// pedido novo chega (normalmente app.emit, injetado por quem chama start()).
 /// `sign_messages`/`on_sign_message` são o equivalente pro canal
-/// /truthid/v1/sign-message.
+/// /truthid/v1/sign-message; `pin_requests`/`on_pin_request`, pro /truthid/v1/pin.
 pub async fn start(
     state: &LocalSignerServerState,
     sign_requests: Arc<SignRequestState>,
     on_sign_request: impl Fn(&sign_request::SignRequestPayload) + Send + Sync + 'static,
     sign_messages: Arc<SignMessageState>,
     on_sign_message: impl Fn(&sign_message::SignMessagePayload) + Send + Sync + 'static,
+    pin_requests: Arc<PinState>,
+    on_pin_request: impl Fn(&pin::PinApprovalPayload) + Send + Sync + 'static,
 ) -> Result<LocalSignerStatus, String> {
     let mut guard = state.0.lock().await;
     if let Some(running) = guard.as_ref() {
@@ -198,6 +222,8 @@ pub async fn start(
         on_sign_request: Arc::new(on_sign_request),
         sign_messages,
         on_sign_message: Arc::new(on_sign_message),
+        pin_requests,
+        on_pin_request: Arc::new(on_pin_request),
     };
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
@@ -267,6 +293,20 @@ mod tests {
         format!("http://127.0.0.1:{}", status.port.expect("port set while running"))
     }
 
+    // Caminho de arquivo único por teste (não $HOME global) pro estado do
+    // pin::PinState — mesmo motivo do helper equivalente em pin.rs::tests:
+    // cargo test roda em paralelo, e mexer em $HOME de verdade contaminaria
+    // outros módulos deste crate que também leem $HOME/.truthid/... nos
+    // próprios testes.
+    fn temp_pin_state() -> Arc<PinState> {
+        Arc::new(PinState::with_authorizations_path(
+            std::env::temp_dir().join(format!(
+                "truthid-lss-pin-test-{}.json",
+                rand::random::<u64>()
+            )),
+        ))
+    }
+
     // Testes que só exercitam ping/handshake não se importam com o
     // sign_request::SignRequestState nem com notificação — esse helper
     // isola esse boilerplate.
@@ -276,6 +316,8 @@ mod tests {
             Arc::new(SignRequestState::default()),
             |_| {},
             Arc::new(SignMessageState::default()),
+            |_| {},
+            temp_pin_state(),
             |_| {},
         )
         .await
@@ -396,6 +438,8 @@ mod tests {
             |_| {},
             Arc::new(SignMessageState::default()),
             |_| {},
+            temp_pin_state(),
+            |_| {},
         )
         .await
         .expect("start should succeed");
@@ -445,6 +489,8 @@ mod tests {
             sign_requests.clone(),
             |_| {},
             Arc::new(SignMessageState::default()),
+            |_| {},
+            temp_pin_state(),
             |_| {},
         )
         .await
@@ -496,6 +542,8 @@ mod tests {
             |_| {},
             sign_messages.clone(),
             |_| {},
+            temp_pin_state(),
+            |_| {},
         )
         .await
         .expect("start should succeed");
@@ -539,6 +587,8 @@ mod tests {
             |_| {},
             sign_messages.clone(),
             |_| {},
+            temp_pin_state(),
+            |_| {},
         )
         .await
         .expect("start should succeed");
@@ -559,6 +609,101 @@ mod tests {
             };
             let resp = reqwest::Client::new().post(&url).json(&body).send().await;
             sign_message::resolve(&sign_messages, &id, sign_message::SignMessageDecision::Rejected)
+                .await
+                .expect("resolve should succeed");
+            resp
+        };
+
+        let (first, second) = tokio::join!(first_request, second_request);
+        assert_eq!(second.expect("request should succeed").status(), 409);
+        assert_eq!(first.expect("request should succeed").status(), 403);
+
+        stop(&state).await;
+    }
+
+    // Os 2 testes de /pin abaixo só exercitam o caminho Rejected — ao
+    // contrário de sign-message, o `pin` real (crate::pin_content) faz
+    // chamadas HTTP de verdade pros providers de pinning configurados no
+    // $HOME real, o que seria não-determinístico e dependente de máquina
+    // aqui. Rejeitar nunca chama `pin`, então cobre o roteamento/wiring de
+    // ponta a ponta sem depender de infraestrutura de IPFS.
+
+    #[tokio::test]
+    async fn pin_endpoint_new_app_request_parks_and_can_be_rejected() {
+        let _guard = PORT_TEST_LOCK.lock().await;
+        let state = LocalSignerServerState::default();
+        let pin_requests = temp_pin_state();
+        let started = start(
+            &state,
+            Arc::new(SignRequestState::default()),
+            |_| {},
+            Arc::new(SignMessageState::default()),
+            |_| {},
+            pin_requests.clone(),
+            |_| {},
+        )
+        .await
+        .expect("start should succeed");
+
+        let url = format!("{}/truthid/v1/pin", base_url(&started));
+        let request = reqwest::Client::new().post(&url).json(&serde_json::json!({
+            "appName": "Practice Valuation",
+            "contentBase64": "aGVsbG8=",
+        }));
+
+        let (resp, _) = tokio::join!(request.send(), async {
+            let id = loop {
+                if let Some(payload) = pin::current(&pin_requests).await {
+                    break payload.id;
+                }
+                tokio::task::yield_now().await;
+            };
+            pin::resolve(&pin_requests, &id, pin::PinDecision::Rejected)
+                .await
+                .expect("resolve should succeed");
+        });
+
+        let resp = resp.expect("request should succeed");
+        assert_eq!(resp.status(), 403);
+        let body: serde_json::Value = resp.json().await.expect("valid json");
+        assert_eq!(body["status"], "rejected");
+
+        stop(&state).await;
+    }
+
+    #[tokio::test]
+    async fn pin_endpoint_rejects_concurrent_second_request() {
+        let _guard = PORT_TEST_LOCK.lock().await;
+        let state = LocalSignerServerState::default();
+        let pin_requests = temp_pin_state();
+        let started = start(
+            &state,
+            Arc::new(SignRequestState::default()),
+            |_| {},
+            Arc::new(SignMessageState::default()),
+            |_| {},
+            pin_requests.clone(),
+            |_| {},
+        )
+        .await
+        .expect("start should succeed");
+
+        let url = format!("{}/truthid/v1/pin", base_url(&started));
+        let body = serde_json::json!({
+            "appName": "Practice Valuation",
+            "contentBase64": "aGVsbG8=",
+        });
+
+        let first_request = reqwest::Client::new().post(&url).json(&body).send();
+        let second_request = async {
+            let id = loop {
+                if let Some(payload) = pin::current(&pin_requests).await {
+                    break payload.id;
+                }
+                tokio::task::yield_now().await;
+            };
+            let resp = reqwest::Client::new().post(&url).json(&body).send().await;
+            pin::resolve(&pin_requests, &id, pin::PinDecision::Rejected)
                 .await
                 .expect("resolve should succeed");
             resp

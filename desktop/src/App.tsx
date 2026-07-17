@@ -23,6 +23,7 @@ import {
 import { computeSmartAccountAddressSync } from "./utils/computeSmartAccountAddress";
 import { SignRequestModal } from "./components/SignRequestModal";
 import { SignMessageModal } from "./components/SignMessageModal";
+import { PinApprovalModal } from "./components/PinApprovalModal";
 import "./App.css";
 
 type Tab = "dashboard" | "devices" | "sessions" | "vault";
@@ -123,6 +124,7 @@ function App() {
       <>
         <SignRequestModal smartAccountAddress={smartAccountAddress} />
         <SignMessageModal />
+        <PinApprovalModal />
         <ConnectWallet />
       </>
     );
@@ -138,6 +140,7 @@ function App() {
     <WalletModalContext.Provider value={{ openConnectModal: () => setConnectModalOpen(true) }}>
       <SignRequestModal smartAccountAddress={smartAccountAddress} />
       <SignMessageModal />
+      <PinApprovalModal />
       <div className="app-shell">
         <header className="topbar">
           <div className="topbar-left">
