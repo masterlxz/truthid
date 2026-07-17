@@ -4240,6 +4240,16 @@ reais achados e corrigidos na descoberta LAN da extensão
 - `npx vitest run` 19/19 (4 novos), `npx tsc --noEmit` limpo na extensão.
 - **Ambiente restaurado ao fim da sessão**: instância de teste do Brave, Desktop nativo e
   `ipfs daemon` (subido só pra esta validação) encerrados; nenhum container Docker deixado rodando.
+- **`pinning_providers_screen.dart` conectada à navegação** (achado da Sessão 114, ainda aberto):
+  a tela existia completa (config de providers Kubo/PSA, teste de saúde) mas não tinha nenhum
+  jeito de abrir pela UI. Novo ícone (`Icons.cloud_outlined`, "Pinning providers") em
+  `vault_screen.dart`, ao lado de "Manage profiles"/"New entry" (mesmo gate `_canWrite` — só faz
+  sentido configurar pinning em quem pode publicar). Confirmado que não é só cosmético:
+  `VaultPublishService` já lia do mesmo `PinningProviderService`/storage local, então conectar a
+  tela já habilita configurar de verdade, sem mudança nenhuma do lado de publicação.
+  `flutter analyze` sem novos achados, `flutter test` 207/207. **Não validado com clique real**
+  (celular desconectou do adb depois da validação da 13.9) — mudança pequena, mesmo padrão do
+  botão irmão já em produção, coberta por teste de widget.
 
 ---
 

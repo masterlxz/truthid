@@ -12,6 +12,7 @@ import '../services/vault_publish_service.dart';
 import '../services/vault_repository.dart';
 import '../services/vault_sync_service.dart';
 import '../theme.dart';
+import 'pinning_providers_screen.dart';
 import 'vault_entry_detail_screen.dart';
 import 'vault_entry_form_screen.dart';
 import 'vault_profiles_screen.dart';
@@ -275,6 +276,15 @@ class _VaultScreenState extends State<VaultScreen> {
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               ),
               if (_canWrite) ...[
+                IconButton(
+                  icon: const Icon(Icons.cloud_outlined),
+                  tooltip: 'Pinning providers',
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => const PinningProvidersScreen(),
+                    ),
+                  ),
+                ),
                 IconButton(
                   icon: const Icon(Icons.sell_outlined),
                   tooltip: 'Manage profiles',
