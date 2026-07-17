@@ -1266,6 +1266,207 @@ O TruthID já resolveu exatamente esse tipo de problema pra outro caso de uso �
 
 ---
 
+### Ideias de Expansão e Roadmap — "app global de segurança" self-sovereign (registrado
+2026-07-17, Sessão 121; conversas de 2026-06 a 2026-07-01, fora do Claude Code)
+
+**Fonte**: `~/Downloads/TruthID - Ideias de Expansao e Roadmap.md` (última atualização
+2026-07-01), anotações de conversas sobre evolução do TruthID. Puro brainstorm — nenhum `/plan`
+rodado, nenhum código tocado, registrado aqui pra não se perder (a versão em `~/Downloads`
+continua sendo o rascunho original, este é o registro oficial no projeto).
+
+**Visão geral**: evoluir o TruthID de um sistema de identidade pra um ecossistema completo de
+segurança digital self-sovereign — identidade + gerenciador de senhas/passkeys/2FA + conta
+cripto, tudo com a mesma raiz de confiança (Ledger).
+
+**1. Roadmap principal (foco apontado nas conversas, não necessariamente ordem de execução)**
+
+1. **Social Recovery** — recuperação via N-de-M guardiões (multisig/timelock), usando o
+   `SessionRegistry`/`DeviceRegistry` já existentes. Resolve "e se eu perder o Ledger".
+2. **Verifiable Credentials / Atestações ZK** — provar atributos sobre a pessoa sem revelar tudo
+   (ex: "maior de 18", "dev verificado") via zero-knowledge proofs. Abre porta pra KYC
+   descentralizado e monetização B2B (ver item 4 da lista de receita, abaixo).
+3. **Delegação de acesso temporário** — sessões com escopo e prazo definido, construindo sobre
+   os contextos Work/Home do Vault. Casos de uso: suporte técnico, compartilhamento pontual.
+4. **Reputação on-chain portátil** — módulo de "histórico de confiança" (tempo de conta,
+   recuperações, atestações recebidas) consultável por outros protocolos — diferencial
+   competitivo frente a Worldcoin/Civic.
+5. **Passkeys / WebAuthn**:
+   - Virtual authenticator: expõe interface WebAuthn, guarda a chave privada cifrada no Vault.
+   - Novo `credential_type: passkey` no `VaultRegistry`.
+   - Fluxo de criação: manual, via ação do usuário no próprio cadastro do site (a extensão
+     **não oferece proativamente** criar passkey).
+   - Entrada de passkey agrupada com a senha do mesmo site — uma única credential record por
+     domínio (senha + passkey juntos).
+6. **2FA / TOTP**:
+   - Guarda o `secret` (seed base32) cifrado no Vault, gerador de código local (RFC 6238).
+   - **Regra de segurança inegociável**: 2FA/TOTP nunca é manipulado pela extensão de
+     navegador — fica isolado no app/desktop. Preserva a separação real dos fatores (se a
+     extensão guardasse tudo, colapsaria os fatores de 2FA em um só).
+7. **Backup criptografado exportável**:
+   - Arquivo `.truthid-backup`: blob único cifrado com chave derivada da master key do device
+     (ou senha extra).
+   - Fluxo de restore: novo device root gera chave, reidrata o Vault a partir do backup.
+   - Pode combinar com Social Recovery (guardiões ajudam a recuperar a chave de decriptação do
+     backup).
+
+**2. Decisões de arquitetura já discutidas pra extensão de navegador**
+
+**Princípio central**: a extensão nunca tem autoridade de escrita no Vault — só relaia e faz
+autofill. Pra credenciais novas (senha ou passkey) criadas via extensão: material cifrado com a
+chave de sessão existente, enviado ao **Device raiz persistente** (mobile/desktop) pra aprovação
+e commit, reaproveitando o mesmo mecanismo de aprovação já usado no upgrade de sessão via QR P2P.
+A extensão participa da cerimônia criptográfica (precisa, é ela que interage com a página), mas
+**quem persiste é sempre o Device raiz**.
+
+**2.1 Sync em lote (batch sync)** — resolve o problema de UX de gerar um QR por credencial
+alterada, e reduz custo de gas (1 transação por sessão de edição, não por item):
+1. Extensão acumula edições pendentes localmente, em memória de sessão cifrada — nada persiste.
+2. Ao clicar "Sincronizar", empacota tudo num payload único e gera um QR code.
+3. Celular escaneia, mostra resumo das mudanças + taxa de gas estimada.
+4. Na aprovação, a smart account assina uma única `UserOperation` em lote (estilo `execBatch`).
+5. **Ordem crítica**: o pinning no IPFS do conteúdo novo deve acontecer a partir do Device
+   **antes** da assinatura do commit on-chain — pra nunca registrar um hash sem conteúdo pinado
+   por trás.
+
+**3. Ideias exploratórias (não são foco, registradas pra não perder)**
+
+- Anti-phishing domain-binding: vincular credenciais salvas ao domínio exato, reforçado pela
+  resistência nativa a phishing do WebAuthn.
+- Vault compartilhado (Family/Team): múltiplos Devices de pessoas diferentes acessando um
+  subconjunto de credenciais compartilhadas, com controle de acesso multisig. Possível ângulo de
+  monetização B2B.
+- Log de atividade/auditoria: histórico de quando cada Device acessou uma credencial, pra
+  detectar uso suspeito.
+- Auto-fill inteligente com detecção de formulário + preenchimento de senha e código 2FA já
+  calculado.
+- Compartilhamento de emergência (estilo "emergency access" do 1Password), com delay de
+  segurança cancelável.
+- Detecção de vazamento de senha via k-anonymity (estilo Have I Been Pwned).
+- Auditoria/"security score" do Vault (senhas fracas/reutilizadas, 2FA ausente).
+- Modo panic/duress (PIN secundário que mostra vault vazio/falso).
+- Suporte a hardware wallets alternativas como root key (Trezor, YubiKey/FIDO2).
+
+**Nada implementado, nada desenhado em detalhe — fica pra quando o dono do projeto quiser rodar
+um `/plan` de verdade sobre algum desses itens.**
+
+---
+
+### Monetização — brainstorm (registrado 2026-07-17, Sessão 121; conversa de 2026-07-17 fora do
+Claude Code)
+
+**Fonte**: `~/Downloads/TRUTHID_MONETIZACAO.md`. Puro brainstorm — nenhuma decisão final, nenhum
+código tocado. Puxado pela motivação original de uma integração B3 (consolidação de carteira),
+mas generalizado pra um modelo de cobrança aplicável a várias ideias de receita.
+
+**Princípio geral (não negociável, definido pelo dono do projeto)**:
+- **Nunca cobrar pelo que já é do usuário.** Identidade, dispositivos, Vault, smart account —
+  tudo roda local/on-chain e continua funcionando **mesmo que o TruthID como empresa/serviço
+  deixe de existir**. Não é negociável pra nenhuma ideia de monetização.
+- **Nunca forçar pagamento pra usar o produto core.** Tudo que hoje é grátis continua grátis.
+  Monetização só entra em serviços adicionais que geram custo real e recorrente pro dono do
+  projeto manter rodando (infraestrutura, não o produto em si).
+- **Preferência explícita por pay-per-use em vez de assinatura** — descartado "plano mensal
+  fixo" como estrutura principal.
+- Referência mental: modelo Ledger — a chave nunca sai do hardware (grátis, sempre), mas o
+  backup redundante é um serviço pago opcional.
+
+**Por que "assinatura mensal via Pix→ETH" foi descartada**: modelo "cambista" (usuário deposita
+Pix, dono do projeto compra ETH e credita) configura operação de câmbio de fato — no Brasil, cai
+na Lei 14.478/2022 (marco legal dos criptoativos), que exigiria autorização do Banco Central como
+Prestador de Serviços de Ativos Virtuais (VASP), com todo o aparato de KYC/AML. Exatamente o
+nível de complexidade regulatória que o dono do projeto quer evitar com CNPJ mínimo.
+
+**Modelo escolhido: taxa de serviço on-chain, paga pela própria smart account, em ETH**
+1. **Modo padrão (sempre disponível, sem o dono do projeto no meio)**: usuário deposita ETH
+   direto na própria smart account (self-funded gas — já é a Fase 14, concluída). 100%
+   self-custodial, sem dependência de nenhum serviço do dono do projeto.
+2. **Modo premium (opcional)**: pra funcionalidades extras, a própria smart account paga em ETH,
+   **dentro da mesma UserOperation** que executa a ação, uma taxa pra uma carteira do dono do
+   projeto.
+
+**Por que resolve o problema regulatório**: o dono do projeto nunca recebe fiat do usuário nem
+entrega cripto a ele — o fluxo é o usuário autorizando uma transação que sai da própria wallet
+dele, em ETH, como pagamento por um serviço prestado. Estruturalmente idêntico a uma taxa de
+protocolo (ex: fee do Uniswap), não câmbio nem custódia de terceiro.
+
+**Arquitetura técnica (em cima do que já existe e já foi validado)**:
+- `execBatch` já roda de verdade em hardware real (Sessões 115-117 — AA26 corrigido, UserOps
+  executando com `userOpHash`/`transactionHash` reais via bundler/Paymaster).
+- **Ações on-chain** (ex: pinning extra no `VaultRegistry`): uma UserOp com `execBatch` contendo
+  (a) a call real da ação e (b) um `transfer` de ETH pra carteira de taxas — atômico, ou as duas
+  rodam ou nenhuma roda.
+- **Ações off-chain** (ex: IA gerenciada, consolidação B3 — rodam num backend do dono do
+  projeto): precisa de ponte entre pagamento on-chain e liberação do serviço. Duas abordagens,
+  a decidir: (a) backend só libera depois de confirmar a transação minerada — simples, mas
+  adiciona latência de bloco a cada chamada; (b) **session key com limite de gasto** (spending
+  limit) autoriza um lote de N chamadas até um teto em ETH, sem transação nova a cada mensagem —
+  preferida pro caso de IA (gas por mensagem de chat seria proibitivo). Ver desenho abaixo.
+
+**Precificação em ETH — volatilidade, nenhuma opção decidida**: (a) valor fixo em ETH,
+reajustado manualmente de vez em quando — mais simples de implementar agora, mas o preço real em
+poder de compra varia com a cotação; (b) cotação via oráculo (Chainlink tem feed ETH/USD na
+Base), consultado só no momento de calcular quanto ETH cobrar pra bater um valor-alvo em dólar.
+Recomendação implícita da conversa: começar por (a), evoluir pra (b) se o volume justificar.
+
+**Saldo em fiat (R$/USD) como fallback**: explicitamente de baixa prioridade — construir primeiro
+o modelo 100% ETH via smart account (não exige tratar fiat, gateway de pagamento, ou nada que se
+pareça com custódia).
+
+**Ideias de fonte de renda (cada uma paga via o mecanismo acima)**:
+1. **Gas sponsorship por uso** — a mais direta, já tem a infra pronta (Paymaster). Cada UserOp
+   patrocinada é medida e cobrada proporcionalmente, só quando o usuário opta por não pagar o
+   próprio gas.
+2. **Integração B3** — a motivação original do brainstorm. Requer CNPJ e certificado mTLS.
+   Cobrado por consolidação/chamada, não assinatura — bate com o próprio modelo de cobrança da
+   B3 pra API de dados de investidor.
+3. **Pinning IPFS além do free tier** — Filebase/Pinata cobram do dono do projeto acima do free
+   tier; repassar (+ margem) pro usuário que precisar de mais espaço. Base técnica já existe:
+   providers de pinning configuráveis (Kubo/PSA) conectados à navegação do Mobile na Sessão 116.
+4. **Verificação/atestação (KYC descentralizado), B2B** — cobrar por consulta quando uma empresa
+   terceira quiser validar identidade via TruthID (depende do item 2 do roadmap de expansão,
+   acima — verifiable credentials/ZK — ainda não implementado).
+5. **IA gerenciada — avaliado e rebaixado a "conveniência", não pilar de receita**: diferente de
+   gas/B3/pinning, não existe barreira técnica real — qualquer usuário pega uma API key grátis
+   (Gemini, por exemplo) e faz o mesmo em minutos. Decisão: manter BYOK grátis pra sempre (como
+   já é hoje), oferecer chave gerenciada como conveniência opcional cobrando só repasse de custo
+   + margem pequena (20-30%), sem esperar que vire receita relevante.
+
+**Session key com limite de gasto — arquitetura pra evitar gas por mensagem (IA), ainda não
+desenhada em detalhe**: uma session key (mecanismo que já está no roadmap — item 3, "delegação
+de acesso temporário") é criada com um teto de gasto em ETH e/ou número máximo de chamadas.
+Enquanto o teto não estoura, o backend de IA aceita chamadas autorizadas por essa session key sem
+exigir uma transação on-chain nova a cada mensagem — a cobrança acontece em lote, no fechamento.
+Precisa decidir: onde fica o registro de "quanto já foi consumido dentro do teto" (on-chain
+custaria gas a cada atualização, anulando o benefício; provavelmente um registro off-chain no
+backend, com a liquidação batendo on-chain só no fechamento do lote). Risco a mapear: o que
+acontece se o backend achar que o teto não estourou mas a session key foi revogada nesse meio
+tempo — precisa de checagem de validade a cada uso, não só no início.
+
+**Token/DAO com moeda própria**: avaliado e **descartado por ora** — risco regulatório alto
+(oferta pública de valor mobiliário), sem tração suficiente pra justificar, risco de prejudicar
+credibilidade pra grants futuros.
+
+**Outras fontes de financiamento mencionadas (fora do mecanismo de taxa acima)**: relay/hosting
+gerenciado (SLA, uptime, suporte); integração B2B/enterprise (dashboard de gestão de
+devices/sessions); **grants** (Base, Ethereum Foundation, Protocol Labs, Gitcoin) como via
+principal de financiamento no estágio atual — não depende de tração de usuários, avalia mais
+qualidade técnica e visão; doações diretas, mantidas como complemento de baixo custo.
+
+**Decisões em aberto (nada decidido ainda)**:
+- Formato final: virar uma Fase nova no `PROJECT_STATE.md`, ou ficar como documento separado
+  referenciado por ele? (Registrado aqui, dentro do Roadmap, por ora — pode virar Fase própria
+  quando/se sair do brainstorm pra implementação real.)
+- Opção (a) ou (b) de precificação ETH/BRL pra começar.
+- Ponte pagamento→liberação pras ações off-chain: confirmação on-chain simples vs. session key
+  com limite de gasto (provavelmente session key pra IA, a decidir caso a caso pras outras).
+- Desenho detalhado da session key com limite de gasto.
+- Se/quando entrar a camada de saldo fiat (R$/USD) — explicitamente de baixa prioridade.
+- Margem/spread exato em cada uma das 4 ideias de receita — nenhum número foi fixado.
+
+**Nada implementado — fica pra quando o dono do projeto quiser rodar um `/plan` de verdade.**
+
+---
+
 ### Interface e identidade visual (UI/UX)
 
 **Quando**: após Fase 4 (Mobile App completo) — pode ser uma Fase 5.5 intercalada com SDKs, ou uma Fase 8 dedicada pós-lançamento. A definir pelo dono do projeto.
@@ -4500,6 +4701,30 @@ autorizações por app
   aprovação, Settings) — fecha por completo a pendência registrada na Sessão 106. Restam em
   aberto, sem relação com `/pin`: validação manual/hardware de toda a frente quando o dono do
   projeto quiser, o checklist de pré-release, e o redeploy pendente do débito #52 (Sessão 118).
+
+### Sessão 121 (continuação) — 2026-07-17: consolidados 2 brainstorms externos (fora do Claude
+Code) no Roadmap — expansão do produto e monetização
+
+- **Contexto**: dono do projeto perguntou se havia pendência registrada sobre 2FA-só-pro-device,
+  passkey e backup do vault — busca em todo o `PROJECT_STATE.md`, na memória entre conversas, e
+  no `PROJECT_STATE.md` do Practice Valuation não achou nada. Confirmado que essas ideias tinham
+  sido discutidas fora do Claude Code e nunca chegaram a virar registro no projeto — achado dois
+  arquivos em `~/Downloads/`: `TruthID - Ideias de Expansao e Roadmap.md` (conversas de
+  2026-06 a 2026-07-01) e `TRUTHID_MONETIZACAO.md` (conversa de 2026-07-17, o próprio arquivo já
+  pedia pra ser colado no `PROJECT_STATE.md`).
+- **Ambos consolidados como novas entradas em "Roadmap de Evoluções Planejadas"** (mesmo lugar
+  onde outros brainstorms externos — Sessões 94, 96, 106 — já vivem antes de virarem `/plan`
+  de verdade): "Ideias de Expansão e Roadmap" (passkey, 2FA/TOTP com a regra de nunca passar
+  pela extensão, backup criptografado exportável, social recovery, verifiable
+  credentials/ZK, sync em lote da extensão, e uma lista de ideias exploratórias) e "Monetização"
+  (taxa de serviço on-chain paga pela smart account em ETH, dentro da mesma UserOperation —
+  modelo de assinatura via Pix→ETH descartado por cair na Lei 14.478/2022 como operação VASP;
+  4 fontes de receita mapeadas; session key com limite de gasto pra IA, ainda não desenhada).
+- **Nenhuma decisão nova tomada, nenhum código tocado** — só registro, pra essas ideias pararem
+  de viver só em arquivos soltos no `~/Downloads` de fora do controle de versão do projeto.
+  Os 2 arquivos originais continuam lá como rascunho, não apagados.
+- **Próximo passo**: nenhum, fica pra quando o dono do projeto quiser rodar um `/plan` de
+  verdade sobre algum item específico de qualquer uma das duas listas.
 
 ---
 
