@@ -5,22 +5,25 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'screens/approval_screen.dart';
 import 'screens/devices_screen.dart';
 import 'screens/scan_screen.dart';
 import 'screens/sessions_screen.dart';
 import 'screens/settings_screen.dart';
-import 'screens/sign_message_approval_screen.dart';
-import 'screens/sign_request_approval_screen.dart';
 import 'screens/vault_screen.dart';
-import 'screens/vault_session_screen.dart';
 import 'screens/wallet_screen.dart';
+import 'services/deep_link_router.dart';
+import 'services/deep_link_service.dart';
 import 'theme.dart';
 
 const _kAppVersion = '1.0.0';
 const _kDonateAddress = '0xB54fe9909D76d98e87a9fD76bDB5C69fABe10265';
 const _kReleasesUrl =
     'https://api.github.com/repos/masterlxz/truthid/releases/latest';
+
+// Precisa existir fora da árvore de widgets: `DeepLinkService` recebe URIs
+// de fora do ciclo normal de build (stream do `app_links`) e precisa
+// conseguir empurrar uma rota mesmo sem um `BuildContext` de widget à mão.
+final navigatorKey = GlobalKey<NavigatorState>();
 
 void main() {
   runApp(const TruthIDApp());
@@ -32,6 +35,7 @@ class TruthIDApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'TruthID',
       theme: appTheme,
       home: const RootScreen(),
@@ -63,11 +67,19 @@ class _RootScreenState extends State<RootScreen> {
   String? _updateVersion;
   String? _updateUrl;
   bool _updateDismissed = false;
+  final _deepLinkService = DeepLinkService();
 
   @override
   void initState() {
     super.initState();
     _checkForUpdate();
+    _deepLinkService.init(navigatorKey);
+  }
+
+  @override
+  void dispose() {
+    _deepLinkService.dispose();
+    super.dispose();
   }
 
   Future<void> _checkForUpdate() async {
@@ -128,34 +140,7 @@ class _RootScreenState extends State<RootScreen> {
       MaterialPageRoute(builder: (_) => const ScanScreen()),
     );
     if (payload == null || !mounted) return;
-
-    final action = payload['action'] as String?;
-
-    if (action == 'truthid-auth') {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => ApprovalScreen(payload: payload)),
-      );
-    } else if (action == 'truthid-vault-session') {
-      Navigator.of(context).push(
-        MaterialPageRoute(builder: (_) => VaultSessionScreen(payload: payload)),
-      );
-    } else if (action == 'truthid-sign-message') {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => SignMessageApprovalScreen(payload: payload),
-        ),
-      );
-    } else if (action == 'truthid-sign-request') {
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => SignRequestApprovalScreen(payload: payload),
-        ),
-      );
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Unrecognized QR: ${action ?? "no action"}')),
-      );
-    }
+    DeepLinkRouter.handlePayload(context, payload);
   }
 
   @override

@@ -1,14 +1,15 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../services/cross_device_delivery_channel.dart';
+import '../services/deep_link_delivery_channel.dart';
 import '../services/device_key_service.dart';
 import '../services/ecies_service.dart';
 import '../services/ipfs_pin_client.dart';
 import '../services/pinning_provider_service.dart';
 import '../services/remote_signer_lan_server.dart';
+import '../services/result_delivery_channel.dart';
 import '../services/vault_lan_server_service.dart';
 import '../theme.dart';
 import '../widgets/info_row.dart';
@@ -41,12 +42,17 @@ bool _isValidPurpose(String purpose) {
 /// (`IpfsPinClient.publishDeadDrop`) pro caso de celular e app terceiro não
 /// estarem na mesma rede — mesmo padrão que a 13.9 já validou pro Vault.
 ///
-/// Schema do QR v1:
+/// Schema do QR v1 (`transport` ausente/`'qr'`):
 ///   { action: 'truthid-sign-message', v: 1, sessionId, ephemeralPubKey,
 ///     expiresAt, appName, purpose }
-/// A mensagem final NUNCA vem pronta do QR — é sempre reconstruída aqui a
-/// partir de appName/purpose, mesmo motivo de domain separation do lado
-/// Rust: um app terceiro não pode escolher a string exata que é assinada.
+/// Schema do deep link (`transport: 'deeplink'`, mesmo aparelho — ver
+/// `DeepLinkService`): igual, menos `ephemeralPubKey` (sem cifra: não há
+/// salto de rede não confiável a proteger), mais `callback` (URI do
+/// esquema do app requisitante pra onde o resultado volta).
+/// A mensagem final NUNCA vem pronta do payload — é sempre reconstruída
+/// aqui a partir de appName/purpose, mesmo motivo de domain separation do
+/// lado Rust: um app terceiro não pode escolher a string exata que é
+/// assinada.
 class SignMessageApprovalScreen extends StatefulWidget {
   final Map<String, dynamic> payload;
   final DeviceKeyService? deviceKeyService;
@@ -54,6 +60,7 @@ class SignMessageApprovalScreen extends StatefulWidget {
   final RemoteSignerLanServer? lanServer;
   final IpfsPinClient? ipfsPinClient;
   final PinningProviderService? pinningProviderService;
+  final ResultDeliveryChannel? deliveryChannel;
 
   const SignMessageApprovalScreen({
     super.key,
@@ -63,6 +70,7 @@ class SignMessageApprovalScreen extends StatefulWidget {
     this.lanServer,
     this.ipfsPinClient,
     this.pinningProviderService,
+    this.deliveryChannel,
   });
 
   @override
@@ -75,6 +83,7 @@ class _SignMessageApprovalScreenState
   late _Status _status;
   String? _sessionId;
   String? _requesterPubKeyHex;
+  Uri? _callbackUri;
   DateTime? _expiresAt;
   String? _appName;
   String? _purpose;
@@ -84,15 +93,18 @@ class _SignMessageApprovalScreenState
   String? _deadDropIpnsName;
   String? _deadDropError;
 
+  late final String _transport;
   late final DeviceKeyService _keyService;
   late final EciesService _ecies;
   late final RemoteSignerLanServer _lanServer;
   late final IpfsPinClient _ipfsPinClient;
   late final PinningProviderService _pinningProviderService;
+  ResultDeliveryChannel? _deliveryChannel;
 
   @override
   void initState() {
     super.initState();
+    _transport = widget.payload['transport'] as String? ?? 'qr';
     _keyService = widget.deviceKeyService ?? DeviceKeyService();
     _ecies = widget.eciesService ?? EciesService();
     _lanServer = widget.lanServer ?? RemoteSignerLanServer();
@@ -101,6 +113,21 @@ class _SignMessageApprovalScreenState
         widget.pinningProviderService ?? PinningProviderService();
 
     _status = _validatePayload() ?? _Status.pending;
+  }
+
+  ResultDeliveryChannel _resolveDeliveryChannel() {
+    final injected = widget.deliveryChannel;
+    if (injected != null) return injected;
+    if (_transport == 'deeplink') {
+      return DeepLinkDeliveryChannel(callbackBaseUri: _callbackUri!);
+    }
+    return CrossDeviceDeliveryChannel(
+      requesterPubKeyHex: _requesterPubKeyHex!,
+      ecies: _ecies,
+      lanServer: _lanServer,
+      ipfsPinClient: _ipfsPinClient,
+      pinningProviderService: _pinningProviderService,
+    );
   }
 
   _Status? _validatePayload() {
@@ -116,10 +143,21 @@ class _SignMessageApprovalScreenState
       return _Status.error;
     }
 
-    final ephemeralPubKey = widget.payload['ephemeralPubKey'] as String?;
-    if (ephemeralPubKey == null || ephemeralPubKey.isEmpty) {
-      _errorMsg = 'Invalid QR: missing ephemeralPubKey.';
-      return _Status.error;
+    if (_transport == 'deeplink') {
+      final callback = widget.payload['callback'] as String?;
+      final callbackUri = callback != null ? Uri.tryParse(callback) : null;
+      if (callbackUri == null || callbackUri.scheme.isEmpty) {
+        _errorMsg = 'Invalid request: missing or malformed callback.';
+        return _Status.error;
+      }
+      _callbackUri = callbackUri;
+    } else {
+      final ephemeralPubKey = widget.payload['ephemeralPubKey'] as String?;
+      if (ephemeralPubKey == null || ephemeralPubKey.isEmpty) {
+        _errorMsg = 'Invalid QR: missing ephemeralPubKey.';
+        return _Status.error;
+      }
+      _requesterPubKeyHex = ephemeralPubKey;
     }
 
     final expiresAtMs = widget.payload['expiresAt'];
@@ -147,7 +185,6 @@ class _SignMessageApprovalScreenState
     }
 
     _sessionId = sessionId;
-    _requesterPubKeyHex = ephemeralPubKey;
     _expiresAt = expiresAt;
     _appName = appName;
     _purpose = purpose;
@@ -175,11 +212,15 @@ class _SignMessageApprovalScreenState
       _deadDropError = null;
     });
 
-    unawaited(
-      VaultLanServerService.getLocalIpAddresses()
-          .then((ips) => setState(() => _localIps = ips))
-          .catchError((_) => <String>[]),
-    );
+    // Só faz sentido fora do caminho deep link — sem rede envolvida, não há
+    // IP local nenhum pra mostrar.
+    if (_transport != 'deeplink') {
+      unawaited(
+        VaultLanServerService.getLocalIpAddresses()
+            .then((ips) => setState(() => _localIps = ips))
+            .catchError((_) => <String>[]),
+      );
+    }
 
     try {
       final expiresAt = _expiresAt!;
@@ -191,47 +232,27 @@ class _SignMessageApprovalScreenState
         return;
       }
 
-      final plaintext = Uint8List.fromList(utf8.encode(jsonEncode(result)));
-      final encryptedBlob =
-          await _ecies.encrypt(plaintext, _requesterPubKeyHex!);
-
-      // Mesma decisão travada da 13.9: o dead-drop corre em paralelo com o
-      // LAN, nunca como fallback sequencial, e nunca lança — uma falha (sem
-      // provider Kubo configurado, Kubo fora do ar) não pode derrubar o
-      // transporte LAN, que já funciona sozinho.
-      final deadDropFuture = _publishDeadDrop(encryptedBlob);
-
-      final served = await _lanServer.serveOnce(
-        encryptedBlob: encryptedBlob,
+      _deliveryChannel ??= _resolveDeliveryChannel();
+      final delivered = await _deliveryChannel!.deliver(
+        result: result,
         sessionId: _sessionId!,
         expiresAt: expiresAt,
       );
-      await deadDropFuture;
 
       if (!mounted) return;
-      setState(() => _status = served ? _Status.sent : _Status.timeout);
+      setState(() {
+        _status = delivered.outcome == DeliveryOutcome.sent
+            ? _Status.sent
+            : _Status.timeout;
+        _deadDropIpnsName = delivered.deadDropIpnsName;
+        _deadDropError = delivered.deadDropError;
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _status = _Status.error;
         _errorMsg = 'Failed to respond to the app: $e';
       });
-    }
-  }
-
-  Future<void> _publishDeadDrop(Uint8List encryptedBlob) async {
-    try {
-      final providers = await _pinningProviderService.load();
-      final ipnsName = await _ipfsPinClient.publishDeadDrop(
-        _sessionId!,
-        encryptedBlob,
-        providers,
-      );
-      if (!mounted) return;
-      setState(() => _deadDropIpnsName = ipnsName);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _deadDropError = '$e');
     }
   }
 

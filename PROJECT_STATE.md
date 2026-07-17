@@ -4251,6 +4251,62 @@ reais achados e corrigidos na descoberta LAN da extensão
   (celular desconectou do adb depois da validação da 13.9) — mudança pequena, mesmo padrão do
   botão irmão já em produção, coberta por teste de widget.
 
+### Sessão 117 — 2026-07-17: deep link app-to-app pro sign-message/sign-request, planejado e
+implementado, validado em hardware real
+
+- **Objetivo**: desenhar e implementar a ideia registrada na Sessão 114 — quando o app
+  requisitante também é mobile e está no mesmo celular, escanear QR na própria tela não faz
+  sentido; o caminho natural é um handoff via deep link/URL scheme (mesmo padrão de "Sign in
+  with Google"). `/plan` rodado antes de codar (ver plano completo salvo em
+  `~/.claude/plans/reactive-gathering-moon.md`), com 2 decisões travadas antes de desenhar: só
+  Android (sem iOS, nada pra testar neste ambiente) e uma tela de auto-teste embutida no
+  próprio TruthID (o Practice Valuation, único app requisitante de referência que existe, é só
+  desktop — não tem lado mobile pra testar o round-trip contra um requisitante real).
+- **Schema**: `truthid://sign-message`/`truthid://sign-request`, query params espelhando o JSON
+  do QR menos `ephemeralPubKey` (sem cifra — mesmo aparelho, sem salto de rede não confiável),
+  mais `callback` (URI do esquema do app requisitante pra onde o resultado volta).
+- **Unificação com o caminho QR, sem duplicar as telas de aprovação**: `_validatePayload()` de
+  `sign_message_approval_screen.dart`/`sign_request_approval_screen.dart` ganhou um branch em
+  `payload['transport']` (default `'qr'`, preserva 100% o comportamento antigo). Extraída uma
+  abstração nova, `ResultDeliveryChannel` (`mobile/lib/services/result_delivery_channel.dart`),
+  com duas implementações: `CrossDeviceDeliveryChannel` (corpo movido *verbatim* do antigo
+  `_deliver()` — ECIES+LAN+dead-drop, zero mudança de comportamento) e
+  `DeepLinkDeliveryChannel` (sem cifra, só monta a callback URI com os campos do `result` e
+  chama `launchUrl`). Cada tela ganhou um único param novo opcional, `deliveryChannel`.
+- **Roteamento**: dispatch de `payload['action']` (antes hardcoded dentro de
+  `main.dart::_openScanner`) extraído pra `DeepLinkRouter.handlePayload`, reusado tanto pelo
+  caminho QR quanto pelo deep link. Novo `DeepLinkService` (pacote `app_links: ^6.4.1`,
+  `getInitialLink()`/`uriLinkStream` confirmados via leitura direta do pacote resolvido, não só
+  assumidos) decide pelo `uri.host` se é um pedido novo (`sign-message`/`sign-request`, monta o
+  payload e chama o roteador) ou o callback do auto-teste (`deeplink-test-callback`, mostra os
+  params recebidos). Guard contra disparo duplo do `app_links` (cold-start + primeiro evento do
+  stream às vezes entregam o mesmo URI): set em memória de `sessionId`s já despachados —
+  relevante porque despachar um `sign-request` duas vezes seria execução duplicada de verdade,
+  não só um glitch visual. `main.dart` ganhou o `navigatorKey` que faltava (nada usava até
+  então) pra `DeepLinkService` conseguir empurrar rota sem `BuildContext` de widget à mão.
+- **`AndroidManifest.xml`**: novo intent-filter (esquema `truthid`, sem `android:host` — o
+  dispatch por host acontece em Dart) na mesma (única) `MainActivity` do app.
+- **Auto-teste**: `mobile/lib/screens/deeplink_self_test_screen.dart`, acessível de Settings
+  atrás de `kDebugMode`, dispara um deep link pra si mesmo com `callback=truthid://
+  deeplink-test-callback` — fecha o ciclo saída→entrada→aprovação→entrega→callback→resultado
+  num único aparelho.
+- **Testado**: `flutter analyze` limpo (só infos pré-existentes), `flutter test` **223/223**
+  (207 antigos + 16 novos — os 28 testes originais das telas de aprovação continuam batendo
+  sem alteração nenhuma, provando que o caminho QR ficou intacto). `flutter build apk --debug`
+  compila de verdade (plugin nativo `app_links` incluso).
+- **Validado em hardware real** (celular físico, reconectado via adb depois de expirar):
+  cold-start e warm-start de `truthid://sign-message` via `adb shell am start`, Approve real
+  (assinatura local) → `Sent` → callback voltou pro próprio app → tela de resultado mostrou
+  `status`/`message`/`signature` recebidos, fechando o ciclo completo de ponta a ponta.
+  `truthid://sign-request` testado via Reject (deliberado, pra não gastar gas de verdade) —
+  roteamento, parsing de `dest`/`value`/`callData`/`functionSignature` e entrega confirmados.
+  Achado no caminho, não é bug do app: `adb shell am start -d "...&...&..."` precisa de aspas
+  simples ao redor da URI dentro de uma string entre aspas duplas locais (`adb shell "am start
+  ... -d '...'"`) — tentativas com `\&` escapado geram uma URI corrompida no dispositivo (o
+  `&` chega literal como `\&`, quebrando o parse de query string) por causa da dupla
+  re-interpretação de shell (local + remoto) que `adb shell` faz.
+- **Nenhum erro/crash no logcat** durante os testes reais.
+
 ---
 
 ## Como Usar Este Arquivo

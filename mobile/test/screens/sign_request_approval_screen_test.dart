@@ -14,6 +14,7 @@ import 'package:truthid_mobile/services/ipfs_pin_client.dart';
 import 'package:truthid_mobile/services/local_storage_service.dart';
 import 'package:truthid_mobile/services/pinning_provider_service.dart';
 import 'package:truthid_mobile/services/remote_signer_lan_server.dart';
+import 'package:truthid_mobile/services/result_delivery_channel.dart';
 import 'package:truthid_mobile/services/session_creator.dart';
 
 class MockBlockchainService extends Mock implements BlockchainService {}
@@ -33,6 +34,9 @@ class MockIpfsPinClient extends Mock implements IpfsPinClient {}
 
 class MockPinningProviderService extends Mock
     implements PinningProviderService {}
+
+class MockResultDeliveryChannel extends Mock
+    implements ResultDeliveryChannel {}
 
 // keccak256("transfer(address,uint256)")[0:4] — mesma técnica que a tela usa
 // pra verificar o seletor declarado contra o callData recebido.
@@ -90,6 +94,7 @@ void main() {
     registerFallbackValue(BigInt.zero);
     registerFallbackValue(DateTime.now());
     registerFallbackValue(<PinningProvider>[]);
+    registerFallbackValue(<String, dynamic>{});
   });
 
   setUp(() {
@@ -408,6 +413,109 @@ void main() {
       expect(find.text('Sent'), findsOneWidget);
       expect(find.textContaining('You rejected this request'),
           findsOneWidget);
+    });
+  });
+
+  group('transport: deeplink', () {
+    Map<String, dynamic> deepLinkPayload({
+      String sessionId = 'session-dl',
+      String? callback = 'someapp://truthid-result',
+      DateTime? expiresAt,
+      String appName = 'Practice Valuation',
+      String? dest,
+      String? value = '1000',
+      String? callData,
+      String? functionSignature = 'transfer(address,uint256)',
+    }) =>
+        {
+          'action': 'truthid-sign-request',
+          'transport': 'deeplink',
+          'v': 1,
+          'sessionId': sessionId,
+          'expiresAt': (expiresAt ?? farFuture).millisecondsSinceEpoch,
+          'appName': appName,
+          'dest': dest ?? destAddress.hexEip55,
+          'value': value,
+          'callData': callData ?? '$_transferSelector${'ab' * 64}',
+          'functionSignature': functionSignature,
+          if (callback != null) 'callback': callback,
+        };
+
+    Widget buildDeepLinkScreen(
+      Map<String, dynamic> payload, {
+      MockResultDeliveryChannel? deliveryChannel,
+    }) {
+      return MaterialApp(
+        home: SignRequestApprovalScreen(
+          payload: payload,
+          sessionCreator: mockSessionCreator,
+          blockchainService: mockBlockchain,
+          localStorageService: mockStorage,
+          bundlerConfigService: mockBundlerConfig,
+          eciesService: mockEcies,
+          lanServer: mockLanServer,
+          ipfsPinClient: mockIpfsPinClient,
+          pinningProviderService: mockPinningProviderService,
+          deliveryChannel: deliveryChannel,
+        ),
+      );
+    }
+
+    testWidgets('payload sem callback mostra erro (não exige ephemeralPubKey)',
+        (tester) async {
+      await tester.pumpWidget(buildDeepLinkScreen(
+        deepLinkPayload(callback: null),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Invalid request'), findsOneWidget);
+    });
+
+    testWidgets(
+        'Approve usa o deliveryChannel injetado em vez de ECIES/LAN, mostra "Sent"',
+        (tester) async {
+      final mockDelivery = MockResultDeliveryChannel();
+      when(() => mockSessionCreator.executeArbitraryCall(
+            smartAccountAddress: any(named: 'smartAccountAddress'),
+            dest: any(named: 'dest'),
+            value: any(named: 'value'),
+            innerCallData: any(named: 'innerCallData'),
+          )).thenAnswer((_) async => const SessionCreationResult(
+            userOpHash: '0xUserOpHashXYZ',
+            transactionHash: '0xTxHash',
+          ));
+      when(() => mockDelivery.deliver(
+            result: any(named: 'result'),
+            sessionId: any(named: 'sessionId'),
+            expiresAt: any(named: 'expiresAt'),
+          )).thenAnswer(
+        (_) async => const DeliveryResult(outcome: DeliveryOutcome.sent),
+      );
+
+      await tester.pumpWidget(buildDeepLinkScreen(
+        deepLinkPayload(),
+        deliveryChannel: mockDelivery,
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Approve'));
+      await tester.pumpAndSettle();
+
+      verify(() => mockDelivery.deliver(
+            result: {
+              'status': 'executed',
+              'userOpHash': '0xUserOpHashXYZ',
+              'transactionHash': '0xTxHash',
+            },
+            sessionId: 'session-dl',
+            expiresAt: any(named: 'expiresAt'),
+          )).called(1);
+      verifyNever(() => mockEcies.encrypt(any(), any()));
+      verifyNever(() => mockLanServer.serveOnce(
+            encryptedBlob: any(named: 'encryptedBlob'),
+            sessionId: any(named: 'sessionId'),
+            expiresAt: any(named: 'expiresAt'),
+          ));
+      expect(find.text('Sent'), findsOneWidget);
     });
   });
 }

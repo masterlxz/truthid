@@ -10,6 +10,7 @@ import 'package:truthid_mobile/services/ecies_service.dart';
 import 'package:truthid_mobile/services/ipfs_pin_client.dart';
 import 'package:truthid_mobile/services/pinning_provider_service.dart';
 import 'package:truthid_mobile/services/remote_signer_lan_server.dart';
+import 'package:truthid_mobile/services/result_delivery_channel.dart';
 
 class MockDeviceKeyService extends Mock implements DeviceKeyService {}
 
@@ -22,6 +23,9 @@ class MockIpfsPinClient extends Mock implements IpfsPinClient {}
 
 class MockPinningProviderService extends Mock
     implements PinningProviderService {}
+
+class MockResultDeliveryChannel extends Mock
+    implements ResultDeliveryChannel {}
 
 void main() {
   late MockDeviceKeyService mockKeyService;
@@ -55,6 +59,7 @@ void main() {
     registerFallbackValue(Uint8List(0));
     registerFallbackValue(DateTime.now());
     registerFallbackValue(<PinningProvider>[]);
+    registerFallbackValue(<String, dynamic>{});
   });
 
   setUp(() {
@@ -269,6 +274,102 @@ void main() {
 
       verifyNever(() => mockKeyService.signChallenge(any()));
       verify(() => mockEcies.encrypt(any(), validEphemeralPubKey)).called(1);
+      expect(find.text('Sent'), findsOneWidget);
+    });
+  });
+
+  group('transport: deeplink', () {
+    Map<String, dynamic> deepLinkPayload({
+      String sessionId = 'session-dl',
+      String? callback = 'someapp://truthid-result',
+      DateTime? expiresAt,
+      String appName = 'Practice Valuation',
+      String purpose = 'vault-sync-key',
+    }) =>
+        {
+          'action': 'truthid-sign-message',
+          'transport': 'deeplink',
+          'v': 1,
+          'sessionId': sessionId,
+          'expiresAt': (expiresAt ?? farFuture).millisecondsSinceEpoch,
+          'appName': appName,
+          'purpose': purpose,
+          if (callback != null) 'callback': callback,
+        };
+
+    Widget buildDeepLinkScreen(
+      Map<String, dynamic> payload, {
+      MockResultDeliveryChannel? deliveryChannel,
+    }) {
+      return MaterialApp(
+        home: SignMessageApprovalScreen(
+          payload: payload,
+          deviceKeyService: mockKeyService,
+          eciesService: mockEcies,
+          lanServer: mockLanServer,
+          ipfsPinClient: mockIpfsPinClient,
+          pinningProviderService: mockPinningProviderService,
+          deliveryChannel: deliveryChannel,
+        ),
+      );
+    }
+
+    testWidgets('payload sem callback mostra erro (não exige ephemeralPubKey)',
+        (tester) async {
+      await tester.pumpWidget(buildDeepLinkScreen(
+        deepLinkPayload(callback: null),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Invalid request'), findsOneWidget);
+    });
+
+    testWidgets('callback malformada mostra erro', (tester) async {
+      await tester.pumpWidget(buildDeepLinkScreen(
+        deepLinkPayload(callback: 'not a uri'),
+      ));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Invalid request'), findsOneWidget);
+    });
+
+    testWidgets(
+        'Approve usa o deliveryChannel injetado em vez de ECIES/LAN, mostra "Sent"',
+        (tester) async {
+      final mockDelivery = MockResultDeliveryChannel();
+      when(() => mockKeyService.signChallenge(any()))
+          .thenAnswer((_) async => '0xdeadbeef');
+      when(() => mockDelivery.deliver(
+            result: any(named: 'result'),
+            sessionId: any(named: 'sessionId'),
+            expiresAt: any(named: 'expiresAt'),
+          )).thenAnswer(
+        (_) async => const DeliveryResult(outcome: DeliveryOutcome.sent),
+      );
+
+      await tester.pumpWidget(buildDeepLinkScreen(
+        deepLinkPayload(),
+        deliveryChannel: mockDelivery,
+      ));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Approve'));
+      await tester.pumpAndSettle();
+
+      verify(() => mockDelivery.deliver(
+            result: {
+              'status': 'signed',
+              'message':
+                  'TruthID Message Signing: Practice Valuation:vault-sync-key',
+              'signature': '0xdeadbeef',
+            },
+            sessionId: 'session-dl',
+            expiresAt: any(named: 'expiresAt'),
+          )).called(1);
+      verifyNever(() => mockEcies.encrypt(any(), any()));
+      verifyNever(() => mockLanServer.serveOnce(
+            encryptedBlob: any(named: 'encryptedBlob'),
+            sessionId: any(named: 'sessionId'),
+            expiresAt: any(named: 'expiresAt'),
+          ));
       expect(find.text('Sent'), findsOneWidget);
     });
   });

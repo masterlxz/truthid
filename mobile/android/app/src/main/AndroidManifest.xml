@@ -25,6 +25,17 @@
                 <action android:name="android.intent.action.MAIN"/>
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
+            <!-- Deep link app-to-app (Sessão 116): esquema custom pra apps
+                 requisitantes no mesmo aparelho abrirem TruthID direto,
+                 sem passar por QR. Sem android:host — o dispatch por host
+                 (sign-request/sign-message/deeplink-test-callback) acontece
+                 em Dart, ver DeepLinkService. -->
+            <intent-filter android:autoVerify="false">
+                <action android:name="android.intent.action.VIEW"/>
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+                <data android:scheme="truthid"/>
+            </intent-filter>
         </activity>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
