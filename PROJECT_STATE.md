@@ -4050,6 +4050,61 @@ cross-device do `/sign-request`
   o Practice Valuation (hoje só o Mobile publica; o requisitante ainda só sabe consumir LAN), e
   `/pin` continua como pendência separada, não atacada.
 
+---
+
+### Sessão 113 — 2026-07-16: dead-drop IPFS/IPNS pro app requisitante (Practice Valuation)
+
+- **Objetivo**: dono do projeto pediu pra fazer a fatia 2 (dead-drop IPFS/IPNS) do lado
+  requisitante antes de testar com o celular físico, pra rodar **um único teste de hardware
+  cobrindo os dois transportes de uma vez** em vez de dois separados. `/plan` rodado antes de
+  codar. Lado que publica (Mobile) não muda — só o lado que consome (Practice Valuation) precisa
+  recalcular o mesmo nome IPNS a partir do `sessionId` e tentar buscar.
+- **Risco principal mitigado com um vetor cruzado já existente**: a derivação do nome IPNS
+  (HKDF-SHA256 → seed Ed25519 → protobuf libp2p → multihash identity → CIDv1 → base36) nunca
+  tinha sido implementada em Rust neste projeto — mas já tinha um vetor validado contra um Kubo
+  real, reaproveitado como teste (`sessionIdHex = "000102030405060708090a0b0c0d0e0f"` →
+  `k51qzi5uqu5diyq5i3xkj8knjqw2jewheim4x3ghwm0a8bh7t6ty3zv9x5f3oh"`, o mesmo par usado em
+  `mobile/test/services/ipns_key_service_test.dart` e `extension/src/session/ipnsKey.test.ts`).
+  **Bateu de primeira** — o port manual (protobuf/multihash/CID montados à mão, sem crate, mesma
+  decisão consciente que o Dart já tinha tomado; só `ed25519-dalek` novo como dependência de
+  verdade) ficou byte-a-byte compatível com Kubo/Dart/TS.
+- **Novo `src/ipns_key.rs`**: `compute_ipns_name(session_id_hex)`, port direto de
+  `computeIpnsName` (`ipnsKey.ts`)/`ipns_key_service.dart`, só a metade pública da derivação (o
+  Practice Valuation nunca precisa da chave privada nem importa nada num Kubo, isso é trabalho só
+  do Mobile). Base36 "estilo base58" implementado à mão (algoritmo clássico de multiply-add sobre
+  um vetor de dígitos, evita depender de crate de bignum pra um valor usado uma vez só).
+- **Novo `src/dead_drop.rs`**: `try_fetch_dead_drop(session_id_hex, client)`, port de
+  `tryFetchDeadDrop` (`extension/src/session/deadDropPolling.ts`) — gateway público `ipfs.io`,
+  query `cachebust`, timeout 10s, qualquer status não-200 ou erro de rede vira `None`, nunca
+  lança (o gateway responde `500`, não `404`, quando o nome ainda não propagou).
+- **`commands/truthid.rs`**: `await_cross_device_sign_request_response` ganhou um segundo
+  transporte em paralelo com cadências diferentes — LAN a cada 2s (como já era), dead-drop a
+  cada ~20s (propagação de IPNS leva até 1-2min, bater num gateway público a cada 2s seria
+  agressivo demais; mesma ordem de grandeza do `chrome.alarms` da extensão, 1/min). O primeiro
+  transporte que achar um blob decide; os dois entregam exatamente o mesmo formato de blob ECIES,
+  mesmo `ecies::decrypt`/`TruthIdSignResult` de sempre.
+- **Frontend**: só cosmético — "Waiting for your phone..." virou "Waiting for your phone (LAN +
+  IPFS backup)...", deixando claro pro usuário que os dois transportes estão ativos.
+- **Testes**: `cargo test` 64/64 (5 novos, todos em `ipns_key.rs`, incluindo o vetor cruzado).
+  `cargo check`/`cargo clippy` limpos (mesmos avisos pré-existentes). `tsc --noEmit` limpo.
+- **Validado nesta sessão com clique real** (mesmo padrão da Sessão 112): `./dev.sh` subido de
+  novo, QR renderizado, texto novo "LAN + IPFS backup" confirmado na tela, e a varredura seguiu
+  rodando establemente por 15s+ sem nenhum erro/panic nos logs — confirma que a primeira
+  tentativa de dead-drop (que falha graciosamente, já que não existe sessão publicada de
+  verdade) não quebra o laço nem trava a UI.
+- **Achado no caminho**: a edição anterior (Sessão 112) tinha derrubado sem querer o cabeçalho
+  "## Como Usar Este Arquivo" no fim deste arquivo — corrigido nesta sessão.
+- **Não validado nesta sessão** (mesma pendência, sem mudança): troca real com celular físico —
+  agora cobrindo os dois transportes de uma vez, é o único passo que falta pra fechar de vez a
+  pendência de ponta a ponta aberta desde a Sessão 108.
+- **Próximo passo**: dono do projeto rodar `./dev.sh` com o celular físico por perto e escanear o
+  QR de verdade — testa LAN e dead-drop no mesmo teste de hardware. `/pin` continua como
+  pendência separada, não atacada.
+
+---
+
+## Como Usar Este Arquivo
+
 1. **Ao começar uma sessão**: Diga ao Claude Code "leia o PROJECT_STATE.md e me ajude a continuar"
 2. **Ao terminar uma sessão**: O Claude atualiza o Log de Sessões e marca etapas concluídas
 3. **Ao tomar uma decisão**: Registrar em "Decisões de Arquitetura em Aberto"
