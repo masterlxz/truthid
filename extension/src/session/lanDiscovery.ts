@@ -6,10 +6,16 @@
  * por padrão, então esse truque retorna lixo silenciosamente em builds
  * atuais.
  *
- * Mecanismo primário: `chrome.system.network.getNetworkInterfaces()` (só
- * Chrome/Edge — Firefox não implementa essa API, ver `wxt.config.ts`).
- * Fallback (Firefox sempre, Chrome também se o sweep automático não achar
- * nada): IP digitado manualmente pelo usuário (`fetchSessionBlob` direto).
+ * Mecanismo primário: `chrome.system.network.getNetworkInterfaces()`.
+ * Firefox não implementa essa API (ver `wxt.config.ts`) — **e o Brave
+ * também não**, apesar de ser Chromium: `chrome.system.*` inteiro vem
+ * desativado por padrão (proteção anti-fingerprinting), `chrome.system`
+ * existe mas fica `{}` mesmo com a permissão `system.network` declarada e
+ * concedida (achado validando a Fase 13.9 em hardware real, Sessão 115 —
+ * `getLocalIpsViaChromeApi` já tratava isso sem crashar, só nunca tinha sido
+ * confirmado *por que* o sweep sempre falhava no Brave). Fallback (Firefox e
+ * Brave sempre, Chrome/Edge de verdade também se o sweep não achar nada): IP
+ * digitado manualmente pelo usuário (`fetchSessionBlob` direto).
  *
  * Lista de portas espelhada em
  * `mobile/lib/services/vault_lan_server_service.dart` — as duas precisam
@@ -42,6 +48,17 @@ type ChromeWithSystemNetwork = typeof chrome & {
   };
 };
 
+// Detecção síncrona (sem round-trip) de se `chrome.system.network` está
+// realmente disponível — usada pela UI pra não prometer uma busca automática
+// que o navegador nunca vai conseguir fazer (Brave, ver comentário no topo
+// do arquivo). `sweepLan`/`getLocalIpsViaChromeApi` continuam funcionando
+// sem crash mesmo sem essa checagem (só devolvem `[]`/`null`), isso aqui é
+// puramente pra dar uma mensagem honesta ao usuário antes de tentar.
+export function isNetworkDiscoverySupported(): boolean {
+  const chromeApi = globalThis.chrome as ChromeWithSystemNetwork | undefined;
+  return typeof chromeApi?.system?.network?.getNetworkInterfaces === 'function';
+}
+
 export async function fetchSessionBlob(
   host: string,
   port: number,
@@ -64,6 +81,21 @@ export async function fetchSessionBlob(
   }
 }
 
+// Prefixos de nome de interfaces virtuais/container (Docker, libvirt, VirtualBox,
+// VPN...) — nunca é onde o celular está. Sem esse filtro, `sweepLan` gasta a
+// maior parte do orçamento de tempo varrendo essas sub-redes (ex: docker0 em
+// 172.17.0.0/16, sempre presente numa máquina de dev com Docker rodando) antes
+// de alcançar a rede Wi-Fi real — na prática, isso fazia o QR (TTL de 3min)
+// expirar antes do sweep automático chegar na sub-rede certa (achado validando
+// a Fase 13.9 em hardware real).
+const VIRTUAL_INTERFACE_PREFIXES = [
+  'docker', 'br-', 'veth', 'virbr', 'vmnet', 'vboxnet', 'tun', 'tap', 'zt', 'utun',
+];
+
+function isVirtualInterface(name: string): boolean {
+  return VIRTUAL_INTERFACE_PREFIXES.some((prefix) => name.startsWith(prefix));
+}
+
 /** IPs locais (IPv4) reportados pela API real de extensão — só Chrome/Edge. */
 export async function getLocalIpsViaChromeApi(): Promise<string[]> {
   const chromeApi = globalThis.chrome as ChromeWithSystemNetwork | undefined;
@@ -73,6 +105,7 @@ export async function getLocalIpsViaChromeApi(): Promise<string[]> {
   return new Promise((resolve) => {
     network.getNetworkInterfaces((interfaces) => {
       const ipv4 = interfaces
+        .filter((iface) => !isVirtualInterface(iface.name))
         .map((iface) => iface.address)
         .filter((address) => /^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(address));
       resolve(ipv4);

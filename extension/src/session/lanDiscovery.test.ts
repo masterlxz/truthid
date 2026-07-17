@@ -1,5 +1,10 @@
-import { describe, expect, it, vi } from 'vitest';
-import { CANDIDATE_PORTS, subnetHosts, sweepLan } from './lanDiscovery';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  CANDIDATE_PORTS,
+  getLocalIpsViaChromeApi,
+  subnetHosts,
+  sweepLan,
+} from './lanDiscovery';
 
 describe('subnetHosts', () => {
   it('enumerates all 254 hosts of the /24', () => {
@@ -11,6 +16,36 @@ describe('subnetHosts', () => {
 
   it('returns empty for a malformed IP', () => {
     expect(subnetHosts('not-an-ip')).toEqual([]);
+  });
+});
+
+describe('getLocalIpsViaChromeApi', () => {
+  afterEach(() => {
+    // @ts-expect-error -- só existe em teste, chrome não é global real aqui
+    delete globalThis.chrome;
+  });
+
+  it('exclui interfaces virtuais (Docker, libvirt, VPN...) e devolve só as reais', async () => {
+    const interfaces = [
+      { name: 'docker0', address: '172.17.0.1', prefixLength: 16 },
+      { name: 'br-3be9e3775796', address: '172.18.0.1', prefixLength: 16 },
+      { name: 'veth1234abcd', address: '172.19.0.5', prefixLength: 16 },
+      { name: 'wlp0s20f3', address: '192.168.1.53', prefixLength: 24 },
+    ];
+    // Mock mínimo da API real de extensão (chrome.system.network não existe
+    // no @types/chrome padrão — mesma razão do type local em lanDiscovery.ts).
+    const fakeChrome = {
+      system: {
+        network: {
+          getNetworkInterfaces: (cb: (ifaces: typeof interfaces) => void) => cb(interfaces),
+        },
+      },
+    };
+    globalThis.chrome = fakeChrome as unknown as typeof chrome;
+
+    const ips = await getLocalIpsViaChromeApi();
+
+    expect(ips).toEqual(['192.168.1.53']);
   });
 });
 

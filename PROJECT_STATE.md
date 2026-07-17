@@ -4190,6 +4190,57 @@ subestimava o `verificationGasLimit` na estimativa de gas
   celular). Resultado: `Status: executed` com `userOpHash` e `transactionHash` reais preenchidos
   — **sem AA26 desta vez**. Fecha, com validação real, a pendência de gas aberta na Sessão 114.
 
+### Sessão 116 — 2026-07-17: Vault 13.9 validado em hardware real (fecha a Fase 13) — 2 bugs
+reais achados e corrigidos na descoberta LAN da extensão
+
+- **Objetivo**: dono do projeto escolheu, entre as opções abertas pela Sessão 114/115, validar
+  o Vault 13.9 (LAN/dead-drop extensão↔celular) em hardware real — único item que faltava pra
+  fechar a Fase 13 de verdade.
+- **Pré-requisito descoberto na hora**: a identidade de teste não tinha nenhum perfil criado
+  (`No profiles created yet`), e o Mobile não conseguia criar um porque `canWriteVault` nunca
+  tinha sido concedido a esse device — os dois exigem publicar no `VaultRegistry`. Criar o
+  perfil "Test" + marcar a entrada existente + conceder a permissão foram feitos pelo Desktop
+  (`VaultManagement.tsx`), mas publicar esbarrou em 3 bloqueios reais em cascata, todos
+  resolvidos na própria sessão: (1) `identityId` não resolvia sem wallet conectada — conectado
+  o Ledger físico do dono do projeto; (2) nenhum provider de pinning configurado além do Kubo
+  local (`http://localhost:5001`), que não estava rodando — subido com `ipfs daemon`; (3) o
+  botão "Publicar via device key (sem Ledger)" exige `~/.truthid/bundler_config.json` (segredo
+  do dono do projeto, não configurado) — contornado usando o botão "Enviar" normal
+  (`handleEnviar`), que assina direto com o Ledger via `writeContract`, sem precisar de bundler.
+  Confirmado on-chain via `cast call getVault`/`hasVault` (não só a UI, que ficou com cache
+  desatualizado): versão 3 publicada, timestamp batendo com o momento da confirmação no Ledger.
+  **Primeira publicação de vault real via Ledger físico confirmada nesta sessão** — as validações
+  anteriores (Sessão 90) nunca tinham chegado a confirmar esse caminho especificamente em
+  hardware, só o pipeline de publicação em geral.
+- **Descoberta automática de LAN falhou repetidamente — 2 causas raiz reais, não uma**:
+  1. `sweepLan` varre o `/24` de **todas** as interfaces que `chrome.system.network.
+     getNetworkInterfaces()` devolve, sem filtrar — numa máquina de dev com Docker rodando isso
+     inclui `docker0`/`br-*` (172.17.0.0/16, 172.18.0.0/16), gastando parte do orçamento de
+     tempo em sub-redes que nunca teriam o celular. Corrigido em
+     `extension/src/session/lanDiscovery.ts`: novo filtro por prefixo de nome de interface
+     (`docker`, `br-`, `veth`, `virbr`, `vmnet`, `vboxnet`, `tun`, `tap`, `zt`, `utun`) antes de
+     montar a lista de IPs locais. Teste novo cobrindo o filtro.
+  2. **Achado maior**: o Brave (o navegador usado pra rodar a extensão neste ambiente) **desativa
+     o namespace inteiro `chrome.system.*`** por proteção anti-fingerprinting — confirmado ao
+     vivo no DevTools (`Object.keys(chrome.system)` → `[]`, mesmo com `system.network` declarado
+     e concedido no manifest). `getLocalIpsViaChromeApi` já não crashava nesse caso (guard
+     `if (!network) return []`), mas a UI escondia isso atrás da mesma mensagem genérica de uma
+     busca que de fato rodou e não achou nada — enganoso. Corrigido: nova função exportada
+     `isNetworkDiscoverySupported()` checada antes de tentar, com mensagem explícita
+     ("this is expected on Brave — it disables that API for privacy") tanto no texto inicial
+     quanto no clique de "Find". **Não é um bug que dá pra corrigir no código** — é uma decisão
+     de privacidade do navegador; o fallback manual de IP (já existia, desenhado desde a Sessão
+     97) é o caminho correto e permanente pra usuários Brave, não um caminho degradado
+     temporário.
+- **Entrega LAN validada de ponta a ponta com clique real**: usando o fallback manual de IP
+  (celular físico → `vault_session_screen.dart` → `VaultLanServerService` → extensão via IP
+  digitado à mão), a entrada `github.com` marcada no perfil "Test" chegou decifrada na extensão
+  (`Username: teste@teste.com`, senha mascarada, botões Copy). **Fecha a pendência de validação
+  E2E da 13.9 aberta desde a Sessão 99, e com ela a Fase 13 inteira do Vault.**
+- `npx vitest run` 19/19 (4 novos), `npx tsc --noEmit` limpo na extensão.
+- **Ambiente restaurado ao fim da sessão**: instância de teste do Brave, Desktop nativo e
+  `ipfs daemon` (subido só pra esta validação) encerrados; nenhum container Docker deixado rodando.
+
 ---
 
 ## Como Usar Este Arquivo

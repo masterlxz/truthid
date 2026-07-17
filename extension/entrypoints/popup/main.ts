@@ -4,6 +4,7 @@ import { decrypt } from '../../src/crypto/ecies';
 import {
   CANDIDATE_PORTS,
   fetchSessionBlob,
+  isNetworkDiscoverySupported,
   sweepLan,
 } from '../../src/session/lanDiscovery';
 import {
@@ -83,9 +84,13 @@ let currentState: SessionState | null = null;
 async function showQr(state: SessionState): Promise<void> {
   els.qrSection.hidden = false;
   els.entriesSection.hidden = true;
-  els.statusText.textContent =
-    'A backup delivery is already trying in the background — click "Find" ' +
-    "for a faster local-network delivery once you've scanned the code.";
+  els.statusText.textContent = isNetworkDiscoverySupported()
+    ? 'A backup delivery is already trying in the background — click "Find" ' +
+      "for a faster local-network delivery once you've scanned the code."
+    : "Your browser doesn't support automatic local-network discovery " +
+      '(this is expected on Brave — it disables that API for privacy). ' +
+      "A backup delivery is trying in the background, or enter your phone's " +
+      "IP manually below once you've scanned the code.";
 
   const payload = toQrPayload(
     state.sessionId,
@@ -171,11 +176,20 @@ els.findButton.addEventListener('click', async () => {
     return;
   }
 
+  // Checagem síncrona antes de tentar: Firefox nunca teve `system.network`,
+  // e o Brave também não (desativa o namespace inteiro por privacidade,
+  // mesmo com a permissão concedida — ver lanDiscovery.ts). Nesses casos
+  // `sweepLan` já devolveria `null` de qualquer forma, mas pular direto pra
+  // mensagem certa evita prometer uma busca que nunca ia rodar de verdade.
+  if (!isNetworkDiscoverySupported()) {
+    els.statusText.textContent =
+      "This browser doesn't support automatic local-network discovery — " +
+      "enter your phone's IP manually below.";
+    return;
+  }
+
   els.statusText.textContent = 'Looking for your phone on the local network...';
 
-  // `system.network` só existe em Chrome/Edge — se essa API não estiver
-  // disponível (Firefox), sweepLan não acha IPs locais e retorna null sem
-  // erro, caindo direto pro fallback manual abaixo.
   const granted = await ensureHostPermission();
   if (!granted) {
     els.statusText.textContent =
