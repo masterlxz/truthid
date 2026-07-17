@@ -62,6 +62,7 @@ contract DeviceRegistry is IdentityResolver {
     error DeviceAlreadyRegistered(address pubKey);
     error DeviceNotFound(address pubKey);
     error DeviceAlreadyRevoked(address pubKey);
+    error DeviceBelongsToAnotherIdentity(address pubKey);
     error InvalidPubKey();
     error NoCommitmentFound();
     error RevealTooEarly();
@@ -106,7 +107,13 @@ contract DeviceRegistry is IdentityResolver {
         bytes calldata encryptedVaultKey
     ) external {
         if (devicePubKey == address(0)) revert InvalidPubKey();
-        if (_devices[devicePubKey].exists) revert DeviceAlreadyRegistered(devicePubKey);
+
+        Device storage existing = _devices[devicePubKey];
+        // Um device revogado pode ser re-registrado (ex: revogado por engano,
+        // ou o usuário quer reativar um device antigo) — mas só pela mesma
+        // identidade que era dona dele antes. Um device nunca registrado
+        // (!exists) segue liberado pra qualquer identidade, como sempre foi.
+        if (existing.exists && !existing.revoked) revert DeviceAlreadyRegistered(devicePubKey);
 
         bytes32 commitment = keccak256(abi.encodePacked(devicePubKey, salt, msg.sender));
         uint256 commitBlock = _commitBlocks[commitment];
@@ -116,6 +123,10 @@ contract DeviceRegistry is IdentityResolver {
         delete _commitBlocks[commitment];
 
         uint256 identityId = _getCallerIdentityId();
+
+        if (existing.exists && existing.identityId != identityId) {
+            revert DeviceBelongsToAnotherIdentity(devicePubKey);
+        }
 
         _devices[devicePubKey] = Device({
             identityId: identityId,

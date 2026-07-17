@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-06 (Sessão 76 — débito #34: vault key derivada da wallet via RFC 6979 + ECIES no pareamento; DeviceRegistry com encryptedVaultKey)
+> Última atualização: 2026-07-17 (Sessão 117 — deep link app-to-app pro sign-message/sign-request, implementado e validado em hardware real; fecha a ideia registrada na Sessão 114)
 >
 > ⚠️ **LEMBRETE**: ao final do projeto (todas as fases concluídas), fazer uma revisão completa deste arquivo — consolidar endereços, remover seções obsoletas, e garantir que a tabela de Pendências de Deploy está zerada. Sessão 68.
 
@@ -70,7 +70,7 @@ Fase 9 — Identidade Visual: Mobile & Desktop  [x] Concluída
 Fase 10 — Ledger via USB (Rust/hidapi)         [x] Concluída
 Fase 11 — Teste E2E Prático (login, sessão, revogação) [x] Concluída
 Fase 12 — Publicação & Release (v1.0.0)        [x] Concluída
-Fase 13 — TruthID Vault (gerenciador de senhas) [~] Em andamento (13.1–13.8 ✓, 13.9 fatia 1/LAN ✓, fatia 2/IPFS-IPNS pendente)
+Fase 13 — TruthID Vault (gerenciador de senhas) [x] Concluída (13.1–13.9 ✓, validada em hardware real na Sessão 116)
 Fase 14 — Smart Account (ERC-4337, Self-Funded)  [x] Concluída
 ```
 
@@ -526,7 +526,7 @@ Desktop app                    Servidor exemplo (Express local)         Blockcha
 | Base da smart account | Safe / Coinbase Smart Wallet / SimpleAccount / custom | **Fork do SimpleAccount** ✓ — Sessão 52. Referência do ERC-4337, ECDSA secp256k1 (Ledger-native), CREATE2 via factory, ~150 linhas, sem dependências extras além do EntryPoint já deployado na Base |
 | Permissões na smart account | Uma tier única vs duas tiers (owner/devices) | **Duas tiers** ✓ — Sessão 52. Ledger = owner (assina tudo, inclusive DeviceRegistry). Devices (celular, etc.) = signers autorizados, bloqueados de chamar DeviceRegistry. Smart account mantém lista interna própria (não consulta DeviceRegistry em `validateUserOp` — evita restrições de storage cross-contract do ERC-4337). |
 | Recovery com saldo zero na smart account | Aceitar perda do saldo vs `emergencyWithdraw` | **`emergencyWithdraw`** ✓ — Sessão 52. Função na smart account chamável só pelo RecoveryManager, migra o saldo para a nova smart account durante a recovery. Recovery da identidade (via RecoveryManager → IdentityRegistry) nunca depende do saldo da smart account. |
-| Transporte cross-device quando o app requisitante também é mobile | QR + varredura LAN/dead-drop (atual, pressupõe dois aparelhos) vs deep link/app-to-app handoff no mesmo celular (tipo "Sign in with Google") | **Pendente** — ideia do dono do projeto, Sessão 114. Se o Practice Valuation (ou outro app requisitante) virar mobile, escanear um QR na tela do próprio celular não faz sentido; o requisitante abriria o app TruthID diretamente via deep link (ex: `truthid://sign-request?...`), o TruthID mostra a aprovação e devolve o resultado pro app chamador (deep link de volta ou `Intent`/`Universal Link` de resultado), sem precisar de LAN nem dead-drop nesse caso — os dois apps já estão no mesmo aparelho. Não desenhado nem prototipado ainda; guardado aqui pra não perder a ideia. |
+| Transporte cross-device quando o app requisitante também é mobile | QR + varredura LAN/dead-drop (dois aparelhos) vs deep link/app-to-app handoff no mesmo celular (tipo "Sign in with Google") | **Deep link, como caminho adicional (não substitui QR)** ✓ — Sessão 117. Esquema `truthid://sign-message`/`truthid://sign-request` (Android only), reaproveitando as mesmas telas de aprovação via `ResultDeliveryChannel` (`CrossDeviceDeliveryChannel` pro caminho QR/LAN/dead-drop existente, `DeepLinkDeliveryChannel` novo pro handoff local sem cifra). Validado em hardware real (cold-start e warm-start, Approve e Reject). |
 
 ---
 
@@ -587,7 +587,7 @@ Problemas identificados na revisão de arquitetura da Sessão 36 (2026-06-25). N
 | 49 | `mobile/lib/services/device_key_service.dart` | `_getOrCreateKey()` fazia "check-then-write" sem nenhuma trava: cada tela cria sua própria instância de `DeviceKeyService`, e num install novo, se duas chamam o método quase ao mesmo tempo, cada uma via a storage vazia e gerava sua própria chave aleatória — quem escrevia por último "vencia", deixando a outra tela com um endereço órfão em memória (observado na prática: "Devices" e "Pair device" mostrando endereços diferentes logo após reinstalar, Sessão 92). | **RESOLVIDO — Sessão 92**. Campo `_keyFuture` agora é `static` — memoiza a criação da chave entre todas as instâncias da classe, garantindo que só a primeira chamada gera/grava, as demais esperam o mesmo resultado. |
 | 50 | `mobile/lib/services/device_key_service.dart` (`getDevicePublicKeyHex`) | Retornava os 64 bytes crus (X\|\|Y) que o `web3dart` usa pra derivar endereço (convenção Ethereum), sem o prefixo SEC1 `0x04`. O lado Rust (`encrypt_vault_key_for_device`) exige exatamente 33 (comprimida) ou 65 bytes (não-comprimida) e rejeitava os 64 bytes — erro engolido em silêncio, deixando `encryptedVaultKey` vazio (`0x`) pra sempre pra aquele device (mesmo sintoma dos débitos #47/#48, causa adicional). | **RESOLVIDO — Sessão 92**. `getDevicePublicKeyHex()` agora prependa `0x04` antes dos 64 bytes, produzindo o formato SEC1 uncompressed (65 bytes) que o Rust espera. |
 | 51 | `desktop/src/components/PairDevice.tsx` | Mesma classe de bug já resolvida no débito #44 (`CreateIdentity.tsx`): quando o commit ou o reveal do pareamento revertia on-chain, `registerPhase` ficava preso em `"committing"`/`"registering"` pra sempre — o botão "Register device" ficava desabilitado sem nenhuma forma de tentar de novo, mesmo com endereço/label ainda preenchidos (achado ao validar ao vivo contra Base Mainnet, Sessão 92 — o erro genérico "unknown error executing 'execute'"/"executeBatch reverted" é comum nesse fluxo, ex: nonce desatualizado ou `DeviceAlreadyRegistered`). | **RESOLVIDO — Sessão 92**. Novo `useEffect` reseta `registerPhase` pra `"idle"` quando `isCommitError \|\| isRegisterError`; `resetCommit()`/`resetRegister()` (novo `reset` de `useWriteContract`) chamados no início de `handleRegister()` pra limpar o estado da tentativa anterior. Teste novo em `PairDevice.test.tsx` (re-habilita o botão após erro). `tsc --noEmit`/`vitest` (48/48) limpos. |
-| 52 | `contracts/src/DeviceRegistry.sol:139` (`revokeDevice`) | `revokeDevice` seta `revoked = true` mas nunca reseta `exists` — e `registerDevice` reverte com `DeviceAlreadyRegistered` pra qualquer endereço onde `exists` já seja `true`, mesmo revogado. **Resultado: um endereço de device, uma vez registrado, nunca mais pode ser registrado de novo — nem pela mesma identidade, nem por outra — mesmo depois de revogado.** Descoberto ao tentar "revogar + parear de novo" pra resolver os débitos #47/#48 (Sessão 92): a mesma chave de device física (persistida permanentemente no `flutter_secure_storage`) fica banida pra sempre assim que revogada uma vez. Contorno usado: reinstalar o app mobile gera uma chave nova (endereço novo), viável só em dispositivos de teste/dev. | **NÃO RESOLVIDO** — decisão de design pendente do dono do projeto (exigiria uma função nova no contrato tipo `reregisterDevice`/resetar `exists`, ou aceitar a limitação como intencional, + redeploy em cascata dos 5 contratos). Registrado na Sessão 92. |
+| 52 | `contracts/src/DeviceRegistry.sol:103` (`registerDevice`) | `revokeDevice` seta `revoked = true` mas nunca reseta `exists` — e `registerDevice` revertia com `DeviceAlreadyRegistered` pra qualquer endereço onde `exists` já fosse `true`, mesmo revogado. **Resultado: um endereço de device, uma vez registrado, nunca mais podia ser registrado de novo — nem pela mesma identidade, nem por outra — mesmo depois de revogado.** Descoberto ao tentar "revogar + parear de novo" pra resolver os débitos #47/#48 (Sessão 92). | **RESOLVIDO (código) — Sessão 118**. Decisão do dono do projeto: só a mesma identidade que revogou pode re-registrar o mesmo endereço (não faz sentido outra identidade reaproveitar um device pubKey que nunca foi dela — a chave nasce de uma instalação específica). `registerDevice` agora permite re-registro quando `exists && revoked`, mas exige `existing.identityId == identityId` do chamador (usa o campo que revoke já preserva, sem storage novo) — senão reverte com o erro novo `DeviceBelongsToAnotherIdentity`. Duplicata em `getDevicesByIdentity`/`deviceCount` aceita deliberadamente (decisão do dono do projeto — já documentado como histórico "incluindo revogados", evitar duplicata exigiria um loop extra). 3 testes novos em `DeviceRegistry.t.sol` (re-registro pela mesma identidade, duplicata aceita, revert pra identidade diferente); `forge test`: 218/218 (era 215). **Deploy pendente** — `DeviceRegistry` é referenciado como `immutable` por `SessionRegistry`, `VaultRegistry` e `TruthIDAccountFactory` (mesma cascata dos débitos #34/#42), então exige redeploy dos 5 contratos em Sepolia e Mainnet. Diferente das cascatas anteriores, **desta vez há identidade real em uso na Mainnet** (Sessão 116, vault publicado via Ledger físico) — avaliar migração antes de redeployar, não presumir `totalIdentities() == 0`. Ver Pendências de Deploy, item #5. |
 | ~~53~~ | ~~`mobile/lib/services/blockchain_service.dart`~~ | ~~As 7 chamadas JSON-RPC do mobile (eth_call, eth_getLogs, eth_getBalance, eth_blockNumber, eth_getTransactionReceipt, eth_getBlockByNumber) dependiam de uma única RPC pública hardcoded (`mainnet.base.org`), sem fallback nem timeout — cada uma repetia o mesmo boilerplate de `HttpClient().postUrl()`. Diferente do Desktop, que já usa `fallback()` do wagmi com 3 RPCs (`desktop/src/config/wagmi.ts`), o mobile ficava fora do ar inteiro assim que essa RPC aplicava rate limit — foi exatamente o que aconteceu ao vivo no fim da Sessão 92 (`-32016 over rate limit`), impedindo a confirmação final da decifra da vault key no celular.~~ | **RESOLVIDO — Sessão 93**. Novo helper único `_rpcCall()`/`_rpcCallOnce()` tenta 3 RPCs públicos da Base em ordem (`mainnet.base.org` → `base-rpc.publicnode.com` → `base.drpc.org`, mesma lista do Desktop), timeout de 10s por tentativa, cai pro próximo RPC em qualquer falha (rede, timeout ou erro no corpo) — mesmo padrão de fallback já usado pelo `IpfsGatewayClient` pros gateways IPFS. Os 7 call sites refatorados pra usar o helper, eliminando ~150 linhas de HTTP duplicado. Não validado contra o Docker (Flutter não instalado neste host, só via `mobile/dev.sh`) — revisão manual linha a linha do arquivo inteiro. |
 
 ---
@@ -609,6 +609,7 @@ Endereços de contrato que estão com placeholder `0x0` no código e precisam se
 | 2 | ~~`VAULT_REGISTRY_ADDRESS`~~ | ~~`desktop/src/config/contracts.ts`~~ | ~~`0x00...00`~~ | **RESOLVIDO — Sessão 88**. Primeiro deploy do `VaultRegistry` (feature implementada desde a Sessão 78-87, débitos #33-43), na mesma leva do redeploy do item #4. Sepolia `0x27E9288F06C42664812a1819235776D801Fd7Cf1`, Mainnet `0x602Fa39611960e5ef17D95a5d7b16816eE0ff734`. `VAULT_DEPLOYED`/`ZERO_ADDRESS` (feature flag em `SmartAccountDashboard.tsx`/`scanSmartAccountActivity.ts`) removido — o bucket "Vault" do dashboard e o scan de `VaultUpdated` agora rodam incondicionalmente. | 13.x / Sessão 88 |
 | 3 | ~~`DeviceRegistry` (débito #34)~~ | ~~`contracts/src/DeviceRegistry.sol`~~ | ~~ver Fase 1.6~~ | **RESOLVIDO — Sessão 77**. Redeploy completo dos 5 contratos (mesma cascata da Sessão 70 — `SessionRegistry` e `TruthIDAccountFactory` têm o endereço do `DeviceRegistry` como `immutable`) em Sepolia e Mainnet, `totalIdentities()` confirmado em 0 nas duas redes antes do redeploy (sem identidade real perdida). Endereços novos e propagação completa (desktop, mobile, 3 SDKs, docs, README) na Sessão 77 do Log de Sessões. | ~~Sessão 76~~ / Sessão 77 / débito #34 |
 | 4 | ~~`IdentityRegistry` + `DeviceRegistry` + `SessionRegistry` (débito #42)~~ | ~~`contracts/src/{IdentityRegistry,DeviceRegistry,SessionRegistry}.sol`~~ | ~~ver débito #42~~ | **RESOLVIDO — Sessão 88**. Cascata completa dos 5 contratos de novo (mesmo formato das Sessões 70/77) + primeiro deploy do `VaultRegistry` (item #2), em Sepolia e Mainnet. `totalIdentities()` confirmado em 0 nas duas redes antes do redeploy (sem identidade real perdida). Endereços novos e propagação completa (desktop, mobile, 3 SDKs, docs, README) na Sessão 88 do Log de Sessões. | Sessão 86 (código) / Sessão 88 (deploy) / débito #42 |
+| 5 | `DeviceRegistry` (débito #52 — re-registro após revogação) | `contracts/src/DeviceRegistry.sol` | ver débito #52 | **PENDENTE**. Mesma cascata de sempre (`DeviceRegistry` é `immutable` em `SessionRegistry`/`VaultRegistry`/`TruthIDAccountFactory`), mas ⚠️ **desta vez `totalIdentities()` NÃO deve estar em 0** — há identidade real na Mainnet desde a Sessão 116 (vault publicado via Ledger físico do dono do projeto). Confirmar on-chain antes de redeployar e decidir se/como migrar essa identidade (recriar do zero vs alguma forma de portar o vault) antes de seguir o mesmo processo das Sessões 70/77/88. | Sessão 118 (código) |
 
 Ao fazer o deploy, atualizar:
 1. A constante no código com o novo endereço
@@ -4306,6 +4307,45 @@ implementado, validado em hardware real
   `&` chega literal como `\&`, quebrando o parse de query string) por causa da dupla
   re-interpretação de shell (local + remoto) que `adb shell` faz.
 - **Nenhum erro/crash no logcat** durante os testes reais.
+
+### Sessão 118 — 2026-07-17: débito #52 resolvido (código) — re-registro de device após
+revogação, restrito à mesma identidade
+
+- **Objetivo**: dono do projeto escolheu, entre as frentes abertas (débito #52 vs checklist de
+  pré-release), fechar o débito #52 — `DeviceRegistry.registerDevice` bania um endereço de
+  device pra sempre depois de revogado, mesmo pela mesma identidade que era dona dele.
+- **Duas decisões de design confirmadas com o dono do projeto antes de codar** (regra de
+  ensino: conceito antes de código): (1) só a mesma identidade que revogou pode re-registrar
+  o mesmo endereço — não outra identidade qualquer, porque um device pubKey nasce de uma
+  instalação específica, não existe cenário legítimo de duas identidades precisarem do mesmo
+  endereço; (2) duplicata em `getDevicesByIdentity`/`deviceCount` ao re-registrar é aceita
+  deliberadamente, evitando um loop extra de gas — a lista já é documentada como histórico
+  ("incluindo revogados").
+- **Fix**: `registerDevice` trocou `if (_devices[devicePubKey].exists) revert
+  DeviceAlreadyRegistered(...)` por `if (existing.exists && !existing.revoked) revert
+  DeviceAlreadyRegistered(...)` — permite passar quando o device existe mas está revogado.
+  Depois do commit-reveal (inalterado), nova checagem `if (existing.exists &&
+  existing.identityId != identityId) revert DeviceBelongsToAnotherIdentity(...)` — reaproveita
+  o campo `identityId` que `revokeDevice` já preservava (nunca zerava), sem precisar de
+  storage novo. Novo erro `DeviceBelongsToAnotherIdentity(address pubKey)`.
+- **Testado**: 3 testes novos em `contracts/test/DeviceRegistry.t.sol` —
+  `test_RegisterDevice_Reregistration_SameIdentity_Success` (revoga e re-registra com label
+  novo, confirma `isDeviceActive` volta a `true`), `test_RegisterDevice_Reregistration_
+  DuplicatesInDevicesByIdentity` (confirma a duplicata aceita — `deviceCount` vai a 2), e
+  `test_Revert_RegisterDevice_Reregistration_DifferentIdentity` (bob tenta se apropriar de um
+  device revogado da alice, reverte com o erro novo). `forge test`: 218/218 (era 215, +3),
+  suíte inteira do repo, não só `DeviceRegistryTest` (que sozinho foi de 33→36).
+- **Deploy pendente, com uma diferença importante das cascatas anteriores (Sessões 70/77/88)**:
+  `DeviceRegistry` é `immutable` em `SessionRegistry`/`VaultRegistry`/`TruthIDAccountFactory`,
+  então o mesmo redeploy em cascata dos 5 contratos é necessário — mas desta vez **não** dá
+  pra presumir `totalIdentities() == 0` antes de redeployar: a Sessão 116 publicou um vault
+  real na Mainnet via Ledger físico do dono do projeto. Registrado como pendência nova (item
+  #5) em Pendências de Deploy, com o aviso explícito de confirmar on-chain e decidir migração
+  antes de repetir o processo das sessões anteriores. Não deployado nesta sessão — decisão e
+  janela de tempo ficam com o dono do projeto.
+- **Próximo passo**: decidir quando fazer esse redeploy (com plano de migração da identidade
+  real), ou avançar pro checklist de pré-release (`/code-review` por pasta, começando por
+  `contracts/` com `ultra`) — a outra frente aberta desde o fim da Sessão 117.
 
 ---
 

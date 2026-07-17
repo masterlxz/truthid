@@ -195,6 +195,64 @@ contract DeviceRegistryTest is Test, IdentityConsentHelper {
     }
 
     // -----------------------------------------------------------------
+    // registerDevice — re-registro após revogação (débito #52)
+    // -----------------------------------------------------------------
+
+    function test_RegisterDevice_Reregistration_SameIdentity_Success() public {
+        _registerDevice(alice, aliceDevice1, "iPhone 15 Pro");
+
+        vm.prank(alice);
+        deviceRegistry.revokeDevice(aliceDevice1);
+        assertFalse(deviceRegistry.isDeviceActive(aliceDevice1));
+
+        // Mesma identidade (alice) re-registra o mesmo endereço, com label novo
+        _registerDevice(alice, aliceDevice1, "iPhone 15 Pro (reativado)");
+
+        assertTrue(deviceRegistry.isDeviceActive(aliceDevice1));
+        DeviceRegistry.Device memory device = deviceRegistry.getDevice(aliceDevice1);
+        assertEq(device.identityId, 1);
+        assertEq(device.label, "iPhone 15 Pro (reativado)");
+        assertFalse(device.revoked);
+    }
+
+    function test_RegisterDevice_Reregistration_DuplicatesInDevicesByIdentity() public {
+        _registerDevice(alice, aliceDevice1, "iPhone 15 Pro");
+
+        vm.prank(alice);
+        deviceRegistry.revokeDevice(aliceDevice1);
+
+        _registerDevice(alice, aliceDevice1, "iPhone 15 Pro (reativado)");
+
+        // Duplicata aceita deliberadamente — getDevicesByIdentity/deviceCount já são
+        // documentados como histórico ("incluindo revogados"), não é bug.
+        assertEq(deviceRegistry.deviceCount(1), 2);
+        address[] memory devices = deviceRegistry.getDevicesByIdentity(1);
+        assertEq(devices[0], aliceDevice1);
+        assertEq(devices[1], aliceDevice1);
+    }
+
+    function test_Revert_RegisterDevice_Reregistration_DifferentIdentity() public {
+        _registerDevice(alice, aliceDevice1, "iPhone 15 Pro");
+
+        vm.prank(alice);
+        deviceRegistry.revokeDevice(aliceDevice1);
+
+        // Bob tenta se apropriar do endereço de device que já foi da Alice
+        bytes32 commitment = keccak256(abi.encodePacked(aliceDevice1, SALT, bob));
+        vm.prank(bob);
+        deviceRegistry.commitDevice(commitment);
+        vm.roll(block.number + 1);
+
+        vm.prank(bob);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                DeviceRegistry.DeviceBelongsToAnotherIdentity.selector, aliceDevice1
+            )
+        );
+        deviceRegistry.registerDevice(aliceDevice1, "Device roubado", SALT, "");
+    }
+
+    // -----------------------------------------------------------------
     // revokeDevice — caminho feliz
     // -----------------------------------------------------------------
 
