@@ -4460,6 +4460,47 @@ aprovação no frontend
   destravada na Sessão 105) quando o dono do projeto quiser; ou fatia 3 (Settings); ou as outras
   frentes já em aberto (checklist de pré-release, redeploy do débito #52).
 
+### Sessão 121 — 2026-07-17: `/truthid/v1/pin` fatia 3 — tela de Settings pra ver/editar/revogar
+autorizações por app
+
+- **Objetivo**: fechar a última pendência registrada da Sessão 120 — hoje o único jeito de ver
+  ou mudar uma autorização de pinning era editar `~/.truthid/pin_authorizations.json` na mão.
+- **`pin.rs`**: `struct PinAuthorization` virou `pub(crate)` (era privada ao módulo) e ganhou
+  `#[serde(rename_all = "camelCase")]` — como esse JSON nunca tinha sido exposto fora do arquivo
+  em disco até agora (fatias 1/2 só liam/gravavam internamente), não existe formato antigo pra
+  migrar. 3 funções novas de gerenciamento, todas tomando `&PinState` (mesmo padrão de
+  `try_consume_quota`/`record_approval`, reaproveitando o lock `quota` pra evitar race com
+  aprovações em andamento): `list_authorizations` (leitura crua, sem `reset_if_new_day` — a tela
+  mostra o que está persistido, não muta nada só de ser lida), `revoke_authorization` (remove a
+  entrada; próxima chamada desse app volta a ser tratada como `NewApp`, não existe estado
+  "revogado mas lembrado"), `set_daily_limit` (só troca `daily_limit`, não mexe em `used_today`
+  — se o novo limite for menor que o já consumido hoje, o app cai automaticamente no caminho
+  `QuotaExceeded` já existente, sem lógica nova pra esse caso). 5 testes novos, incluindo um que
+  prova que revogar e o app pedir de novo gera `PinApprovalReason::NewApp` (não algum estado
+  intermediário). `cargo test`: **64/64** (era 59, +5).
+- **`lib.rs`**: 3 comandos Tauri finos (`pin_get_authorizations`, `pin_revoke_authorization`,
+  `pin_set_daily_limit`), só repassando pra `pin.rs` — nenhum passa pelo protocolo de
+  aprovação/parking, são leitura/escrita direta do arquivo.
+- **Frontend**: nova seção "Third-party app pinning access" dentro de `VaultSettings.tsx`
+  (mesma tela "Providers de Pinning", já que é sobre quem usa esses providers) — componente
+  próprio `PinAuthorizationsSection` com sua própria carga/gravação. Lista app, uso do dia
+  (`3 / 50 pins today`), input de limite editável (botão "Save" só habilita quando o valor
+  difere do persistido) e botão "Revoke". **Achado de consistência de idioma**: o resto de
+  `VaultSettings.tsx` está em português (pré-existente, de antes da regra "todo código novo em
+  inglês" ser aplicada de forma consistente) — a seção nova ficou em inglês, seguindo a regra e
+  o padrão já usado pelos irmãos `SignMessageModal`/`PinApprovalModal` desta mesma frente; não
+  traduzi o resto do arquivo (fora de escopo, mudança grande não pedida). Fica uma página com
+  mistura de idioma, registrado aqui como observação, não corrigido.
+- **Testado**: `cargo build`/`cargo clippy --all-targets` limpos (mesmo 1 warning pré-existente
+  em `ipfs.rs`, não tocado). `tsc --noEmit` limpo. `npx vitest run`: 56/56 (sem teste novo,
+  mesma cobertura do padrão já existente pros componentes irmãos). `cargo fmt --check` conferido
+  manualmente linha por linha nos 2 arquivos Rust tocados — só débito pré-existente sobrou.
+- **Não validado com clique real** — mesmo padrão das fatias 1/2 desta frente.
+- **Com isso, o `/truthid/v1/pin` está com as 3 fatias completas** (núcleo, HTTP+UI de
+  aprovação, Settings) — fecha por completo a pendência registrada na Sessão 106. Restam em
+  aberto, sem relação com `/pin`: validação manual/hardware de toda a frente quando o dono do
+  projeto quiser, o checklist de pré-release, e o redeploy pendente do débito #52 (Sessão 118).
+
 ---
 
 ## Como Usar Este Arquivo

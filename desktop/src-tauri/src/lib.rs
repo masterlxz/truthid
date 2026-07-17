@@ -657,6 +657,33 @@ async fn respond_to_pin_request(
     pin::resolve(state.inner(), &id, decision).await
 }
 
+/// Os 3 comandos abaixo alimentam a tela de Settings de autorizações de
+/// pinning por app (fatia 3) — nenhum deles passa pelo protocolo de
+/// aprovação/parking, só leem/gravam o arquivo de autorizações direto.
+#[tauri::command]
+async fn pin_get_authorizations(
+    state: tauri::State<'_, std::sync::Arc<pin::PinState>>,
+) -> Result<Vec<pin::PinAuthorization>, String> {
+    Ok(pin::list_authorizations(state.inner()).await)
+}
+
+#[tauri::command]
+async fn pin_revoke_authorization(
+    app_name: String,
+    state: tauri::State<'_, std::sync::Arc<pin::PinState>>,
+) -> Result<(), String> {
+    pin::revoke_authorization(state.inner(), &app_name).await
+}
+
+#[tauri::command]
+async fn pin_set_daily_limit(
+    app_name: String,
+    daily_limit: u32,
+    state: tauri::State<'_, std::sync::Arc<pin::PinState>>,
+) -> Result<(), String> {
+    pin::set_daily_limit(state.inner(), &app_name, daily_limit).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -744,6 +771,9 @@ pub fn run() {
             respond_to_sign_message,
             get_pending_pin_request,
             respond_to_pin_request,
+            pin_get_authorizations,
+            pin_revoke_authorization,
+            pin_set_daily_limit,
             ledger::is_ledger_connected,
             ledger::get_ledger_address,
             ledger::sign_ledger_transaction,

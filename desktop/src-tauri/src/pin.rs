@@ -190,8 +190,14 @@ impl PinOutcome {
 // Autorizações por app (persistidas)
 // ---------------------------------------------------------------------------
 
+/// pub(crate) (não privado): exposta pra tela de Settings via
+/// `list_authorizations`/`lib.rs::pin_get_authorizations`. `rename_all =
+/// "camelCase"` só entra em vigor agora, na fatia 3 — as fatias 1/2 nunca
+/// expuseram este JSON fora do arquivo em disco, então não há formato antigo
+/// pra migrar.
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
-struct PinAuthorization {
+#[serde(rename_all = "camelCase")]
+pub(crate) struct PinAuthorization {
     app_name: String,
     daily_limit: u32,
     used_today: u32,
@@ -306,8 +312,9 @@ async fn try_consume_quota(state: &PinState, app_name: &str) -> Result<Option<bo
 
 /// Chamado só depois de uma aprovação (app novo ou reset de cota). App novo:
 /// cria a autorização do zero. Cota estourada: reseta a janela a partir de
-/// agora, mantendo o mesmo daily_limit — ajustar o limite em si fica pra uma
-/// tela de Settings futura, aprovar aqui só desbloqueia o dia.
+/// agora, mantendo o mesmo daily_limit — ajustar o limite em si é feito à
+/// parte, pela tela de Settings, via `set_daily_limit` (abaixo); aprovar
+/// aqui só desbloqueia o dia.
 async fn record_approval(
     state: &PinState,
     app_name: &str,
@@ -333,6 +340,47 @@ async fn record_approval(
         }
     }
 
+    save_authorizations(&state.authorizations_path, &authorizations)
+}
+
+// ---------------------------------------------------------------------------
+// Gerenciamento — usado pela tela de Settings (listar/editar/revogar)
+// ---------------------------------------------------------------------------
+
+/// Autorizações atuais (uma por app). Não faz `reset_if_new_day` — a tela de
+/// Settings mostra `used_today`/`day_start_ms` como estão persistidos, sem
+/// mutar nada só por serem lidos.
+pub async fn list_authorizations(state: &PinState) -> Vec<PinAuthorization> {
+    let _guard = state.quota.lock().await;
+    load_authorizations(&state.authorizations_path)
+}
+
+/// Revoga a autorização de um app. Próxima chamada dele volta a pedir
+/// aprovação como se fosse a primeira vez (`PinApprovalReason::NewApp`) —
+/// não existe estado intermediário de "revogado mas lembrado", é o mesmo
+/// caminho de um app que nunca pediu nada.
+pub async fn revoke_authorization(state: &PinState, app_name: &str) -> Result<(), String> {
+    let _guard = state.quota.lock().await;
+    let mut authorizations = load_authorizations(&state.authorizations_path);
+    authorizations.retain(|a| a.app_name != app_name);
+    save_authorizations(&state.authorizations_path, &authorizations)
+}
+
+/// Atualiza o limite diário de um app já autorizado, sem mexer em
+/// `used_today` — se o novo limite for menor que o já consumido hoje, o app
+/// simplesmente já está sobre a cota até o próximo reset (mesmo caminho de
+/// `QuotaExceeded` que `try_consume_quota` já trata).
+pub async fn set_daily_limit(
+    state: &PinState,
+    app_name: &str,
+    daily_limit: u32,
+) -> Result<(), String> {
+    let _guard = state.quota.lock().await;
+    let mut authorizations = load_authorizations(&state.authorizations_path);
+    let Some(auth) = authorizations.iter_mut().find(|a| a.app_name == app_name) else {
+        return Err(format!("no authorization found for app '{app_name}'"));
+    };
+    auth.daily_limit = daily_limit;
     save_authorizations(&state.authorizations_path, &authorizations)
 }
 
@@ -732,5 +780,151 @@ mod tests {
         assert!(current(&state).await.is_none());
         // Timeout não deve consumir/gravar cota nenhuma — o app segue "novo".
         assert!(load_authorizations(&path).is_empty());
+    }
+
+    // -----------------------------------------------------------------
+    // Gerenciamento (fatia 3 — tela de Settings)
+    // -----------------------------------------------------------------
+
+    #[tokio::test]
+    async fn list_authorizations_returns_what_was_saved() {
+        let path = temp_authorizations_path();
+        save_authorizations(
+            &path,
+            &[
+                PinAuthorization {
+                    app_name: "App One".to_string(),
+                    daily_limit: 50,
+                    used_today: 3,
+                    day_start_ms: now_ms(),
+                },
+                PinAuthorization {
+                    app_name: "App Two".to_string(),
+                    daily_limit: 10,
+                    used_today: 0,
+                    day_start_ms: now_ms(),
+                },
+            ],
+        )
+        .expect("save");
+
+        let state = PinState::with_authorizations_path(path);
+        let authorizations = list_authorizations(&state).await;
+
+        assert_eq!(authorizations.len(), 2);
+        assert_eq!(authorizations[0].app_name, "App One");
+        assert_eq!(authorizations[1].app_name, "App Two");
+    }
+
+    #[tokio::test]
+    async fn revoke_authorization_removes_only_the_named_app() {
+        let path = temp_authorizations_path();
+        save_authorizations(
+            &path,
+            &[
+                PinAuthorization {
+                    app_name: "App One".to_string(),
+                    daily_limit: 50,
+                    used_today: 3,
+                    day_start_ms: now_ms(),
+                },
+                PinAuthorization {
+                    app_name: "App Two".to_string(),
+                    daily_limit: 10,
+                    used_today: 0,
+                    day_start_ms: now_ms(),
+                },
+            ],
+        )
+        .expect("save");
+
+        let state = PinState::with_authorizations_path(path);
+        revoke_authorization(&state, "App One")
+            .await
+            .expect("revoke should succeed");
+
+        let remaining = list_authorizations(&state).await;
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0].app_name, "App Two");
+    }
+
+    #[tokio::test]
+    async fn revoked_app_is_treated_as_new_on_next_request() {
+        let path = temp_authorizations_path();
+        let state = Arc::new(PinState::with_authorizations_path(path));
+        let state_bg = state.clone();
+        let handle = tokio::spawn(async move {
+            handle_incoming(
+                &state_bg,
+                body("Practice Valuation", b"hello"),
+                |_| {},
+                fake_pin,
+            )
+            .await
+        });
+        let payload = wait_for_pending(&state).await;
+        resolve(&state, &payload.id, PinDecision::Approved)
+            .await
+            .expect("resolve");
+        handle.await.expect("task should not panic");
+
+        revoke_authorization(&state, "Practice Valuation")
+            .await
+            .expect("revoke should succeed");
+
+        let state_bg = state.clone();
+        let handle = tokio::spawn(async move {
+            handle_incoming(
+                &state_bg,
+                body("Practice Valuation", b"hello"),
+                |_| {},
+                fake_pin,
+            )
+            .await
+        });
+        let payload = wait_for_pending(&state).await;
+        assert_eq!(
+            payload.reason,
+            PinApprovalReason::NewApp,
+            "a revoked app is a stranger again, not QuotaExceeded"
+        );
+        resolve(&state, &payload.id, PinDecision::Rejected)
+            .await
+            .expect("resolve");
+        handle.await.expect("task should not panic");
+    }
+
+    #[tokio::test]
+    async fn set_daily_limit_updates_limit_without_touching_used_today() {
+        let path = temp_authorizations_path();
+        save_authorizations(
+            &path,
+            &[PinAuthorization {
+                app_name: "Practice Valuation".to_string(),
+                daily_limit: 50,
+                used_today: 7,
+                day_start_ms: now_ms(),
+            }],
+        )
+        .expect("save");
+
+        let state = PinState::with_authorizations_path(path);
+        set_daily_limit(&state, "Practice Valuation", 5)
+            .await
+            .expect("set_daily_limit should succeed");
+
+        let authorizations = list_authorizations(&state).await;
+        assert_eq!(authorizations[0].daily_limit, 5);
+        assert_eq!(
+            authorizations[0].used_today, 7,
+            "used_today is untouched by a limit change"
+        );
+    }
+
+    #[tokio::test]
+    async fn set_daily_limit_for_unknown_app_fails() {
+        let state = PinState::with_authorizations_path(temp_authorizations_path());
+        let err = set_daily_limit(&state, "Ghost App", 10).await;
+        assert!(err.is_err());
     }
 }

@@ -4,6 +4,13 @@ import type { PinningProvider } from "../types";
 
 type HealthStatus = "idle" | "checking" | "ok" | "error";
 
+interface PinAuthorization {
+  appName: string;
+  dailyLimit: number;
+  usedToday: number;
+  dayStartMs: number;
+}
+
 const DEFAULT_KUBO: PinningProvider = {
   name: "Kubo local",
   kind: "kubo",
@@ -371,6 +378,129 @@ ipfs config --json API.HTTPHeaders.Access-Control-Allow-Methods '["PUT", "POST",
           </div>
         )}
       </div>
+
+      <PinAuthorizationsSection />
+    </div>
+  );
+}
+
+/**
+ * Apps terceiros autorizados a usar os providers acima via /truthid/v1/pin
+ * (fatia 3 do débito registrado na Sessão 106). Separado num componente
+ * próprio, com seu próprio load/save, porque a fonte de dados é outra —
+ * `pin_get_authorizations`, não `vault_get_providers`.
+ */
+function PinAuthorizationsSection() {
+  const [authorizations, setAuthorizations] = useState<PinAuthorization[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  // Valor do input de limite por app, só enquanto difere do persistido —
+  // evita que o campo "pule" pro valor salvo a cada re-render.
+  const [limitDrafts, setLimitDrafts] = useState<Record<string, string>>({});
+
+  function load() {
+    setLoading(true);
+    invoke<PinAuthorization[]>("pin_get_authorizations")
+      .then(setAuthorizations)
+      .catch((e) => setError(String(e)))
+      .finally(() => setLoading(false));
+  }
+
+  useEffect(load, []);
+
+  async function handleRevoke(appName: string) {
+    setError(null);
+    try {
+      await invoke("pin_revoke_authorization", { appName });
+      setAuthorizations((prev) => prev.filter((a) => a.appName !== appName));
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
+  async function handleSaveLimit(appName: string) {
+    const draft = limitDrafts[appName];
+    const parsed = draft !== undefined ? Number.parseInt(draft, 10) : NaN;
+    if (!Number.isFinite(parsed) || parsed <= 0) return;
+
+    setError(null);
+    try {
+      await invoke("pin_set_daily_limit", { appName, dailyLimit: parsed });
+      setAuthorizations((prev) =>
+        prev.map((a) => (a.appName === appName ? { ...a, dailyLimit: parsed } : a))
+      );
+      setLimitDrafts((prev) => {
+        const { [appName]: _removed, ...rest } = prev;
+        return rest;
+      });
+    } catch (e) {
+      setError(String(e));
+    }
+  }
+
+  if (loading) return null;
+
+  return (
+    <div style={{ marginTop: "2rem" }}>
+      <h2>Third-party app pinning access</h2>
+      <p className="muted" style={{ marginBottom: "1.25rem" }}>
+        Apps that requested to pin data using the providers above via /pin. A new app always
+        needs your approval first; once approved, it can pin up to its daily limit without
+        asking again.
+      </p>
+
+      {error && <p className="error-text">{error}</p>}
+
+      {authorizations.length === 0 ? (
+        <p className="muted">No app has requested pinning access yet.</p>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: "0.75rem" }}>
+          {authorizations.map((a) => {
+            const draft = limitDrafts[a.appName];
+            const dirty = draft !== undefined && draft !== String(a.dailyLimit);
+            return (
+              <div
+                key={a.appName}
+                className="card"
+                style={{ display: "flex", alignItems: "center", gap: "0.75rem", padding: "0.85rem 1.1rem" }}
+              >
+                <span style={{ fontWeight: 600, flex: 1 }}>{a.appName}</span>
+                <span className="muted" style={{ fontSize: "0.85em", flexShrink: 0 }}>
+                  {a.usedToday} / {a.dailyLimit} pins today
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  value={draft ?? String(a.dailyLimit)}
+                  onChange={(e) =>
+                    setLimitDrafts((prev) => ({ ...prev, [a.appName]: e.target.value }))
+                  }
+                  style={{ width: "5rem", flexShrink: 0 }}
+                />
+                <button
+                  onClick={() => handleSaveLimit(a.appName)}
+                  disabled={!dirty}
+                  style={{ padding: "0.3em 0.75em", fontSize: "0.85em", flexShrink: 0 }}
+                >
+                  Save
+                </button>
+                <button
+                  onClick={() => handleRevoke(a.appName)}
+                  style={{
+                    padding: "0.3em 0.65em",
+                    fontSize: "0.85em",
+                    borderColor: "var(--color-danger)",
+                    color: "var(--color-danger)",
+                    flexShrink: 0,
+                  }}
+                >
+                  Revoke
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
