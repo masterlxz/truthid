@@ -4103,6 +4103,57 @@ cross-device do `/sign-request`
 
 ---
 
+### Sessão 114 — 2026-07-16: primeira troca real ponta a ponta com celular físico — fecha a
+pendência aberta desde a Sessão 108
+
+- **Objetivo**: dono do projeto pediu pra rodar o teste de hardware combinado (LAN+dead-drop)
+  guiado passo a passo, incluindo emparelhar o celular via adb (depuração sem fio) pra reinstalar
+  o Mobile atualizado. Achado logo de cara: o APK instalado no celular era de **2026-07-07**,
+  anterior a toda a Fase de `/sign-request` cross-device (Sessões 108-113) — precisou de
+  `./dev.sh build` + `adb pair`/`adb connect`/`adb install -r` antes de qualquer teste real.
+- **Achado paralelo, registrado por transparência**: a tela de configurar provedor de pinning no
+  Mobile (`pinning_providers_screen.dart`) existe no código mas **não está conectada a nenhuma
+  navegação no app** — não tem como abrir ela hoje pela UI. Não bloqueou o teste desta sessão
+  (LAN venceu antes do dead-drop ter chance de importar), mas é uma lacuna real a fechar numa
+  sessão futura se dead-drop precisar ser validado especificamente.
+- **Primeira troca real ponta a ponta confirmada**: Practice Valuation gerou o QR real, o celular
+  físico (Samsung SM_S731B, app recém-instalado) escaneou, aprovou, e o resultado voltou via LAN
+  — primeiro teste mostrou `Status: executed`.
+- **Bug real achado e corrigido só porque testamos com hardware de verdade**: o `userOpHash`/
+  `transactionHash` não apareciam na tela, só "Status: executed". Causa: o `#[serde(rename_all =
+  "camelCase")]` que a Sessão 112 adicionou em `TruthIdSignResult` corrige a desserialização do
+  JSON que chega de fora (Mobile/Desktop, sempre camelCase) mas **também** muda a serialização de
+  volta pro Tauri/JS — e o frontend (`TruthIdPanel.tsx`) lê os campos em snake_case
+  (`user_op_hash`/`transaction_hash`), mesmo padrão que `TruthIdHandshakeResult` já usa em todo o
+  resto do arquivo. Os dois lados (desserializar o JSON alheio vs serializar de volta pro Tauri)
+  precisam de convenções de nome diferentes. Corrigido separando em dois tipos:
+  `TruthIdWireResult` (só `Deserialize`, `rename_all = "camelCase"`, usado internamente pra
+  parsear a resposta do loopback e do blob decifrado) e `TruthIdSignResult` (só `Serialize`, sem
+  `rename_all`, o que volta pro Tauri) com um `impl From<TruthIdWireResult> for TruthIdSignResult`
+  no meio. **Nem `cargo test`/`tsc` nem a Sessão 112 pegaram isso** — os campos são `Option<T>`,
+  então uma chave ausente nunca gera erro de parse, só vira `None`/`undefined` em silêncio; só
+  apareceu testando com um celular físico de verdade e prestando atenção ao que a tela mostrava.
+  `cargo test` continua 64/64, `cargo check`/`clippy` limpos.
+- **Segundo teste, após a correção**: `Status: failed`, com a mensagem de erro completa
+  (`UserOperation reverted with reason: AA26 over verificationGasLimit, code: -32500`) aparecendo
+  corretamente na tela — confirma que a correção funcionou (o campo `error` decodifica certo) e,
+  de brinde, valida o caminho de falha (mesma decisão da Sessão 110: erro de execução ainda assim
+  vira uma resposta entregue, não um erro local silencioso).
+- **AA26 é uma pendência separada, não um bug do transporte**: erro padrão ERC-4337 — a etapa de
+  verificação da smart account (`validateUserOp`) consumiu mais gás do que o bundler (Pimlico)
+  reservou pra essa etapa. Não tem relação com QR/LAN/dead-drop/decriptação, que é exatamente o
+  que esta sessão validou. Mesma classe da pendência já registrada em
+  `project_delegated_signing.md` ("Validação real em Mainnet nunca confirmada").
+- **Fecha a pendência aberta desde a Sessão 108**: "nenhuma troca ponta a ponta real foi
+  observada" — agora foi, duas vezes, com hardware físico real, cobrindo tanto o caminho de
+  sucesso quanto o de falha.
+- **Próximo passo**: investigar o AA26 (parâmetros de gas do `SessionCreator.executeArbitraryCall`
+  no Mobile, ou config do bundler) se o dono do projeto quiser seguir essa frente; conectar
+  `pinning_providers_screen.dart` a alguma navegação real se dead-drop precisar ser validado
+  especificamente; `/pin` continua como pendência separada, não atacada.
+
+---
+
 ## Como Usar Este Arquivo
 
 1. **Ao começar uma sessão**: Diga ao Claude Code "leia o PROJECT_STATE.md e me ajude a continuar"
