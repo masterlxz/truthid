@@ -3985,7 +3985,70 @@ transporte LAN
 
 ---
 
-## Como Usar Este Arquivo
+### Sessão 112 — 2026-07-16: app requisitante de referência — Practice Valuation vira cliente
+cross-device do `/sign-request`
+
+- **Objetivo**: fechar a pendência que mais bloqueava validação E2E real de toda a frente de
+  delegação de assinatura desde a Sessão 108 — nenhum app terceiro real gerava QR nem consumia a
+  resposta via LAN. O dono do projeto escolheu explicitamente Practice Valuation (outro
+  repositório, `~/Documents/workspace/practice-valuation`, tocar nele confirmado explicitamente)
+  em vez de um demo no TruthID Desktop, só canal `/sign-request` (mais representativo do uso real
+  planejado — pagar gás via smart account — e já tinha uma PoC loopback em
+  `commands/truthid.rs::send_test_sign_request`), e só transporte **LAN** nesta fatia — dead-drop
+  IPFS/IPNS fica pra depois (exigiria portar a derivação de nome IPNS — HKDF+Ed25519+CID/base36 —
+  pro Rust do zero, risco de interop real demais pra empacotar junto). `/plan` rodado antes de
+  codar.
+- **Reaproveitamento pesado, pouco código novo do zero**: o decrypt ECIES em Rust já existia como
+  teste (`dart_produced_blob_decrypts_correctly` em `desktop/src-tauri/src/lib.rs` do TruthID) —
+  virou o novo `ecies.rs` do Practice Valuation quase sem alteração, com o mesmo vetor cruzado
+  reaproveitado como teste. A varredura LAN (`lan_sweep.rs`, novo) é um port direto de
+  `extension/src/session/lanDiscovery.ts` (mesma simplificação de /24 fixo, mesmo desenho de
+  lotes paralelos) — só trocando `Promise.all` por `futures::future::join_all` e
+  `chrome.system.network` pela crate `if-addrs`.
+- **2 comandos novos em `commands/truthid.rs`** (mesmo arquivo da PoC loopback, não um módulo à
+  parte): `create_cross_device_sign_request` (gera par efêmero + sessionId + JSON do QR, reusa as
+  mesmas `TEST_DEST_ADDRESS`/`TEST_FUNCTION_SIGNATURE` da PoC loopback — mesma transferência de
+  valor zero pro endereço de burn, mesma decisão da Sessão 103) e
+  `await_cross_device_sign_request_response` (varre a LAN em laço a cada 2s até responder ou
+  expirar, decifra e decodifica pro mesmo `TruthIdSignResult` já existente). Dois comandos
+  stateless em vez de um esquema de evento Tauri — mesmo padrão já estabelecido no arquivo, sem
+  introduzir arquitetura nova.
+- **Achado incidental, corrigido no caminho**: `TruthIdSignResult` nunca tinha
+  `#[serde(rename_all = "camelCase")]`, mas tanto o `SignRequestResponse` do TruthID Desktop
+  quanto o resultado que o Mobile entrega via LAN mandam `userOpHash`/`transactionHash` em
+  camelCase — os campos (sendo `Option<T>`, opcionais-quando-ausentes por padrão do serde) nunca
+  davam erro, só ficavam `None` em silêncio mesmo com um hash real na resposta. Bug pré-existente
+  desde a Sessão 103, nunca pego porque só o caminho de Reject foi validado com clique real na
+  Sessão 105 (que não tem hash pra mostrar). Corrigido com uma linha; sem isso, a nova fatia
+  cross-device herdaria o mesmo problema.
+- **Frontend**: `qrcode`/`@types/qrcode` adicionados (mesma lib que a extensão já usa), novo
+  `renderQr.ts` (mirror de 5 linhas), nova seção em `TruthIdPanel.tsx` — "Start cross-device
+  request" gera a sessão, renderiza o QR num canvas e já dispara a varredura automaticamente (sem
+  esperar clique — mesma filosofia de "já começa a servir assim que aprovar" do lado Mobile).
+- **Testes**: `cargo test` 59/59 (7 novos: vetor cruzado ECIES + round-trip de par efêmero gerado
+  em `ecies.rs`; `subnet_hosts` puro + 3 casos de `fetch_session_blob` contra um `TcpListener` de
+  teste real, mesmo espírito "I/O real, nunca mock de rede" que `remote_signer_lan_server_test.dart`
+  já segue do lado Mobile, em `lan_sweep.rs`). `cargo check`/`cargo clippy` limpos (mesmos avisos
+  pré-existentes, não relacionados). `tsc --noEmit` limpo.
+- **Validado nesta sessão com clique real** (mesmo espírito da Sessão 105): Practice Valuation
+  subido via `./dev.sh` real (Docker, `network_mode: host`), janela capturada e clicada de verdade
+  (`xdotool`/`spectacle`, sem precisar do fix `GDK_BACKEND=x11` da Sessão 105 — só necessário pro
+  Tauri nativo do TruthID, o Docker da Practice Valuation já era X11 puro). Clique em "Start
+  cross-device request" → `create_cross_device_sign_request` respondeu, QR renderizado de verdade
+  no `<canvas>`, `await_cross_device_sign_request_response` disparou sozinho e a tela foi pra
+  "Waiting for your phone..." sem nenhum erro/panic nos logs do container — confirma que a
+  integração IPC (nomes de parâmetro camelCase, schema do QR, encadeamento das duas mutations)
+  funciona de ponta a ponta no lado do requisitante.
+- **Não validado nesta sessão** (não há celular físico disponível neste ambiente pra escanear):
+  a troca real com o Mobile — QR escaneado, aprovação, UserOp executada, resposta decifrada de
+  volta no Practice Valuation. É o único passo que falta pra fechar completamente a pendência
+  "nenhuma troca ponta a ponta real foi observada", aberta desde a Sessão 108.
+- **Próximo passo**: dono do projeto rodar `./dev.sh` no Practice Valuation com o celular físico
+  pareado por perto, clicar "Start cross-device request" e escanear o QR de verdade — fecha a
+  última pendência real desta frente inteira (LAN + dead-drop nos dois canais, requisitante de
+  referência). Depois: fatia 2 (dead-drop IPFS/IPNS) pro `/sign-request` levar o mesmo padrão até
+  o Practice Valuation (hoje só o Mobile publica; o requisitante ainda só sabe consumir LAN), e
+  `/pin` continua como pendência separada, não atacada.
 
 1. **Ao começar uma sessão**: Diga ao Claude Code "leia o PROJECT_STATE.md e me ajude a continuar"
 2. **Ao terminar uma sessão**: O Claude atualiza o Log de Sessões e marca etapas concluídas
