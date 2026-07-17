@@ -4184,10 +4184,11 @@ subestimava o `verificationGasLimit` na estimativa de gas
   passou a exigir que a assinatura usada seja a real (não mais um placeholder zerado) —
   `flutter test` 12/12 no arquivo, `flutter analyze` sem novos achados. `tsc --noEmit` e
   `cargo test` (49/49) limpos no Desktop.
-- **Não validado em hardware real**: mesma pendência de sempre (Ledger/WalletConnect/Pimlico
-  configurado, ação do dono do projeto) — o próximo teste de ponta a ponta com o celular físico
-  (mesmo fluxo da Sessão 114) é quem confirma se o AA26 se resolveu de fato ou só reduziu a
-  chance dele acontecer. Continua registrado como pendência de validação Mainnet.
+- **Validado em hardware real na mesma sessão, com sucesso**: repetido o teste de ponta a ponta
+  da Sessão 114 (celular físico Samsung SM_S731B, APK rebuildado com o fix, Practice Valuation
+  via Docker gerando o QR, "Start cross-device request" → escaneio real → aprovação real no
+  celular). Resultado: `Status: executed` com `userOpHash` e `transactionHash` reais preenchidos
+  — **sem AA26 desta vez**. Fecha, com validação real, a pendência de gas aberta na Sessão 114.
 
 ---
 
