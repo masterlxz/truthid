@@ -13,6 +13,7 @@ mod bundler;
 mod ipfs;
 mod ledger;
 mod local_signer_server;
+mod pin;
 mod sign_message;
 mod sign_request;
 mod vault;

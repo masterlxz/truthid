@@ -4347,6 +4347,60 @@ revogação, restrito à mesma identidade
   real), ou avançar pro checklist de pré-release (`/code-review` por pasta, começando por
   `contracts/` com `ultra`) — a outra frente aberta desde o fim da Sessão 117.
 
+### Sessão 119 — 2026-07-17: `/truthid/v1/pin` fatia 1 — núcleo Rust (autorização por
+app + cota diária), sem rota HTTP nem UI ainda
+
+- **Objetivo**: destravar a pendência registrada na Sessão 106 (`POST /truthid/v1/pin`, proxy
+  de pinning de IPFS pros providers que o usuário já configurou) — dono do projeto pediu pra
+  evitar `/code-review ultra`/`high` por custo de token, então esta sessão ficou só com trabalho
+  de código direto (sem agentes de review).
+- **Decisão de consentimento, travada com o dono do projeto antes de codar**: por chamada
+  (mesmo padrão do `/sign-request`) rejeitado — pinning é frequente (toda vez que um app salva
+  algo), diferente de assinar, que é raro. Decidido **aprovação única por app + teto diário**:
+  primeira chamada de um app novo pausa e pede aprovação (`PinApprovalReason::NewApp`, mostra o
+  limite sugerido); chamadas seguintes dentro da cota pinam direto, sem popup; cota estourada
+  pausa de novo (`QuotaExceeded`) — aprovar reseta a janela a partir de agora, mantendo o mesmo
+  limite (editar o limite em si fica pra uma tela de Settings futura). Cota é janela rolante de
+  24h desde o primeiro uso do dia, não meia-noite de fuso nenhum (mais simples, sem bug de
+  timezone).
+- **Implementado só o núcleo** (`desktop/src-tauri/src/pin.rs`, novo — registrado em `lib.rs`):
+  mesmo formato de `sign_message.rs` (`handle_incoming`/`current`/`resolve`, parking via
+  `oneshot` + `tokio::sync::Mutex`, single-flight, timeout de 5min), mas com um caminho novo que
+  `sign_message`/`sign_request` não têm — quando o app já está autorizado e dentro da cota,
+  `handle_incoming` nunca chama `notify`, consome a cota e pina direto. Autorizações persistidas
+  em `~/.truthid/pin_authorizations.json` (mesmo padrão de `ipfs.rs::{load,save}_providers`).
+  `PinState::authorizations_path` é **injetado** (não lido de `$HOME` global dentro do módulo) —
+  decisão deliberada: `cargo test` roda em paralelo e vários outros módulos do crate (`vault.rs`,
+  `ipfs.rs`, `bundler.rs`) também leem `$HOME/.truthid/...` durante os próprios testes; a
+  primeira versão dos testes mudava `$HOME` de verdade via `std::env::set_var` e foi corrigida
+  antes de commitar — fonte real de flakiness cruzada entre módulos que só apareceu ao pensar em
+  como os testes rodariam de verdade, não ao rodá-los isoladamente (isolados, passavam).
+  8 testes novos cobrindo: app novo pausa e pina após aprovar; rejeição não persiste nem chama
+  `pin`; app autorizado dentro da cota pina sem popup nenhum; cota estourada pausa e reseta ao
+  aprovar (mesmo limite); cota reseta sozinha depois de 24h; segundo pedido concorrente é `Busy`;
+  corpo inválido nunca notifica nem parqueia; timeout limpa o estado sem consumir cota.
+  `cargo test`: **57/57** no crate inteiro (era 49, +8).
+- **Achado no caminho, corrigido antes de commitar**: rodei `cargo fmt -- src/pin.rs` esperando
+  formatar só o arquivo novo, mas o `cargo fmt` sem escopo reformatou o crate inteiro
+  (`ipfs.rs`, `ledger.rs`, `local_signer_server.rs`, `sign_message.rs`, `sign_request.rs`,
+  `vault.rs`, `lib.rs`) — o projeto não roda `rustfmt` de forma consistente, então havia diffs de
+  estilo pré-existentes nesses arquivos que o fmt "corrigiu" de graça. Revertido tudo pro estado
+  original (via `git show HEAD:<path>` + Read/Write, já que `git checkout --`/redirecionamento
+  de shell pra sobrescrever arquivos tracked foram bloqueados pelo classifier de auto mode)
+  exceto a única linha `mod pin;` no `lib.rs` — confirmado com `diff` contra `git show HEAD:...`
+  que os 6 arquivos voltaram byte a byte ao original. Diff final da sessão: só `pin.rs` (novo) e
+  1 linha em `lib.rs`.
+- **Não implementado ainda (fatia 2, futura)**: rota HTTP `POST /truthid/v1/pin` em
+  `local_signer_server.rs` (o `pin.rs` de hoje não está exposto por HTTP nenhum), comandos Tauri
+  `get_pending_pin_request`/`respond_to_pin_request`, tela de aprovação no frontend, e uma tela
+  de Settings pra ver/editar/revogar autorizações por app. `pin_vault` (`ipfs.rs`) ainda não é
+  chamado por este módulo — a assinatura de `handle_incoming` já prevê isso (parâmetro `pin`
+  injetado, mesma forma que `sign_message::handle_incoming` injeta `sign`), só falta a
+  implementação real conectando os dois.
+- **Próximo passo**: fatia 2 (rota HTTP + comandos Tauri + tela de aprovação), quando o dono do
+  projeto quiser continuar essa frente — ou o checklist de pré-release, ou o redeploy pendente do
+  débito #52 (Sessão 118), que seguem abertos em paralelo.
+
 ---
 
 ## Como Usar Este Arquivo
