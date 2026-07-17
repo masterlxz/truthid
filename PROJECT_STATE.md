@@ -4153,6 +4153,42 @@ pendência aberta desde a Sessão 108
   `pinning_providers_screen.dart` a alguma navegação real se dead-drop precisar ser validado
   especificamente; `/pin` continua como pendência separada, não atacada.
 
+### Sessão 115 — 2026-07-17: causa raiz do AA26 achada e corrigida — assinatura placeholder
+subestimava o `verificationGasLimit` na estimativa de gas
+
+- **Objetivo**: investigar o `AA26 over verificationGasLimit` achado na Sessão 114 (dono do
+  projeto escolheu esta frente entre 3 opções abertas).
+- **Causa raiz, achada lendo `TruthIDAccount._validateSignature`**: tanto o Mobile
+  (`SessionCreator._executeViaUserOp`) quanto o Desktop (`userOpExecutor.ts`) chamavam
+  `eth_estimateUserOperationGas` com uma assinatura placeholder de 65 bytes zerados (`v=0`).
+  `_validateSignature` rejeita `v != 27 && v != 28` **antes até de chamar `ecrecover`** — a
+  simulação de gas nunca chega em `authorizedDevices[signer]` nem em `_isDeviceCallAllowed`
+  (que lê `blockedForDevices[dest]` e, pra `executeBatch`, faz um `STATICCALL` extra em
+  `_decodeExecuteBatchDest`). Como `&&` faz curto-circuito em Solidity, esse custo real de
+  verificação (o caminho que sempre roda numa UserOp de device de verdade) nunca entrava na
+  estimativa — só o caminho mais barato possível (rejeição imediata por `v` inválido). Dá pra
+  reproduzir o resultado on-chain: `verificationGasLimit` estimado ficava sistematicamente
+  abaixo do que a execução real consome.
+- **Fix (mirror nos dois lados)**: assinar a UserOp de verdade (com a device key) **antes** da
+  chamada de estimativa, não só depois — usando o hash com os campos de gas ainda zerados (é
+  reassinada de novo depois, já com os valores retornados pela estimativa, porque o
+  `userOpHash` muda quando `callGasLimit`/`verificationGasLimit`/`preVerificationGas` deixam de
+  ser zero). Isso faz `ecrecover` recuperar o endereço real do device durante a simulação,
+  disparando o mesmo caminho (`authorizedDevices` → `_isDeviceCallAllowed` →
+  `_isDestAllowed`/`blockedForDevices`) que a execução real percorre — sem exigir nenhuma
+  mudança de contrato nem margem/multiplicador arbitrário sobre a estimativa do bundler.
+  `mobile/lib/services/session_creator.dart` (reaproveita `signUserOperation`, já existente,
+  chamado agora 2x) e `desktop/src/services/userOpExecutor.ts` (reaproveita o comando Tauri
+  `sign_user_op_hash`, idem). `session_creator_test.dart` atualizado: as 4 verificações de
+  `mockKeyService.signHash(any())).called(1)` viraram `called(2)`, e o teste da estimativa
+  passou a exigir que a assinatura usada seja a real (não mais um placeholder zerado) —
+  `flutter test` 12/12 no arquivo, `flutter analyze` sem novos achados. `tsc --noEmit` e
+  `cargo test` (49/49) limpos no Desktop.
+- **Não validado em hardware real**: mesma pendência de sempre (Ledger/WalletConnect/Pimlico
+  configurado, ação do dono do projeto) — o próximo teste de ponta a ponta com o celular físico
+  (mesmo fluxo da Sessão 114) é quem confirma se o AA26 se resolveu de fato ou só reduziu a
+  chance dele acontecer. Continua registrado como pendência de validação Mainnet.
+
 ---
 
 ## Como Usar Este Arquivo

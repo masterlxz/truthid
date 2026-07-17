@@ -123,7 +123,11 @@ void main() {
     verify(() => mockBlockchain.getSmartAccountNonce(smartAccountAddress))
         .called(1);
     verify(() => mockBundler.getUserOperationGasPrice()).called(1);
-    verify(() => mockKeyService.signHash(any())).called(1);
+    // 2 chamadas: uma assinatura real "descartável" sobre a UserOp com gas
+    // zerado (usada só na estimativa, pra não subestimar o AA26 — ver
+    // session_creator.dart) e a assinatura final sobre a UserOp com os
+    // valores de gas já preenchidos.
+    verify(() => mockKeyService.signHash(any())).called(2);
 
     // A UserOp final enviada ao bundler carrega o sender/nonce corretos, a
     // estimativa de gas e a assinatura de 65 bytes vinda do DeviceKeyService.
@@ -145,7 +149,7 @@ void main() {
   });
 
   test(
-      'a estimativa de gas usa uma UserOp com gas zerado e assinatura placeholder',
+      'a estimativa de gas usa uma UserOp com gas zerado mas assinatura real da device key',
       () async {
     when(() => mockBundler.getUserOperationReceipt(any()))
         .thenAnswer((_) async => null);
@@ -165,7 +169,10 @@ void main() {
     expect(estimatedOp.callGasLimit, BigInt.zero);
     expect(estimatedOp.verificationGasLimit, BigInt.zero);
     expect(estimatedOp.preVerificationGas, BigInt.zero);
-    expect(estimatedOp.signature.length, 65);
+    // Não pode ser um placeholder zerado (v=0): TruthIDAccount rejeitaria a
+    // assinatura antes até de chamar ecrecover, subestimando o gas de
+    // verificação real (causa raiz do AA26 achado na Sessão 114).
+    expect(estimatedOp.signature, hexToBytes(dummyUserOpSignature));
   });
 
   test('devolve transactionHash nulo se o recibo não confirmar a tempo',
@@ -230,7 +237,9 @@ void main() {
 
       verify(() => mockBlockchain.getSmartAccountNonce(smartAccountAddress))
           .called(1);
-      verify(() => mockKeyService.signHash(any())).called(1);
+      // 2 chamadas por operação (assinatura real usada na estimativa +
+      // assinatura final) — ver comentário equivalente no teste de createSession.
+      verify(() => mockKeyService.signHash(any())).called(2);
 
       final sentOp = verify(() => mockBundler.sendUserOperation(captureAny()))
           .captured
@@ -356,7 +365,9 @@ void main() {
 
       verify(() => mockBlockchain.getSmartAccountNonce(smartAccountAddress))
           .called(1);
-      verify(() => mockKeyService.signHash(any())).called(1);
+      // 2 chamadas por operação (assinatura real usada na estimativa +
+      // assinatura final) — ver comentário equivalente no teste de createSession.
+      verify(() => mockKeyService.signHash(any())).called(2);
 
       final sentOp = verify(() => mockBundler.sendUserOperation(captureAny()))
           .captured
@@ -425,7 +436,9 @@ void main() {
 
       verify(() => mockBlockchain.getSmartAccountNonce(smartAccountAddress))
           .called(1);
-      verify(() => mockKeyService.signHash(any())).called(1);
+      // 2 chamadas por operação (assinatura real usada na estimativa +
+      // assinatura final) — ver comentário equivalente no teste de createSession.
+      verify(() => mockKeyService.signHash(any())).called(2);
 
       final sentOp = verify(() => mockBundler.sendUserOperation(captureAny()))
           .captured

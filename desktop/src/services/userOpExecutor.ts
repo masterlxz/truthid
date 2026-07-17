@@ -97,8 +97,26 @@ export async function executeViaUserOp({
     preVerificationGas: 0n,
     maxFeePerGas: gasPrice.maxFeePerGas,
     maxPriorityFeePerGas: gasPrice.maxPriorityFeePerGas,
-    // placeholder — só a estimativa de gas usa isto, nunca é enviado assinado assim.
+    // substituído abaixo antes da estimativa, nunca enviado assinado assim.
     signature: ZERO_SIGNATURE_65_BYTES,
+  };
+
+  // A estimativa de gas precisa de uma assinatura real da device key, não de
+  // um placeholder zerado: `TruthIDAccount._validateSignature` rejeita v=0
+  // antes até de chamar ecrecover, então o custo de
+  // `authorizedDevices`/`_isDeviceCallAllowed` (que só roda quando o signer
+  // recuperado bate com um device autorizado) nunca entraria na simulação —
+  // foi a causa raiz do AA26 (verificationGasLimit subestimado) achado na
+  // Sessão 114 com hardware real. O hash aqui é só da UserOp com gas
+  // zerado; é reassinada mais abaixo com os valores reais antes do envio.
+  const dummyUserOpHash = computeUserOperationHash({
+    userOperation: userOp,
+    entryPoint: ENTRY_POINT_V07,
+    chainId: CHAIN_ID,
+  });
+  userOp = {
+    ...userOp,
+    signature: await invoke<Hex>("sign_user_op_hash", { hash: dummyUserOpHash }),
   };
 
   const estimate = await bundlerClient.estimateUserOperationGas(userOp);

@@ -241,7 +241,23 @@ class SessionCreator {
       preVerificationGas: BigInt.zero,
       maxFeePerGas: gasPrice.maxFeePerGas,
       maxPriorityFeePerGas: gasPrice.maxPriorityFeePerGas,
-      signature: Uint8List(65), // placeholder — só a estimativa de gas usa isto
+      signature: Uint8List(65), // substituído abaixo antes da estimativa
+    );
+
+    // A estimativa de gas precisa de uma assinatura real da device key, não
+    // de um placeholder zerado: `TruthIDAccount._validateSignature` rejeita
+    // v=0 antes até de chamar ecrecover, então o custo de
+    // `authorizedDevices`/`_isDeviceCallAllowed` (que só roda quando o
+    // signer recuperado bate com um device autorizado) nunca entraria na
+    // simulação — foi a causa raiz do AA26 (verificationGasLimit
+    // subestimado) achado na Sessão 114 com hardware real. O hash aqui é só
+    // da UserOp com gas zerado; é reassinada mais abaixo com os valores
+    // reais antes do envio.
+    userOp = await signUserOperation(
+      userOperation: userOp,
+      entryPoint: _entryPoint,
+      chainId: _chainId,
+      deviceKeyService: _deviceKeyService,
     );
 
     final estimate = await _bundlerClient.estimateUserOperationGas(userOp);
