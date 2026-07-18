@@ -212,6 +212,33 @@ void main() {
     expect(outcome.entries, hasLength(1));
   });
 
+  test(
+      'cache local à frente do on-chain (mudanças pendentes não publicadas) — '
+      'não sobrescreve nem busca no IPFS', () async {
+    // Simula 2 edições locais feitas neste device, nunca publicadas.
+    await repository.addEntry(site: 'local-only.com', username: 'u', password: 'p');
+    await repository.addEntry(site: 'local-only-2.com', username: 'u', password: 'p');
+    final localBlobBefore = await File(vaultPath).readAsBytes();
+
+    when(() => mockBlockchain.hasVault(identityId))
+        .thenAnswer((_) async => true);
+    // On-chain está na versão 1 — atrás das 2 edições locais (version 2).
+    when(() => mockBlockchain.getVault(identityId)).thenAnswer((_) async =>
+        VaultRef(
+            cid: 'bafyOldCid',
+            contentHashHex: wrongHash,
+            updatedAt: updatedAt,
+            version: 1));
+
+    final outcome = await syncService.sync(identityId);
+
+    expect(outcome.status, VaultSyncStatus.synced);
+    expect(outcome.entries.map((e) => e.site),
+        containsAll(['local-only.com', 'local-only-2.com']));
+    verifyNever(() => mockGateway.fetch(any()));
+    expect(await File(vaultPath).readAsBytes(), equals(localBlobBefore));
+  });
+
   test('falha de rede sem cache nenhum — syncFailedNoCache', () async {
     when(() => mockBlockchain.hasVault(identityId))
         .thenThrow(Exception('network down'));

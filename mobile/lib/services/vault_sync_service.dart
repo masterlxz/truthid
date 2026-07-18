@@ -89,6 +89,24 @@ class VaultSyncService {
 
     try {
       final ref = await _blockchain.getVault(identityId);
+
+      // O cache local pode ter mudanças escritas neste device e ainda não
+      // publicadas (ver Sessão 97/124-125, VaultScreen chama sync() toda vez
+      // que a tela recarrega). Sobrescrever incondicionalmente com o blob
+      // on-chain apagaria essas mudanças sempre que o fetch tivesse sucesso —
+      // só puxa do chain quando ele realmente está à frente do cache local.
+      final localVersion = await _repository.currentVersion();
+      if (ref.version <= localVersion) {
+        final entries = await _repository.listEntries();
+        final profileNames = await _repository.listProfileNames();
+        return VaultSyncOutcome(
+          status: VaultSyncStatus.synced,
+          entries: entries,
+          profileNames: profileNames,
+          updatedAt: ref.updatedAt,
+        );
+      }
+
       final bytes = await _gateway.fetch(ref.cid);
 
       final digest = bytesToHex(keccak256(bytes), include0x: true);

@@ -4985,6 +4985,75 @@ em hardware real (Desktop nativo + celular físico) descrito no plano, mesma té
 já usada no TOTP (Sessão pós-123). Plano completo salvo em
 `~/.claude/plans/idempotent-roaming-thunder.md` se precisar consultar os detalhes originais.
 
+### Sessão 125 — 2026-07-18: suíte de verificação completa rodada, tudo passando — só falta o
+walkthrough manual em hardware real
+
+Continuação direta da Sessão 124 (Passkeys/WebAuthn). Rodada a suíte completa listada no plano,
+tudo junto, depois de todas as edições de UI do Mobile:
+
+- `cargo test` (Desktop, `src-tauri`): **64/64 passando**.
+- `npx vitest run` (Desktop): **74/74 passando**, 9 arquivos.
+- `tsc --noEmit`: limpo em `desktop/` e `extension/`.
+- `flutter test` completo via Docker (`./dev.sh flutter test`, não só o arquivo de webauthn):
+  **245/245 passando**, ~27s.
+
+Nenhuma regressão, nenhum fix necessário. `docker system prune -f` não rodou (precisa de sudo
+interativo, que o Claude Code não tem nesta máquina — ver [[env-setup]]); root em 89%/3.6GB livre,
+não bloqueante ainda.
+
+**Falta só uma coisa pra fechar item 3 do roadmap ([[project-roadmap-priority]]) por completo**: o
+walkthrough manual em hardware real (Desktop nativo + celular físico via adb wireless) descrito no
+plano — gerar um passkey numa entrada, ver o badge, clicar "Testar assinatura", confirmar sucesso,
+e confirmar que sobrevive a save/reload. Mesma técnica já usada pra validar TOTP e o ECIES do
+pareamento nas Sessões anteriores. Precisa do dono do projeto disponível com o celular físico
+(e opcionalmente o Ledger, embora não seja estritamente necessário pra testar passkey — só leitura
+do vault já pareado).
+
+### Sessão 126 — 2026-07-18: walkthrough manual em hardware real feito — Fase 3 (Passkeys) fecha
+100%; achado e corrigido bug crítico de perda de dados no sync do Mobile
+
+**Desktop nativo** (`GDK_BACKEND=x11 ... npm run tauri dev`, técnica de [[env-setup]]): criada
+entrada de teste `passkey-test.com`, "Gerar passkey" funcionou, "Testar assinatura" retornou
+sucesso (✓). Persistência confirmada de duas formas: reload simples (botão de refresh do header) e
+**restart completo do processo** (`pkill` no binário + `npm run tauri dev` de novo, novo PID) — o
+passkey sobreviveu à leitura do `vault.enc` local do zero nas duas vezes. Assinatura retestada com
+sucesso depois do restart. Entrada de teste apagada ao final (nunca publicada on-chain, sem afetar
+o resto do vault).
+
+**Achado crítico durante a validação no Mobile — bug real de perda de dados, não erro de toque**:
+ao criar uma entrada de teste com passkey no celular físico (Galaxy Z Flip, adb wireless) e voltar
+pra lista do Vault, a entrada nova desaparecia sistematicamente (reproduzido 2x). Confirmado via
+`adb shell run-as ... ls -la vault.enc` que o arquivo local crescia ao salvar (580→840 bytes) e
+depois **voltava sozinho pro tamanho original em poucos segundos**, sem nenhuma ação do usuário —
+descartando de vez a hipótese de toque errado.
+
+**Causa raiz**: `VaultSyncService.sync()` (`mobile/lib/services/vault_sync_service.dart`) chamava
+`_repository.overwriteCache(bytes)` **incondicionalmente** sempre que conseguia buscar a versão
+publicada on-chain/IPFS com sucesso — sem comparar com a versão do cache local. `VaultScreen._load()`
+roda esse sync toda vez que a tela recarrega (inclusive logo depois de qualquer "Save"), então
+qualquer escrita local não publicada (a feature inteira da Sessão 97, "Mobile ganha escrita
+completa no Vault") era apagada silenciosamente assim que o sync tinha sucesso — não é bug
+específico do Passkey, afeta qualquer entrada/edição feita no Mobile. Confirmado que o Desktop não
+sofre disso: só publica sob ação explícita do usuário (nunca faz pull automático que sobrescreva o
+local).
+
+**Fix**: `sync()` agora lê `_repository.currentVersion()` antes de decidir — só baixa do
+IPFS/sobrescreve o cache quando `ref.version` (on-chain) for **maior** que a versão local. Quando o
+cache local já está à frente (mudanças pendentes não publicadas), retorna as entradas do cache
+local direto, sem sequer chamar o gateway IPFS. Teste de regressão novo em
+`vault_sync_service_test.dart` (2 `addEntry` locais simulando mudanças pendentes + `getVault`
+mockado com versão mais antiga → espera `synced` com as entradas locais e `verifyNever` no fetch do
+IPFS). `flutter test` **246/246** (245 + o novo). `tsc --noEmit` limpo em desktop/extension.
+
+**Mobile revalidado com o fix**: rebuild do APK + reinstall no mesmo celular físico, entrada de
+teste `passkey-mobile-test.com` criada de novo — desta vez sobreviveu ao reload ("9 pending
+changes", entrada visível na lista). "Testar assinatura" na tela de detalhe retornou sucesso (✓).
+Entrada apagada ao final (10 pending changes, nunca publicado, sem afetar o resto do vault).
+
+**Fase 3 do roadmap pós-Fase 14 (Passkeys) fecha 100%** — fundação implementada, testada e
+validada em hardware real nos dois lados (Desktop e Mobile), sem nenhuma pendência de validação
+restante. Ver [[project-passkeys]] pro detalhe técnico completo.
+
 ---
 
 ## Como Usar Este Arquivo
