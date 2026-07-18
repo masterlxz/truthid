@@ -5054,6 +5054,86 @@ Entrada apagada ao final (10 pending changes, nunca publicado, sem afetar o rest
 validada em hardware real nos dois lados (Desktop e Mobile), sem nenhuma pendência de validação
 restante. Ver [[project-passkeys]] pro detalhe técnico completo.
 
+### Sessão 126 (continuação) — 2026-07-18: implementado e validado o item 4 do roadmap (Backup
+criptografado exportável) — .truthid-backup, senha de exportação separada da vault key
+
+Seguindo a ordem travada na Sessão 122, com Passkeys (item 3) fechado nesta mesma sessão, foi
+implementado o item 4: um arquivo `.truthid-backup` que empacota o vault inteiro (senhas, TOTP,
+passkeys, perfis, permissões de device) pra exportar/importar em qualquer direção entre Desktop e
+Mobile. Planejado via `/plan` completo antes de implementar.
+
+**Decisão de produto confirmada com o dono do projeto antes de codar** (pergunta direta, não
+decisão técnica): o backup usa uma **senha de exportação separada**, digitada pelo usuário no
+momento do export — não a vault key derivada da assinatura da wallet. Desvio deliberado da
+filosofia "sem master password" do resto do Vault, escolhido porque restaurar um backup não deve
+exigir ter a wallet em mãos.
+
+**Formato do envelope** (idêntico em Rust e Dart): `magic(8, "TIDVLTB1") || salt(16) ||
+kdf_iterations(4, big-endian u32) || nonce(12) || ciphertext+tag(AES-256-GCM)`. Chave derivada via
+PBKDF2-HMAC-SHA256 (600.000 iterações em produção) a partir da senha + salt do próprio arquivo. O
+plaintext do AEAD é o JSON serializado do `Vault` inteiro (mesmo shape que `vault.enc` já usa).
+Import decifra com a senha de export, mas **recifra com a vault key local** antes de gravar — a
+senha de export nunca é usada pro armazenamento local, é isso que faz o restore funcionar entre
+plataformas/devices diferentes. Version do JSON importado é preservada tal como veio (sem +1) — se
+estiver desatualizada frente à on-chain, o fix desta mesma sessão em `VaultSyncService.sync()` já
+corrige sozinho no próximo sync.
+
+**Implementado e testado** (5 milestones do plano):
+- `desktop/src-tauri/src/backup.rs` (novo): módulo de cripto puro, `encrypt`/`decrypt`/
+  `encrypt_with` (núcleo testável com salt/nonce/iterations explícitos), 8 testes incluindo um
+  vetor fixo cruzado com o Dart. Dependência nova: `pbkdf2 = "0.12"` (resolveu 0.12.2).
+- `vault_export_backup`/`vault_import_backup` (novos comandos Tauri em `lib.rs`), mais
+  `tauri-plugin-dialog`/`tauri-plugin-fs` (novos, pra diálogo nativo de salvar/abrir arquivo — não
+  existia nenhum precedente disso no projeto) com capabilities `dialog:default` +
+  `fs:allow-write-file`/`fs:allow-read-file` (escopo `**`, já que o path vem de um diálogo nativo
+  que o próprio usuário escolheu).
+- `desktop/src/hooks/useVaultBackup.ts` + `desktop/src/components/VaultBackup.tsx` (novos) — nova
+  view `"backup"` em `VaultManagement.tsx`, botão `⏏ Backup` no header ao lado do `⚙ Providers`,
+  **fora** de qualquer guarda de `canWrite` (export/import não dependem disso).
+- `mobile/lib/services/backup_cipher_service.dart` (novo, espelho do Rust) + `exportBackup`/
+  `importBackup` novos em `VaultRepository` (reaproveitando `_load`/`_save`, com
+  `_parseVaultJson`/`_serializeVaultData` extraídos pra serem compartilhados). `mobile/lib/
+  screens/vault_backup_screen.dart` (novo) + botão `Icons.save_alt` em `vault_screen.dart`,
+  também fora da guarda de `canWrite`.
+- Testes: `backup_cipher_service_test.dart` (7, incluindo o vetor fixo — bateu byte-a-byte com o
+  Rust de primeira), extensão em `vault_repository_test.dart` (3, roundtrip export/import/senha
+  errada), `vault_backup_screen_test.dart` (5, validação de senha na UI — achado no caminho:
+  `ListView` virtualiza via sliver mesmo com children fixos, testes precisam de
+  `tester.view.physicalSize` maior pra montar conteúdo abaixo da dobra).
+
+**Achado real de build, não hipotético — Android/Kotlin/AGP 9**: adicionar `file_picker` (escolha
+de arquivo no Mobile) quebrou o build Android com `cannot find symbol: class FilePickerPlugin`.
+Causa raiz, descoberta por investigação direta (não achismo): este projeto usa AGP 9.0.1 com
+`android.builtInKotlin=false` (flag padrão do template Flutter). `file_picker` 11.x só aplica o
+Kotlin Gradle Plugin quando detecta AGP < 9 (assume que AGP 9+ usa Kotlin nativo/built-in) — com
+built-in Kotlin desligado, o Kotlin do plugin nunca compilava. Ligar `builtInKotlin=true` resolve
+o `file_picker` mas quebra `app_links` (dependência já existente, aplica o Kotlin Gradle Plugin
+incondicionalmente, incompatível com built-in Kotlin ligado). Testadas 3 versões do `file_picker`
+antes de achar uma sem conflito: 8.1.7/9.2.3 (Java puro, mas hardcodeiam `compileSdk 34`, quebram
+com `flutter_plugin_android_lifecycle` que exige 36+), 11.x (Kotlin condicional, conflita com
+`app_links`). **Fixado em `file_picker: 10.3.6`** (sem `^`, de propósito) — única versão que usa
+`compileSdk flutter.compileSdkVersion` (não hardcoded) E aplica o Kotlin Gradle Plugin
+incondicionalmente, igual ao `app_links`, sem nenhum dos dois conflitos.
+
+**Achado de ambiente, não relacionado ao código**: `desktop/src-tauri/gen/` estava com dono
+`root:root` (sobra de um build anterior via Docker rodando como root num diretório bind-mounted do
+host) — bloqueou o `cargo build` na hora de adicionar os plugins novos (Rust precisa reescrever os
+schemas de capability ali). Corrigido pelo dono do projeto via `sudo chown -R $USER:$USER
+desktop/src-tauri/gen` (Claude Code não roda sudo interativo nesta máquina).
+
+**Validação manual em hardware real, cross-device de verdade**: Desktop nativo
+(`GDK_BACKEND=x11 ... npm run tauri dev`) — export com senha, arquivo criado com magic `TIDVLTB1`
+correto; import com senha errada rejeitado com mensagem clara e vault local intacto; import com
+senha certa restaurou fielmente (mesma versão, mesma entrada). Depois, **export do Desktop → `adb
+push` do arquivo pro celular físico (Galaxy Z Flip) → import no app do Mobile via o seletor de
+arquivo do sistema (SAF), escolhendo o arquivo em Downloads** — restaurou a entrada `github.com`
+corretamente, confirmando compatibilidade cross-platform real (não só o vetor fixo de teste). O
+dono do projeto optou por não testar o caminho inverso (Mobile→Desktop) explicitamente — a lógica
+é simétrica e já provada compatível pelo vetor cruzado nos testes automatizados.
+
+**Item 4 do roadmap pós-Fase 14 (Backup) fecha 100%** — validado em hardware real cross-device,
+sem pendência de validação restante.
+
 ---
 
 ## Como Usar Este Arquivo

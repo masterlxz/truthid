@@ -365,6 +365,57 @@ void main() {
     });
   });
 
+  group('VaultRepository backup export/import', () {
+    test('exportBackup retorna bytes começando com o magic TIDVLTB1', () async {
+      await repo.addEntry(site: 'github.com', username: 'fab', password: 'x');
+      final blob = await repo.exportBackup('hunter2');
+      expect(utf8.decode(blob.sublist(0, 8)), 'TIDVLTB1');
+    });
+
+    test('importBackup faz roundtrip de entries/profileNames/version', () async {
+      await repo.addProfile('Trabalho');
+      await repo.addEntry(
+        site: 'github.com',
+        username: 'fab',
+        password: 'x',
+        profiles: ['Trabalho'],
+      );
+      final versionBefore = await repo.currentVersion();
+
+      final blob = await repo.exportBackup('hunter2');
+
+      final freshTempDir = await Directory.systemTemp.createTemp('vault_import_test_');
+      final freshRepo = VaultRepository(
+        cipherService: _FakeCipherService(),
+        testPath: '${freshTempDir.path}/vault.enc',
+      );
+      await freshRepo.importBackup(blob, 'hunter2');
+
+      final entries = await freshRepo.listEntries();
+      expect(entries, hasLength(1));
+      expect(entries.first.site, 'github.com');
+      expect(entries.first.profiles, equals(['Trabalho']));
+      expect(await freshRepo.listProfileNames(), equals(['Trabalho']));
+      expect(await freshRepo.currentVersion(), equals(versionBefore));
+
+      await freshTempDir.delete(recursive: true);
+    });
+
+    test('importBackup com senha errada lança e não altera o vault local', () async {
+      await repo.addEntry(site: 'github.com', username: 'fab', password: 'x');
+      final blob = await repo.exportBackup('senha-certa');
+
+      await expectLater(
+        repo.importBackup(blob, 'senha-errada'),
+        throwsFormatException,
+      );
+
+      final entries = await repo.listEntries();
+      expect(entries, hasLength(1));
+      expect(entries.first.site, 'github.com');
+    });
+  });
+
   group('VaultEntry.toJsonForExtension', () {
     test('never includes totp_secret, even when the entry has one', () {
       final entry = VaultEntry(

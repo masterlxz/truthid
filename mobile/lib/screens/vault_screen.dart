@@ -13,6 +13,7 @@ import '../services/vault_repository.dart';
 import '../services/vault_sync_service.dart';
 import '../theme.dart';
 import 'pinning_providers_screen.dart';
+import 'vault_backup_screen.dart';
 import 'vault_entry_detail_screen.dart';
 import 'vault_entry_form_screen.dart';
 import 'vault_profiles_screen.dart';
@@ -274,6 +275,19 @@ class _VaultScreenState extends State<VaultScreen> {
               const Expanded(
                 child: Text('Vault',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              ),
+              // Fora da guarda de _canWrite de propósito: export/import não
+              // dependem de permissão de escrita on-chain (só leem/escrevem
+              // o cache local deste device) — mesmo device só-leitura pode
+              // fazer backup do que já vê.
+              IconButton(
+                icon: const Icon(Icons.save_alt),
+                tooltip: 'Backup / restore',
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => VaultBackupScreen(repository: _repository),
+                  ),
+                ),
               ),
               if (_canWrite) ...[
                 IconButton(

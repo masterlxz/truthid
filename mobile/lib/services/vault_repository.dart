@@ -6,6 +6,7 @@ import 'dart:typed_data';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 
+import 'backup_cipher_service.dart';
 import 'vault_cipher_service.dart';
 
 // ---------------------------------------------------------------------------
@@ -224,11 +225,16 @@ class _VaultData {
 
 class VaultRepository {
   final VaultCipherService _cipherService;
+  final BackupCipherService _backupCipherService;
   // Caminho injetado nos testes; null = usa path_provider em produção.
   final String? _testPath;
 
-  VaultRepository({VaultCipherService? cipherService, String? testPath})
-      : _cipherService = cipherService ?? VaultCipherService(),
+  VaultRepository({
+    VaultCipherService? cipherService,
+    BackupCipherService? backupCipherService,
+    String? testPath,
+  })  : _cipherService = cipherService ?? VaultCipherService(),
+        _backupCipherService = backupCipherService ?? BackupCipherService(),
         _testPath = testPath;
 
   Future<List<VaultEntry>> listEntries() async {
@@ -416,6 +422,25 @@ class VaultRepository {
     return pending > 0 ? pending : 0;
   }
 
+  // Serializa o vault local inteiro e cifra com uma senha de export (PBKDF2 +
+  // AES-256-GCM via BackupCipherService), independente da vault key derivada
+  // da wallet/pareamento — ver PROJECT_STATE.md, roadmap item 4.
+  Future<Uint8List> exportBackup(String password) async {
+    final data = await _load();
+    return _backupCipherService.encrypt(_serializeVaultData(data), password);
+  }
+
+  // Decifra um blob de backup com a senha de export e **sobrescreve** o
+  // vault local, recifrando com a vault key deste device via _save() — a
+  // senha de export nunca é usada pro armazenamento local. Não altera a
+  // `version` do JSON importado: se estiver desatualizada frente à on-chain,
+  // VaultSyncService.sync() corrige sozinho no próximo sync (ver
+  // vault_sync_service.dart, `if (ref.version <= localVersion)`).
+  Future<void> importBackup(Uint8List blob, String password) async {
+    final json = await _backupCipherService.decrypt(blob, password);
+    await _save(_parseVaultJson(json));
+  }
+
   // -------------------------------------------------------------------------
   // Privado
   // -------------------------------------------------------------------------
@@ -426,14 +451,9 @@ class VaultRepository {
     return '${dir.path}/vault.enc';
   }
 
-  Future<_VaultData> _load() async {
-    final path = await _vaultPath();
-    final file = File(path);
-    if (!await file.exists()) {
-      return const _VaultData(version: 0, entries: []);
-    }
-    final blob = await file.readAsBytes();
-    final json = await _cipherService.decrypt(blob);
+  // Desserializa o JSON plano (já decifrado) do vault — compartilhado entre
+  // _load() (lê do vault.enc local) e importBackup() (lê de um backup).
+  _VaultData _parseVaultJson(Uint8List json) {
     final map = jsonDecode(utf8.decode(json)) as Map<String, dynamic>;
     final entries = (map['entries'] as List)
         .map((e) => VaultEntry.fromJson(e as Map<String, dynamic>))
@@ -454,15 +474,32 @@ class VaultRepository {
     );
   }
 
-  Future<void> _save(_VaultData data) async {
+  // Serializa o vault pro JSON plano (ainda não cifrado) — compartilhado
+  // entre _save() (grava no vault.enc local) e exportBackup().
+  Uint8List _serializeVaultData(_VaultData data) {
     final map = {
       'version': data.version,
       'entries': data.entries.map((e) => e.toJson()).toList(),
       'profile_names': data.profileNames,
       'device_permissions': data.devicePermissions.map((p) => p.toJson()).toList(),
     };
-    final json = utf8.encode(jsonEncode(map));
-    final blob = await _cipherService.encrypt(Uint8List.fromList(json));
+    return Uint8List.fromList(utf8.encode(jsonEncode(map)));
+  }
+
+  Future<_VaultData> _load() async {
+    final path = await _vaultPath();
+    final file = File(path);
+    if (!await file.exists()) {
+      return const _VaultData(version: 0, entries: []);
+    }
+    final blob = await file.readAsBytes();
+    final json = await _cipherService.decrypt(blob);
+    return _parseVaultJson(json);
+  }
+
+  Future<void> _save(_VaultData data) async {
+    final json = _serializeVaultData(data);
+    final blob = await _cipherService.encrypt(json);
     final path = await _vaultPath();
     await File(path).writeAsBytes(blob);
   }

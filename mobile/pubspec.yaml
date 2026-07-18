@@ -43,6 +43,16 @@ dependencies:
   elliptic: ^0.3.11
   app_links: ^6.0.0
   pointycastle: ^3.9.1
+  # Pinado em 10.3.6 (não ^) de propósito: 8.x/9.x hardcodeiam compileSdk 34
+  # no build.gradle do plugin (quebra com flutter_plugin_android_lifecycle,
+  # que exige compileSdk 36+); 11.x só aplica o Kotlin Gradle Plugin quando
+  # detecta AGP < 9 (assume built-in Kotlin do AGP 9+), o que quebra com
+  # android.builtInKotlin=false (necessário porque outro plugin já existente,
+  # app_links, aplica o Kotlin Gradle Plugin incondicionalmente e quebra se
+  # built-in Kotlin estiver ligado). A 10.3.6 usa `flutter.compileSdkVersion`
+  # (não hardcoded) E aplica o Kotlin Gradle Plugin incondicionalmente — sem
+  # nenhum dos dois conflitos. Ver achado real na Sessão 126.
+  file_picker: 10.3.6
 
 dev_dependencies:
   flutter_test:

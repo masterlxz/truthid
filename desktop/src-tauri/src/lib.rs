@@ -9,6 +9,7 @@ use aes_gcm::{Aes256Gcm, Key};
 use aes_gcm::aead::{Aead, AeadCore, KeyInit};
 use k256::elliptic_curve::ecdh::diffie_hellman;
 
+mod backup;
 mod bundler;
 mod ipfs;
 mod ledger;
@@ -497,6 +498,34 @@ fn vault_decrypt(blob_b64: String) -> Result<String, String> {
     Ok(STANDARD.encode(plaintext))
 }
 
+/// Serializa o vault local inteiro e cifra com uma senha de export (PBKDF2 +
+/// AES-256-GCM), independente da vault key derivada da wallet. Retorna o
+/// blob completo (magic+salt+iterations+nonce+ciphertext) em Base64 — o
+/// frontend só grava esses bytes no arquivo escolhido pelo usuário.
+#[tauri::command]
+fn vault_export_backup(password: String) -> Result<String, String> {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    let v = vault::load()?;
+    let json = serde_json::to_vec(&v).map_err(|e| e.to_string())?;
+    let blob = backup::encrypt(&json, &password)?;
+    Ok(STANDARD.encode(blob))
+}
+
+/// Decifra um blob de backup (Base64) com a senha de export e sobrescreve o
+/// vault local, recifrando com a vault key deste device — a senha de export
+/// nunca é usada pro armazenamento local. Não altera a `version` do JSON
+/// importado (ver VaultSyncService.sync() no Mobile, que corrige sozinho se
+/// a versão importada estiver desatualizada frente à on-chain).
+#[tauri::command]
+fn vault_import_backup(blob_b64: String, password: String) -> Result<(), String> {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    let blob = STANDARD.decode(&blob_b64).map_err(|e| e.to_string())?;
+    let json = backup::decrypt(&blob, &password)?;
+    let imported: vault::Vault = serde_json::from_slice(&json)
+        .map_err(|_| "backup file has invalid vault contents".to_string())?;
+    vault::save(&imported)
+}
+
 /// Núcleo puro de `personal_sign`/EIP-191 pra uma mensagem string arbitrária —
 /// separado de `sign_personal_message` pra ser testável com uma chave fixa,
 /// sem tocar keyring (mesmo padrão de `sign_eip191_hash_raw`, que já isola a
@@ -688,6 +717,8 @@ async fn pin_set_daily_limit(
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .manage(local_signer_server::LocalSignerServerState::default())
         .manage(std::sync::Arc::new(sign_request::SignRequestState::default()))
         .manage(std::sync::Arc::new(sign_message::SignMessageState::default()))
@@ -756,6 +787,8 @@ pub fn run() {
             vault_delete_profile,
             vault_encrypt,
             vault_decrypt,
+            vault_export_backup,
+            vault_import_backup,
             vault_publish,
             vault_pending_changes,
             vault_get_providers,

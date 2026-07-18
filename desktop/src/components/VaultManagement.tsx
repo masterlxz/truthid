@@ -7,6 +7,7 @@ import { useWalletModal } from "../contexts/WalletModalContext";
 import { DEVICE_REGISTRY_ADDRESS, DEVICE_REGISTRY_ABI } from "../config/contracts";
 import type { DeviceInfo, VaultEntry, DeviceVaultPermission, Passkey } from "../types";
 import { VaultSettings } from "./VaultSettings";
+import { VaultBackup } from "./VaultBackup";
 import { useVaultPublish } from "../hooks/useVaultPublish";
 import { TotpCode } from "./TotpCode";
 import { parseTotpSecret } from "../utils/totp";
@@ -294,7 +295,7 @@ export function VaultManagement() {
   }
 
   // ── View ──────────────────────────────────────────────────────────────────
-  const [view, setView] = useState<"entries" | "settings">("entries");
+  const [view, setView] = useState<"entries" | "settings" | "backup">("entries");
 
   // ── Entradas locais ───────────────────────────────────────────────────────
   const [entries, setEntries] = useState<VaultEntry[]>([]);
@@ -508,6 +509,24 @@ export function VaultManagement() {
     );
   }
 
+  // ── View: backup ─────────────────────────────────────────────────────────
+  if (view === "backup") {
+    return (
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1rem" }}>
+          <button
+            onClick={() => setView("entries")}
+            style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)", padding: "0.3em 0.8em" }}
+          >
+            ← Vault
+          </button>
+          <h2 style={{ margin: 0 }}>Backup</h2>
+        </div>
+        <VaultBackup />
+      </div>
+    );
+  }
+
   // ── Guard: vault key ─────────────────────────────────────────────────────
   if (vaultKeyReady === null) {
     return <div className="card"><p className="muted">Checking vault key...</p></div>;
@@ -549,12 +568,20 @@ export function VaultManagement() {
       {/* Cabeçalho */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem" }}>
         <h2 style={{ margin: 0 }}>Vault</h2>
-        <button
-          onClick={() => setView("settings")}
-          style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)", padding: "0.3em 0.8em", fontSize: "0.85em" }}
-        >
-          ⚙ Providers
-        </button>
+        <div style={{ display: "flex", gap: "0.5rem" }}>
+          <button
+            onClick={() => setView("backup")}
+            style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)", padding: "0.3em 0.8em", fontSize: "0.85em" }}
+          >
+            ⏏ Backup
+          </button>
+          <button
+            onClick={() => setView("settings")}
+            style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)", padding: "0.3em 0.8em", fontSize: "0.85em" }}
+          >
+            ⚙ Providers
+          </button>
+        </div>
       </div>
 
       {/* Status on-chain + botão Enviar */}
