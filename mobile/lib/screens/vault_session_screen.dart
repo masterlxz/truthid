@@ -218,9 +218,11 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
         return;
       }
 
+      // toJsonForExtension() (não toJson()) — 2FA fica isolado no Device por
+      // design, a extensão nunca deve receber o totp_secret de uma entrada.
       final plaintext = Uint8List.fromList(
         utf8.encode(
-          jsonEncode(_matchingEntries.map((e) => e.toJson()).toList()),
+          jsonEncode(_matchingEntries.map((e) => e.toJsonForExtension()).toList()),
         ),
       );
       final encryptedBlob =

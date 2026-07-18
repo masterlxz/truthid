@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/totp_service.dart';
 import '../services/vault_repository.dart';
 import '../theme.dart';
 
@@ -24,6 +25,7 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
   final _usernameCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
   final _notesCtrl = TextEditingController();
+  final _totpSecretCtrl = TextEditingController();
 
   List<String> _profileOptions = [];
   final Set<String> _selectedProfiles = {};
@@ -31,6 +33,7 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
   bool _loadingProfiles = true;
   bool _saving = false;
   String? _error;
+  String? _totpError;
 
   bool get _isEditing => widget.entry != null;
 
@@ -46,6 +49,7 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
       _passwordCtrl.text = entry.password;
       _notesCtrl.text = entry.notes;
       _selectedProfiles.addAll(entry.profiles);
+      _totpSecretCtrl.text = entry.totpSecret ?? '';
     }
     _loadProfileOptions();
   }
@@ -62,6 +66,7 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
     _usernameCtrl.dispose();
     _passwordCtrl.dispose();
     _notesCtrl.dispose();
+    _totpSecretCtrl.dispose();
     super.dispose();
   }
 
@@ -70,7 +75,32 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
       _usernameCtrl.text.trim().isEmpty ||
       _passwordCtrl.text.trim().isEmpty;
 
+  void _onTotpChanged(String value) {
+    setState(() {
+      if (value.trim().isEmpty) {
+        _totpError = null;
+        return;
+      }
+      try {
+        parseTotpSecret(value);
+        _totpError = null;
+      } catch (e) {
+        _totpError = '$e';
+      }
+    });
+  }
+
   Future<void> _save() async {
+    String? totpSecret;
+    if (_totpSecretCtrl.text.trim().isNotEmpty) {
+      try {
+        totpSecret = parseTotpSecret(_totpSecretCtrl.text);
+      } catch (e) {
+        setState(() => _totpError = '$e');
+        return;
+      }
+    }
+
     setState(() { _saving = true; _error = null; });
     try {
       if (_isEditing) {
@@ -81,6 +111,7 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
           password: _passwordCtrl.text.trim(),
           notes: _notesCtrl.text.trim(),
           profiles: _selectedProfiles.toList(),
+          totpSecret: totpSecret,
         ));
       } else {
         await _repository.addEntry(
@@ -90,6 +121,7 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
           password: _passwordCtrl.text.trim(),
           notes: _notesCtrl.text.trim(),
           profiles: _selectedProfiles.toList(),
+          totpSecret: totpSecret,
         );
       }
       if (mounted) Navigator.of(context).pop(true);
@@ -144,6 +176,16 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                     decoration: const InputDecoration(labelText: 'Notes'),
                     maxLines: 3,
                   ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _totpSecretCtrl,
+                    decoration: InputDecoration(
+                      labelText: '2FA secret (optional)',
+                      hintText: 'base32 secret or otpauth://... URI',
+                      errorText: _totpError,
+                    ),
+                    onChanged: _onTotpChanged,
+                  ),
                   const SizedBox(height: 16),
                   const Text('Profiles', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
@@ -171,7 +213,7 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                     const SizedBox(height: 12),
                   ],
                   ElevatedButton(
-                    onPressed: (_saving || _formInvalid) ? null : _save,
+                    onPressed: (_saving || _formInvalid || _totpError != null) ? null : _save,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.accent,
                       foregroundColor: AppColors.background,

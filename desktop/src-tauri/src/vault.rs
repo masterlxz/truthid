@@ -26,6 +26,12 @@ pub(crate) struct VaultEntry {
     /// Campo legado — só lido na desserialização para migração. Nunca escrito.
     #[serde(default, skip_serializing)]
     profile: String,
+    /// Segredo TOTP (RFC 6238) em base32, se o usuário configurou 2FA pra essa
+    /// entrada. Cálculo do código acontece em TS/Dart, não no Rust — este
+    /// campo nunca deve ser incluído no payload enviado à extensão de
+    /// navegador (ver vault_session_screen.dart no Mobile).
+    #[serde(default)]
+    pub totp_secret: Option<String>,
     pub created_at: u64,
     pub updated_at: u64,
 }
@@ -393,6 +399,7 @@ mod tests {
             notes: String::new(),
             profiles: vec![],
             profile: String::new(),
+            totp_secret: None,
             created_at: 0,
             updated_at: 0,
         }

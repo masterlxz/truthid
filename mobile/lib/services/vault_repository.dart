@@ -12,6 +12,12 @@ import 'vault_cipher_service.dart';
 // Modelo de entrada do vault
 // ---------------------------------------------------------------------------
 
+class _Unset {
+  const _Unset();
+}
+
+const _unset = _Unset();
+
 class VaultEntry {
   final String id;
   final String site;
@@ -21,6 +27,9 @@ class VaultEntry {
   final String notes;
   /// Lista de grupos a que esta entrada pertence (ex: ["Trabalho", "Casa"]).
   final List<String> profiles;
+  /// Segredo TOTP (RFC 6238) em base32, se 2FA estiver configurado. Nunca deve
+  /// ser incluído no payload enviado à extensão — usar [toJsonForExtension].
+  final String? totpSecret;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -32,6 +41,7 @@ class VaultEntry {
     required this.password,
     required this.notes,
     this.profiles = const [],
+    this.totpSecret,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -53,6 +63,7 @@ class VaultEntry {
       password: json['password'] as String,
       notes: json['notes'] as String,
       profiles: profiles,
+      totpSecret: json['totp_secret'] as String?,
       createdAt: DateTime.fromMillisecondsSinceEpoch(
         (json['created_at'] as int) * 1000,
         isUtc: true,
@@ -72,10 +83,25 @@ class VaultEntry {
         'password': password,
         'notes': notes,
         'profiles': profiles,
+        'totp_secret': totpSecret,
         'created_at': createdAt.millisecondsSinceEpoch ~/ 1000,
         'updated_at': updatedAt.millisecondsSinceEpoch ~/ 1000,
       };
 
+  /// Igual a [toJson], mas sem `totp_secret` — usar sempre que a entrada for
+  /// sair pro canal da extensão de navegador (LAN/dead-drop em
+  /// vault_session_screen.dart). 2FA fica isolado no Device por design; a
+  /// extensão nunca deve receber esse segredo.
+  Map<String, dynamic> toJsonForExtension() {
+    final json = toJson();
+    json.remove('totp_secret');
+    return json;
+  }
+
+  // `totpSecret` usa um sentinel em vez de `String?` puro: precisa
+  // distinguir "não passei esse argumento" (mantém o valor atual) de "passei
+  // null de propósito" (apaga o 2FA da entrada) — um `String? ?? this.x`
+  // comum não permite nunca limpar o campo de volta pra null.
   VaultEntry copyWith({
     String? site,
     String? url,
@@ -83,6 +109,7 @@ class VaultEntry {
     String? password,
     String? notes,
     List<String>? profiles,
+    Object? totpSecret = _unset,
   }) =>
       VaultEntry(
         id: id,
@@ -92,6 +119,8 @@ class VaultEntry {
         password: password ?? this.password,
         notes: notes ?? this.notes,
         profiles: profiles ?? this.profiles,
+        totpSecret:
+            identical(totpSecret, _unset) ? this.totpSecret : totpSecret as String?,
         createdAt: createdAt,
         updatedAt: DateTime.now().toUtc(),
       );
@@ -233,6 +262,7 @@ class VaultRepository {
     required String password,
     String notes = '',
     List<String> profiles = const [],
+    String? totpSecret,
   }) async {
     final data = await _load();
     final now = DateTime.now().toUtc();
@@ -244,6 +274,7 @@ class VaultRepository {
       password: password,
       notes: notes,
       profiles: profiles,
+      totpSecret: totpSecret,
       createdAt: now,
       updatedAt: now,
     );

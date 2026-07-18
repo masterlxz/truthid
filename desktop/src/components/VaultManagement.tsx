@@ -8,6 +8,8 @@ import { DEVICE_REGISTRY_ADDRESS, DEVICE_REGISTRY_ABI } from "../config/contract
 import type { DeviceInfo, VaultEntry, DeviceVaultPermission } from "../types";
 import { VaultSettings } from "./VaultSettings";
 import { useVaultPublish } from "../hooks/useVaultPublish";
+import { TotpCode } from "./TotpCode";
+import { parseTotpSecret } from "../utils/totp";
 
 const VAULT_KEY_MESSAGE = "TruthID Vault Key v1";
 
@@ -36,10 +38,11 @@ type FormState = {
   password: string;
   notes: string;
   profiles: string[];
+  totp_secret: string;
 };
 
 function emptyForm(): FormState {
-  return { site: "", url: "", username: "", password: "", notes: "", profiles: [] };
+  return { site: "", url: "", username: "", password: "", notes: "", profiles: [], totp_secret: "" };
 }
 
 // ---------------------------------------------------------------------------
@@ -102,9 +105,30 @@ function EntryForm({
 }) {
   const [form, setForm] = useState<FormState>(initial);
   const [showPw, setShowPw] = useState(false);
+  const [totpError, setTotpError] = useState<string | null>(null);
 
   function set(field: keyof FormState, val: string | string[]) {
     setForm((f) => ({ ...f, [field]: val }));
+  }
+
+  function handleTotpChange(val: string) {
+    set("totp_secret", val);
+    if (!val.trim()) { setTotpError(null); return; }
+    try {
+      parseTotpSecret(val);
+      setTotpError(null);
+    } catch (e) {
+      setTotpError(String(e));
+    }
+  }
+
+  function handleSave() {
+    if (!form.totp_secret.trim()) { onSave(form); return; }
+    try {
+      onSave({ ...form, totp_secret: parseTotpSecret(form.totp_secret) });
+    } catch (e) {
+      setTotpError(String(e));
+    }
   }
 
   return (
@@ -146,10 +170,19 @@ function EntryForm({
         <label>Grupos</label>
         <ProfilePicker value={form.profiles} onChange={(v) => set("profiles", v)} options={profileOptions} />
       </div>
+      <div className="field">
+        <label>Segredo 2FA (opcional)</label>
+        <input
+          value={form.totp_secret}
+          onChange={(e) => handleTotpChange(e.target.value)}
+          placeholder="Segredo base32 ou URI otpauth://..."
+        />
+        {totpError && <p className="error-text" style={{ margin: "0.25em 0 0", fontSize: "0.82em" }}>{totpError}</p>}
+      </div>
       <div className="actions-row">
         <button
-          onClick={() => onSave(form)}
-          disabled={saving || !form.site.trim() || !form.username.trim() || !form.password.trim()}
+          onClick={handleSave}
+          disabled={saving || !form.site.trim() || !form.username.trim() || !form.password.trim() || !!totpError}
         >
           {saving ? "Salvando..." : "Salvar"}
         </button>
@@ -558,7 +591,7 @@ export function VaultManagement() {
               return (
                 <div key={entry.id} className="card">
                   <EntryForm
-                    initial={{ site: entry.site, url: entry.url, username: entry.username, password: entry.password, notes: entry.notes, profiles: entry.profiles }}
+                    initial={{ site: entry.site, url: entry.url, username: entry.username, password: entry.password, notes: entry.notes, profiles: entry.profiles, totp_secret: entry.totp_secret ?? "" }}
                     onSave={(f) => handleEdit(entry.id, f)}
                     onCancel={() => setEditingId(null)}
                     saving={mutating}
@@ -585,6 +618,11 @@ export function VaultManagement() {
                     <div className="address" style={{ fontSize: "0.82em", color: "var(--color-text-muted)", marginTop: "0.15rem" }}>
                       {maskPassword(entry.password)}
                     </div>
+                    {entry.totp_secret && (
+                      <div style={{ marginTop: "0.3rem" }}>
+                        <TotpCode secret={entry.totp_secret} />
+                      </div>
+                    )}
                   </div>
                   <div style={{ display: "flex", gap: "0.4rem", flexShrink: 0, marginLeft: "0.75rem" }}>
                     <button

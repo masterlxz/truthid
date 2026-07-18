@@ -22,6 +22,8 @@ export type VaultEntry = {
   password: string;
   notes: string;
   profiles: string[];
+  /** Segredo TOTP (RFC 6238) em base32, se 2FA estiver configurado pra esta entrada. */
+  totp_secret?: string;
   created_at: number;
   updated_at: number;
 };

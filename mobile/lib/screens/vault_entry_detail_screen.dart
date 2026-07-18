@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../services/totp_service.dart';
 import '../services/vault_repository.dart';
 import '../theme.dart';
 import '../widgets/info_row.dart';
@@ -130,6 +133,13 @@ class _VaultEntryDetailScreenState extends State<VaultEntryDetailScreen> {
               const SizedBox(height: 8),
               InfoRow(label: 'Notes', value: entry.notes),
             ],
+            if (entry.totpSecret != null && entry.totpSecret!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              _TotpCodeRow(
+                secret: entry.totpSecret!,
+                onCopy: (code) => _copy('2FA code', code),
+              ),
+            ],
             if (entry.profiles.isNotEmpty) ...[
               const SizedBox(height: 16),
               Wrap(
@@ -181,6 +191,85 @@ class _LinkRow extends StatelessWidget {
             const Icon(Icons.open_in_new, size: 18, color: AppColors.textMuted),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// Mostra o código TOTP atual (RFC 6238), com contagem regressiva de 30s —
+// mesmo padrão de Timer.periodic + cancel-em-dispose já usado em
+// show_device_qr_screen.dart, adaptado pra um tick de 1s em vez de polling.
+class _TotpCodeRow extends StatefulWidget {
+  final String secret;
+  final void Function(String code) onCopy;
+
+  const _TotpCodeRow({required this.secret, required this.onCopy});
+
+  @override
+  State<_TotpCodeRow> createState() => _TotpCodeRowState();
+}
+
+class _TotpCodeRowState extends State<_TotpCodeRow> {
+  static const _tickInterval = Duration(seconds: 1);
+  Timer? _tickTimer;
+  String _code = '······';
+  int _remaining = 30;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _tick();
+    _tickTimer = Timer.periodic(_tickInterval, (_) => _tick());
+  }
+
+  void _tick() {
+    final now = DateTime.now().toUtc().millisecondsSinceEpoch ~/ 1000;
+    try {
+      final code = generateTotpCode(widget.secret, now);
+      if (mounted) {
+        setState(() {
+          _code = code;
+          _remaining = secondsRemaining(now);
+          _error = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = '$e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _tickTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_error != null) {
+      return Text('2FA: $_error', style: const TextStyle(color: AppColors.danger));
+    }
+    final formatted = '${_code.substring(0, 3)} ${_code.substring(3)}';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceAlt,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          const Text('2FA: ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          Expanded(
+            child: Text(formatted,
+                style: const TextStyle(fontFamily: 'monospace', fontSize: 15)),
+          ),
+          Text('${_remaining}s', style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+          IconButton(
+            icon: const Icon(Icons.copy, size: 20, color: AppColors.textMuted),
+            onPressed: () => widget.onCopy(_code),
+          ),
+        ],
       ),
     );
   }

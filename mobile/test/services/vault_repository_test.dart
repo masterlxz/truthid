@@ -364,4 +364,42 @@ void main() {
       expect(updated.profiles, equals(['Pessoal']));
     });
   });
+
+  group('VaultEntry.toJsonForExtension', () {
+    test('never includes totp_secret, even when the entry has one', () {
+      final entry = VaultEntry(
+        id: '1',
+        site: 'github.com',
+        url: '',
+        username: 'fab',
+        password: 'x',
+        notes: '',
+        totpSecret: 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ',
+        createdAt: DateTime.now().toUtc(),
+        updatedAt: DateTime.now().toUtc(),
+      );
+
+      expect(entry.toJson().containsKey('totp_secret'), isTrue);
+      expect(entry.toJsonForExtension().containsKey('totp_secret'), isFalse);
+    });
+
+    test('carries every other field through unchanged', () {
+      final entry = VaultEntry(
+        id: '1',
+        site: 'github.com',
+        url: 'https://github.com',
+        username: 'fab',
+        password: 'x',
+        notes: 'note',
+        profiles: const ['Trabalho'],
+        totpSecret: 'GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ',
+        createdAt: DateTime.now().toUtc(),
+        updatedAt: DateTime.now().toUtc(),
+      );
+
+      final extensionJson = entry.toJsonForExtension();
+      final fullJson = entry.toJson()..remove('totp_secret');
+      expect(extensionJson, equals(fullJson));
+    });
+  });
 }
