@@ -1,4 +1,5 @@
-import type { Abi, Address, Hash, PublicClient } from "viem";
+import { toEventSelector } from "viem";
+import type { Abi, AbiEvent, Address, Hash, PublicClient } from "viem";
 import {
   DEVICE_REGISTRY_ADDRESS,
   DEVICE_REGISTRY_ABI,
@@ -20,8 +21,8 @@ type EventSource = {
   type: SmartAccountActivityType;
 };
 
-// Todos os 6 eventos indexam `identityId`, então o filtro `args: { identityId }`
-// já deixa o RPC descartar eventos de outras identidades — o utilitário nunca
+// Todos os 6 eventos indexam `identityId`, então o filtro por topic já deixa
+// o RPC descartar eventos de outras identidades — o utilitário nunca
 // busca-e-descarta nada.
 const EVENT_SOURCES: EventSource[] = [
   { address: DEVICE_REGISTRY_ADDRESS, abi: DEVICE_REGISTRY_ABI as Abi, eventName: "DeviceRegistered", type: "device_registered" },
@@ -32,7 +33,30 @@ const EVENT_SOURCES: EventSource[] = [
   { address: VAULT_REGISTRY_ADDRESS, abi: VAULT_REGISTRY_ABI as Abi, eventName: "VaultUpdated", type: "vault_updated" },
 ];
 
-export type ScanClient = Pick<PublicClient, "getContractEvents" | "getTransactionReceipt" | "getBlock">;
+function findAbiEvent(abi: Abi, eventName: string): AbiEvent {
+  const found = abi.find((item): item is AbiEvent => item.type === "event" && item.name === eventName);
+  if (!found) throw new Error(`Event ${eventName} not found in ABI`);
+  return found;
+}
+
+// Sessão 122/123: mesmo fix aplicado no Mobile (blockchain_service.dart /
+// smart_account_activity_scanner.dart). Um scan de histórico completo cruza
+// ~250 chunks; buscar cada fonte separado (6 chamadas eth_getLogs paralelas
+// por chunk) soma ~1500 chamadas contra RPCs públicos gratuitos, estourando
+// rate limit. `address` e `topics[0]` no eth_getLogs aceitam lista (o nó faz
+// OR dentro da posição), e o topic0 de cada evento é o hash da própria
+// assinatura (único por tipo) — dá pra combinar as 6 fontes numa chamada só
+// por chunk sem contaminação cruzada. `getContractEvents`/`getLogs` do viem
+// não dão esse controle quando combinam múltiplos eventos (descartam o
+// filtro por `args` nesse caso — ver node_modules/viem/actions/public/getLogs.ts),
+// por isso o request cru via `client.request` em vez da action de conveniência.
+const ADDRESSES: Address[] = Array.from(new Set(EVENT_SOURCES.map((s) => s.address)));
+const TOPIC0_BY_INDEX: Hash[] = EVENT_SOURCES.map((s) => toEventSelector(findAbiEvent(s.abi, s.eventName)));
+const TYPE_BY_TOPIC0 = new Map<string, SmartAccountActivityType>(
+  EVENT_SOURCES.map((s, i) => [TOPIC0_BY_INDEX[i].toLowerCase(), s.type]),
+);
+
+export type ScanClient = Pick<PublicClient, "request" | "getTransactionReceipt" | "getBlock">;
 
 export type ScanProgress = { scannedTo: bigint; latest: bigint };
 
@@ -50,6 +74,13 @@ function sortActivities(activities: SmartAccountActivity[]): void {
   });
 }
 
+type RawLog = {
+  topics: Hash[];
+  transactionHash: Hash;
+  blockNumber: Hash;
+  logIndex: Hash;
+};
+
 /**
  * Varre os eventos de sessão/device/vault de uma identidade, do bloco `fromBlock`
  * até `toBlock` (inclusive), em chunks de `CHUNK_SIZE` blocos, pra frente.
@@ -64,6 +95,7 @@ export async function scanSmartAccountActivity(
 ): Promise<SmartAccountActivity[]> {
   const { identityId, fromBlock, toBlock, onChunkScanned } = params;
 
+  const idTopic = `0x${identityId.toString(16).padStart(64, "0")}` as Hash;
   const receiptCache = new Map<Hash, { gasUsed: bigint; effectiveGasPrice: bigint }>();
   const blockTimestampCache = new Map<bigint, bigint>();
   const activities: SmartAccountActivity[] = [];
@@ -72,24 +104,25 @@ export async function scanSmartAccountActivity(
   while (chunkFrom <= toBlock) {
     const chunkTo = chunkFrom + CHUNK_SIZE - 1n > toBlock ? toBlock : chunkFrom + CHUNK_SIZE - 1n;
 
-    const logsPerSource = await Promise.all(
-      EVENT_SOURCES.map(async (source) => {
-        const logs = await client.getContractEvents({
-          address: source.address,
-          abi: source.abi,
-          eventName: source.eventName,
-          args: { identityId },
-          fromBlock: chunkFrom,
-          toBlock: chunkTo,
-        } as Parameters<ScanClient["getContractEvents"]>[0]);
-        return logs.map((log) => ({ log, type: source.type }));
-      }),
-    );
+    const rawLogs = (await client.request({
+      method: "eth_getLogs",
+      params: [
+        {
+          address: ADDRESSES,
+          topics: [TOPIC0_BY_INDEX, idTopic],
+          fromBlock: `0x${chunkFrom.toString(16)}`,
+          toBlock: `0x${chunkTo.toString(16)}`,
+        },
+      ],
+    } as Parameters<ScanClient["request"]>[0])) as unknown as RawLog[];
 
-    for (const { log, type } of logsPerSource.flat()) {
-      const hash = log.transactionHash as Hash;
-      const blockNumber = log.blockNumber as bigint;
-      const logIndex = log.logIndex as number;
+    for (const log of rawLogs) {
+      const type = TYPE_BY_TOPIC0.get(log.topics[0].toLowerCase());
+      if (!type) continue; // topic0 fora da lista pedida, não deveria acontecer
+
+      const hash = log.transactionHash;
+      const blockNumber = BigInt(log.blockNumber);
+      const logIndex = Number(log.logIndex);
 
       let receipt = receiptCache.get(hash);
       if (!receipt) {

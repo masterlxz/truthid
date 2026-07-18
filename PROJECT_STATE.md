@@ -4834,6 +4834,35 @@ na varredura de atividade do Mobile)
   Wallet e reabrir); se confirmar, aplicar o mesmo fix (combinar `eth_getLogs`) no
   `scanSmartAccountActivity.ts` do Desktop por paridade.
 
+### Sessão 123 (continuação) — 2026-07-18: mesmo fix aplicado no Desktop por paridade, sem esperar
+confirmação do bug lá
+
+- **Pedido do dono do projeto**: aplicar o mesmo fix da varredura de atividade no Desktop
+  (`desktop/src/utils/scanSmartAccountActivity.ts`), mesmo sem confirmação de que ele sofria do
+  bug de rate limit — mesmo desenho do Mobile (6 fontes de evento, 1 chamada por fonte por chunk).
+- **Diferença em relação ao Mobile**: `getContractEvents`/`getLogs` do viem não dão o mesmo
+  controle direto de topics ao combinar múltiplos eventos — internamente, quando se passa
+  `events` (plural, lista), o filtro por `args` é descartado (`node_modules/viem/actions/public/getLogs.ts`,
+  `args: events_ ? undefined : args`), então filtrar por `identityId` via a API de conveniência
+  do viem some junto com a combinação. Resolvido indo direto no `client.request({ method:
+  "eth_getLogs", ... })`, montando `address`/`topics` manualmente — mesmo formato cru que o
+  Mobile já usava. `ScanClient` trocou `getContractEvents` por `request` no `Pick<PublicClient>`.
+  Topic0 de cada evento calculado via `toEventSelector` do próprio viem a partir da ABI real em
+  `config/contracts.ts` (não hardcoded como string de assinatura — evita divergência silenciosa
+  se a ABI mudar).
+- **Sem camada de retry/backoff extra no Desktop** (diferente do Mobile,
+  `BlockchainService._rpcCall`): `desktop/src/config/wagmi.ts` já usa `fallback()` do viem sobre
+  os mesmos 3 RPCs, e o transport `http()` do viem já tem retry com backoff embutido por padrão —
+  não duplicado aqui.
+- **Testes**: `scanSmartAccountActivity.test.ts` reescrito pro formato de log cru
+  (`topics`/`blockNumber`/`logIndex` como hex, mock de `client.request` em vez de
+  `getContractEvents`) — inclui teste novo confirmando 1 chamada só por chunk com os 3 endereços
+  (Device/Session/VaultRegistry) e 6 topic0s combinados. `npx vitest run`: **56/56 passando**
+  (suíte inteira). `npx tsc --noEmit`: limpo.
+- **Próximo passo**: nenhum — os dois lados (Mobile e Desktop) já têm o mesmo fix aplicado e
+  testado. Falta só a validação manual num scan frio real (celular do dono do projeto), que
+  segue como pendência de hardware, não de código.
+
 ---
 
 ## Como Usar Este Arquivo
