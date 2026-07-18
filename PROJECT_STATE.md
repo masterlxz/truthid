@@ -4863,6 +4863,49 @@ confirmação do bug lá
   testado. Falta só a validação manual num scan frio real (celular do dono do projeto), que
   segue como pendência de hardware, não de código.
 
+### Sessão 123 (continuação) — 2026-07-18: validação manual em hardware real — fix de rate limit
+confirmado + última pendência do Vault (ECIES no pareamento) finalmente fechada
+
+Dono do projeto tinha celular + Ledger físicos disponíveis — sessão aproveitou pra validar as
+duas coisas na mesma passada.
+
+**Rate limit da Wallet (fix acima) validado com scan frio real**: instalado o APK novo
+(`./dev.sh build` + `adb install`) no celular físico (Galaxy Z Flip, `SM_S731B`, conectado via
+Wireless debugging/`adb pair`+`adb connect`). Botão "Refresh" da aba Wallet (limpa cache + força
+rescan desde `deviceRegistryDeployBlock`) disparado **duas vezes seguidas** — ambas completaram
+sem o erro "Todos os RPCs falharam", confirmando o fix na prática, não só em teste automatizado.
+
+**Achado à parte, não relacionado ao fix**: `adb shell input tap` não conseguia acertar a barra
+de navegação inferior do app (Devices/Sessions/Wallet/Vault) neste aparelho especificamente —
+toques no topo da tela (engrenagem, voltar) funcionavam normalmente. Provável peculiaridade de
+compatibilidade de tela do Z Flip (não investigado a fundo). Contornado pedindo pro dono do
+projeto tocar fisicamente nessas abas; o resto (screenshots, digitação, scroll) seguiu via adb.
+
+**ECIES no pareamento (pendência aberta desde a Sessão 99/[[project-vault]]) validada do zero,
+sem ambiguidade**: `adb uninstall` + reinstalar o APK (gera device novo, sem nenhuma vault key em
+cache) → tela "Show QR to pair" do Mobile deu o endereço novo (`0x9830f672...E229D`) e a chave de
+criptografia → Desktop rodado nativo (`GDK_BACKEND=x11 ... npm run tauri dev`, automatizado via
+`xdotool`/`spectacle`, mesma técnica já documentada em [[env-setup]]) → conectado ao Ledger físico
+→ formulário "Add device" preenchido com endereço/chave/nome → dono do projeto confirmou as 2
+assinaturas no Ledger físico (commit + reveal) → device apareceu "Active" on-chain no Desktop.
+**No celular, a aba Vault mostrou `github.com`/`teste@teste.com` decifrado imediatamente**, sem
+nenhuma chave pré-existente — prova de ponta a ponta que a entrega ECIES da vault key no
+pareamento funciona de verdade em hardware real. Fecha a última pendência da Fase 13.
+
+**Achado à parte #2, sem relação com ECIES**: logo depois do pareamento (`Navigator.pop` de volta
+pra `DevicesScreen`), o app mostrou tela preta por completo (status bar/nav bar do Android normais,
+conteúdo do app todo preto) — app continuava respondendo a toques nos logs (`ViewPostIme pointer`),
+sem exceção nenhuma no logcat, `mCurrentFocus` seguia sendo a Activity certa. Bate com um bug
+conhecido do Impeller (backend Vulkan do Flutter, "Using the Impeller rendering backend (Vulkan)"
+no log) em alguns aparelhos — não é bug do código do TruthID. Resolvido com
+`am force-stop` + reabrir o app; não reapareceu depois. Não investigado a fundo, registrar caso
+aconteça de novo.
+
+Ambiente de teste (Desktop nativo, Ledger, `adb`/wireless debugging) encerrado ao fim da sessão.
+Device de teste "Test re-pair Sessao 123" (`0x9830f672...E229D`) ficou registrado on-chain,
+ativo — revogar não é reversível (`DeviceRegistry.revokeDevice` nunca reseta `exists`, achado da
+Sessão 92), então nenhuma ação tomada sobre ele sem pedido explícito do dono do projeto.
+
 ---
 
 ## Como Usar Este Arquivo
