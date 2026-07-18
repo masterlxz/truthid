@@ -4728,6 +4728,81 @@ Code) no Roadmap — expansão do produto e monetização
 
 ---
 
+### Sessão 122 — 2026-07-18: prioridade definida — Vault 100% funcional antes de qualquer coisa,
+monetização fica pra depois
+
+- **Objetivo**: só conversa/registro, nenhum código tocado. Dono do projeto definiu a ordem de
+  execução entre as opções que a Sessão 121 tinha deixado em aberto (item 7 do brainstorm —
+  "Roadmap: expansão do produto e monetização"). Decisão explícita: **produto bom primeiro,
+  monetização só depois** — nada da frente de monetização entra antes do Vault estar completo.
+- **Ordem de prioridade definida** (nesta sequência, cada item só começa depois do anterior
+  estar de pé):
+  1. **Vault 100% funcional** — fechar as pendências de validação que já restam antes de
+     qualquer feature nova: decifra ECIES no pareamento em hardware real (nunca confirmada,
+     ver [[project-vault]]/Fase 13 acima), Local Network Privacy no iOS (só Android validado).
+  2. **2FA/TOTP** — o Device (mobile) puxa o secret cifrado do Vault via IPFS e gera o código
+     localmente (RFC 6238). Reaproveita a regra já registrada no item 6 do "Roadmap de
+     Expansão" acima: 2FA/TOTP nunca passa pela extensão de navegador, fica isolado no
+     app/desktop (preserva a separação real dos fatores). **Dono do projeto sinalizou que ainda
+     não domina TOTP a fundo** — vai precisar de explicação do mecanismo ao implementar, não só
+     código direto.
+  3. **Passkeys** — precisa existir antes/junto do backup, já que o backup deve cobrir passkeys
+     também. Ver item 5 do "Roadmap de Expansão" acima (virtual authenticator WebAuthn, novo
+     `credential_type: passkey` no `VaultRegistry`, fluxo de criação manual).
+  4. **Backup criptografado exportável** — cobrindo tudo junto: senhas, passkeys e 2FA. Ver item
+     7 do "Roadmap de Expansão" acima (`.truthid-backup`, chave derivada da master key do
+     device, fluxo de restore em device novo).
+  5. **Extensão de navegador: reforma de estilo + funcionalidade completa** — hoje é a peça mais
+     atrasada do conjunto (`extension/entrypoints/popup`): HTML/CSS cru sem identidade visual
+     (Desktop/Mobile ganharam isso na Fase 9, a extensão nunca ganhou), zero content-script,
+     zero autofill — só mostra a lista de entradas do vault pra copiar manualmente. Escopo:
+     (a) estilo alinhado à identidade visual de Desktop/Mobile; (b) autofill automático de
+     verdade — detecção de formulário + preenchimento de senha (e código 2FA já calculado, item
+     2 acima). Autofill já estava na lista de "ideias exploratórias"; o resto (estilo/UX) é novo
+     nesta sessão.
+  6. **Mobile como gerenciador de senhas completo** — paridade total com o que existir no
+     Desktop/extensão, tornando o app o "produto principal" no celular (não só um espelho do
+     Desktop).
+- **Só depois de todo esse bloco**: revisitar a frente de monetização (Sessão 121) — nenhum
+  trabalho nela até lá.
+- **Nada implementado ainda nesta sessão** — começa na próxima. Nenhum `/plan` detalhado rodado
+  ainda pra nenhum dos 6 itens; a ordem acima é a única coisa travada até agora.
+
+### Sessão 122 (continuação) — 2026-07-18: bug real relatado — aba Wallet do Mobile falha com
+"Todos os RPCs falharam para eth_getLogs"
+
+- **Relato ao vivo do dono do projeto**: abriu a tela de smart account no Mobile (aba Wallet,
+  Sessão 73) e a seção Activity deu erro, `_scanError` mostrando algo como "Todos os RPCs
+  falharam para eth_getLogs: ...".
+- **Diagnóstico feito (só investigação, nenhum código tocado)**: não é um RPC individual caindo —
+  é o volume da varredura completa estourando os 3 RPCs públicos ao mesmo tempo.
+  `WalletScreen._loadActivity` (`mobile/lib/screens/wallet_screen.dart:175`) varre, na primeira
+  vez (cache frio), desde `deviceRegistryDeployBlock`/`sessionRegistryDeployBlock` (`48294070`,
+  Sessão 88) até o bloco atual da Base (confirmado ao vivo via `eth_blockNumber`:
+  `~48791354` em 2026-07-18) — uma diferença de **~497 mil blocos**.
+  `SmartAccountActivityScanner` (`mobile/lib/services/smart_account_activity_scanner.dart:22`)
+  pagina isso em chunks de 2000 blocos (`_chunkSize`), cada chunk disparando 5 chamadas
+  `eth_getLogs` em paralelo (uma por tipo de evento) — dá **~250 chunks × 5 = ~1250 chamadas
+  `eth_getLogs`** numa varredura só, contra 3 RPCs públicos gratuitos sem chave
+  (`mainnet.base.org`, `base-rpc.publicnode.com`, `base.drpc.org`,
+  `blockchain_service.dart:78-82`). O fallback entre os 3 (débito #53, Sessão 93) resolve quando
+  *um* deles rate-limita isoladamente, mas não ajuda quando o volume é alto o bastante pra
+  estourar os 3 ao mesmo tempo — que é o que está acontecendo aqui. Já tinha aparecido de relance
+  na Sessão 92 (RPC gratuita "over rate limit" por volume de chamadas simultâneas), mas nunca foi
+  atacado na raiz — só o fallback entre RPCs foi resolvido antes, não o volume da varredura em
+  si. Mesmo desenho existe no Desktop (`scanSmartAccountActivity.ts`, 14.10) — não confirmado se
+  sofre do mesmo problema lá, não testado nesta sessão.
+- **Importante**: é cache-first (`ActivityCacheService`) — depois de uma varredura completa bem
+  sucedida, os acessos seguintes só re-escaneiam a partir do último bloco salvo (bem mais leve).
+  O problema é especificamente essa primeira varredura completa, desde o deploy.
+- **Decisão do dono do projeto**: só registrar por ora, não corrigir agora — entra na fila de
+  amanhã junto com a prioridade do Vault (ver Sessão 122 acima). Meio caminho andado quando for
+  atacar: opções discutidas mas não escolhidas — espaçar/reduzir o volume de chamadas por chunk,
+  backoff exponencial entre tentativas, e/ou adicionar mais um RPC à lista de fallback.
+- **Próximo passo**: nenhum ainda — pendência nova, sem `/plan` rodado.
+
+---
+
 ## Como Usar Este Arquivo
 
 1. **Ao começar uma sessão**: Diga ao Claude Code "leia o PROJECT_STATE.md e me ajude a continuar"
