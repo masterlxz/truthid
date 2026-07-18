@@ -42,6 +42,7 @@ dependencies:
   path_provider: ^2.1.0
   elliptic: ^0.3.11
   app_links: ^6.0.0
+  pointycastle: ^3.9.1
 
 dev_dependencies:
   flutter_test:

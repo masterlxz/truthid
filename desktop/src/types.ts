@@ -14,6 +14,15 @@ export type PinningProvider = {
   api_key: string;
 };
 
+export type Passkey = {
+  rp_id: string;
+  credential_id_b64: string;
+  user_handle_b64: string;
+  private_key_hex: string;
+  sign_count: number;
+  created_at: number;
+};
+
 export type VaultEntry = {
   id: string;
   site: string;
@@ -24,6 +33,8 @@ export type VaultEntry = {
   profiles: string[];
   /** Segredo TOTP (RFC 6238) em base32, se 2FA estiver configurado pra esta entrada. */
   totp_secret?: string;
+  /** Credencial WebAuthn (passkey) da entrada, se o usuário gerou uma. */
+  passkey?: Passkey;
   created_at: number;
   updated_at: number;
 };

@@ -18,6 +18,48 @@ class _Unset {
 
 const _unset = _Unset();
 
+/// Credencial WebAuthn (passkey) da entrada, se o usuário gerou uma. A chave
+/// privada nunca deve ser incluída no payload enviado à extensão — usar
+/// [VaultEntry.toJsonForExtension].
+class Passkey {
+  final String rpId;
+  final String credentialIdB64;
+  final String userHandleB64;
+  final String privateKeyHex;
+  final int signCount;
+  final DateTime createdAt;
+
+  const Passkey({
+    required this.rpId,
+    required this.credentialIdB64,
+    required this.userHandleB64,
+    required this.privateKeyHex,
+    required this.signCount,
+    required this.createdAt,
+  });
+
+  factory Passkey.fromJson(Map<String, dynamic> json) => Passkey(
+        rpId: json['rp_id'] as String,
+        credentialIdB64: json['credential_id_b64'] as String,
+        userHandleB64: json['user_handle_b64'] as String,
+        privateKeyHex: json['private_key_hex'] as String,
+        signCount: json['sign_count'] as int,
+        createdAt: DateTime.fromMillisecondsSinceEpoch(
+          (json['created_at'] as int) * 1000,
+          isUtc: true,
+        ),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'rp_id': rpId,
+        'credential_id_b64': credentialIdB64,
+        'user_handle_b64': userHandleB64,
+        'private_key_hex': privateKeyHex,
+        'sign_count': signCount,
+        'created_at': createdAt.millisecondsSinceEpoch ~/ 1000,
+      };
+}
+
 class VaultEntry {
   final String id;
   final String site;
@@ -30,6 +72,9 @@ class VaultEntry {
   /// Segredo TOTP (RFC 6238) em base32, se 2FA estiver configurado. Nunca deve
   /// ser incluído no payload enviado à extensão — usar [toJsonForExtension].
   final String? totpSecret;
+  /// Credencial WebAuthn (passkey) da entrada, se o usuário gerou uma. Nunca
+  /// deve ser incluída no payload enviado à extensão — usar [toJsonForExtension].
+  final Passkey? passkey;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -42,6 +87,7 @@ class VaultEntry {
     required this.notes,
     this.profiles = const [],
     this.totpSecret,
+    this.passkey,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -64,6 +110,9 @@ class VaultEntry {
       notes: json['notes'] as String,
       profiles: profiles,
       totpSecret: json['totp_secret'] as String?,
+      passkey: json['passkey'] != null
+          ? Passkey.fromJson(json['passkey'] as Map<String, dynamic>)
+          : null,
       createdAt: DateTime.fromMillisecondsSinceEpoch(
         (json['created_at'] as int) * 1000,
         isUtc: true,
@@ -84,23 +133,25 @@ class VaultEntry {
         'notes': notes,
         'profiles': profiles,
         'totp_secret': totpSecret,
+        'passkey': passkey?.toJson(),
         'created_at': createdAt.millisecondsSinceEpoch ~/ 1000,
         'updated_at': updatedAt.millisecondsSinceEpoch ~/ 1000,
       };
 
-  /// Igual a [toJson], mas sem `totp_secret` — usar sempre que a entrada for
-  /// sair pro canal da extensão de navegador (LAN/dead-drop em
-  /// vault_session_screen.dart). 2FA fica isolado no Device por design; a
-  /// extensão nunca deve receber esse segredo.
+  /// Igual a [toJson], mas sem `totp_secret`/`passkey` — usar sempre que a
+  /// entrada for sair pro canal da extensão de navegador (LAN/dead-drop em
+  /// vault_session_screen.dart). 2FA e passkeys ficam isolados no Device por
+  /// design; a extensão nunca deve receber esses segredos.
   Map<String, dynamic> toJsonForExtension() {
     final json = toJson();
     json.remove('totp_secret');
+    json.remove('passkey');
     return json;
   }
 
-  // `totpSecret` usa um sentinel em vez de `String?` puro: precisa
-  // distinguir "não passei esse argumento" (mantém o valor atual) de "passei
-  // null de propósito" (apaga o 2FA da entrada) — um `String? ?? this.x`
+  // `totpSecret`/`passkey` usam um sentinel em vez de tipo anulável puro:
+  // precisa distinguir "não passei esse argumento" (mantém o valor atual) de
+  // "passei null de propósito" (apaga o campo da entrada) — um `?? this.x`
   // comum não permite nunca limpar o campo de volta pra null.
   VaultEntry copyWith({
     String? site,
@@ -110,6 +161,7 @@ class VaultEntry {
     String? notes,
     List<String>? profiles,
     Object? totpSecret = _unset,
+    Object? passkey = _unset,
   }) =>
       VaultEntry(
         id: id,
@@ -121,6 +173,7 @@ class VaultEntry {
         profiles: profiles ?? this.profiles,
         totpSecret:
             identical(totpSecret, _unset) ? this.totpSecret : totpSecret as String?,
+        passkey: identical(passkey, _unset) ? this.passkey : passkey as Passkey?,
         createdAt: createdAt,
         updatedAt: DateTime.now().toUtc(),
       );
@@ -263,6 +316,7 @@ class VaultRepository {
     String notes = '',
     List<String> profiles = const [],
     String? totpSecret,
+    Passkey? passkey,
   }) async {
     final data = await _load();
     final now = DateTime.now().toUtc();
@@ -275,6 +329,7 @@ class VaultRepository {
       notes: notes,
       profiles: profiles,
       totpSecret: totpSecret,
+      passkey: passkey,
       createdAt: now,
       updatedAt: now,
     );

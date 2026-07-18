@@ -1,7 +1,11 @@
+import 'dart:math';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
 
 import '../services/totp_service.dart';
 import '../services/vault_repository.dart';
+import '../services/webauthn_service.dart' as webauthn;
 import '../theme.dart';
 
 // Tela compartilhada de criar/editar uma entrada do vault — mirror do
@@ -34,6 +38,7 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
   bool _saving = false;
   String? _error;
   String? _totpError;
+  Passkey? _passkey;
 
   bool get _isEditing => widget.entry != null;
 
@@ -50,8 +55,41 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
       _notesCtrl.text = entry.notes;
       _selectedProfiles.addAll(entry.profiles);
       _totpSecretCtrl.text = entry.totpSecret ?? '';
+      _passkey = entry.passkey;
     }
     _loadProfileOptions();
+  }
+
+  // Deriva um hostname pra usar como RP ID — tenta a URL, cai pro nome do
+  // site (sanitizado) se estiver vazia/inválida. Sem redução pra domínio
+  // registrável (eTLD+1) nesta fase, mesmo critério do Desktop
+  // (VaultManagement.tsx, hostnameOf).
+  String _hostnameOf(String url, String site) {
+    final uri = Uri.tryParse(url);
+    if (uri != null && uri.host.isNotEmpty) return uri.host;
+    final sanitized = site.trim().toLowerCase().replaceAll(RegExp(r'[^a-z0-9.-]'), '');
+    return sanitized.isNotEmpty ? sanitized : 'unknown';
+  }
+
+  void _generatePasskey() {
+    final rpId = _hostnameOf(_urlCtrl.text, _siteCtrl.text);
+    final random = Random.secure();
+    final challenge = Uint8List.fromList(List<int>.generate(32, (_) => random.nextInt(256)));
+    final created = webauthn.createPasskey(
+      rpId: rpId,
+      challenge: challenge,
+      origin: 'https://$rpId',
+    );
+    setState(() {
+      _passkey = Passkey(
+        rpId: rpId,
+        credentialIdB64: created.credentialIdB64,
+        userHandleB64: created.userHandleB64,
+        privateKeyHex: created.privateKeyHex,
+        signCount: created.signCount,
+        createdAt: DateTime.fromMillisecondsSinceEpoch(created.createdAt * 1000, isUtc: true),
+      );
+    });
   }
 
   Future<void> _loadProfileOptions() async {
@@ -112,6 +150,7 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
           notes: _notesCtrl.text.trim(),
           profiles: _selectedProfiles.toList(),
           totpSecret: totpSecret,
+          passkey: _passkey,
         ));
       } else {
         await _repository.addEntry(
@@ -122,6 +161,7 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
           notes: _notesCtrl.text.trim(),
           profiles: _selectedProfiles.toList(),
           totpSecret: totpSecret,
+          passkey: _passkey,
         );
       }
       if (mounted) Navigator.of(context).pop(true);
@@ -185,6 +225,22 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                       errorText: _totpError,
                     ),
                     onChanged: _onTotpChanged,
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      const Text('Passkey: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                      if (_passkey != null)
+                        Expanded(
+                          child: Text(_passkey!.rpId,
+                              style: const TextStyle(color: AppColors.textMuted),
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                      TextButton(
+                        onPressed: _generatePasskey,
+                        child: Text(_passkey == null ? 'Gerar passkey' : 'Recriar'),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
                   const Text('Profiles', style: TextStyle(fontWeight: FontWeight.bold)),

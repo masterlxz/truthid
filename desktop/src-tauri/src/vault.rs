@@ -32,8 +32,26 @@ pub(crate) struct VaultEntry {
     /// navegador (ver vault_session_screen.dart no Mobile).
     #[serde(default)]
     pub totp_secret: Option<String>,
+    /// Credencial WebAuthn (passkey) da entrada, se o usuário gerou uma. Só
+    /// existe (Some) se o usuário clicou em "Gerar passkey" — a chave privada
+    /// nunca é manipulada aqui, só armazenada como bytes opacos; toda a
+    /// cerimônia WebAuthn (keygen, CBOR/COSE, atestação, assinatura) acontece
+    /// em TS/Dart, nunca no Rust (mesma regra do totp_secret). Este campo
+    /// nunca deve ser incluído no payload enviado à extensão de navegador.
+    #[serde(default)]
+    pub passkey: Option<Passkey>,
     pub created_at: u64,
     pub updated_at: u64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub(crate) struct Passkey {
+    pub rp_id: String,
+    pub credential_id_b64: String,
+    pub user_handle_b64: String,
+    pub private_key_hex: String,
+    pub sign_count: u32,
+    pub created_at: u64,
 }
 
 /// Permissão de escrita no vault por device (`pub_key` = endereço do device).
@@ -400,6 +418,7 @@ mod tests {
             profiles: vec![],
             profile: String::new(),
             totp_secret: None,
+            passkey: None,
             created_at: 0,
             updated_at: 0,
         }

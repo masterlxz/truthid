@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -6,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../services/totp_service.dart';
 import '../services/vault_repository.dart';
+import '../services/webauthn_service.dart' as webauthn;
 import '../theme.dart';
 import '../widgets/info_row.dart';
 import 'vault_entry_form_screen.dart';
@@ -140,6 +142,10 @@ class _VaultEntryDetailScreenState extends State<VaultEntryDetailScreen> {
                 onCopy: (code) => _copy('2FA code', code),
               ),
             ],
+            if (entry.passkey != null) ...[
+              const SizedBox(height: 8),
+              _PasskeyRow(passkey: entry.passkey!),
+            ],
             if (entry.profiles.isNotEmpty) ...[
               const SizedBox(height: 16),
               Wrap(
@@ -268,6 +274,91 @@ class _TotpCodeRowState extends State<_TotpCodeRow> {
           IconButton(
             icon: const Icon(Icons.copy, size: 20, color: AppColors.textMuted),
             onPressed: () => widget.onCopy(_code),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// Mostra a credencial passkey (RP ID + data de criação) com um botão
+// "Testar assinatura" que roda uma cerimônia de asserção local, sem nenhum
+// site real envolvido — mesmo papel que _TotpCodeRow cumpre pro 2FA, mas sem
+// live-refresh (a passkey não tem "código atual", só uma ação sob demanda).
+class _PasskeyRow extends StatefulWidget {
+  final Passkey passkey;
+  const _PasskeyRow({required this.passkey});
+
+  @override
+  State<_PasskeyRow> createState() => _PasskeyRowState();
+}
+
+enum _PasskeyTestResult { idle, ok, error }
+
+class _PasskeyRowState extends State<_PasskeyRow> {
+  _PasskeyTestResult _result = _PasskeyTestResult.idle;
+  String? _error;
+
+  void _test() {
+    try {
+      final random = Random.secure();
+      final challenge = Uint8List.fromList(
+        List<int>.generate(32, (_) => random.nextInt(256)),
+      );
+      webauthn.signAssertion(
+        privateKeyHex: widget.passkey.privateKeyHex,
+        rpId: widget.passkey.rpId,
+        signCount: widget.passkey.signCount,
+        challenge: challenge,
+        origin: 'https://${widget.passkey.rpId}',
+      );
+      setState(() {
+        _result = _PasskeyTestResult.ok;
+        _error = null;
+      });
+    } catch (e) {
+      setState(() {
+        _result = _PasskeyTestResult.error;
+        _error = '$e';
+      });
+    }
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _result = _PasskeyTestResult.idle);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final created = widget.passkey.createdAt;
+    final formattedDate =
+        '${created.day.toString().padLeft(2, '0')}/${created.month.toString().padLeft(2, '0')}/${created.year}';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: AppColors.surfaceAlt,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        children: [
+          const Text('🔑 ', style: TextStyle(fontSize: 15)),
+          Expanded(
+            child: Text(
+              '${widget.passkey.rpId} · $formattedDate',
+              style: const TextStyle(fontSize: 14, color: AppColors.textMuted),
+            ),
+          ),
+          if (_error != null)
+            const Icon(Icons.error_outline, size: 18, color: AppColors.danger),
+          TextButton(
+            onPressed: _test,
+            child: Text(
+              _result == _PasskeyTestResult.ok
+                  ? '✓'
+                  : _result == _PasskeyTestResult.error
+                      ? '✕'
+                      : 'Testar assinatura',
+            ),
           ),
         ],
       ),

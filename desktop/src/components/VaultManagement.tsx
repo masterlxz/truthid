@@ -5,11 +5,13 @@ import { hexToSignature } from "viem";
 import { useIdentity } from "../contexts/IdentityContext";
 import { useWalletModal } from "../contexts/WalletModalContext";
 import { DEVICE_REGISTRY_ADDRESS, DEVICE_REGISTRY_ABI } from "../config/contracts";
-import type { DeviceInfo, VaultEntry, DeviceVaultPermission } from "../types";
+import type { DeviceInfo, VaultEntry, DeviceVaultPermission, Passkey } from "../types";
 import { VaultSettings } from "./VaultSettings";
 import { useVaultPublish } from "../hooks/useVaultPublish";
 import { TotpCode } from "./TotpCode";
 import { parseTotpSecret } from "../utils/totp";
+import { PasskeyBadge } from "./PasskeyBadge";
+import { createPasskey } from "../utils/webauthn";
 
 const VAULT_KEY_MESSAGE = "TruthID Vault Key v1";
 
@@ -39,10 +41,23 @@ type FormState = {
   notes: string;
   profiles: string[];
   totp_secret: string;
+  passkey?: Passkey;
 };
 
 function emptyForm(): FormState {
   return { site: "", url: "", username: "", password: "", notes: "", profiles: [], totp_secret: "" };
+}
+
+/** Extrai um hostname pra usar como RP ID — tenta a URL, cai pro nome do site
+ * (sanitizado) se a URL estiver vazia/inválida. Sem redução pra domínio
+ * registrável (eTLD+1) nesta fase — não há relying party real validando isso
+ * ainda (ver PROJECT_STATE.md, escopo da fundação de Passkeys). */
+function hostnameOf(url: string, site: string): string {
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return site.trim().toLowerCase().replace(/[^a-z0-9.-]/g, "") || "unknown";
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -131,6 +146,23 @@ function EntryForm({
     }
   }
 
+  function handleGeneratePasskey() {
+    const rpId = hostnameOf(form.url, form.site);
+    const challenge = crypto.getRandomValues(new Uint8Array(32));
+    const created = createPasskey({ rpId, challenge, origin: `https://${rpId}` });
+    setForm((f) => ({
+      ...f,
+      passkey: {
+        rp_id: rpId,
+        credential_id_b64: created.credentialIdB64,
+        user_handle_b64: created.userHandleB64,
+        private_key_hex: created.privateKeyHex,
+        sign_count: created.signCount,
+        created_at: created.createdAt,
+      },
+    }));
+  }
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
@@ -178,6 +210,23 @@ function EntryForm({
           placeholder="Segredo base32 ou URI otpauth://..."
         />
         {totpError && <p className="error-text" style={{ margin: "0.25em 0 0", fontSize: "0.82em" }}>{totpError}</p>}
+      </div>
+      <div className="field">
+        <label>Passkey (opcional)</label>
+        {form.passkey ? (
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <span className="muted" style={{ fontSize: "0.85em" }}>
+              🔑 {form.passkey.rp_id}
+            </span>
+            <button type="button" onClick={handleGeneratePasskey} style={{ padding: "0.2em 0.6em", fontSize: "0.8em" }}>
+              Recriar
+            </button>
+          </div>
+        ) : (
+          <button type="button" onClick={handleGeneratePasskey} style={{ padding: "0.3em 0.8em", fontSize: "0.85em", alignSelf: "flex-start" }}>
+            Gerar passkey
+          </button>
+        )}
       </div>
       <div className="actions-row">
         <button
@@ -591,7 +640,7 @@ export function VaultManagement() {
               return (
                 <div key={entry.id} className="card">
                   <EntryForm
-                    initial={{ site: entry.site, url: entry.url, username: entry.username, password: entry.password, notes: entry.notes, profiles: entry.profiles, totp_secret: entry.totp_secret ?? "" }}
+                    initial={{ site: entry.site, url: entry.url, username: entry.username, password: entry.password, notes: entry.notes, profiles: entry.profiles, totp_secret: entry.totp_secret ?? "", passkey: entry.passkey }}
                     onSave={(f) => handleEdit(entry.id, f)}
                     onCancel={() => setEditingId(null)}
                     saving={mutating}
@@ -621,6 +670,11 @@ export function VaultManagement() {
                     {entry.totp_secret && (
                       <div style={{ marginTop: "0.3rem" }}>
                         <TotpCode secret={entry.totp_secret} />
+                      </div>
+                    )}
+                    {entry.passkey && (
+                      <div style={{ marginTop: "0.3rem" }}>
+                        <PasskeyBadge passkey={entry.passkey} />
                       </div>
                     )}
                   </div>

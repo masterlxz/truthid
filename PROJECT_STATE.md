@@ -4908,6 +4908,85 @@ Sessão 92), então nenhuma ação tomada sobre ele sem pedido explícito do don
 
 ---
 
+### Sessão 124 — 2026-07-18: implementada a fundação de Passkeys/WebAuthn (item 3 do roadmap
+pós-Fase 14), verificação final ainda pendente
+
+Seguindo a ordem travada na Sessão 122 ([[project-roadmap-priority]]), com Vault (item 1) e
+2FA/TOTP (item 2, Sessão pós-123) fechados, esta sessão implementou o item 3: **Passkeys/WebAuthn
+— só a fundação**. Escopo explicitamente confirmado com o dono do projeto via pergunta direta:
+modelo de dados no Vault + um virtual authenticator WebAuthn funcional (P-256/ES256, COSE, atestação
+"none", asserção assinada), validado por testes automatizados. **Fora de escopo, de propósito**:
+interceptar `navigator.credentials` num site real — isso precisa de um content script + bridge de
+main-world na extensão que não existe hoje (extensão só tem `background.ts`+`popup/`, zero content
+scripts) — fica pra uma fase futura de reforma da extensão (item 5), ainda não desenhada.
+
+**Correção de uma nota antiga do Roadmap**: `PROJECT_STATE.md` (linhas ~1295, ~4751, escritas nas
+Sessões 121-122) diziam "novo `credential_type: passkey` no `VaultRegistry`" — **isso está
+incorreto**, confirmado por exploração de código: `VaultRegistry.sol` só guarda `{cid,
+contentHash, updatedAt, version, exists}` por identidade, nunca schema de entrada. Igual ao TOTP,
+não foi preciso nenhuma mudança on-chain — o campo novo é só mais um campo opaco dentro do blob
+cifrado, com o discriminador sendo a própria presença do campo `passkey` (mesmo padrão do
+`totp_secret`, sem precisar de um `credential_type` string separado).
+
+**Decisões de formato fechadas** (não hand-waved, decididas e implementadas): atestação `fmt:
+"none"`; chave privada como escalar P-256 cru em hex; credential ID e user handle como 16 bytes
+aleatórios em base64url; encoder CBOR hand-rolled (só encoder, sem decoder — únicas estruturas são
+o COSE_Key e o attestationObject, ambos mapas pequenos e fixos); RP ID = hostname cru da URL, sem
+redução pra eTLD+1 (adiado, confirmado aceitável com o dono do projeto já que não há relying party
+real validando isso nesta fase); um passkey opcional por `VaultEntry` (não lista), igual ao
+`totp_secret`; UI com botão "Testar assinatura" (desafio fake local, sem site real) — confirmado
+com o dono do projeto como forma de "ver funcionando" sem precisar da interceptação real.
+
+**Achado técnico importante, não previsto no plano original**: `package:cryptography` (usado no
+plano original pra assinar ES256 no Dart via `Ecdsa.p256(Sha256())`) tem sua implementação
+pure-Dart (`DartEcdsa`) inteiramente `UnimplementedError` — só funciona com um plugin nativo
+(`cryptography_flutter`, não presente neste projeto) ou em navegador. Como `flutter test` roda sem
+plugin nativo, isso quebraria os testes. Resolvido trazendo `package:pointycastle` (já presente
+como dependência transitiva via `web3dart`, promovido a dependência direta — mesmo padrão do
+`@noble/curves` promovido no TS) só pra assinatura ECDSA determinística (RFC 6979, via
+`Signer('SHA-256/DET-ECDSA')` + `NormalizedECDSASigner` pra low-S canônico); `package:elliptic`
+continua sendo usado só pra geração de chave/pontos (já provado funcionar, mesmo padrão do
+secp256k1 já usado no projeto).
+
+**Achado de baixo nível, útil se reaparecer**: o vetor cruzado TS↔Dart pra assinatura de asserção
+batia em tudo (chave pública, `authenticatorData`, até o `r` da assinatura ECDSA) mas o `s` vinha
+diferente — não malandragem, era exatamente `n - s` um do outro (par low-S/high-S). Descoberto que
+`@noble/curves` (versão instalada, `^1.9.x`) **não** normaliza pra low-S por padrão apesar da doc
+do tipo dizer "default: true" — precisa passar `{ lowS: true }` explicitamente em `p256.sign()`.
+Corrigido em `desktop/src/utils/webauthn.ts`; o lado Dart (PointyCastle `NormalizedECDSASigner`)
+já normalizava certo por padrão. Vale checar esse mesmo detalhe se algum dia usar `@noble/curves`
+pra ES256/ECDSA em outro lugar do projeto.
+
+**Implementado e testado nesta sessão** (Milestones 1-3 do plano, todos com testes passando):
+- Schema: `Passkey` novo em `desktop/src-tauri/src/vault.rs` (Rust), `desktop/src/types.ts` (TS),
+  `mobile/lib/services/vault_repository.dart` (Dart, incluindo `toJsonForExtension()` filtrando o
+  campo e o truque do sentinel `_unset` no `copyWith`) — `cargo test` (64/64) e `flutter test`
+  (245/245, incluindo teste de regressão novo pro filtro) passando.
+- Cripto: `desktop/src/utils/cbor.ts` + `desktop/src/utils/webauthn.ts` (TS) e
+  `mobile/lib/services/cbor_util.dart` + `mobile/lib/services/webauthn_service.dart` (Dart),
+  espelho funcional um do outro. Testado com `@simplewebauthn/server` (verificador WebAuthn
+  independente, prova conformidade real com a spec, não autoconsistência) + vetor fixo cruzado
+  byte-a-byte entre TS e Dart (chave pública, `authenticatorData`, assinatura DER) — `npx vitest
+  run` (74/74 no Desktop) e `flutter test` (mesma suíte acima) passando.
+- UI: `desktop/src/components/PasskeyBadge.tsx` + integração em `VaultManagement.tsx` (botão
+  "Gerar passkey" no form, badge com "Testar assinatura" no card da entrada); `_PasskeyRow` em
+  `mobile/lib/screens/vault_entry_detail_screen.dart` + botão "Gerar passkey" em
+  `vault_entry_form_screen.dart` (+ `Passkey? passkey` novo em `VaultRepository.addEntry`).
+  `tsc --noEmit` limpo em desktop e extension; `dart analyze` limpo nos arquivos novos/alterados
+  (só 2 warnings pré-existentes sem relação, linhas 232/424 de `vault_repository.dart`).
+
+**Pendência explícita pra próxima sessão** (parada por token, não por bloqueio técnico): rodar a
+suíte de verificação completa listada no plano — `cargo test`/`npx vitest run`/`flutter test`/`tsc
+--noEmit` já rodaram individualmente por arquivo/pacote durante a implementação e passaram, mas
+não houve uma rodada final de tudo junto depois das últimas edições de UI do Mobile
+(`vault_entry_form_screen.dart`, `vault_repository.dart::addEntry`) — rodar `flutter test`
+completo (não só o arquivo de webauthn) mais uma vez pra confirmar, e fazer o walkthrough manual
+em hardware real (Desktop nativo + celular físico) descrito no plano, mesma técnica de validação
+já usada no TOTP (Sessão pós-123). Plano completo salvo em
+`~/.claude/plans/idempotent-roaming-thunder.md` se precisar consultar os detalhes originais.
+
+---
+
 ## Como Usar Este Arquivo
 
 1. **Ao começar uma sessão**: Diga ao Claude Code "leia o PROJECT_STATE.md e me ajude a continuar"

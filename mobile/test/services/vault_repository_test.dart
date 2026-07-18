@@ -383,6 +383,30 @@ void main() {
       expect(entry.toJsonForExtension().containsKey('totp_secret'), isFalse);
     });
 
+    test('never includes passkey, even when the entry has one', () {
+      final entry = VaultEntry(
+        id: '1',
+        site: 'github.com',
+        url: '',
+        username: 'fab',
+        password: 'x',
+        notes: '',
+        passkey: Passkey(
+          rpId: 'github.com',
+          credentialIdB64: 'AAAAAAAAAAAAAAAAAAAAAA',
+          userHandleB64: 'BBBBBBBBBBBBBBBBBBBBBB',
+          privateKeyHex: '00' * 32,
+          signCount: 0,
+          createdAt: DateTime.now().toUtc(),
+        ),
+        createdAt: DateTime.now().toUtc(),
+        updatedAt: DateTime.now().toUtc(),
+      );
+
+      expect(entry.toJson().containsKey('passkey'), isTrue);
+      expect(entry.toJsonForExtension().containsKey('passkey'), isFalse);
+    });
+
     test('carries every other field through unchanged', () {
       final entry = VaultEntry(
         id: '1',
@@ -398,7 +422,9 @@ void main() {
       );
 
       final extensionJson = entry.toJsonForExtension();
-      final fullJson = entry.toJson()..remove('totp_secret');
+      final fullJson = entry.toJson()
+        ..remove('totp_secret')
+        ..remove('passkey');
       expect(extensionJson, equals(fullJson));
     });
   });

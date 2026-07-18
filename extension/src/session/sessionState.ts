@@ -12,10 +12,10 @@ export type SessionStatus =
   | 'expired'
   | 'error';
 
-// Intencionalmente sem `totp_secret`: 2FA fica isolado no Device (Mobile ou
-// Desktop), nunca na extensão — o Mobile já filtra esse campo antes de
-// cifrar/enviar (ver `VaultEntry.toJsonForExtension()` em
-// vault_repository.dart). Não adicionar esse campo aqui.
+// Intencionalmente sem `totp_secret`/`passkey`: 2FA e passkeys ficam isolados
+// no Device (Mobile ou Desktop), nunca na extensão — o Mobile já filtra esses
+// campos antes de cifrar/enviar (ver `VaultEntry.toJsonForExtension()` em
+// vault_repository.dart). Não adicionar nenhum dos dois campos aqui.
 export interface VaultEntry {
   id: string;
   site: string;
