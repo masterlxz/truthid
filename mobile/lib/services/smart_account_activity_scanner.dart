@@ -33,6 +33,14 @@ class SmartAccountActivityScanner {
   // já deixa o RPC descartar eventos de outras identidades, o scanner nunca
   // busca-e-descarta nada. VaultUpdated fica de fora (VaultRegistry ainda não
   // deployado — mesma decisão do Desktop, ver smart_account_activity.dart).
+  //
+  // Sessão 122: um scan de histórico completo cruza ~250 chunks; buscar cada
+  // fonte separado (5 chamadas eth_getLogs paralelas por chunk) soma ~1250
+  // chamadas contra RPCs públicos gratuitos, estourando rate limit nos 3 ao
+  // mesmo tempo. `address` e `topics[0]` no eth_getLogs aceitam lista (o nó
+  // faz OR dentro da posição) — como o topic0 de cada evento é o hash da
+  // própria assinatura (único por tipo), dá pra combinar as 5 fontes numa
+  // chamada só por chunk sem risco de contaminação cruzada entre eventos.
   static final _eventSources = [
     _EventSource(
       address: BlockchainService.deviceRegistryAddress,
@@ -61,6 +69,15 @@ class SmartAccountActivityScanner {
     ),
   ];
 
+  // Endereços únicos (Device/SessionRegistry) e topic0s das 5 fontes acima,
+  // já achatados pro formato que uma única chamada combinada de getLogs
+  // espera — computados uma vez (estático) em vez de a cada scan().
+  static final _addresses = _eventSources.map((s) => s.address).toSet().toList();
+  static final _topic0List = _eventSources.map((s) => s.topic0).toList();
+  static final _typeByTopic0 = {
+    for (final s in _eventSources) s.topic0.toLowerCase(): s.type,
+  };
+
   Future<List<SmartAccountActivity>> scan({
     required BigInt identityId,
     required int fromBlock,
@@ -77,18 +94,18 @@ class SmartAccountActivityScanner {
     while (chunkFrom <= toBlock) {
       final chunkTo = chunkFrom + _chunkSize - 1 > toBlock ? toBlock : chunkFrom + _chunkSize - 1;
 
-      final logsPerSource = await Future.wait(_eventSources.map((source) async {
-        final logs = await _blockchainService.getLogs(
-          address: source.address,
-          topics: [source.topic0, idTopic],
-          fromBlock: chunkFrom,
-          toBlock: chunkTo,
-        );
-        return logs.map((log) => (log: log, type: source.type)).toList();
-      }));
+      final logs = await _blockchainService.getLogs(
+        addresses: _addresses,
+        topics: [_topic0List, idTopic],
+        fromBlock: chunkFrom,
+        toBlock: chunkTo,
+      );
 
-      for (final entry in logsPerSource.expand((x) => x)) {
-        final log = entry.log;
+      for (final log in logs) {
+        final topic0 = ((log['topics'] as List).first as String).toLowerCase();
+        final type = _typeByTopic0[topic0];
+        if (type == null) continue; // topic0 fora da lista pedida, não deveria acontecer
+
         final hash = log['transactionHash'] as String;
         final blockNumber = _hexToInt(log['blockNumber'] as String);
         final logIndex = _hexToInt(log['logIndex'] as String);
@@ -106,7 +123,7 @@ class SmartAccountActivityScanner {
         }
 
         activities.add(SmartAccountActivity(
-          type: entry.type,
+          type: type,
           hash: hash,
           blockNumber: blockNumber,
           logIndex: logIndex,

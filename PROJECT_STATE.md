@@ -4801,6 +4801,39 @@ monetização fica pra depois
   backoff exponencial entre tentativas, e/ou adicionar mais um RPC à lista de fallback.
 - **Próximo passo**: nenhum ainda — pendência nova, sem `/plan` rodado.
 
+### Sessão 123 — 2026-07-18: corrigido o bug de rate limit da Sessão 122 (volume de eth_getLogs
+na varredura de atividade do Mobile)
+
+- **Fix escolhido, entre as opções que a Sessão 122 tinha deixado em aberto**: reduzir o volume
+  de chamadas por chunk (não backoff sozinho, nem mais um RPC no fallback).
+  `SmartAccountActivityScanner.scan` (`mobile/lib/services/smart_account_activity_scanner.dart`)
+  disparava 5 chamadas `eth_getLogs` em paralelo por chunk (uma por tipo de evento, endereços
+  diferentes — `DeviceRegistry`/`SessionRegistry`). `eth_getLogs` aceita `address` e `topics[0]`
+  como lista (o nó já faz OR dentro da posição), e o topic0 de cada evento é o hash da própria
+  assinatura (único por tipo) — dá pra combinar as 5 fontes numa chamada só por chunk sem
+  contaminação cruzada. `BlockchainService.getLogs` ganhou `addresses: List<String>` (era
+  `address: String`) e `topics` agora aceita listas aninhadas; o scanner classifica cada log
+  retornado pelo próprio `topics[0]` (mapa `_typeByTopic0`) em vez de saber o tipo por qual
+  chamada separada devolveu o resultado. Resultado: ~250 chunks × 1 chamada = ~250 `eth_getLogs`
+  numa varredura fria completa, contra os ~1250 de antes (corte de 80%).
+- **Segunda camada, defesa em profundidade**: `BlockchainService._rpcCall` só percorria os 3 RPCs
+  uma vez e desistia — se os 3 estiverem rate-limitados ao mesmo tempo (o cenário relatado), não
+  adiantava nada. Agora repete a lista inteira até 3 rodadas, com um intervalo curto entre elas
+  (500ms, 1000ms) — dá tempo da janela de rate limit de um RPC público (normalmente de segundos)
+  esvaziar antes de desistir de vez. Fallback exponencial descartado como opção separada — virou
+  parte deste fix, não uma frente à parte.
+- **Testes**: `smart_account_activity_scanner_test.dart` reescrito pro novo formato de chamada
+  combinada (logs agora carregam `topics: [topic0]` pra o teste simular o log real, e o teste de
+  chunking passou de esperar 10 chamadas — 5 fontes × 2 chunks — pra 2). `flutter test` completo:
+  **224/224 passando**. `flutter analyze`: só os mesmos 14 avisos pré-existentes, nada novo.
+  Rodado via Docker (`./dev.sh`), sem precisar de hardware físico — diferente da pendência do
+  Vault (ECIES no pareamento), que segue bloqueada por disponibilidade de celular/Ledger.
+- **Não confirmado nesta sessão**: se o Desktop (`scanSmartAccountActivity.ts`, mesmo desenho)
+  sofre do mesmo problema — mesma pendência da Sessão 122, ainda não testado/corrigido lá.
+- **Próximo passo**: validar com o dono do projeto num scan frio real (limpar o cache da aba
+  Wallet e reabrir); se confirmar, aplicar o mesmo fix (combinar `eth_getLogs`) no
+  `scanSmartAccountActivity.ts` do Desktop por paridade.
+
 ---
 
 ## Como Usar Este Arquivo

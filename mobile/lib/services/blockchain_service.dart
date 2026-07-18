@@ -81,6 +81,15 @@ class BlockchainService {
     'https://base.drpc.org',
   ];
   static const _rpcTimeout = Duration(seconds: 10);
+
+  // Sessão 122: um scan de histórico completo da aba Wallet dispara volume
+  // suficiente de eth_getLogs pra estourar rate limit nos 3 RPCs públicos ao
+  // mesmo tempo (não é falha isolada de 1 deles — esse caso já era coberto
+  // pelo fallback acima desde o débito #53). Percorrer a lista de novo, com
+  // um breve intervalo, dá tempo do rate limit (normalmente janela de
+  // segundos num RPC público) esvaziar antes de desistir de vez.
+  static const _rpcRetryRounds = 3;
+  static const _rpcRetryBackoff = Duration(milliseconds: 500);
   static const _sessionRegistryAddress =
       '0x66F10F8c38b3F35551e90ACa3c675F5E3432C6Df';
   static const _deviceRegistryAddress =
@@ -162,11 +171,16 @@ class BlockchainService {
   // 'error' no corpo) passa pro próximo RPC da lista.
   Future<dynamic> _rpcCall(String method, List<dynamic> params) async {
     final errors = <String>[];
-    for (final url in _rpcUrls) {
-      try {
-        return await _rpcCallOnce(url, method, params).timeout(_rpcTimeout);
-      } catch (e) {
-        errors.add('$url: $e');
+    for (var round = 0; round < _rpcRetryRounds; round++) {
+      for (final url in _rpcUrls) {
+        try {
+          return await _rpcCallOnce(url, method, params).timeout(_rpcTimeout);
+        } catch (e) {
+          errors.add('$url: $e');
+        }
+      }
+      if (round < _rpcRetryRounds - 1) {
+        await Future.delayed(_rpcRetryBackoff * (round + 1));
       }
     }
     throw Exception('Todos os RPCs falharam para $method: ${errors.join('; ')}');
@@ -523,19 +537,22 @@ class BlockchainService {
   // eth_getLogs genérico — generaliza _fetchIdentityCreatedLogs (endereço
   // parametrizado em vez de hardcoded pro IdentityRegistry). Usado pelo
   // SmartAccountActivityScanner (aba Wallet) pra escanear os 5 tipos de
-  // evento de atividade. Diferente de _fetchIdentityCreatedLogs (que engole
-  // erro e tenta o chunk anterior — estratégia de busca bounded), este método
-  // **lança exceção** em erro: o scanner precisa que falha de rede vire um
-  // erro real na UI, não um resultado silenciosamente incompleto.
+  // evento de atividade numa chamada só por chunk (Sessão 122: `addresses` e
+  // `topics[0]` aceitam lista — o nó já faz o OR dentro da posição — em vez
+  // de 5 chamadas paralelas, uma por endereço/topic0). Diferente de
+  // _fetchIdentityCreatedLogs (que engole erro e tenta o chunk anterior —
+  // estratégia de busca bounded), este método **lança exceção** em erro: o
+  // scanner precisa que falha de rede vire um erro real na UI, não um
+  // resultado silenciosamente incompleto.
   Future<List<Map<String, dynamic>>> getLogs({
-    required String address,
-    required List<String> topics,
+    required List<String> addresses,
+    required List<dynamic> topics,
     required int fromBlock,
     required int toBlock,
   }) async {
     final result = await _rpcCall('eth_getLogs', [
       {
-        'address': address,
+        'address': addresses.length == 1 ? addresses.first : addresses,
         'topics': topics,
         'fromBlock': '0x${fromBlock.toRadixString(16)}',
         'toBlock': '0x${toBlock.toRadixString(16)}',

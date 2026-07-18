@@ -19,12 +19,18 @@ String _topic0(String eventSignature) {
   return '0x${sigBytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join()}';
 }
 
+// Um log inclui `topics: [topic0, idTopic]` porque a Sessão 122 juntou as 5
+// fontes numa chamada só de getLogs — o scanner agora descobre o tipo de
+// cada atividade pelo próprio topic0 do log, não mais por qual chamada
+// (separada) devolveu o resultado.
 Map<String, dynamic> _log({
+  required String topic0,
   required String txHash,
   required int blockNumber,
   required int logIndex,
 }) {
   return {
+    'topics': [topic0],
     'transactionHash': txHash,
     'blockNumber': '0x${blockNumber.toRadixString(16)}',
     'logIndex': '0x${logIndex.toRadixString(16)}',
@@ -40,36 +46,37 @@ void main() {
   final deviceRegisteredTopic = _topic0('DeviceRegistered(uint256,address,string)');
 
   setUpAll(() {
-    registerFallbackValue(0);
+    registerFallbackValue(<String>[]);
+    registerFallbackValue(<dynamic>[]);
   });
 
   setUp(() {
     mockBlockchain = MockBlockchainService();
     scanner = SmartAccountActivityScanner(blockchainService: mockBlockchain);
 
-    // Por padrão, nenhuma fonte de evento retorna nada — cada teste
+    // Por padrão, a chamada combinada não devolve nada — cada teste
     // sobrescreve só o que precisa.
     when(() => mockBlockchain.getLogs(
-          address: any(named: 'address'),
+          addresses: any(named: 'addresses'),
           topics: any(named: 'topics'),
           fromBlock: any(named: 'fromBlock'),
           toBlock: any(named: 'toBlock'),
         )).thenAnswer((_) async => []);
   });
 
-  void mockLogsForTopic(String topic0, List<Map<String, dynamic>> logs) {
+  void mockLogsForChunk(int fromBlock, int toBlock, List<Map<String, dynamic>> logs) {
     when(() => mockBlockchain.getLogs(
-          address: any(named: 'address'),
-          topics: any(named: 'topics', that: contains(topic0)),
-          fromBlock: any(named: 'fromBlock'),
-          toBlock: any(named: 'toBlock'),
+          addresses: any(named: 'addresses'),
+          topics: any(named: 'topics'),
+          fromBlock: fromBlock,
+          toBlock: toBlock,
         )).thenAnswer((_) async => logs);
   }
 
   test('escaneia um único evento num único chunk e calcula o custo corretamente',
       () async {
-    mockLogsForTopic(sessionCreatedTopic, [
-      _log(txHash: '0xTx1', blockNumber: 100, logIndex: 0),
+    mockLogsForChunk(0, 100, [
+      _log(topic0: sessionCreatedTopic, txHash: '0xTx1', blockNumber: 100, logIndex: 0),
     ]);
     when(() => mockBlockchain.getTransactionReceipt('0xTx1')).thenAnswer(
       (_) async => TxReceiptInfo(
@@ -96,11 +103,9 @@ void main() {
 
   test('ordena atividades de tipos diferentes por (blockNumber, logIndex)',
       () async {
-    mockLogsForTopic(sessionCreatedTopic, [
-      _log(txHash: '0xTxLater', blockNumber: 200, logIndex: 0),
-    ]);
-    mockLogsForTopic(deviceRegisteredTopic, [
-      _log(txHash: '0xTxEarlier', blockNumber: 100, logIndex: 0),
+    mockLogsForChunk(0, 300, [
+      _log(topic0: sessionCreatedTopic, txHash: '0xTxLater', blockNumber: 200, logIndex: 0),
+      _log(topic0: deviceRegisteredTopic, txHash: '0xTxEarlier', blockNumber: 100, logIndex: 0),
     ]);
     when(() => mockBlockchain.getTransactionReceipt(any())).thenAnswer(
       (_) async => TxReceiptInfo(gasUsed: BigInt.one, effectiveGasPrice: BigInt.one),
@@ -121,11 +126,9 @@ void main() {
 
   test('deduplica receipt e timestamp quando dois eventos compartilham tx/bloco',
       () async {
-    mockLogsForTopic(sessionCreatedTopic, [
-      _log(txHash: '0xSharedTx', blockNumber: 100, logIndex: 0),
-    ]);
-    mockLogsForTopic(sessionRevokedTopic, [
-      _log(txHash: '0xSharedTx', blockNumber: 100, logIndex: 1),
+    mockLogsForChunk(0, 100, [
+      _log(topic0: sessionCreatedTopic, txHash: '0xSharedTx', blockNumber: 100, logIndex: 0),
+      _log(topic0: sessionRevokedTopic, txHash: '0xSharedTx', blockNumber: 100, logIndex: 1),
     ]);
     when(() => mockBlockchain.getTransactionReceipt('0xSharedTx')).thenAnswer(
       (_) async => TxReceiptInfo(gasUsed: BigInt.one, effectiveGasPrice: BigInt.one),
@@ -144,7 +147,7 @@ void main() {
     verify(() => mockBlockchain.getBlockTimestamp(100)).called(1);
   });
 
-  test('escaneia em chunks de 2000 blocos ao cruzar o limite de uma faixa',
+  test('escaneia em chunks de 2000 blocos ao cruzar o limite de uma faixa, uma chamada por chunk',
       () async {
     final activities = await scanner.scan(
       identityId: BigInt.one,
@@ -153,18 +156,16 @@ void main() {
     );
     expect(activities, isEmpty);
 
-    // 5 fontes de evento × 2 chunks (1000-2999, 3000-3500) = 10 chamadas.
-    // Um único `verify` captura tudo — mocktail só considera invocações
-    // ainda não verificadas por uma chamada anterior, então dois `verify`
-    // separados sobre a mesma interação não funcionam aqui.
+    // Sessão 122: 1 chamada combinada por chunk (não mais 5 por fonte) ×
+    // 2 chunks (1000-2999, 3000-3500) = 2 chamadas.
     final calls = verify(() => mockBlockchain.getLogs(
-          address: any(named: 'address'),
+          addresses: any(named: 'addresses'),
           topics: any(named: 'topics'),
           fromBlock: captureAny(named: 'fromBlock'),
           toBlock: captureAny(named: 'toBlock'),
         )).captured;
 
-    expect(calls, hasLength(20)); // 10 chamadas × 2 args capturados cada
+    expect(calls, hasLength(4)); // 2 chamadas × 2 args capturados cada
 
     final fromBlocks = <int>{};
     final toBlocks = <int>{};
@@ -174,6 +175,24 @@ void main() {
     }
     expect(fromBlocks, {1000, 3000});
     expect(toBlocks, {2999, 3500});
+  });
+
+  test('combina os 5 topic0s e os 2 endereços numa chamada só por chunk', () async {
+    await scanner.scan(identityId: BigInt.one, fromBlock: 0, toBlock: 100);
+
+    final captured = verify(() => mockBlockchain.getLogs(
+          addresses: captureAny(named: 'addresses'),
+          topics: captureAny(named: 'topics'),
+          fromBlock: any(named: 'fromBlock'),
+          toBlock: any(named: 'toBlock'),
+        )).captured;
+
+    final addresses = captured[0] as List<String>;
+    final topics = captured[1] as List<dynamic>;
+
+    expect(addresses, hasLength(2)); // DeviceRegistry + SessionRegistry, deduplicados
+    expect(topics, hasLength(2)); // [topic0List, idTopic]
+    expect(topics[0], hasLength(5)); // 5 tipos de evento combinados via OR
   });
 
   test('chama onChunkScanned uma vez por chunk com o progresso correto',
@@ -195,7 +214,7 @@ void main() {
 
   test('propaga erro se getLogs falhar', () async {
     when(() => mockBlockchain.getLogs(
-          address: any(named: 'address'),
+          addresses: any(named: 'addresses'),
           topics: any(named: 'topics'),
           fromBlock: any(named: 'fromBlock'),
           toBlock: any(named: 'toBlock'),
@@ -208,8 +227,8 @@ void main() {
   });
 
   test('propaga erro se getTransactionReceipt falhar', () async {
-    mockLogsForTopic(sessionCreatedTopic, [
-      _log(txHash: '0xTx1', blockNumber: 100, logIndex: 0),
+    mockLogsForChunk(0, 100, [
+      _log(topic0: sessionCreatedTopic, txHash: '0xTx1', blockNumber: 100, logIndex: 0),
     ]);
     when(() => mockBlockchain.getTransactionReceipt('0xTx1'))
         .thenThrow(Exception('receipt not found'));
