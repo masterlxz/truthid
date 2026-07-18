@@ -1,9 +1,11 @@
 import { decrypt } from '../src/crypto/ecies';
+import { matchesOrigin } from '../src/session/entryMatching';
 import { tryFetchDeadDrop } from '../src/session/deadDropPolling';
 import type { VaultEntry } from '../src/session/sessionState';
 import { isExpired } from '../src/session/sessionState';
 import { clearSession, loadSession, saveSession } from '../src/storage/sessionStore';
 import { hexToBytes } from '../src/util/bytes';
+import { GET_MATCHING_ENTRIES_MESSAGE } from '../src/autofill/messages';
 
 // Único job do service worker: garantir que a sessão some do
 // `chrome.storage.session` quando o TTL expira, mesmo que a popup nunca
@@ -70,4 +72,23 @@ export default defineBackground(() => {
     chrome.alarms.create(DEAD_DROP_POLL_ALARM, { delayInMinutes: 1, periodInMinutes: 1 });
     void pollDeadDropOnce();
   });
+
+  // Único canal request/response do projeto até agora (o resto das
+  // mensagens é fire-and-forget) — o content script de autofill pergunta
+  // quais entradas do vault batem com o hostname da página atual. Só o
+  // background lê `chrome.storage.session`; o content script nunca acessa
+  // o storage diretamente.
+  chrome.runtime.onMessage.addListener(
+    (message: { type?: string; hostname?: string } | undefined, _sender, sendResponse) => {
+      if (message?.type !== GET_MATCHING_ENTRIES_MESSAGE) return;
+      void (async () => {
+        const session = await loadSession();
+        const entries = (session?.entries ?? []).filter((entry: VaultEntry) =>
+          matchesOrigin(entry, message.hostname ?? ''),
+        );
+        sendResponse({ entries });
+      })();
+      return true; // mantém o canal aberto pro sendResponse assíncrono
+    },
+  );
 });

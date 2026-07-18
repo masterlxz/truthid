@@ -5134,6 +5134,83 @@ dono do projeto optou por não testar o caminho inverso (Mobile→Desktop) expli
 **Item 4 do roadmap pós-Fase 14 (Backup) fecha 100%** — validado em hardware real cross-device,
 sem pendência de validação restante.
 
+### Sessão 127 — 2026-07-18/19: reforma da extensão de navegador (item 5 do roadmap) —
+reestilização + autofill de usuário/senha, validado em hardware real no GitHub
+
+Seguindo a ordem travada na Sessão 122, com Vault/2FA/Passkeys/Backup (itens 1-4) fechados, esta
+sessão implementou o item 5, o mais atrasado do conjunto: a extensão (`extension/`, WXT + vanilla
+TS) nunca tinha ganhado a identidade visual de Desktop/Mobile e nunca tivera autofill — só uma
+lista pra copiar manualmente. Planejado via `/plan` completo antes de implementar.
+
+**Escopo confirmado com o dono do projeto antes de codar** (duas perguntas diretas): (1) autofill
+cobre só usuário/senha nesta fase — TOTP fica de fora de propósito, já que reverter a exclusão de
+`totp_secret` da extensão é uma decisão de segurança separada, não decidida aqui; (2) content
+script roda automaticamente em todo site HTTP/HTTPS (não sob demanda/`activeTab`) — uma reversão
+deliberada da filosofia de permissão mínima que o projeto usava até agora (o próprio
+`wxt.config.ts` explicava que `http://*/*` foi deixado opcional exatamente pra evitar o aviso
+amplo de instalação), mas o dono do projeto confirmou que quer essa troca por UX de autofill de
+verdade.
+
+**Implementado** (4 milestones do plano):
+- Tokens de design (`extension/src/ui/theme.css`) reproduzindo literalmente as variáveis `:root`
+  de `desktop/src/App.css` (fundo `#0b0f14`, acento ciano `#4dd0e1`, Space Grotesk/Inter) — fontes
+  bundladas localmente como WOFF2 (baixadas do Google Fonts e comitadas em
+  `extension/public/fonts/`, não via `@import` de CDN, mais robusto pra um contexto de extensão).
+  Popup reestilizado (`popup.css` novo, reaproveitando `.card`/`.field`/`.muted`/`.error-text`/
+  `.status-badge` do Desktop) e ícone novo (`extension/public/icon/{16,32,48,128}.png`,
+  re-exportado via `sharp` a partir de `mobile/assets/icon/app_icon.png`, já que nenhuma ferramenta
+  de imagem — ImageMagick/PIL — estava disponível no host; instalado temporariamente num projeto
+  node à parte no scratchpad e descartado depois).
+- Primeiro content script do projeto (`extension/entrypoints/autofill.content.ts`, `matches:
+  ['http://*/*', 'https://*/*']`), com a lógica isolada em `src/autofill/` (testável): `formDetection.ts`
+  (acha pares usuário/senha, com/sem `<form>`, `WeakSet` anti-duplicata), `fillField.ts`
+  (`setNativeValue` via setter nativo do protótipo — necessário pra frameworks tipo React
+  registrarem a mudança), `overlay.ts` (ícone + dropdown em Shadow DOM `closed`, só aparece se
+  houver ao menos uma entrada batendo com o hostname atual). Novo canal de mensagem
+  request/response `getMatchingEntries` em `background.ts` (primeiro do tipo no projeto — até
+  então tudo era fire-and-forget) — o content script nunca lê `chrome.storage.session` direto, só
+  o background decide o que sai do vault. Matching de hostname (`entryMatching.ts`) é função pura
+  testável, compara `entry.url`/`entry.site` contra `location.hostname` com tolerância a
+  subdomínio.
+- Testes novos: 39 no total (4 arquivos pré-existentes + `entryMatching.test.ts`,
+  `formDetection.test.ts`, `fillField.test.ts` — os dois últimos com jsdom via pragma
+  `// @vitest-environment jsdom` por arquivo, sem mudar o ambiente `node` padrão do resto da
+  suíte). `jsdom` novo como dev dependency.
+
+**Achado real durante a validação manual, não hipotético — content script carregava mas o ícone
+não aparecia**: depurado ao vivo com o dono do projeto (celular não precisou, só o navegador desta
+vez). Descartadas várias hipóteses (permissão de site, modo anônimo, cache de extensão, path
+errado) até confirmar via `Ctrl+P` no painel Sources do DevTools que o `autofill.js` **estava**
+carregado (só não aparecia na árvore lateral "Content scripts" por algum motivo de exibição do
+Brave) — e sem nenhum erro de execução. Causa raiz real: o `chrome.storage.session` (onde mora a
+sessão de teste injetada manualmente via console pra validar sem precisar re-parear com o celular)
+tinha sido apagado quando a extensão foi **removida e reinstalada** no meio do diagnóstico —
+comportamento correto do storage (efêmero, atrelado ao ciclo de vida da extensão), não um bug. Ao
+reinjetar a sessão de teste, o ícone apareceu e o fluxo completo (clicar → lista suspensa → clicar
+na entrada → usuário e senha preenchidos) funcionou de primeira, inclusive no formulário de login
+real do GitHub (React).
+
+**Achado real de regressão de plataforma, não relacionado ao autofill**: a permissão
+`system.network` (usada pra descoberta automática de LAN, `wxt.config.ts`) começou a ser
+**rejeitada** pelo Chromium atual ("only allowed for packaged apps"), aparecendo como erro visível
+no card da extensão — antes disso, já se sabia (Sessão 115) que o Brave zera `chrome.system.*`
+inteiro por anti-fingerprinting mesmo com a permissão concedida, mas agora nem a declaração é mais
+aceita por padrão em builds recentes do Chromium. Como `isNetworkDiscoverySupported()`
+(`lanDiscovery.ts`) já detectava a ausência da API graciosamente e cai no fallback manual de IP
+(que cobre o caso em qualquer navegador), a correção foi simplesmente parar de declarar essa
+permissão no manifest — sem perda de funcionalidade real, só o erro visível a menos.
+
+**Validação manual em hardware real (Brave, já em uso pelo dono do projeto)**: popup mostra a
+identidade visual nova (confirmado visualmente); ícone de autofill aparece ancorado ao campo de
+senha do formulário real do GitHub; clicar abre a lista com a entrada de teste; selecionar preenche
+usuário e senha corretamente, inclusive no framework JS do próprio GitHub (prova que o truque do
+setter nativo funciona de verdade, não só em teste sintético). `system.network` confirmado sem
+erro depois do fix.
+
+**Item 5 do roadmap (reforma da extensão) fecha 100%** — visual e autofill de usuário/senha
+validados em hardware real. TOTP autofill fica registrado como possível item futuro, dependente de
+uma decisão de segurança separada (reverter a exclusão de `totp_secret` da extensão).
+
 ---
 
 ## Como Usar Este Arquivo

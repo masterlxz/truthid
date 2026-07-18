@@ -1,0 +1,41 @@
+/* Mesma identidade visual do Desktop (desktop/src/App.css) e do Mobile
+   (mobile/lib/theme.dart) — fundo quase preto, acento ciano, Space Grotesk
+   nos títulos, Inter no corpo. Não existe um arquivo de tokens
+   compartilhado entre as três plataformas hoje; cada uma duplica os
+   mesmos valores hex literalmente, e esta extensão segue o mesmo padrão.
+
+   Fontes bundladas localmente (woff2, ver public/fonts/) em vez de @import
+   de CDN — funciona offline e não depende de rede externa carregar antes
+   do popup renderizar. */
+
+@font-face {
+  font-family: 'Inter';
+  src: url('/fonts/Inter-Variable.woff2') format('woff2');
+  font-weight: 400 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Space Grotesk';
+  src: url('/fonts/SpaceGrotesk-Variable.woff2') format('woff2');
+  font-weight: 500 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --color-bg: #0b0f14;
+  --color-surface: #111820;
+  --color-border: #1f2630;
+  --color-text: #e6edf3;
+  --color-text-muted: #9fb1c2;
+  --color-accent: #4dd0e1;
+  --color-accent-dark: #34c3d6;
+  --color-danger: #e25c5c;
+
+  --font-heading: 'Space Grotesk', 'Inter', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+
+  color-scheme: dark;
+}

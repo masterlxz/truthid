@@ -1,11 +1,6 @@
 import { defineConfig } from 'wxt';
 
-// TruthID Vault — extensão de navegador (13.9, fatia 1: só transporte LAN).
-//
-// `system.network` só existe em Chrome/Edge (Firefox não implementa essa
-// API) — por isso não entra no manifest base, e sim condicionalmente via
-// hook, só pra esses browsers. Firefox sempre cai no fallback manual de IP
-// (campo de texto na popup), que funciona em qualquer browser.
+// TruthID Vault — extensão de navegador.
 //
 // `http://*/*` é pedido em runtime (optional_host_permissions +
 // chrome.permissions.request()), não declarado como host_permissions fixo —
@@ -26,16 +21,29 @@ export default defineConfig({
       'Recebe um subconjunto do seu vault de senhas do app TruthID Mobile via LAN ou IPFS/IPNS.',
     permissions: ['storage', 'alarms'],
     optional_host_permissions: ['http://*/*'],
-  },
-  hooks: {
-    'build:manifestGenerated': (wxt, manifest) => {
-      const browser = wxt.config.browser;
-      if (browser === 'chrome' || browser === 'edge') {
-        manifest.permissions ??= [];
-        // "system.network" é uma permissão real (Chrome/Edge), mas ausente
-        // do union type `ManifestPermission` do WXT.
-        manifest.permissions.push('system.network' as never);
-      }
+    icons: {
+      16: 'icon/16.png',
+      32: 'icon/32.png',
+      48: 'icon/48.png',
+      128: 'icon/128.png',
     },
+    // O ícone do overlay de autofill (content script) é um <img> injetado
+    // na página visitada — sem isso, o navegador bloqueia o carregamento
+    // do recurso da extensão a partir do contexto da página.
+    web_accessible_resources: [
+      {
+        resources: ['icon/32.png'],
+        matches: ['http://*/*', 'https://*/*'],
+      },
+    ],
   },
+  // Não declara mais `system.network` no manifest — achado real na Sessão
+  // 126: versões atuais do Chromium (confirmado no Brave) rejeitam essa
+  // permissão ("only allowed for packaged apps"), gerando um erro visível
+  // no card da extensão. Já se sabia que o Brave zera `chrome.system.*`
+  // por anti-fingerprinting mesmo com a permissão concedida (Sessão 115) —
+  // agora nem a declaração é aceita. `isNetworkDiscoverySupported()` em
+  // lanDiscovery.ts já detecta a ausência da API graciosamente (sem essa
+  // permissão, `chrome.system.network` fica `undefined`) e mostra o
+  // fallback manual de IP, que já cobre o caso em qualquer navegador.
 });

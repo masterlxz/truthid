@@ -1,0 +1,196 @@
+/* Reestilização do popup pra alinhar com a identidade visual de
+   Desktop/Mobile — mesma paleta/tipografia (ver ../../src/ui/theme.css),
+   mesmas convenções de componente (.card/.field/.muted/.error-text/
+   .actions-row/.status-badge) usadas em desktop/src/App.css. */
+
+body {
+  width: 340px;
+  margin: 0;
+  padding: 16px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  line-height: 1.4;
+  color: var(--color-text);
+  background-color: var(--color-bg);
+}
+
+h1 {
+  font-family: var(--font-heading);
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+h1 img {
+  width: 20px;
+  height: 20px;
+}
+
+.muted {
+  color: var(--color-text-muted);
+  font-size: 0.9em;
+}
+
+.error-text {
+  color: var(--color-danger);
+}
+
+.card {
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  padding: 0.9rem 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin-bottom: 0.75rem;
+}
+
+.field label {
+  font-size: 0.85em;
+  color: var(--color-text-muted);
+}
+
+.actions-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  font-size: 0.8em;
+  font-weight: 500;
+  padding: 0.15em 0.6em;
+  border-radius: 999px;
+  background-color: rgba(77, 208, 225, 0.12);
+  color: var(--color-accent);
+}
+
+input,
+button {
+  border-radius: 8px;
+  border: 1px solid var(--color-border);
+  padding: 0.5em 0.9em;
+  font-size: 0.95em;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--color-text);
+  background-color: var(--color-surface);
+  transition: border-color 0.2s, color 0.2s, background-color 0.2s;
+}
+
+input::placeholder {
+  color: var(--color-text-muted);
+}
+
+button {
+  cursor: pointer;
+  border-color: var(--color-accent);
+  color: var(--color-accent);
+  width: 100%;
+}
+
+button:hover:not(:disabled) {
+  background-color: var(--color-accent);
+  color: var(--color-bg);
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+input:focus,
+button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+#qr-canvas {
+  display: block;
+  margin: 12px auto;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+#status-text {
+  min-height: 18px;
+  font-size: 0.9em;
+  margin: 8px 0;
+  text-align: center;
+}
+
+.manual-row {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.manual-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.manual-row button {
+  width: auto;
+  flex-shrink: 0;
+}
+
+.secondary-action {
+  margin-top: 12px;
+  text-align: center;
+}
+
+.secondary-action button {
+  width: auto;
+  border-color: var(--color-border);
+  color: var(--color-text-muted);
+  padding: 0.4em 0.9em;
+  font-size: 0.85em;
+}
+
+.secondary-action button:hover:not(:disabled) {
+  background-color: var(--color-surface);
+  color: var(--color-text);
+}
+
+.entry-site {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+}
+
+.entry-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9em;
+  margin: 4px 0;
+}
+
+.entry-field span {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: 'SF Mono', 'Menlo', monospace;
+  font-size: 0.9em;
+  color: var(--color-text-muted);
+}
+
+.entry-field button {
+  width: auto;
+  padding: 0.3em 0.7em;
+  font-size: 0.8em;
+  flex-shrink: 0;
+}

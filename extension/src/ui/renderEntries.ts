@@ -23,7 +23,7 @@ export function renderEntries(container: HTMLElement, entries: VaultEntry[]): vo
 
 function renderEntryRow(entry: VaultEntry): HTMLElement {
   const row = document.createElement('div');
-  row.className = 'entry-row';
+  row.className = 'card';
 
   const site = document.createElement('div');
   site.className = 'entry-site';

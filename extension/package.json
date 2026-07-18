@@ -22,6 +22,7 @@
   "devDependencies": {
     "@types/chrome": "^0.0.287",
     "@types/qrcode": "^1.5.5",
+    "jsdom": "^29.1.1",
     "typescript": "~5.8.3",
     "vitest": "^4.1.9",
     "wxt": "^0.20.27"
