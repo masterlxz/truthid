@@ -9,6 +9,7 @@ import '../services/blockchain_service.dart';
 import '../services/bundler_config_service.dart';
 import '../services/device_key_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/paired_username_resolver.dart';
 import '../services/pimlico_bundler_client.dart';
 import '../services/session_creator.dart';
 import '../services/smart_account_activity_scanner.dart';
@@ -132,20 +133,14 @@ class _WalletScreenState extends State<WalletScreen> {
     // um hiccup de rede pontual — sem retry aqui, um único load com falha
     // deixava o username nunca persistido, travando saldo/atividade pra
     // sempre (achado real, Sessão 134: identityId resolvido, username null
-    // indefinidamente). Tenta de novo em todo load enquanto não persistir.
-    if (username == null) {
-      try {
-        final resolved =
-            await _blockchain.getUsernameForIdentity(BigInt.parse(identityId));
-        if (resolved != null) {
-          await _storage.savePairedUsername(resolved);
-          username = resolved;
-        }
-      } catch (_) {
-        // Tenta de novo no próximo load — identidade/device já resolvidos
-        // não devem travar por causa disso.
-      }
-    }
+    // indefinidamente). `resolvePairedUsername` tenta de novo em todo load
+    // enquanto não persistir (extraído como helper compartilhado na Sessão
+    // 135 — o mesmo bug apareceu em mais telas).
+    username ??= await resolvePairedUsername(
+      storage: _storage,
+      blockchain: _blockchain,
+      identityId: identityId,
+    );
 
     if (mounted) {
       setState(() {

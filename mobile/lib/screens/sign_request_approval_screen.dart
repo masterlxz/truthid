@@ -13,6 +13,7 @@ import '../services/deep_link_delivery_channel.dart';
 import '../services/ecies_service.dart';
 import '../services/ipfs_pin_client.dart';
 import '../services/local_storage_service.dart';
+import '../services/paired_username_resolver.dart';
 import '../services/pimlico_bundler_client.dart';
 import '../services/pinning_provider_service.dart';
 import '../services/remote_signer_lan_server.dart';
@@ -269,12 +270,31 @@ class _SignRequestApprovalScreenState
 
   Future<void> _resolveSmartAccount() async {
     final identityId = await _storage.getPairedIdentityId();
-    final username = await _storage.getPairedUsername();
-    if (identityId == null || username == null) {
+    if (identityId == null) {
       if (!mounted) return;
       setState(() {
         _status = _Status.error;
         _errorMsg = "This phone isn't paired with a TruthID identity yet.";
+      });
+      return;
+    }
+
+    // Achado real (Sessão 135, ultrareview): identityId persistido mas
+    // username nunca resolvido é um estado real e alcançável (mesmo bug já
+    // corrigido em wallet_screen.dart/vault_edit_approval_screen.dart) —
+    // reportar "não pareado" aqui enganava o usuário a re-parear em vez de
+    // só esperar o on-chain resolver.
+    final username = await resolvePairedUsername(
+      storage: _storage,
+      blockchain: _blockchain,
+      identityId: identityId,
+    );
+    if (username == null) {
+      if (!mounted) return;
+      setState(() {
+        _status = _Status.error;
+        _errorMsg =
+            'Still resolving your identity on-chain — try again in a moment.';
       });
       return;
     }

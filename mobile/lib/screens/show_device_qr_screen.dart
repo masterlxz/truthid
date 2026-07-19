@@ -7,6 +7,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../services/blockchain_service.dart';
 import '../services/device_key_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/paired_username_resolver.dart';
 import '../services/vault_key_service.dart';
 import '../theme.dart';
 
@@ -71,11 +72,17 @@ class _ShowDeviceQrScreenState extends State<ShowDeviceQrScreen> {
     }
 
     _pollTimer?.cancel();
-    await _storage.savePairedIdentity(device.identityId.toString());
+    final identityId = device.identityId.toString();
+    await _storage.savePairedIdentity(identityId);
 
-    _blockchain.getUsernameForIdentity(device.identityId).then((username) {
-      if (username != null) _storage.savePairedUsername(username);
-    });
+    // Best-effort, não bloqueia a confirmação do pareamento — se falhar
+    // aqui, as telas que precisam do username (Wallet, Sessions, Vault,
+    // etc.) já tentam de novo sozinhas via este mesmo helper.
+    unawaited(resolvePairedUsername(
+      storage: _storage,
+      blockchain: _blockchain,
+      identityId: identityId,
+    ));
 
     // Non-critical: se falhar aqui (ex: app derrubado em background), a
     // VaultScreen oferece um retry que refaz este mesmo passo depois — os

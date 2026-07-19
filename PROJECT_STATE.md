@@ -5841,14 +5841,24 @@ achados 3 e 4 acima, baratos de resolver juntos): `getIdentityByUsername` sem tr
 de entrega sobrepostas; `activeMobileDelivery` obsoleto podia reenviar uma proposta já aprovada via
 Desktop.
 
-### ⏳ PLAUSIBLE (8 restantes, sendo corrigidos aos poucos)
+### ✅ Mais 2 achados PLAUSIBLE corrigidos — commit seguinte
 
-- 3 telas irmãs (`sign_request_approval_screen.dart`, `sessions_screen.dart`,
-  `show_device_qr_screen.dart`, `vault_screen.dart`) nunca receberam o fix de retry de username
-  desta sessão — mesmo bug, sem correção.
-- A lógica de retry de username está duplicada entre `wallet_screen.dart` e
-  `vault_edit_approval_screen.dart` (candidata a virar um helper compartilhado, especialmente dado
-  o ponto acima).
+- **3 telas irmãs sem o fix de retry de username** (`sign_request_approval_screen.dart`,
+  `sessions_screen.dart`, `show_device_qr_screen.dart`, `vault_screen.dart`) — **fix**: extraído
+  `mobile/lib/services/paired_username_resolver.dart` (função livre `resolvePairedUsername`, 4
+  testes próprios), aplicado nas 4 telas + refatorado `wallet_screen.dart`/
+  `vault_edit_approval_screen.dart` pra usar o mesmo helper em vez da lógica duplicada.
+  `sessions_screen.dart`/`vault_screen.dart` também passaram a chamar `_resolveSmartAccount`
+  incondicionalmente (antes só rodava `if (username != null)`, travando pra sempre sem retry se
+  username fosse null); `show_device_qr_screen.dart` trocou o `.then()` fire-and-forget duplicado
+  pelo helper (continua fire-and-forget de propósito, best-effort, não bloqueia a confirmação do
+  pareamento — as telas consumidoras já retentam sozinhas).
+- **Duplicação da lógica de retry** — resolvida pelo mesmo helper acima.
+
+Validado: `flutter analyze` limpo, `flutter test` 361/361 (4 testes novos do helper).
+
+### ⏳ PLAUSIBLE (6 restantes)
+
 - `setState` sem checar `mounted` em `vault_edit_approval_screen.dart` (mascarado por `catchError`,
   baixo risco real).
 - Falha de RPC num chunk específico do scan pode causar falso "not found" (`_fetchIdentityCreatedLogs`

@@ -5,6 +5,7 @@ import '../services/blockchain_service.dart';
 import '../services/bundler_config_service.dart';
 import '../services/device_key_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/paired_username_resolver.dart';
 import '../services/pimlico_bundler_client.dart';
 import '../services/session_creator.dart';
 import '../theme.dart';
@@ -85,12 +86,6 @@ class _SessionsScreenState extends State<SessionsScreen> {
         // Auto-descoberta: device registrado on-chain mas não salvo localmente
         identityId = device.identityId.toString();
         await _storage.savePairedIdentity(identityId);
-        _blockchain.getUsernameForIdentity(device.identityId).then((u) {
-          if (u != null) {
-            _storage.savePairedUsername(u);
-            if (mounted) setState(() => _pairedUsername = u);
-          }
-        });
       }
     } else if (identityId != null) {
       // Device revogado ou removido — limpar storage
@@ -138,13 +133,23 @@ class _SessionsScreenState extends State<SessionsScreen> {
     // Resolver a smart account depende do username — segue em paralelo, sem
     // bloquear a lista de sessões (a lista já lê por identityId, que sempre
     // temos nesse ponto). Necessária só pro _revoke() (sender da UserOp).
-    if (username != null) {
-      _resolveSmartAccount(username);
-    }
+    // Chamado incondicionalmente (não só `if (username != null)`) — achado
+    // real, Sessão 135: o username podia nunca ter resolvido e ficava
+    // travado pra sempre sem retry; `_resolveSmartAccount` agora tenta
+    // resolver de novo via `resolvePairedUsername` antes de desistir.
+    _resolveSmartAccount(identityId);
   }
 
-  Future<void> _resolveSmartAccount(String username) async {
+  Future<void> _resolveSmartAccount(String identityId) async {
     try {
+      final username = await resolvePairedUsername(
+        storage: _storage,
+        blockchain: _blockchain,
+        identityId: identityId,
+      );
+      if (username == null) return;
+      if (mounted) setState(() => _pairedUsername = username);
+
       final identity = await _blockchain.getIdentityByUsername(username);
       if (identity == null) return;
       if (mounted) setState(() => _smartAccountAddress = identity.controller);

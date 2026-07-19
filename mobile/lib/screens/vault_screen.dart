@@ -5,6 +5,7 @@ import '../services/blockchain_service.dart';
 import '../services/bundler_config_service.dart';
 import '../services/device_key_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/paired_username_resolver.dart';
 import '../services/pimlico_bundler_client.dart';
 import '../services/session_creator.dart';
 import '../services/vault_key_service.dart';
@@ -161,13 +162,22 @@ class _VaultScreenState extends State<VaultScreen> {
 
     // Resolver a smart account depende do username — segue em paralelo, sem
     // bloquear a tela (mesmo padrão de sessions_screen.dart). Necessária só
-    // pro botão Publicar (sender da UserOp de updateVault).
-    final username = await _storage.getPairedUsername();
-    if (username != null) _resolveSmartAccount(username);
+    // pro botão Publicar (sender da UserOp de updateVault). Chamado
+    // incondicionalmente (achado real, Sessão 135: um username nunca
+    // resolvido ficava travado pra sempre sem retry — `_resolveSmartAccount`
+    // agora tenta de novo via `resolvePairedUsername` antes de desistir).
+    _resolveSmartAccount(identityId);
   }
 
-  Future<void> _resolveSmartAccount(String username) async {
+  Future<void> _resolveSmartAccount(String identityId) async {
     try {
+      final username = await resolvePairedUsername(
+        storage: _storage,
+        blockchain: _blockchain,
+        identityId: identityId,
+      );
+      if (username == null) return;
+
       final identity = await _blockchain.getIdentityByUsername(username);
       if (identity == null) return;
       if (mounted) setState(() => _smartAccountAddress = identity.controller);

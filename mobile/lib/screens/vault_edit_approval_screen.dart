@@ -7,6 +7,7 @@ import 'package:web3dart/web3dart.dart' show EthereumAddress;
 import '../services/blockchain_service.dart';
 import '../services/bundler_config_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/paired_username_resolver.dart';
 import '../services/pimlico_bundler_client.dart';
 import '../services/remote_signer_lan_server.dart';
 import '../services/session_creator.dart';
@@ -212,19 +213,16 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
     }
 
     // O celular já está pareado (identityId persistido), mas o username
-    // pode nunca ter resolvido (achado real, Sessão 134/135 — ver
-    // wallet_screen.dart::_load). Tenta de novo aqui antes de desistir, em
-    // vez de reportar "não pareado" (engana o usuário a re-parear em vez de
-    // só esperar o on-chain resolver).
-    var username = await _storage.getPairedUsername();
-    if (username == null) {
-      try {
-        username = await _blockchain.getUsernameForIdentity(BigInt.parse(identityId));
-        if (username != null) await _storage.savePairedUsername(username);
-      } catch (_) {
-        // cai no branch abaixo, que já trata username nulo
-      }
-    }
+    // pode nunca ter resolvido (achado real, Sessão 134/135). Tenta de novo
+    // aqui antes de desistir, em vez de reportar "não pareado" (engana o
+    // usuário a re-parear em vez de só esperar o on-chain resolver).
+    // `resolvePairedUsername` é o mesmo helper que wallet_screen.dart usa —
+    // extraído como compartilhado depois de aparecer duplicado nos dois.
+    final username = await resolvePairedUsername(
+      storage: _storage,
+      blockchain: _blockchain,
+      identityId: identityId,
+    );
     if (username == null) {
       if (!mounted) return null;
       setState(() {
