@@ -32,6 +32,26 @@
       </div>
     </section>
 
+    <section id="pending-edits-section" hidden>
+      <div class="card">
+        <span class="status-badge" id="pending-edits-badge">0 pending</span>
+        <p class="muted" style="margin: 0.5rem 0 0.75rem">
+          New credentials created on sites you visit — send them to a device you trust to save.
+        </p>
+        <div class="actions-row">
+          <button id="send-to-desktop">Send to this computer</button>
+          <button id="send-to-phone">Send to phone</button>
+        </div>
+        <p id="pending-edits-status" class="muted" style="margin-top: 0.5rem"></p>
+      </div>
+      <div id="pending-edit-qr-wrapper" hidden>
+        <div class="card">
+          <p class="muted" style="margin: 0 0 0.5rem">Scan with the TruthID Mobile app.</p>
+          <canvas id="pending-edit-qr-canvas"></canvas>
+        </div>
+      </div>
+    </section>
+
     <script type="module" src="./main.ts"></script>
   </body>
 </html>

@@ -25,6 +25,9 @@ import {
 import { renderEntries } from '../../src/ui/renderEntries';
 import { renderQrToCanvas } from '../../src/ui/renderQr';
 import { bytesToHex, hexToBytes } from '../../src/util/bytes';
+import { listPendingEdits, removePendingEdit } from '../../src/vaultEdit/pendingEdits';
+import { sendToDesktop } from '../../src/vaultEdit/desktopDelivery';
+import { startMobileDelivery } from '../../src/vaultEdit/mobileDelivery';
 
 const SESSION_EXPIRY_ALARM = 'truthid-vault-session-expiry';
 const START_DEAD_DROP_POLL_MESSAGE = 'truthid-start-dead-drop-poll';
@@ -77,6 +80,13 @@ const els = {
   newSessionButton2: document.getElementById(
     'new-session-2',
   ) as HTMLButtonElement,
+  pendingEditsSection: document.getElementById('pending-edits-section') as HTMLElement,
+  pendingEditsBadge: document.getElementById('pending-edits-badge') as HTMLElement,
+  pendingEditsStatus: document.getElementById('pending-edits-status') as HTMLElement,
+  sendToDesktopButton: document.getElementById('send-to-desktop') as HTMLButtonElement,
+  sendToPhoneButton: document.getElementById('send-to-phone') as HTMLButtonElement,
+  pendingEditQrWrapper: document.getElementById('pending-edit-qr-wrapper') as HTMLElement,
+  pendingEditQrCanvas: document.getElementById('pending-edit-qr-canvas') as HTMLCanvasElement,
 };
 
 let currentState: SessionState | null = null;
@@ -241,4 +251,91 @@ async function startNewSession(): Promise<void> {
 els.newSessionButton.addEventListener('click', () => void startNewSession());
 els.newSessionButton2.addEventListener('click', () => void startNewSession());
 
+// ---------------------------------------------------------------------------
+// Propostas de credencial nova (Sessão 134, item 6 do roadmap) — enfileiradas
+// por webauthn.content.ts/webauthn-bridge.content.ts quando um site chama
+// navigator.credentials.create(). Seção independente do fluxo de QR/entries
+// acima (mostrada sempre que há pendências, não faz parte da máquina de
+// estados showingQr/received).
+// ---------------------------------------------------------------------------
+
+async function refreshPendingEdits(): Promise<void> {
+  const pending = await listPendingEdits();
+  els.pendingEditsSection.hidden = pending.length === 0;
+  els.pendingEditsBadge.textContent = `${pending.length} pending`;
+  if (pending.length === 0) {
+    els.pendingEditQrWrapper.hidden = true;
+    els.pendingEditsStatus.textContent = '';
+  }
+}
+
+els.sendToDesktopButton.addEventListener('click', async () => {
+  const pending = await listPendingEdits();
+  const proposal = pending[0];
+  if (!proposal) return;
+
+  els.pendingEditsStatus.textContent = 'Looking for TruthID Desktop on this computer...';
+  els.sendToDesktopButton.disabled = true;
+  els.sendToPhoneButton.disabled = true;
+  try {
+    const result = await sendToDesktop(proposal);
+    if (result.status === 'approved') {
+      await removePendingEdit(proposal.id);
+      els.pendingEditsStatus.textContent = 'Saved.';
+    } else if (result.status === 'rejected') {
+      await removePendingEdit(proposal.id);
+      els.pendingEditsStatus.textContent = 'Rejected on the Desktop.';
+    } else if (result.status === 'not-found') {
+      els.pendingEditsStatus.textContent =
+        "Couldn't find TruthID Desktop running on this computer.";
+    } else {
+      els.pendingEditsStatus.textContent = `Failed: ${result.status}${result.error ? ` (${result.error})` : ''}`;
+    }
+  } finally {
+    els.sendToDesktopButton.disabled = false;
+    els.sendToPhoneButton.disabled = false;
+    await refreshPendingEdits();
+  }
+});
+
+els.sendToPhoneButton.addEventListener('click', async () => {
+  const pending = await listPendingEdits();
+  const proposal = pending[0];
+  if (!proposal) return;
+
+  const granted = await ensureHostPermission();
+  if (!granted) {
+    els.pendingEditsStatus.textContent = 'Permission denied.';
+    return;
+  }
+
+  els.sendToDesktopButton.disabled = true;
+  els.sendToPhoneButton.disabled = true;
+  try {
+    const session = startMobileDelivery(proposal);
+    els.pendingEditQrWrapper.hidden = false;
+    await renderQrToCanvas(els.pendingEditQrCanvas, JSON.stringify(session.qrPayload));
+    els.pendingEditsStatus.textContent = 'Scan with your phone...';
+
+    const sent = await session.send();
+    if (sent) {
+      // Best-effort: a extensão não tem como receber confirmação de volta
+      // de que o celular publicou de verdade (não roda servidor nenhum) —
+      // marca como enviada assim que o PUT chega, mesmo espírito best-effort
+      // já aceito em outros lugares do projeto (dead-drop, por exemplo).
+      await removePendingEdit(proposal.id);
+      els.pendingEditsStatus.textContent = 'Sent to your phone — check it to approve.';
+      els.pendingEditQrWrapper.hidden = true;
+    } else {
+      els.pendingEditsStatus.textContent =
+        "Couldn't reach your phone on the local network.";
+    }
+  } finally {
+    els.sendToDesktopButton.disabled = false;
+    els.sendToPhoneButton.disabled = false;
+    await refreshPendingEdits();
+  }
+});
+
 void init();
+void refreshPendingEdits();

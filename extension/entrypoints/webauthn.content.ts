@@ -1,4 +1,11 @@
-import { base64UrlDecode } from '../src/webauthn';
+import { base64UrlDecode, createPasskey } from '../src/webauthn';
+
+// Canal de enfileiramento de propostas (Sessão 134, item 6 do roadmap) —
+// separado do canal de login (CHANNEL abaixo) de propósito: é fire-and-
+// forget (a página não espera resposta, só o resultado normal do
+// create()), então não precisa do protocolo request/response com
+// requestId/timeout que o login exige.
+const VAULT_EDIT_CHANNEL = '__truthid_vault_edit__';
 
 // Intercepta `navigator.credentials.get()` de verdade na página (Sessão
 // 132) — precisa rodar no main-world (o mesmo contexto JS da página, não o
@@ -69,6 +76,54 @@ export default defineContentScript({
   runAt: 'document_start',
   main() {
     const originalGet = navigator.credentials.get.bind(navigator.credentials);
+    const originalCreate = navigator.credentials.create.bind(navigator.credentials);
+
+    navigator.credentials.create = (async (options?: CredentialCreationOptions) => {
+      const publicKey = options?.publicKey;
+      if (!publicKey) return originalCreate(options);
+
+      // Gera a passkey localmente — não precisa de aprovação do Device pra
+      // *gerar* (só pra *persistir*), então nenhum round-trip pro bridge
+      // aqui: o site nunca fica esperando o usuário aprovar em outro
+      // dispositivo só pra terminar o próprio fluxo de cadastro.
+      const rpId = publicKey.rp?.id ?? location.hostname;
+      const challenge = toUint8Array(publicKey.challenge as BufferSource);
+      const passkey = createPasskey({ rpId, challenge, origin: location.origin });
+
+      // Fire-and-forget pro bridge — a proposta fica pendente até o
+      // usuário mandar pra aprovação (popup da extensão), sem bloquear o
+      // resultado que a página está esperando.
+      window.postMessage(
+        {
+          channel: VAULT_EDIT_CHANNEL,
+          site: rpId,
+          url: location.origin,
+          username: publicKey.user?.name ?? '',
+          password: '',
+          notes: '',
+          passkey: {
+            rp_id: rpId,
+            credential_id_b64: passkey.credentialIdB64,
+            user_handle_b64: passkey.userHandleB64,
+            private_key_hex: passkey.privateKeyHex,
+            sign_count: passkey.signCount,
+            created_at: passkey.createdAt,
+          },
+        },
+        location.origin,
+      );
+
+      return {
+        id: passkey.credentialIdB64,
+        type: 'public-key',
+        rawId: toArrayBuffer(base64UrlDecode(passkey.credentialIdB64)),
+        response: {
+          clientDataJSON: toArrayBuffer(new TextEncoder().encode(passkey.clientDataJSON)),
+          attestationObject: toArrayBuffer(passkey.attestationObject),
+        },
+        getClientExtensionResults: () => ({}),
+      };
+    }) as typeof navigator.credentials.create;
 
     navigator.credentials.get = (async (options?: CredentialRequestOptions) => {
       const publicKey = options?.publicKey;

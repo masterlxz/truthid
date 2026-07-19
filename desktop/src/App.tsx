@@ -24,6 +24,7 @@ import { computeSmartAccountAddressSync } from "./utils/computeSmartAccountAddre
 import { SignRequestModal } from "./components/SignRequestModal";
 import { SignMessageModal } from "./components/SignMessageModal";
 import { PinApprovalModal } from "./components/PinApprovalModal";
+import { VaultEditApprovalModal } from "./components/VaultEditApprovalModal";
 import "./App.css";
 
 type Tab = "dashboard" | "devices" | "sessions" | "vault";
@@ -125,6 +126,7 @@ function App() {
         <SignRequestModal smartAccountAddress={smartAccountAddress} />
         <SignMessageModal />
         <PinApprovalModal />
+        <VaultEditApprovalModal smartAccountAddress={smartAccountAddress} />
         <ConnectWallet />
       </>
     );
@@ -141,6 +143,7 @@ function App() {
       <SignRequestModal smartAccountAddress={smartAccountAddress} />
       <SignMessageModal />
       <PinApprovalModal />
+      <VaultEditApprovalModal smartAccountAddress={smartAccountAddress} />
       <div className="app-shell">
         <header className="topbar">
           <div className="topbar-left">

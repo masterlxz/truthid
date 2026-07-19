@@ -18,6 +18,7 @@ mod pin;
 mod sign_message;
 mod sign_request;
 mod vault;
+mod vault_edit;
 
 const SERVICE: &str = "truthid";
 const ACCOUNT: &str = "device-private-key";
@@ -611,13 +612,16 @@ async fn local_signer_start(
     sign_requests: tauri::State<'_, std::sync::Arc<sign_request::SignRequestState>>,
     sign_messages: tauri::State<'_, std::sync::Arc<sign_message::SignMessageState>>,
     pin_requests: tauri::State<'_, std::sync::Arc<pin::PinState>>,
+    vault_edit_requests: tauri::State<'_, std::sync::Arc<vault_edit::VaultEditState>>,
 ) -> Result<local_signer_server::LocalSignerStatus, String> {
     use tauri::Emitter;
     let sign_requests = sign_requests.inner().clone();
     let sign_messages = sign_messages.inner().clone();
     let pin_requests = pin_requests.inner().clone();
+    let vault_edit_requests = vault_edit_requests.inner().clone();
     let app_for_message = app.clone();
     let app_for_pin = app.clone();
+    let app_for_vault_edit = app.clone();
     local_signer_server::start(
         &state,
         sign_requests,
@@ -631,6 +635,10 @@ async fn local_signer_start(
         pin_requests,
         move |payload| {
             let _ = app_for_pin.emit("truthid://pin", payload);
+        },
+        vault_edit_requests,
+        move |payload| {
+            let _ = app_for_vault_edit.emit("truthid://vault-edit", payload);
         },
     )
     .await
@@ -698,6 +706,22 @@ async fn respond_to_pin_request(
     pin::resolve(state.inner(), &id, decision).await
 }
 
+#[tauri::command]
+async fn get_pending_vault_edit_request(
+    state: tauri::State<'_, std::sync::Arc<vault_edit::VaultEditState>>,
+) -> Result<Option<vault_edit::VaultEditApprovalPayload>, String> {
+    Ok(vault_edit::current(state.inner()).await)
+}
+
+#[tauri::command]
+async fn respond_to_vault_edit_request(
+    id: String,
+    decision: vault_edit::VaultEditDecision,
+    state: tauri::State<'_, std::sync::Arc<vault_edit::VaultEditState>>,
+) -> Result<(), String> {
+    vault_edit::resolve(state.inner(), &id, decision).await
+}
+
 /// Os 3 comandos abaixo alimentam a tela de Settings de autorizações de
 /// pinning por app (fatia 3) — nenhum deles passa pelo protocolo de
 /// aprovação/parking, só leem/gravam o arquivo de autorizações direto.
@@ -735,6 +759,7 @@ pub fn run() {
         .manage(std::sync::Arc::new(sign_request::SignRequestState::default()))
         .manage(std::sync::Arc::new(sign_message::SignMessageState::default()))
         .manage(std::sync::Arc::new(pin::PinState::default()))
+        .manage(std::sync::Arc::new(vault_edit::VaultEditState::default()))
         .setup(|app| {
             // AppHandle (não State) porque a closure/future precisa ser 'static
             // pra rodar em tauri::async_runtime::spawn — um State<'_, T> tomado
@@ -767,6 +792,7 @@ pub fn run() {
             let notify_handle = handle.clone();
             let notify_handle_message = handle.clone();
             let notify_handle_pin = handle.clone();
+            let notify_handle_vault_edit = handle.clone();
             tauri::async_runtime::spawn(async move {
                 let state = handle.state::<local_signer_server::LocalSignerServerState>();
                 let sign_requests = handle
@@ -779,6 +805,10 @@ pub fn run() {
                     .clone();
                 let pin_requests = handle
                     .state::<std::sync::Arc<pin::PinState>>()
+                    .inner()
+                    .clone();
+                let vault_edit_requests = handle
+                    .state::<std::sync::Arc<vault_edit::VaultEditState>>()
                     .inner()
                     .clone();
                 let result = local_signer_server::start(
@@ -794,6 +824,10 @@ pub fn run() {
                     pin_requests,
                     move |payload| {
                         let _ = notify_handle_pin.emit("truthid://pin", payload);
+                    },
+                    vault_edit_requests,
+                    move |payload| {
+                        let _ = notify_handle_vault_edit.emit("truthid://vault-edit", payload);
                     },
                 )
                 .await;
@@ -843,6 +877,8 @@ pub fn run() {
             pin_get_authorizations,
             pin_revoke_authorization,
             pin_set_daily_limit,
+            get_pending_vault_edit_request,
+            respond_to_vault_edit_request,
             ledger::is_ledger_connected,
             ledger::get_ledger_address,
             ledger::sign_ledger_transaction,

@@ -3,6 +3,7 @@ import {
   WEBAUTHN_SIGN_ASSERTION_MESSAGE,
 } from '../src/autofill/messages';
 import { showWebauthnConfirmPrompt } from '../src/webauthnPrompt';
+import { addPendingEdit, type VaultEditProposal } from '../src/vaultEdit/pendingEdits';
 
 // Companheiro isolated-world de webauthn.content.ts (main-world, Sessão
 // 132) — MAIN-world scripts não têm acesso às APIs de extensão
@@ -11,6 +12,10 @@ import { showWebauthnConfirmPrompt } from '../src/webauthnPrompt';
 // canais normais (mesmo padrão de GET_MATCHING_ENTRIES_MESSAGE já usado
 // pelo autofill) e devolve o resultado do mesmo jeito.
 const CHANNEL = '__truthid_webauthn__';
+// Canal irmão, fire-and-forget (Sessão 134) — enfileira uma proposta de
+// credencial nova (`chrome.storage.session`, via pendingEdits.ts); nunca
+// espera resposta, então não usa o protocolo request/response acima.
+const VAULT_EDIT_CHANNEL = '__truthid_vault_edit__';
 
 interface BridgeRequest {
   channel: typeof CHANNEL;
@@ -21,6 +26,11 @@ interface BridgeRequest {
   challenge: Uint8Array;
 }
 
+type VaultEditEnqueueMessage = { channel: typeof VAULT_EDIT_CHANNEL } & Omit<
+  VaultEditProposal,
+  'id' | 'createdAtMs'
+>;
+
 export default defineContentScript({
   matches: ['http://*/*', 'https://*/*'],
   main() {
@@ -29,6 +39,13 @@ export default defineContentScript({
       // origens — só a própria página (via webauthn.content.ts, mesmo
       // frame) fala nesse canal.
       if (event.source !== window) return;
+
+      const vaultEditData = event.data as Partial<VaultEditEnqueueMessage> | undefined;
+      if (vaultEditData?.channel === VAULT_EDIT_CHANNEL) {
+        void addPendingEdit(vaultEditData as VaultEditEnqueueMessage);
+        return;
+      }
+
       const data = event.data as Partial<BridgeRequest> | undefined;
       if (data?.channel !== CHANNEL || data.direction !== 'request') return;
       void handleRequest(data as BridgeRequest);

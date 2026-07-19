@@ -49,3 +49,37 @@ export function randomSessionId(): string {
   crypto.getRandomValues(bytes);
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
+
+/**
+ * Schema v1 do QR de proposta de credencial nova (Sessão 134, item 6 do
+ * roadmap) — a extensão vira "requisitante" pela primeira vez, mesmo schema
+ * já validado pelo `/truthid/v1/pin` cross-device (`ephemeralPubKey` é da
+ * extensão agora, não do Device; espelha `pin_approval_screen.dart`'s
+ * `_validatePayload`, que já aceita exatamente esses 5 campos). `appName`
+ * fixo — só a própria extensão TruthID fala esse protocolo.
+ */
+export interface VaultEditQrPayload {
+  action: 'truthid-vault-edit';
+  v: 1;
+  sessionId: string;
+  ephemeralPubKey: string; // 0x + 33 bytes SEC1 comprimido, hex
+  expiresAt: number; // unix ms, absoluto
+  appName: 'TruthID Extension';
+}
+
+export const VAULT_EDIT_QR_TTL_MS = 3 * 60 * 1000;
+
+export function buildVaultEditQrPayload(
+  sessionId: string,
+  ephemeralPubKeyHex: string,
+  now: number = Date.now(),
+): VaultEditQrPayload {
+  return {
+    action: 'truthid-vault-edit',
+    v: 1,
+    sessionId,
+    ephemeralPubKey: ephemeralPubKeyHex,
+    expiresAt: now + VAULT_EDIT_QR_TTL_MS,
+    appName: 'TruthID Extension',
+  };
+}

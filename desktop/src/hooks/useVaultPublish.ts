@@ -9,13 +9,8 @@ import {
   VAULT_REGISTRY_ABI,
   TRUTHID_ACCOUNT_ABI,
 } from "../config/contracts";
-import { executeViaUserOp } from "../services/userOpExecutor";
+import { publishVaultViaDeviceKey } from "../services/vaultPublishViaDeviceKey";
 import type { PinResult } from "../types";
-
-interface BundlerConfig {
-  api_key: string;
-  network: string;
-}
 
 // Débito #43: máquina de estados de "publicar o vault" (vault_publish local +
 // updateVault on-chain) extraída do VaultManagement.tsx, mesmo padrão já usado
@@ -154,32 +149,7 @@ export function useVaultPublish(
         throw new Error("Nenhuma identidade carregada.");
       }
 
-      const result = await invoke<PinResult>("vault_publish");
-      if (result.providers_failed.length > 0 && result.providers_ok.length === 0) {
-        throw new Error(`Todos os providers falharam: ${result.providers_failed.join(", ")}`);
-      }
-
-      const bundlerConfig = await invoke<BundlerConfig>("get_bundler_config");
-      if (!bundlerConfig.api_key) {
-        throw new Error(
-          "Bundler não configurado — grave api_key/network em ~/.truthid/bundler_config.json."
-        );
-      }
-
-      const callData = encodeFunctionData({
-        abi: VAULT_REGISTRY_ABI,
-        functionName: "updateVault",
-        args: [result.cid, result.content_hash as `0x${string}`],
-      });
-
-      const { transactionHash } = await executeViaUserOp({
-        smartAccountAddress,
-        dest: VAULT_REGISTRY_ADDRESS,
-        value: 0n,
-        callData,
-        bundlerApiKey: bundlerConfig.api_key,
-        bundlerNetwork: bundlerConfig.network || "base",
-      });
+      const { transactionHash } = await publishVaultViaDeviceKey(smartAccountAddress);
 
       if (!transactionHash) {
         throw new Error(

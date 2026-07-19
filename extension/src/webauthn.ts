@@ -1,16 +1,16 @@
 import { p256 } from '@noble/curves/p256';
 import { sha256 } from '@noble/hashes/sha256';
 
-import { hexToBytes } from './util/bytes';
+import { bytesToHex, hexToBytes } from './util/bytes';
+import { encodeBytes, encodeInt, encodeMap, encodeText } from './cbor';
 
 /**
- * Assinatura de asserção WebAuthn (login com passkey já existente) — porte
- * de `desktop/src/utils/webauthn.ts` (Sessão 124-125, "Testar assinatura"),
- * só a metade de `get()`. Mesmo padrão de duplicação por plataforma do
- * resto do projeto (ver `crypto/ecies.ts`): reimplementado aqui, nunca
- * importado direto do Desktop (não há pacote compartilhado). `createPasskey`/
- * `buildAttestationObject`/CBOR (só usados no registro, `create()`) ficam de
- * fora de propósito — Sessão 132 só cobre login, ver PROJECT_STATE.md.
+ * WebAuthn (P-256/ES256) — porte de `desktop/src/utils/webauthn.ts`. Mesmo
+ * padrão de duplicação por plataforma do resto do projeto (ver
+ * `crypto/ecies.ts`): reimplementado aqui, nunca importado direto do
+ * Desktop (não há pacote compartilhado). Sessão 132 portou só `get()`
+ * (login); Sessão 134 completa com `createPasskey`/`buildAttestationObject`
+ * (registro via `navigator.credentials.create()`, item 6 do roadmap).
  */
 
 const AAGUID = new Uint8Array(16); // zeros — sem attestation de hardware real, igual ao Desktop.
@@ -44,17 +44,129 @@ function concatBytes(...chunks: Uint8Array[]): Uint8Array {
   return out;
 }
 
+function randomBytes(length: number): Uint8Array {
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  return bytes;
+}
+
+/**
+ * Encodes a P-256 public key as a COSE_Key CBOR map, per WebAuthn §6.5.1.1 —
+ * mesma ordem de chaves do Desktop (não CBOR canonical sort).
+ */
+export function encodeCoseP256PublicKey(x: Uint8Array, y: Uint8Array): Uint8Array {
+  return encodeMap([
+    [encodeInt(1), encodeInt(2)],
+    [encodeInt(3), encodeInt(-7)],
+    [encodeInt(-1), encodeInt(1)],
+    [encodeInt(-2), encodeBytes(x)],
+    [encodeInt(-3), encodeBytes(y)],
+  ]);
+}
+
+type AttestedCredential = {
+  credentialId: Uint8Array;
+  coseP256PublicKey: Uint8Array;
+};
+
 /**
  * Monta o `authenticatorData` (§6.1 da spec): rpIdHash(32) || flags(1) ||
- * signCount(4, BE) — sem `attestedCredentialData` (só usado no registro).
- * Flags sempre 0x05 (UP+UV) — autenticador virtual, sem presença/biometria
- * real (mesma simplificação já aceita no Desktop/Mobile).
+ * signCount(4, BE) || [attestedCredentialData]. Flags sempre inclui UP+UV
+ * (0x05) — autenticador virtual, sem presença/biometria real (mesma
+ * simplificação já aceita no Desktop/Mobile); bit AT (0x40) somado quando
+ * `attestedCredential` presente (só no registro).
  */
-export function buildAuthenticatorData(params: { rpId: string; signCount: number }): Uint8Array {
+export function buildAuthenticatorData(params: {
+  rpId: string;
+  signCount: number;
+  attestedCredential?: AttestedCredential;
+}): Uint8Array {
   const rpIdHash = sha256(new TextEncoder().encode(params.rpId));
+  const flags = params.attestedCredential ? 0x45 : 0x05;
   const signCountBytes = new Uint8Array(4);
   new DataView(signCountBytes.buffer).setUint32(0, params.signCount, false);
-  return concatBytes(rpIdHash, new Uint8Array([0x05]), signCountBytes);
+
+  if (!params.attestedCredential) {
+    return concatBytes(rpIdHash, new Uint8Array([flags]), signCountBytes);
+  }
+
+  const { credentialId, coseP256PublicKey } = params.attestedCredential;
+  const credentialIdLen = new Uint8Array(2);
+  new DataView(credentialIdLen.buffer).setUint16(0, credentialId.length, false);
+
+  return concatBytes(
+    rpIdHash,
+    new Uint8Array([flags]),
+    signCountBytes,
+    AAGUID,
+    credentialIdLen,
+    credentialId,
+    coseP256PublicKey,
+  );
+}
+
+/** Builds a "none"-format WebAuthn attestationObject CBOR map (§6.5.4). */
+export function buildAttestationObject(authData: Uint8Array): Uint8Array {
+  return encodeMap([
+    [encodeText('fmt'), encodeText('none')],
+    [encodeText('attStmt'), encodeMap([])],
+    [encodeText('authData'), encodeBytes(authData)],
+  ]);
+}
+
+export type CreatedPasskey = {
+  privateKeyHex: string;
+  credentialIdB64: string;
+  userHandleB64: string;
+  clientDataJSON: string;
+  attestationObject: Uint8Array;
+  signCount: number;
+  createdAt: number;
+};
+
+/**
+ * Gera um par de chaves P-256 novo e monta authenticatorData +
+ * attestationObject "none" — cerimônia de registro completa, local e
+ * self-contida, idêntica ao `createPasskey` do Desktop. Chave privada nunca
+ * sai do processo da extensão até o Device aprovar (ver
+ * `vaultEdit/pendingEdits.ts`).
+ */
+export function createPasskey(params: {
+  rpId: string;
+  challenge: Uint8Array;
+  origin: string;
+}): CreatedPasskey {
+  const privateKey = p256.utils.randomPrivateKey();
+  const publicKey = p256.getPublicKey(privateKey, false); // uncompressed: 0x04 || x(32) || y(32)
+  const x = publicKey.slice(1, 33);
+  const y = publicKey.slice(33, 65);
+
+  const credentialId = randomBytes(16);
+  const userHandle = randomBytes(16);
+  const coseP256PublicKey = encodeCoseP256PublicKey(x, y);
+
+  const authData = buildAuthenticatorData({
+    rpId: params.rpId,
+    signCount: 0,
+    attestedCredential: { credentialId, coseP256PublicKey },
+  });
+  const attestationObject = buildAttestationObject(authData);
+
+  const clientDataJSON = JSON.stringify({
+    type: 'webauthn.create',
+    challenge: base64UrlEncode(params.challenge),
+    origin: params.origin,
+  });
+
+  return {
+    privateKeyHex: bytesToHex(privateKey),
+    credentialIdB64: base64UrlEncode(credentialId),
+    userHandleB64: base64UrlEncode(userHandle),
+    clientDataJSON,
+    attestationObject,
+    signCount: 0,
+    createdAt: Math.floor(Date.now() / 1000),
+  };
 }
 
 export type SignedAssertion = {

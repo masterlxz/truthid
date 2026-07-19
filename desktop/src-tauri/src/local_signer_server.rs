@@ -9,6 +9,7 @@ use tokio::sync::{oneshot, Mutex};
 use crate::pin::{self, PinState};
 use crate::sign_message::{self, SignMessageState};
 use crate::sign_request::{self, SignRequestState};
+use crate::vault_edit::{self, VaultEditState};
 
 /// Callback chamado sempre que um /sign-request novo chega, pra quem estiver
 /// rodando o servidor decidir como notificar a UI (normalmente app.emit do
@@ -23,6 +24,9 @@ type SignMessageNotifier = Arc<dyn Fn(&sign_message::SignMessagePayload) + Send 
 /// Mesma ideia de SignRequestNotifier, só que pro canal /pin.
 type PinNotifier = Arc<dyn Fn(&pin::PinApprovalPayload) + Send + Sync>;
 
+/// Mesma ideia de SignRequestNotifier, só que pro canal /vault-edit.
+type VaultEditNotifier = Arc<dyn Fn(&vault_edit::VaultEditApprovalPayload) + Send + Sync>;
+
 #[derive(Clone)]
 struct SignRequestRouterState {
     sign_requests: Arc<SignRequestState>,
@@ -31,6 +35,8 @@ struct SignRequestRouterState {
     on_sign_message: SignMessageNotifier,
     pin_requests: Arc<PinState>,
     on_pin_request: PinNotifier,
+    vault_edit_requests: Arc<VaultEditState>,
+    on_vault_edit_request: VaultEditNotifier,
 }
 
 /// Portas candidatas para o canal local Desktop<->app terceiro. Bloco próprio,
@@ -168,6 +174,18 @@ async fn pin_handler(
     (status, Json(body))
 }
 
+async fn vault_edit_handler(
+    State(router_state): State<SignRequestRouterState>,
+    Json(body): Json<vault_edit::VaultEditRequestBody>,
+) -> (StatusCode, Json<vault_edit::VaultEditResponse>) {
+    let outcome = vault_edit::handle_incoming(&router_state.vault_edit_requests, body, |payload| {
+        (router_state.on_vault_edit_request)(payload)
+    })
+    .await;
+    let (status, body) = outcome.into_response();
+    (status, Json(body))
+}
+
 fn router(router_state: SignRequestRouterState) -> Router {
     Router::new()
         .route("/truthid/v1/ping", get(ping))
@@ -175,6 +193,7 @@ fn router(router_state: SignRequestRouterState) -> Router {
         .route("/truthid/v1/sign-request", post(sign_request_handler))
         .route("/truthid/v1/sign-message", post(sign_message_handler))
         .route("/truthid/v1/pin", post(pin_handler))
+        .route("/truthid/v1/vault-edit", post(vault_edit_handler))
         .with_state(router_state)
 }
 
@@ -188,7 +207,8 @@ fn router(router_state: SignRequestRouterState) -> Router {
 /// pedidos que chegam via HTTP); `on_sign_request` é chamado sempre que um
 /// pedido novo chega (normalmente app.emit, injetado por quem chama start()).
 /// `sign_messages`/`on_sign_message` são o equivalente pro canal
-/// /truthid/v1/sign-message; `pin_requests`/`on_pin_request`, pro /truthid/v1/pin.
+/// /truthid/v1/sign-message; `pin_requests`/`on_pin_request`, pro /truthid/v1/pin;
+/// `vault_edit_requests`/`on_vault_edit_request`, pro /truthid/v1/vault-edit.
 pub async fn start(
     state: &LocalSignerServerState,
     sign_requests: Arc<SignRequestState>,
@@ -197,6 +217,8 @@ pub async fn start(
     on_sign_message: impl Fn(&sign_message::SignMessagePayload) + Send + Sync + 'static,
     pin_requests: Arc<PinState>,
     on_pin_request: impl Fn(&pin::PinApprovalPayload) + Send + Sync + 'static,
+    vault_edit_requests: Arc<VaultEditState>,
+    on_vault_edit_request: impl Fn(&vault_edit::VaultEditApprovalPayload) + Send + Sync + 'static,
 ) -> Result<LocalSignerStatus, String> {
     let mut guard = state.0.lock().await;
     if let Some(running) = guard.as_ref() {
@@ -224,6 +246,8 @@ pub async fn start(
         on_sign_message: Arc::new(on_sign_message),
         pin_requests,
         on_pin_request: Arc::new(on_pin_request),
+        vault_edit_requests,
+        on_vault_edit_request: Arc::new(on_vault_edit_request),
     };
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
@@ -307,6 +331,12 @@ mod tests {
         ))
     }
 
+    // VaultEditState não tem arquivo nenhum (tudo em memória) — sem
+    // isolamento de caminho pra fazer, ao contrário de temp_pin_state acima.
+    fn temp_vault_edit_state() -> Arc<VaultEditState> {
+        Arc::new(VaultEditState::default())
+    }
+
     // Testes que só exercitam ping/handshake não se importam com o
     // sign_request::SignRequestState nem com notificação — esse helper
     // isola esse boilerplate.
@@ -318,6 +348,8 @@ mod tests {
             Arc::new(SignMessageState::default()),
             |_| {},
             temp_pin_state(),
+            |_| {},
+            temp_vault_edit_state(),
             |_| {},
         )
         .await
@@ -440,6 +472,8 @@ mod tests {
             |_| {},
             temp_pin_state(),
             |_| {},
+            temp_vault_edit_state(),
+            |_| {},
         )
         .await
         .expect("start should succeed");
@@ -491,6 +525,8 @@ mod tests {
             Arc::new(SignMessageState::default()),
             |_| {},
             temp_pin_state(),
+            |_| {},
+            temp_vault_edit_state(),
             |_| {},
         )
         .await
@@ -544,6 +580,8 @@ mod tests {
             |_| {},
             temp_pin_state(),
             |_| {},
+            temp_vault_edit_state(),
+            |_| {},
         )
         .await
         .expect("start should succeed");
@@ -588,6 +626,8 @@ mod tests {
             sign_messages.clone(),
             |_| {},
             temp_pin_state(),
+            |_| {},
+            temp_vault_edit_state(),
             |_| {},
         )
         .await
@@ -641,6 +681,8 @@ mod tests {
             |_| {},
             pin_requests.clone(),
             |_| {},
+            temp_vault_edit_state(),
+            |_| {},
         )
         .await
         .expect("start should succeed");
@@ -684,6 +726,8 @@ mod tests {
             |_| {},
             pin_requests.clone(),
             |_| {},
+            temp_vault_edit_state(),
+            |_| {},
         )
         .await
         .expect("start should succeed");
@@ -704,6 +748,105 @@ mod tests {
             };
             let resp = reqwest::Client::new().post(&url).json(&body).send().await;
             pin::resolve(&pin_requests, &id, pin::PinDecision::Rejected)
+                .await
+                .expect("resolve should succeed");
+            resp
+        };
+
+        let (first, second) = tokio::join!(first_request, second_request);
+        assert_eq!(second.expect("request should succeed").status(), 409);
+        assert_eq!(first.expect("request should succeed").status(), 403);
+
+        stop(&state).await;
+    }
+
+    // Roteamento de /truthid/v1/vault-edit — mesmo espírito dos testes de
+    // /pin acima: só exercita o caminho Rejected (aprovar de verdade
+    // dispara merge+publish, que é orquestrado pelo frontend, fora do
+    // escopo deste teste de wiring).
+
+    #[tokio::test]
+    async fn vault_edit_endpoint_parks_until_resolved_and_can_be_rejected() {
+        let _guard = PORT_TEST_LOCK.lock().await;
+        let state = LocalSignerServerState::default();
+        let vault_edit_requests = temp_vault_edit_state();
+        let started = start(
+            &state,
+            Arc::new(SignRequestState::default()),
+            |_| {},
+            Arc::new(SignMessageState::default()),
+            |_| {},
+            temp_pin_state(),
+            |_| {},
+            vault_edit_requests.clone(),
+            |_| {},
+        )
+        .await
+        .expect("start should succeed");
+
+        let url = format!("{}/truthid/v1/vault-edit", base_url(&started));
+        let request = reqwest::Client::new().post(&url).json(&serde_json::json!({
+            "site": "example.com",
+            "username": "user",
+            "password": "hunter2",
+        }));
+
+        let (resp, _) = tokio::join!(request.send(), async {
+            let id = loop {
+                if let Some(payload) = vault_edit::current(&vault_edit_requests).await {
+                    break payload.id;
+                }
+                tokio::task::yield_now().await;
+            };
+            vault_edit::resolve(&vault_edit_requests, &id, vault_edit::VaultEditDecision::Rejected)
+                .await
+                .expect("resolve should succeed");
+        });
+
+        let resp = resp.expect("request should succeed");
+        assert_eq!(resp.status(), 403);
+        let body: serde_json::Value = resp.json().await.expect("valid json");
+        assert_eq!(body["status"], "rejected");
+
+        stop(&state).await;
+    }
+
+    #[tokio::test]
+    async fn vault_edit_endpoint_rejects_concurrent_second_request() {
+        let _guard = PORT_TEST_LOCK.lock().await;
+        let state = LocalSignerServerState::default();
+        let vault_edit_requests = temp_vault_edit_state();
+        let started = start(
+            &state,
+            Arc::new(SignRequestState::default()),
+            |_| {},
+            Arc::new(SignMessageState::default()),
+            |_| {},
+            temp_pin_state(),
+            |_| {},
+            vault_edit_requests.clone(),
+            |_| {},
+        )
+        .await
+        .expect("start should succeed");
+
+        let url = format!("{}/truthid/v1/vault-edit", base_url(&started));
+        let body = serde_json::json!({
+            "site": "example.com",
+            "username": "user",
+            "password": "hunter2",
+        });
+
+        let first_request = reqwest::Client::new().post(&url).json(&body).send();
+        let second_request = async {
+            let id = loop {
+                if let Some(payload) = vault_edit::current(&vault_edit_requests).await {
+                    break payload.id;
+                }
+                tokio::task::yield_now().await;
+            };
+            let resp = reqwest::Client::new().post(&url).json(&body).send().await;
+            vault_edit::resolve(&vault_edit_requests, &id, vault_edit::VaultEditDecision::Rejected)
                 .await
                 .expect("resolve should succeed");
             resp

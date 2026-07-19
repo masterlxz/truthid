@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-19 (Sessão 133 — passkey na extensão, Fase 1/login [item 2 do backlog da Sessão 130], validado em hardware real com página de teste local. Fase 2 [create() + aprovação em lote via Device] registrada como item 6 novo, escopo grande — não implementada. Restam: QR no TOTP no Mobile [hardware pendente], gerador de senha em popup, code review + docs + publicação)
+> Última atualização: 2026-07-19 (Sessão 134 — passkey na extensão, Fase 2/criação [item 6]: Desktop e extensão fechados e validados por teste automatizado; **Mobile ainda não implementado, sessão pausada a pedido do dono do projeto**. Nenhuma validação manual em hardware feita ainda pra esta feature. Plano em ~/.claude/plans/streamed-churning-truffle.md. Restam além disso: QR no TOTP no Mobile [hardware pendente], senha nova via extensão, gerador de senha em popup, code review + docs + publicação)
 >
 > ⚠️ **LEMBRETE**: ao final do projeto (todas as fases concluídas), fazer uma revisão completa deste arquivo — consolidar endereços, remover seções obsoletas, e garantir que a tabela de Pendências de Deploy está zerada. Sessão 68.
 
@@ -1436,11 +1436,20 @@ depois, um de cada vez, em sessão própria (provavelmente com `/plan`).
    Isso exige construir do zero o "Sync em lote (batch sync)" descrito nessa mesma seção (2.1) —
    extensão acumula a credencial nova (senha ou passkey) em memória de sessão cifrada → gera QR →
    Device escaneia, mostra resumo + taxa de gas → aprova → smart account assina uma `UserOperation`
-   (pinning no IPFS antes do commit on-chain, ordem crítica) — **nada disso existe hoje**, é só
-   desenho de papel. Peça de infraestrutura do tamanho do `/truthid/v1/pin` inteiro (3 sessões).
-   Pra passkey especificamente, também precisa portar `createPasskey`/`buildAttestationObject`/CBOR
-   pra extensão (Fase 1 só portou `signAssertion`, de propósito). Nenhum `/plan` detalhado rodado
-   ainda.
+   (pinning no IPFS antes do commit on-chain, ordem crítica) — **nada disso existia até a Sessão
+   134**, só desenho de papel. Peça de infraestrutura do tamanho do `/truthid/v1/pin` inteiro (3
+   sessões).
+
+   ~~Nenhum `/plan` detalhado rodado ainda~~ — **`/plan` completo rodado e aprovado na Sessão 134**
+   (2026-07-19), com escopo explicitamente reduzido pra essa rodada (confirmado com o dono do
+   projeto via `AskUserQuestion`): **só passkey** nesta fatia (senha nova via extensão fica pro
+   próximo item do backlog — o desenho de "qualquer credencial" acima continua válido, só a
+   implementação começou pela metade menor); e **os dois caminhos de entrega** (Desktop na mesma
+   máquina via loopback HTTP, e celular via QR+LAN), confirmado porque o dono do projeto apontou
+   explicitamente que "o device não necessariamente é o app no mesmo computador, pode ser a
+   extensão no PC e autorizar com o celular". Ver entrada de sessão logo abaixo pro estado exato
+   (**Desktop e extensão fechados e validados; Mobile — a fatia final — ainda não implementada,
+   trabalho pausado a pedido do dono do projeto pra continuar numa sessão futura**).
 
 Nada implementado nesta entrada — só levantamento e registro de causa raiz (item 4), pra rodar item
 por item nas próximas sessões.
@@ -5592,6 +5601,109 @@ passkey do TruthID está registrada em nenhum relying party de verdade ainda.
 
 **Item 2 do backlog da Sessão 130 fecha na Fase 1 (login)** — Fase 2 (criação + aprovação em lote)
 registrada como item 6 novo do mesmo backlog, escopo grande o suficiente pra sessão própria.
+
+### Sessão 134 — 2026-07-19: passkey na extensão, Fase 2 (criação + aprovação via Device) —
+Desktop e extensão fechados e validados; Mobile pendente, sessão pausada a pedido do dono do
+projeto
+
+Item 6 do backlog (registrado ao fechar a Fase 1 na Sessão 133). Planejado via `/plan` completo —
+3 agentes de exploração em paralelo (padrão de aprovação do `/truthid/v1/pin`, infraestrutura de
+publicação do Vault/UserOp, e capacidade da extensão de virar "requisitante" pela primeira vez)
+mais 2 rodadas de `AskUserQuestion` pra fechar escopo: **só passkey** nesta rodada (senha nova via
+extensão fica pro próximo item do backlog) e **os dois caminhos de entrega** (Desktop mesma
+máquina + celular via QR), confirmado pelo dono do projeto — "o device não necessariamente é o app
+no mesmo computador, pode ser a extensão no PC e autorizar com o celular".
+
+**Arquitetura**: extensão intercepta `navigator.credentials.create()`, gera a passkey localmente e
+enfileira uma proposta (`chrome.storage.session`); popup mostra a fila com 2 botões de envio
+("Send to this computer" via loopback HTTP, mesmas portas do `/truthid/v1/pin`; "Send to phone" via
+QR + varredura de LAN, miranda as portas do `RemoteSignerLanServer` do Mobile já usado pelo `/pin`
+cross-device); o Device aprova/rejeita e, só na aprovação, faz merge no vault local + pin no IPFS +
+assinatura real de UserOperation sozinho, reaproveitando os comandos que o botão "Publicar via
+device key" de cada plataforma já usa — a extensão nunca vê a vault key nem participa da
+publicação.
+
+**Desktop — fechado e validado** (`cargo test` 85/85, +8 novos; `tsc --noEmit` limpo):
+- Novo `desktop/src-tauri/src/vault_edit.rs`, mirror de `pin.rs` mas **sem sistema de cota**
+  (toda proposta pede aprovação individual, mesma decisão do `/pin` cross-device do Mobile) e sem
+  "conteúdo opaco" (o payload em si é o que a UI precisa mostrar — nunca sai do processo).
+  `handle_incoming` sempre estaciona, espera até 300s, devolve `Approved`/`Rejected`/`TimedOut`/
+  `Busy`/`Invalid` — a resposta HTTP não espera o merge nem a publicação, só a decisão humana.
+- `local_signer_server.rs`: nova rota `POST /truthid/v1/vault-edit` no mesmo `Router`/
+  `SignRequestRouterState`, +2 testes E2E de roteamento (mirror dos testes de `/pin`).
+- `lib.rs`: `VaultEditState` gerenciado, comandos `get_pending_vault_edit_request`/
+  `respond_to_vault_edit_request`, wiring do notifier pra `truthid://vault-edit` nos 2 pontos que
+  já fazem isso pros outros 3 canais.
+- `desktop/src/hooks/useIncomingVaultEditRequest.ts` (novo) + `desktop/src/components/
+  VaultEditApprovalModal.tsx` (novo, montado em `App.tsx` junto do `PinApprovalModal`): mostra
+  site/username/senha com toggle de mascaramento/badge "+ passkey"; no approve, chama
+  `vault_upsert_entry` (comando já existente) e depois `publishVaultViaDeviceKey` — **novo**
+  `desktop/src/services/vaultPublishViaDeviceKey.ts`, extraído de `useVaultPublish.ts::
+  handleEnviarViaDeviceKey` pra ser reaproveitado pelos dois call sites sem duplicar a cadeia
+  `vault_publish` → `get_bundler_config` → `executeViaUserOp` (refactor puro, sem mudança de
+  comportamento no hook original).
+
+**Extensão — fechada e validada** (`npx vitest run` 65/65, +32 novos; `tsc --noEmit` limpo;
+`npm run build` gera os 3 content scripts corretamente):
+- `extension/src/cbor.ts` (novo, porte de `desktop/src/utils/cbor.ts`) + `extension/src/
+  webauthn.ts` ganha `createPasskey`/`buildAttestationObject`/`encodeCoseP256PublicKey` (Fase 1 só
+  tinha portado `signAssertion`). Testado com o mesmo vetor fixo cross-plataforma já validado no
+  Desktop — bate byte-a-byte.
+- `extension/entrypoints/webauthn.content.ts` (main-world) ganha a interceptação de
+  `navigator.credentials.create()`: gera a passkey localmente (sem round-trip pro bridge — não
+  precisa de aprovação pra *gerar*, só pra *persistir*), resolve a Promise da página normalmente
+  (o site nunca espera o Device aprovar), e em paralelo manda um `postMessage` fire-and-forget
+  (canal novo `__truthid_vault_edit__`, sem protocolo request/response) pro bridge isolated-world
+  enfileirar a proposta.
+- `extension/src/vaultEdit/pendingEdits.ts` (novo): fila em `chrome.storage.session`, chave
+  própria separada da sessão de leitura.
+- `extension/src/vaultEdit/desktopDelivery.ts` (novo): `findDesktopPort` faz `GET /truthid/v1/
+  ping` (endpoint já existente) nas portas candidatas antes do `POST /truthid/v1/vault-edit` de
+  verdade (esse com timeout de 300s, espera a decisão humana).
+- `extension/src/session/qrPayload.ts` ganha `VaultEditQrPayload`/`buildVaultEditQrPayload` (schema
+  `truthid-vault-edit`, mesmo formato de 5 campos do `truthid-pin` já validado no Mobile).
+  `extension/src/vaultEdit/cipher.ts` (novo): HKDF-do-sessionId + AES-256-GCM, mirror de
+  `pin_content_cipher_service.dart` mas com **salt/info novos** (domain separation, nunca reusar a
+  derivação do `/pin`). `extension/src/vaultEdit/lanDelivery.ts` (novo): `pushToMobile` varre a LAN
+  mirando as portas do `RemoteSignerLanServer` do Mobile (`48050-48054`, distintas das
+  `47850-47854` já usadas pra ler o vault), reaproveitando os helpers de enumeração de IP de
+  `lanDiscovery.ts` mas com `PUT` em vez de `GET`. `extension/src/vaultEdit/mobileDelivery.ts`
+  (novo): orquestra sessionId + keypair efêmero + QR + cifra + push, tudo injetável pra teste.
+- Popup (`entrypoints/popup/index.html` + `main.ts`): nova seção mostrando a contagem de propostas
+  pendentes e os 2 botões de envio, reaproveitando `.card`/`.status-badge`/`.actions-row` já
+  existentes.
+
+**Fora de escopo, documentado explicitamente** (mesmo do plano original): senha nova via extensão
+(só passkey nesta rodada); canal de confirmação de volta pro celular→extensão (a extensão não
+consegue rodar servidor TCP, só client HTTP — marca a proposta como "enviada" assim que o PUT pro
+celular retorna 200, sem esperar confirmação de que foi publicada de verdade, mesmo espírito
+best-effort já aceito em outros lugares do projeto pro dead-drop); batching de múltiplas propostas
+num único QR/UserOp (o contrato já suporta `executeBatch` com validação pra device-tier — achado
+confirmado durante a pesquisa —, mas nenhum código hoje monta essa chamada; uma proposta por vez
+basta pro volume real).
+
+**Pausado a pedido explícito do dono do projeto** ("finaliza essa etapa que você tá fazendo e para,
+registra o resto como pendência e continuamos depois") — a fatia Desktop e a fatia extensão estão
+100% completas e validadas (testes automatizados + build), mas **nada foi testado manualmente em
+hardware real ainda** (nem o caminho Desktop nem o caminho celular). **Falta implementar a fatia
+Mobile** (item 6 do plano, `~/.claude/plans/streamed-churning-truffle.md`):
+- Novo `mobile/lib/services/vault_edit_content_cipher_service.dart` — mirror de
+  `pin_content_cipher_service.dart`, mesmo salt/info novos do lado da extensão (domain separation),
+  com vetor cruzado TS↔Dart pra provar interop antes de qualquer hardware.
+- Novo `mobile/lib/screens/vault_edit_approval_screen.dart` — mirror de `pin_approval_screen.dart`
+  (fase 1 recebe via `RemoteSignerLanServer.receiveOnce()`, reaproveitado sem mudança), **sem fase
+  de retorno** (diferente do `/pin`, de propósito — ver "fora de escopo" acima). No approve:
+  `_repository.addEntry(site:, url:, username:, password:, notes:, passkey:)` (método já existe e
+  já aceita `passkey`, confirmado durante a pesquisa — nenhuma mudança em `vault_repository.dart`
+  necessária) seguido de `_publishService.publish(smartAccountAddress)` (já existente, faz pin +
+  UserOp num único método).
+- Roteamento do novo action `truthid-vault-edit` no mesmo lugar que já roteia `truthid-pin` — call
+  site exato ainda não encontrado, fica pra quando a implementação retomar.
+- Depois: `flutter test`/`flutter analyze`, e só então a validação manual em hardware real das 2
+  entregas (testar reject/timeout primeiro; aprovar de verdade só com autorização explícita, já
+  que isso assina uma UserOperation real).
+
+Plano completo em `~/.claude/plans/streamed-churning-truffle.md`.
 
 ---
 
