@@ -317,6 +317,50 @@ void main() {
             passkey: any(named: 'passkey'),
           ));
     });
+
+    testWidgets(
+        'identityId pareado mas username null resolve on-chain e aprova',
+        (tester) async {
+      // Achado real (Sessão 135, mesmo caso do wallet_screen.dart): o
+      // celular já está pareado, mas o username nunca foi persistido — a
+      // tela deve tentar resolver de novo, não reportar "não pareado".
+      when(() => mockStorage.getPairedUsername()).thenAnswer((_) async => null);
+      when(() => mockBlockchain.getUsernameForIdentity(BigInt.one))
+          .thenAnswer((_) async => 'alice');
+      when(() => mockStorage.savePairedUsername('alice'))
+          .thenAnswer((_) async {});
+
+      await pumpToApproval(tester);
+      await tester.tap(find.text('Approve'));
+      await tester.pumpAndSettle();
+
+      verify(() => mockBlockchain.getUsernameForIdentity(BigInt.one)).called(1);
+      verify(() => mockStorage.savePairedUsername('alice')).called(1);
+      expect(find.text('Saved'), findsOneWidget);
+    });
+
+    testWidgets(
+        'identityId pareado, username null e resolução falha mostra erro '
+        'específico (não "não pareado")', (tester) async {
+      when(() => mockStorage.getPairedUsername()).thenAnswer((_) async => null);
+      when(() => mockBlockchain.getUsernameForIdentity(BigInt.one))
+          .thenThrow(Exception('log scan timed out'));
+
+      await pumpToApproval(tester);
+      await tester.tap(find.text('Approve'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Still resolving'), findsOneWidget);
+      expect(find.textContaining("isn't paired"), findsNothing);
+      verifyNever(() => mockRepository.addEntry(
+            site: any(named: 'site'),
+            url: any(named: 'url'),
+            username: any(named: 'username'),
+            password: any(named: 'password'),
+            notes: any(named: 'notes'),
+            passkey: any(named: 'passkey'),
+          ));
+    });
   });
 
   group('fase 2 — Reject', () {

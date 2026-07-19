@@ -197,12 +197,35 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
 
   Future<EthereumAddress?> _resolveSmartAccountAddress() async {
     final identityId = await _storage.getPairedIdentityId();
-    final username = await _storage.getPairedUsername();
-    if (identityId == null || username == null) {
+    if (identityId == null) {
       if (!mounted) return null;
       setState(() {
         _status = _Status.error;
         _errorMsg = "This phone isn't paired with a TruthID identity yet.";
+      });
+      return null;
+    }
+
+    // O celular já está pareado (identityId persistido), mas o username
+    // pode nunca ter resolvido (achado real, Sessão 134/135 — ver
+    // wallet_screen.dart::_load). Tenta de novo aqui antes de desistir, em
+    // vez de reportar "não pareado" (engana o usuário a re-parear em vez de
+    // só esperar o on-chain resolver).
+    var username = await _storage.getPairedUsername();
+    if (username == null) {
+      try {
+        username = await _blockchain.getUsernameForIdentity(BigInt.parse(identityId));
+        if (username != null) await _storage.savePairedUsername(username);
+      } catch (_) {
+        // cai no branch abaixo, que já trata username nulo
+      }
+    }
+    if (username == null) {
+      if (!mounted) return null;
+      setState(() {
+        _status = _Status.error;
+        _errorMsg =
+            'Still resolving your identity on-chain — try again in a moment.';
       });
       return null;
     }
