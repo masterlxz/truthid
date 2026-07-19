@@ -5707,6 +5707,140 @@ Plano completo em `~/.claude/plans/streamed-churning-truffle.md`.
 
 ---
 
+## Achados do /code-review max (Sessão 135, INCOMPLETO — bateu limite de sessão)
+
+Rodado sobre `git diff @{upstream}...HEAD` (13 arquivos, ~1300 linhas: fix do scan de username +
+retry no Wallet + fatia Mobile/extensão do vault-edit + os 2 bugfixes de hardware). Metodologia
+`max` pedia 10 agentes buscadores em paralelo + verificação 1-voto + sweep — **só 4 dos 10
+completaram antes de bater o limite de sessão** (resetava 19h50 America/Sao_Paulo); os outros 5
+(line-by-line scan, removed-behavior, cross-file tracer, language-pitfall, wrapper/proxy,
+simplification) **não rodaram** e a fase de verificação/sweep também não rodou — nenhum achado
+abaixo foi verificado por um segundo agente, tratar tudo como PLAUSÍVEL, não CONFIRMADO. Retomar
+rodando o `/code-review max` de novo (ou pelo menos os 5 ângulos que faltaram) quando houver
+sessão nova.
+
+### Reuse (5 achados, todos plausíveis)
+1. **`_resolveSmartAccountAddress` duplicado quase igual** entre
+   `mobile/lib/screens/vault_edit_approval_screen.dart:214-222` e
+   `mobile/lib/screens/wallet_screen.dart:136-148` — mesma sequência (ler username cacheado → se
+   null, `getUsernameForIdentity` → persistir → engolir erro). Extrair um helper compartilhado
+   (ex: em `LocalStorageService` ou função própria).
+2. **`mobile/lib/screens/sign_request_approval_screen.dart:270-280`** (`_resolveSmartAccount`) tem
+   a MESMA lógica antiga (sem retry) que acabou de ser corrigida nos dois arquivos acima — ainda
+   mostra "not paired" errado pro mesmo cenário já identificado e corrigido em outro lugar nesta
+   sessão. Acompanha achado #1: prova real de que a falta de um helper compartilhado já causou
+   drift (uma 3ª tela não recebeu o fix).
+3. **`vault_edit_content_cipher_service.dart` é clone estrutural de `pin_content_cipher_service.dart`**
+   (mesmo AES-GCM framing, só salt/info/nomes diferentes) — os dois são Dart puro no mesmo diretório
+   (não é o caso de duplicação cross-linguagem já aceito no projeto). `hkdf_util.dart` já prova que
+   o projeto extrai primitivas idênticas em Dart puro quando cabe. Candidato a um
+   `content_cipher_util.dart` compartilhado.
+4. **`attemptMobileDelivery` (extension/entrypoints/popup/main.ts:313-347) duplica o padrão
+   disable/try/finally/re-enable/refresh** já usado pelo handler do `sendToDesktopButton` logo
+   acima no mesmo arquivo (275-302). Candidato a um helper `withPendingEditButtons(...)`.
+5. **`vault_edit_approval_screen.dart`'s `_validatePayload`/`_receiveContent` (118-196) é a 4ª cópia
+   quase idêntica do padrão de `pin_approval_screen.dart`** (127-204) — já documentado como "mirror
+   estrutural" deliberado, mas na 4ª cópia já vale considerar uma classe-base/mixin compartilhado.
+
+### Efficiency (5 achados, todos plausíveis — #1 e #2 parecem os mais sérios da rodada toda)
+1. **Regressão real de performance no caso comum**: `getUsernameForIdentity`
+   (`blockchain_service.dart:298-329`) trocou scan-pra-trás-do-tip (identidade nova = achada no
+   1º chunk) por scan-pra-frente-do-deploy SEM limite de chunks. Chain está ~550k blocos à frente
+   do deploy hoje → uma identidade **recém-criada** agora precisa de **~275 round-trips
+   sequenciais** de `eth_getLogs` (era 1 antes). Sem teto, esse número só cresce (~11 chunks/dia a
+   mais, pra sempre). Sugestão: manter o scan-pra-trás limitado como primeira tentativa (rápido pro
+   caso comum), cair pro scan-pra-frente-do-deploy só se aquele vier vazio (cobre o caso raro sem
+   penalizar o comum). ALTERNATIVA a considerar com calma — pode trocar "às vezes trava pra sempre"
+   por "quase sempre lento", validar com cuidado antes de aplicar.
+2. **`wallet_screen.dart::_load()` agora BLOQUEIA a aba inteira** nesse mesmo scan (era
+   fire-and-forget antes, agora é `await`ado antes do `setState` que tira o spinner) — pull-to-refresh
+   dispara o scan completo de novo do zero, sem nenhum cache de checkpoint (diferente do
+   `_loadActivity` 50 linhas abaixo NO MESMO ARQUIVO, que já usa `ActivityCacheService` pra retomar
+   de onde parou — o padrão de cache já existe no projeto e não foi reaproveitado aqui).
+3. **Extensão: `pushToMobile` re-varre a LAN inteira (254 hosts × 5 portas, ~21s) do zero a cada
+   clique de retry**, sem lembrar quem respondeu/não respondeu da tentativa anterior.
+4. Mesma varredura cara do achado #1/#2 duplicada num 3º call site:
+   `vault_edit_approval_screen.dart:214-222`, também sem checkpoint entre tentativas de Approve.
+5. `_approve()` (`vault_edit_approval_screen.dart:266-286`) roda `_resolveSmartAccountAddress`
+   (rede) sequencialmente antes de `_repository.addEntry` e `_ensurePublishService` (ambos só I/O
+   local, sem dependência do resultado da rede) — poderiam rodar em paralelo via `Future.wait`.
+   Ganho pequeno mas de graça.
+
+### Altitude (8 achados, todos plausíveis)
+1-2. Mesma duplicação do Reuse #1/#2 (`vault_edit_approval_screen.dart` + `sign_request_approval_screen.dart`
+   sem o fix) — mas aqui como "correção rasa, precisa generalizar `getUsernameForIdentity` ou um
+   wrapper em vez de cada chamador reimplementar retry".
+3. **`mobile/lib/screens/sessions_screen.dart:88-93`** tem o MESMO padrão fire-and-forget
+   `.then()` sem retry que foi removido de `wallet_screen.dart` por ser bugado nesta mesma sessão —
+   ainda vivo aqui, mesma classe de bug (username perdido em falha transiente de RPC).
+4. **`mobile/lib/screens/show_device_qr_screen.dart:76-78`** — mesmo `.then()` sem retry, disparado
+   no momento exato do pareamento.
+5. **`mobile/lib/screens/vault_screen.dart:165-166`** — `_resolveSmartAccount` só roda
+   `if (username != null)`; se nunca resolveu, fica travado pra sempre sem gancho de retry.
+6. Botão de retry do LAN (`pending-edit-retry`) é manual/único; `VAULT_EDIT_QR_TTL_MS` (3min) dava
+   folga de sobra pra um retry automático com backoff embutido no próprio `MobileDeliverySession.send()`
+   em vez de depender do usuário notar o erro e clicar.
+7. `pushToMobile` (`extension/src/vaultEdit/lanDelivery.ts:57-89`) não tem retry/backoff embutido —
+   inconsistente com o próprio padrão já usado em `blockchain_service.dart` (`_rpcRetryBackoff`,
+   backoff linear já estabelecido no projeto).
+8. O fix do bug do Brave (`chrome.storage.session` bloqueado em content script) só cobriu o 1
+   call site que quebrou — `pendingEdits.ts`'s `loadAll`/`saveAll`/etc. continuam livremente
+   importáveis de qualquer lugar, incl. um futuro content script, sem lint/import-boundary
+   impedindo reintrodução do mesmo bug. `background.ts` também ganhou um 4º listener
+   `chrome.runtime.onMessage` avulso em vez de um dispatcher único.
+   **Confirmação independente**: `getUsernameForIdentity`'s mudança em si (scan-pra-trás →
+   pra-frente) FOI considerada correção de fundo, não rasa — corrige pra qualquer idade de
+   identidade, não só a que foi pega (identidade #1).
+
+### Conventions
+Nenhum CLAUDE.md existe no repo (checado root + todos os diretórios ancestrais dos arquivos
+mudados) — ângulo não se aplica, 0 achados.
+
+### Ângulos que NÃO rodaram (retomar quando houver sessão nova)
+Line-by-line scan, removed-behavior auditor, cross-file tracer, language-pitfall specialist,
+wrapper/proxy correctness, simplification. Nenhuma verificação (fase 2) nem sweep (fase 3) rodou
+em cima do que foi encontrado acima.
+
+### ATUALIZAÇÃO — os 6 ângulos que faltavam rodaram (sessão renovada), review completo
+
+Todos os 10 ângulos rodaram. Verificação feita por leitura direta do código (não spawnou
+verificador por achado, dado o volume) + forte corroboração cruzada entre agentes independentes.
+15 achados finais reportados via `ReportFindings`, 4 CONFIRMED e 11 PLAUSIBLE, nenhum REFUTED.
+Nada foi corrigido ainda — ficam registrados aqui pra decidir o que vale a pena consertar.
+
+**CONFIRMED (4)**:
+1. `blockchain_service.dart:298` — o scan de username agora é ~275x mais lento no caso comum
+   (identidade recém-criada) pra corrigir o caso raro (identidade antiga). Tradeoff documentado no
+   próprio comentário do código, mas o agente de efficiency achou que vale reconsiderar: tentar
+   scan-pra-trás primeiro (rápido, caso comum), só cair pro scan-pra-frente-do-deploy se vier vazio.
+2. `wallet_screen.dart:139` — a aba Wallet agora trava no spinner enquanto esse scan roda (antes
+   era fire-and-forget), e pull-to-refresh reinicia o scan do zero sem nenhum checkpoint (o
+   `_loadActivity` no mesmo arquivo já tem esse cache via `ActivityCacheService` e não foi
+   reaproveitado).
+3. `vault_edit_approval_screen.dart:514` — se a resolução da smart account falhar na aprovação, o
+   único botão é "Back", que descarta a proposta já decifrada pra sempre (a extensão já removeu da
+   fila dela assim que o PUT chegou, sem esperar confirmação) — perde a passkey recém-criada.
+4. `extension/entrypoints/popup/main.ts:328` — a mensagem "Sent to your phone" é escrita e
+   imediatamente apagada pelo próprio `finally` (`refreshPendingEdits()` zera o texto quando
+   `pending.length === 0`, o que já é verdade nesse ponto). Mesmo bug já existia no handler do
+   "Send to this computer" antes desta sessão ("Saved."/"Rejected on the Desktop." têm o mesmo
+   problema).
+
+**PLAUSIBLE (11)**: 3 telas irmãs (`sign_request_approval_screen.dart`, `sessions_screen.dart`,
+`show_device_qr_screen.dart`, `vault_screen.dart`) nunca receberam o fix de retry de username desta
+sessão — mesmo bug, sem correção; a lógica de retry está duplicada entre 2 arquivos; um slot
+`activeMobileDelivery` obsoleto pode reenviar proposta já aprovada se o usuário alternar entre
+"Send to this computer"/"Send to phone" com 2+ propostas pendentes; clique duplo em "Send to
+phone" corre antes dos botões desabilitarem; `setState` sem checar `mounted` (mascarado por
+catchError); erro de `getIdentityByUsername` não capturado localmente; falha de RPC num chunk
+específico pode causar falso "not found"; `pushToMobile` re-varre a LAN inteira do zero a cada
+retry; o fix do bug do Brave cobriu só 1 call site, `pendingEdits.ts` continua livre pra qualquer
+content script futuro reintroduzir o mesmo bug; falha no `renderQrToCanvas` deixa card de QR em
+branco sem status. Detalhe completo de cada achado (file/line/failure_scenario) foi reportado via
+`ReportFindings` na sessão — não duplicado aqui pra não inflar o arquivo.
+
+---
+
 ## Como Usar Este Arquivo
 
 1. **Ao começar uma sessão**: Diga ao Claude Code "leia o PROJECT_STATE.md e me ajude a continuar"
