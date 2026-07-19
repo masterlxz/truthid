@@ -1420,19 +1420,27 @@ depois, um de cada vez, em sessão própria (provavelmente com `/plan`).
    o app — registrado como sequência pedida pro fim desta leva de trabalho, sem detalhe adicional
    ainda (nenhum escopo de code review ou plano de publicação definido nesta sessão).
 
-6. **Passkey na extensão, Fase 2: criação (`navigator.credentials.create()`) + aprovação via
-   Device** — registrado ao fechar a Sessão 133 (item 2 acima, Fase 1/login, fechou). Confirmado
-   com o dono do projeto: a extensão também deve interceptar o cadastro de passkey novo direto num
-   site, mas **qualquer alteração no Vault iniciada pela extensão precisa de aprovação de um
+6. **Fase 2: criação de credencial nova (senha e/ou passkey) direto na extensão + aprovação via
+   Device** — registrado ao fechar a Sessão 133 (item 2 acima, Fase 1/login de passkey, fechou).
+   **Escopo ampliado por pedido explícito do dono do projeto** (2026-07-19, mesma sessão, "não
+   rodar ainda, só anotar"): não é só `navigator.credentials.create()` (passkey) — o mesmo padrão
+   de aprovação vale pra **qualquer credencial nova criada a partir da extensão**, incluindo uma
+   senha nova digitada/gerada direto num formulário de cadastro de site (a extensão hoje não tem
+   nenhum jeito de criar entrada nova — só autofill de entrada já existente). Confirmado com o dono
+   do projeto: **qualquer alteração no Vault iniciada pela extensão precisa de aprovação de um
    Device** (Desktop/Mobile) — a extensão nunca tem autoridade de escrita, princípio já registrado
-   na seção "Decisões de arquitetura já discutidas pra extensão de navegador" acima. Isso exige
-   construir do zero o "Sync em lote (batch sync)" descrito nessa mesma seção (2.1) — extensão
-   acumula a passkey nova em memória de sessão cifrada → gera QR → Device escaneia, mostra resumo +
-   taxa de gas → aprova → smart account assina uma `UserOperation` (pinning no IPFS antes do commit
-   on-chain, ordem crítica) — **nada disso existe hoje**, é só desenho de papel. Peça de
-   infraestrutura do tamanho do `/truthid/v1/pin` inteiro (3 sessões). Precisa portar
-   `createPasskey`/`buildAttestationObject`/CBOR pra extensão também (Fase 1 só portou
-   `signAssertion`, de propósito). Nenhum `/plan` detalhado rodado ainda.
+   na seção "Decisões de arquitetura já discutidas pra extensão de navegador" acima, que já cobria
+   isso pra "credenciais novas (senha ou passkey)" desde o brainstorm original — a Sessão 133 só
+   reafirmou que vale pros dois, não só passkey.
+
+   Isso exige construir do zero o "Sync em lote (batch sync)" descrito nessa mesma seção (2.1) —
+   extensão acumula a credencial nova (senha ou passkey) em memória de sessão cifrada → gera QR →
+   Device escaneia, mostra resumo + taxa de gas → aprova → smart account assina uma `UserOperation`
+   (pinning no IPFS antes do commit on-chain, ordem crítica) — **nada disso existe hoje**, é só
+   desenho de papel. Peça de infraestrutura do tamanho do `/truthid/v1/pin` inteiro (3 sessões).
+   Pra passkey especificamente, também precisa portar `createPasskey`/`buildAttestationObject`/CBOR
+   pra extensão (Fase 1 só portou `signAssertion`, de propósito). Nenhum `/plan` detalhado rodado
+   ainda.
 
 Nada implementado nesta entrada — só levantamento e registro de causa raiz (item 4), pra rodar item
 por item nas próximas sessões.
