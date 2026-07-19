@@ -68,6 +68,59 @@ class RemoteSignerLanServer {
     }
   }
 
+  /// Sobe o servidor na primeira porta livre da lista, espera exatamente 1
+  /// request PUT em `/session/<sessionId>/content`, lê o corpo inteiro e
+  /// fecha. Irmã de [serveOnce], mas na direção contrária: aqui o celular
+  /// RECEBE um blob (o conteúdo cifrado a pinar, fase 1 do `/pin`
+  /// cross-device) em vez de servir um já pronto. Mesmo bloco de portas — as
+  /// duas fases nunca rodam ao mesmo tempo, então não há disputa real.
+  /// Retorna os bytes recebidos, ou `null` se ninguém bater em `expiresAt`.
+  Future<Uint8List?> receiveOnce({
+    required String sessionId,
+    required DateTime expiresAt,
+  }) async {
+    final server = await _bindFirstAvailable();
+    _server = server;
+
+    final completer = Completer<Uint8List?>();
+    final expectedPath = '/session/$sessionId/content';
+
+    final subscription = server.listen((request) async {
+      // Mesmo 404 uniforme do serveOnce: não vaza sinal de "quase certo" pra
+      // quem estiver varrendo a rede sem o QR correto.
+      if (request.method != 'PUT' || request.uri.path != expectedPath) {
+        request.response.statusCode = HttpStatus.notFound;
+        await request.response.close();
+        return;
+      }
+
+      final bytes = await request.fold<BytesBuilder>(
+        BytesBuilder(copy: false),
+        (builder, chunk) => builder..add(chunk),
+      );
+      final body = bytes.takeBytes();
+
+      request.response.statusCode = HttpStatus.ok;
+      await request.response.close();
+
+      if (!completer.isCompleted) completer.complete(body);
+    });
+
+    final remaining = expiresAt.difference(DateTime.now());
+    final timer = Timer(remaining.isNegative ? Duration.zero : remaining, () {
+      if (!completer.isCompleted) completer.complete(null);
+    });
+
+    try {
+      return await completer.future;
+    } finally {
+      timer.cancel();
+      await subscription.cancel();
+      await server.close(force: true);
+      _server = null;
+    }
+  }
+
   Future<void> stop() async {
     await _server?.close(force: true);
     _server = null;

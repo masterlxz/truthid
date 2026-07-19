@@ -79,6 +79,71 @@ void main() {
       expect(served, isFalse);
     });
   });
+
+  group('RemoteSignerLanServer.receiveOnce', () {
+    test('recebe o corpo do PUT no path esperado', () async {
+      final server = RemoteSignerLanServer();
+      final expiresAt = DateTime.now().add(const Duration(seconds: 5));
+      final sentBody = Uint8List.fromList([9, 8, 7, 6, 5]);
+
+      final receiveFuture = server.receiveOnce(
+        sessionId: 'abc123',
+        expiresAt: expiresAt,
+      );
+
+      final port = await _waitForOpenPort();
+      final client = HttpClient();
+      try {
+        final request = await client.putUrl(
+          Uri.parse('http://127.0.0.1:$port/session/abc123/content'),
+        );
+        request.add(sentBody);
+        final response = await request.close();
+        await response.drain<void>();
+        expect(response.statusCode, 200);
+      } finally {
+        client.close(force: true);
+      }
+
+      expect(await receiveFuture, sentBody);
+    });
+
+    test('devolve 404 uniforme pra path/sessionId errado', () async {
+      final server = RemoteSignerLanServer();
+      final expiresAt = DateTime.now().add(const Duration(seconds: 5));
+
+      final receiveFuture = server.receiveOnce(
+        sessionId: 'the-real-session',
+        expiresAt: expiresAt,
+      );
+
+      final port = await _waitForOpenPort();
+      final client = HttpClient();
+      try {
+        final request = await client.putUrl(
+          Uri.parse('http://127.0.0.1:$port/session/wrong-id/content'),
+        );
+        request.add(Uint8List.fromList([1]));
+        final response = await request.close();
+        await response.drain<void>();
+        expect(response.statusCode, 404);
+      } finally {
+        client.close(force: true);
+      }
+
+      expect(await receiveFuture, isNull);
+    });
+
+    test('expira e devolve null quando ninguém conecta', () async {
+      final server = RemoteSignerLanServer();
+      final received = await server.receiveOnce(
+        sessionId: 'never-requested',
+        expiresAt: DateTime.now().add(const Duration(milliseconds: 50)),
+      );
+
+      expect(received, isNull);
+    });
+  });
 }
 
 // O bind acontece dentro de serveOnce (assíncrono); como o teste não tem

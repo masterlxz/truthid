@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../screens/approval_screen.dart';
+import '../screens/pin_approval_screen.dart';
 import '../screens/sign_message_approval_screen.dart';
 import '../screens/sign_request_approval_screen.dart';
 import '../screens/vault_session_screen.dart';
@@ -37,6 +38,12 @@ class DeepLinkRouter {
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => SignRequestApprovalScreen(payload: payload),
+        ),
+      );
+    } else if (action == 'truthid-pin') {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => PinApprovalScreen(payload: payload),
         ),
       );
     } else {
