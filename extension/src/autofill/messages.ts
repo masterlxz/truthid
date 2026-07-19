@@ -11,3 +11,12 @@ export const GET_MATCHING_ENTRIES_MESSAGE = 'truthid-get-matching-entries';
 // importam só isso, sem puxar `webauthn.ts` (crypto) nem UI junto.
 export const WEBAUTHN_FIND_PASSKEY_MESSAGE = 'truthid-webauthn-find-passkey';
 export const WEBAUTHN_SIGN_ASSERTION_MESSAGE = 'truthid-webauthn-sign-assertion';
+
+// Enfileira uma proposta de credencial nova (Sessão 134/135, item 6 do
+// roadmap) — fire-and-forget, igual ao canal acima. Precisa passar pelo
+// background porque `chrome.storage.session` não é acessível direto de um
+// content script no Brave ("Access to storage is not allowed from this
+// context", achado real na validação em hardware da Sessão 135) — mesmo
+// motivo pelo qual GET_MATCHING_ENTRIES_MESSAGE já existe: "só o background
+// lê/escreve chrome.storage.session".
+export const VAULT_EDIT_ENQUEUE_MESSAGE = 'truthid-vault-edit-enqueue';

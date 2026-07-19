@@ -1,9 +1,10 @@
 import {
+  VAULT_EDIT_ENQUEUE_MESSAGE,
   WEBAUTHN_FIND_PASSKEY_MESSAGE,
   WEBAUTHN_SIGN_ASSERTION_MESSAGE,
 } from '../src/autofill/messages';
 import { showWebauthnConfirmPrompt } from '../src/webauthnPrompt';
-import { addPendingEdit, type VaultEditProposal } from '../src/vaultEdit/pendingEdits';
+import type { VaultEditProposal } from '../src/vaultEdit/pendingEdits';
 
 // Companheiro isolated-world de webauthn.content.ts (main-world, Sessão
 // 132) — MAIN-world scripts não têm acesso às APIs de extensão
@@ -42,7 +43,8 @@ export default defineContentScript({
 
       const vaultEditData = event.data as Partial<VaultEditEnqueueMessage> | undefined;
       if (vaultEditData?.channel === VAULT_EDIT_CHANNEL) {
-        void addPendingEdit(vaultEditData as VaultEditEnqueueMessage);
+        const { channel: _channel, ...proposal } = vaultEditData as VaultEditEnqueueMessage;
+        void chrome.runtime.sendMessage({ type: VAULT_EDIT_ENQUEUE_MESSAGE, proposal }).catch(() => {});
         return;
       }
 

@@ -7,10 +7,12 @@ import { clearSession, loadSession, saveSession } from '../src/storage/sessionSt
 import { hexToBytes } from '../src/util/bytes';
 import {
   GET_MATCHING_ENTRIES_MESSAGE,
+  VAULT_EDIT_ENQUEUE_MESSAGE,
   WEBAUTHN_FIND_PASSKEY_MESSAGE,
   WEBAUTHN_SIGN_ASSERTION_MESSAGE,
 } from '../src/autofill/messages';
 import { signAssertion } from '../src/webauthn';
+import { addPendingEdit, type VaultEditProposal } from '../src/vaultEdit/pendingEdits';
 
 // Único job do service worker: garantir que a sessão some do
 // `chrome.storage.session` quando o TTL expira, mesmo que a popup nunca
@@ -159,6 +161,18 @@ export default defineBackground(() => {
         });
       })();
       return true;
+    },
+  );
+
+  // Enfileira uma proposta de credencial nova (Sessão 134/135) — fire-and-
+  // forget, sem sendResponse. Precisa passar pelo background porque
+  // `chrome.storage.session` não é acessível direto de um content script no
+  // Brave (achado real da Sessão 135); mesmo motivo do canal
+  // GET_MATCHING_ENTRIES_MESSAGE acima.
+  chrome.runtime.onMessage.addListener(
+    (message: { type?: string; proposal?: Omit<VaultEditProposal, 'id' | 'createdAtMs'> } | undefined) => {
+      if (message?.type !== VAULT_EDIT_ENQUEUE_MESSAGE || !message.proposal) return;
+      void addPendingEdit(message.proposal);
     },
   );
 });

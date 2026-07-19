@@ -25,9 +25,9 @@ import {
 import { renderEntries } from '../../src/ui/renderEntries';
 import { renderQrToCanvas } from '../../src/ui/renderQr';
 import { bytesToHex, hexToBytes } from '../../src/util/bytes';
-import { listPendingEdits, removePendingEdit } from '../../src/vaultEdit/pendingEdits';
+import { listPendingEdits, removePendingEdit, type VaultEditProposal } from '../../src/vaultEdit/pendingEdits';
 import { sendToDesktop } from '../../src/vaultEdit/desktopDelivery';
-import { startMobileDelivery } from '../../src/vaultEdit/mobileDelivery';
+import { startMobileDelivery, type MobileDeliverySession } from '../../src/vaultEdit/mobileDelivery';
 
 const SESSION_EXPIRY_ALARM = 'truthid-vault-session-expiry';
 const START_DEAD_DROP_POLL_MESSAGE = 'truthid-start-dead-drop-poll';
@@ -87,6 +87,9 @@ const els = {
   sendToPhoneButton: document.getElementById('send-to-phone') as HTMLButtonElement,
   pendingEditQrWrapper: document.getElementById('pending-edit-qr-wrapper') as HTMLElement,
   pendingEditQrCanvas: document.getElementById('pending-edit-qr-canvas') as HTMLCanvasElement,
+  pendingEditRetryButton: document.getElementById(
+    'pending-edit-retry',
+  ) as HTMLButtonElement,
 };
 
 let currentState: SessionState | null = null;
@@ -298,6 +301,51 @@ els.sendToDesktopButton.addEventListener('click', async () => {
   }
 });
 
+// Sessão de entrega ativa (QR já mostrado, aguardando o celular escanear e
+// abrir o servidor de recebimento) — precisa sobreviver ao retorno do
+// handler de clique original pro botão de retry conseguir reusar o MESMO
+// sessionId/chave (gerar uma sessão nova geraria um QR diferente do que o
+// celular já escaneou). Só uma proposta em voo por vez (mesma premissa dos
+// botões desabilitados durante o envio).
+let activeMobileDelivery: { session: MobileDeliverySession; proposal: VaultEditProposal } | null =
+  null;
+
+async function attemptMobileDelivery(
+  session: MobileDeliverySession,
+  proposal: VaultEditProposal,
+): Promise<void> {
+  els.sendToDesktopButton.disabled = true;
+  els.sendToPhoneButton.disabled = true;
+  els.pendingEditRetryButton.disabled = true;
+  try {
+    const sent = await session.send();
+    if (sent) {
+      // Best-effort: a extensão não tem como receber confirmação de volta
+      // de que o celular publicou de verdade (não roda servidor nenhum) —
+      // marca como enviada assim que o PUT chega, mesmo espírito best-effort
+      // já aceito em outros lugares do projeto (dead-drop, por exemplo).
+      await removePendingEdit(proposal.id);
+      els.pendingEditsStatus.textContent = 'Sent to your phone — check it to approve.';
+      els.pendingEditQrWrapper.hidden = true;
+      activeMobileDelivery = null;
+    } else {
+      // Achado real (Sessão 135): o primeiro envio roda ANTES de o usuário
+      // ter tido tempo de escanear o QR de verdade — quase sempre falha na
+      // primeira tentativa, não por TTL vencido. `activeMobileDelivery`
+      // continua de pé pro botão de retry tentar de novo com a MESMA sessão,
+      // depois que o celular já escaneou e está com o servidor no ar.
+      els.pendingEditsStatus.textContent =
+        "Couldn't reach your phone on the local network — scan the QR, then " +
+        'try again.';
+    }
+  } finally {
+    els.sendToDesktopButton.disabled = false;
+    els.sendToPhoneButton.disabled = false;
+    els.pendingEditRetryButton.disabled = false;
+    await refreshPendingEdits();
+  }
+}
+
 els.sendToPhoneButton.addEventListener('click', async () => {
   const pending = await listPendingEdits();
   const proposal = pending[0];
@@ -309,32 +357,18 @@ els.sendToPhoneButton.addEventListener('click', async () => {
     return;
   }
 
-  els.sendToDesktopButton.disabled = true;
-  els.sendToPhoneButton.disabled = true;
-  try {
-    const session = startMobileDelivery(proposal);
-    els.pendingEditQrWrapper.hidden = false;
-    await renderQrToCanvas(els.pendingEditQrCanvas, JSON.stringify(session.qrPayload));
-    els.pendingEditsStatus.textContent = 'Scan with your phone...';
+  const session = startMobileDelivery(proposal);
+  activeMobileDelivery = { session, proposal };
+  els.pendingEditQrWrapper.hidden = false;
+  await renderQrToCanvas(els.pendingEditQrCanvas, JSON.stringify(session.qrPayload));
+  els.pendingEditsStatus.textContent = 'Scan with your phone...';
 
-    const sent = await session.send();
-    if (sent) {
-      // Best-effort: a extensão não tem como receber confirmação de volta
-      // de que o celular publicou de verdade (não roda servidor nenhum) —
-      // marca como enviada assim que o PUT chega, mesmo espírito best-effort
-      // já aceito em outros lugares do projeto (dead-drop, por exemplo).
-      await removePendingEdit(proposal.id);
-      els.pendingEditsStatus.textContent = 'Sent to your phone — check it to approve.';
-      els.pendingEditQrWrapper.hidden = true;
-    } else {
-      els.pendingEditsStatus.textContent =
-        "Couldn't reach your phone on the local network.";
-    }
-  } finally {
-    els.sendToDesktopButton.disabled = false;
-    els.sendToPhoneButton.disabled = false;
-    await refreshPendingEdits();
-  }
+  await attemptMobileDelivery(session, proposal);
+});
+
+els.pendingEditRetryButton.addEventListener('click', async () => {
+  if (!activeMobileDelivery) return;
+  await attemptMobileDelivery(activeMobileDelivery.session, activeMobileDelivery.proposal);
 });
 
 void init();
