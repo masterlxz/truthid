@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-19 (Sessão 130 — registrado backlog de 5 itens pedidos pelo dono do projeto: QR no TOTP, passkey na extensão, gerador de senha em popup no Desktop, bug de "pending changes" falso no Mobile [causa raiz já localizada em vault_sync_service.dart:119], depois code review + docs + publicação. Nada implementado ainda)
+> Última atualização: 2026-07-19 (Sessão 131 — corrigido o bug de "pending changes" falso no Mobile [item 4 do backlog da Sessão 130], validado sem gastar gas via build real + leitura on-chain gratuita. Restam do backlog: QR no TOTP, passkey na extensão, gerador de senha em popup, code review + docs + publicação)
 >
 > ⚠️ **LEMBRETE**: ao final do projeto (todas as fases concluídas), fazer uma revisão completa deste arquivo — consolidar endereços, remover seções obsoletas, e garantir que a tabela de Pendências de Deploy está zerada. Sessão 68.
 
@@ -1388,28 +1388,47 @@ depois, um de cada vez, em sessão própria (provavelmente com `/plan`).
    (`vault_entry_form_screen.dart`, Sessão 128) — pedido é trazer o Desktop pro mesmo tratamento
    (dialog/popup flutuante em vez de painel inline).
 
-4. **Bug reportado: "pending changes" falso no Mobile depois de sync** — publicar uma entrada nova
-   no Desktop, o Mobile puxa a atualização certinho (aparece a entrada nova), mas continua
-   mostrando "N pending changes" como se tivesse mudança local não publicada. **Causa raiz já
-   localizada por inspeção de código, não corrigida ainda**: `VaultRepository.pendingChanges()`
+4. ~~**Bug reportado: "pending changes" falso no Mobile depois de sync**~~ — **CORRIGIDO na Sessão
+   131** (2026-07-19). Publicar uma entrada nova no Desktop, o Mobile puxava a atualização certinho
+   (aparece a entrada nova), mas continuava mostrando "N pending changes" como se tivesse mudança
+   local não publicada. **Causa raiz**: `VaultRepository.pendingChanges()`
    (`mobile/lib/services/vault_repository.dart:494`) calcula `data.version - last`, onde `last` vem
    de uma chave própria do device (`vault_last_published_version` no `flutter_secure_storage`) que
-   só é atualizada por `markPublished()` — chamado exclusivamente em
+   só era atualizada por `markPublished()` — chamado exclusivamente em
    `vault_publish_service.dart:66`, ou seja, só quando o **próprio Mobile** publica algo. Quando
-   `VaultSyncService.sync()` puxa uma versão mais nova vinda de outro device e sobrescreve o cache
-   local (`vault_sync_service.dart:119`, `_repository.overwriteCache(bytes)` — o mesmo caminho do
-   fix da Sessão 126 pro bug de perda de dados), ele nunca chama `markPublished(ref.version)`. Então
-   `data.version` sobe (reflete a versão nova sincronizada) mas o marcador de "última publicada por
-   este device" fica parado no valor antigo, e a subtração vira um número positivo de "pendências"
-   que não existem de verdade. Fix provável: `sync()` também chamar `markPublished(ref.version)`
-   sempre que aceitar uma versão vinda do chain/IPFS (não só nas publicações locais) — não
-   implementado ainda, só localizado. **Não confirmado no Desktop**: `desktop/src-tauri/src/vault.rs`
-   não tem nenhum mecanismo de pull/sync automático (só `load()` local e `mark_published()`/
-   `vault_publish()` — nunca busca do IPFS), então o Desktop não passa pelo mesmo caminho de código
-   que causa esse bug específico no Mobile. Pode ser que o dono do projeto tenha observado outra
-   coisa no Desktop (vale reproduzir/perguntar antes de assumir que é o mesmo bug), ou que o gap
-   real no Desktop seja simplesmente a ausência de qualquer sync automático — aí seria feature
-   faltando, não bug.
+   `VaultSyncService.sync()` puxava uma versão mais nova vinda de outro device e sobrescrevia o
+   cache local (`vault_sync_service.dart:119`, `_repository.overwriteCache(bytes)` — o mesmo
+   caminho do fix da Sessão 126 pro bug de perda de dados), nunca chamava `markPublished(ref.version)`.
+   Então `data.version` subia (refletindo a versão nova sincronizada) mas o marcador de "última
+   publicada por este device" ficava parado no valor antigo, e a subtração virava um número positivo
+   de "pendências" que não existiam de verdade.
+
+   **Fix**: `sync()` (`vault_sync_service.dart`) agora chama `markPublished(ref.version)` em dois
+   pontos — (a) depois de `overwriteCache(bytes)`, no caminho de pull de uma versão mais nova; (b)
+   no caminho de early-return, quando `ref.version == localVersion` (cobre o caso de um device que
+   nasce já sincronizado com a versão on-chain atual, ex. logo depois do pareamento, e nunca chamou
+   `markPublished` por conta própria — mesmo bug, caminho de código diferente). **Não** marca como
+   publicado quando `ref.version < localVersion` (local genuinamente à frente, com edições reais
+   ainda não publicadas) — esse caso continua contando certo, de propósito.
+
+   2 testes de regressão novos em `vault_sync_service_test.dart`, reproduzindo os dois cenários
+   corrigidos com chain mockada (ambos esperam `pendingChanges() == 0` depois do sync). Precisou
+   adicionar o mock de `flutter_secure_storage` (`MethodChannel` + `TestWidgetsFlutterBinding.
+   ensureInitialized()`, mesmo padrão de `vault_publish_service_test.dart`/Sessão 98) ao arquivo de
+   teste, que antes não precisava disso (nenhum teste anterior passava pelo caminho que grava em
+   secure storage). `flutter test`: 331/331 (2 novos), `flutter analyze` limpo.
+
+   **Validado em duas frentes, sem gastar gas**: (1) build real instalado no celular físico
+   (Samsung Galaxy S25 FE) — o vault real desse device mostrava "10 pending changes" já documentado
+   como débito de teste conhecido da Sessão 126 (passkey de teste criada e apagada, nunca publicada,
+   nenhuma sessão depois tocou o vault do Mobile de novo); (2) leitura on-chain direta e gratuita do
+   `VaultRegistry` via `cast call getVault(uint256) 1` (eth_call, sem transação) confirmou
+   `version=4` publicada — bate exatamente com `4 (chain) + 10 (edições locais reais, nunca
+   publicadas) = 14 (local)`. Ou seja, o fix **não zerou** essa pendência real, confirmando que ele
+   distingue certo "pendência real" (`ref.version < localVersion`, não mexe) de "pendência fantasma"
+   (`ref.version >= localVersion`, corrige). Não foi feita uma publicação real a partir do Desktop
+   pra provar o caminho inverso ao vivo (custaria gas real em Base Mainnet, não autorizado) — a
+   cobertura fica pelos 2 testes automatizados que reproduzem exatamente esse caminho com mocks.
 
 5. **Depois de tudo isso**: code review completo do app inteiro, atualizar documentação, e publicar
    o app — registrado como sequência pedida pro fim desta leva de trabalho, sem detalhe adicional
@@ -5379,6 +5398,31 @@ não falha de renderização.
 `NSFaceIDUsageDescription`/iOS, que segue sem device pra testar, mesma situação já registrada pro
 Local Network Privacy do item 1 — não bloqueia o resto da fila). Próximo da ordem travada na Sessão
 122: item 7, frente de monetização.
+
+### Sessão 130 — 2026-07-19: registrado backlog de 5 itens pedidos pelo dono do projeto (QR no
+TOTP, passkey na extensão, gerador de senha em popup, bug de "pending changes" falso, code
+review + docs + publicação) — ver seção "Backlog pós-item 6" em "Roadmap de Evoluções Planejadas",
+logo antes de "Monetização". Nada implementado nesta sessão, só levantamento e causa raiz do bug
+(item 4) já localizada por inspeção de código.
+
+### Sessão 131 — 2026-07-19: corrigido o bug de "pending changes" falso no Mobile (item 4 do
+backlog da Sessão 130)
+
+Causa raiz já localizada na sessão anterior, implementada e validada nesta. Detalhe técnico
+completo na seção "Backlog pós-item 6" (item 4, agora riscado como corrigido) — resumo aqui:
+`VaultSyncService.sync()` (`mobile/lib/services/vault_sync_service.dart`) agora chama
+`markPublished(ref.version)` tanto no caminho de pull de uma versão nova de outro device quanto no
+caminho de early-return quando a versão local já bate exatamente com a on-chain — os dois pontos
+onde o marcador de "última publicada por este device" ficava desatualizado e gerava pendência
+fantasma. 2 testes de regressão novos, `flutter test` 331/331, `flutter analyze` limpo.
+
+**Validado sem gastar gas**: build real instalado no celular físico confirmou que o fix não zera
+pendências reais (vault desse device tem 10 edições locais genuínas nunca publicadas, débito de
+teste conhecido desde a Sessão 126); leitura on-chain gratuita (`cast call getVault(uint256) 1`,
+Base Mainnet) confirmou `version=4` publicada, batendo exatamente com `4 + 10 = 14` da versão
+local — prova que o fix distingue certo pendência real de fantasma. Não foi feita publicação real a
+partir do Desktop pra validar o caminho inverso ao vivo (gastaria gas real, não autorizado nesta
+sessão) — coberto pelos 2 testes automatizados.
 
 ---
 

@@ -97,6 +97,16 @@ class VaultSyncService {
       // só puxa do chain quando ele realmente está à frente do cache local.
       final localVersion = await _repository.currentVersion();
       if (ref.version <= localVersion) {
+        // Local já reflete (ou está à frente d)o on-chain. Só quando as duas
+        // versões batem exatamente é seguro marcar como "publicado até aqui"
+        // — se local estiver à frente (mudanças pendentes deste device),
+        // isso ficaria pra pendingChanges() continuar contando certo (ver
+        // achado da Sessão 130: sem isso, um device que nunca publicou nada
+        // localmente mas já nasceu sincronizado com a versão on-chain atual
+        // mostrava "pending changes" fantasma).
+        if (ref.version == localVersion) {
+          await _repository.markPublished(ref.version);
+        }
         final entries = await _repository.listEntries();
         final profileNames = await _repository.listProfileNames();
         return VaultSyncOutcome(
@@ -117,6 +127,12 @@ class VaultSyncService {
       }
 
       await _repository.overwriteCache(bytes);
+      // Achado da Sessão 130: puxar uma versão mais nova doutro device sem
+      // marcar como publicada deixava pendingChanges() (que compara contra o
+      // marcador local de "última publicada por este device") achando que
+      // essa versão ainda estava pendente — "pending changes" fantasma no
+      // Mobile depois de sincronizar algo publicado pelo Desktop.
+      await _repository.markPublished(ref.version);
       final entries = await _repository.listEntries();
       final profileNames = await _repository.listProfileNames();
       return VaultSyncOutcome(

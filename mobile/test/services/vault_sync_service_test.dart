@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:web3dart/crypto.dart';
@@ -46,6 +46,8 @@ Map<String, dynamic> _entry(String site) => {
     };
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late MockBlockchainService mockBlockchain;
   late MockIpfsGatewayClient mockGateway;
   late MockVaultKeyService mockKeyService;
@@ -59,11 +61,32 @@ void main() {
   final wrongHash =
       bytesToHex(Uint8List.fromList(List.filled(32, 0xff)), include0x: true);
 
+  // pendingChanges()/markPublished() do VaultRepository usam
+  // FlutterSecureStorage real (campo estático, não injetável) — mesmo mock
+  // de vault_publish_service_test.dart (Sessão 98), necessário agora que
+  // sync() também chama markPublished() (fix da Sessão 130).
+  const secureStorageChannel =
+      MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
+  final fakeSecureStorage = <String, String>{};
+
   setUpAll(() {
     registerFallbackValue(BigInt.one);
   });
 
   setUp(() async {
+    fakeSecureStorage.clear();
+    TestWidgetsFlutterBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(secureStorageChannel, (call) async {
+      switch (call.method) {
+        case 'write':
+          fakeSecureStorage[call.arguments['key']] = call.arguments['value'];
+          return null;
+        case 'read':
+          return fakeSecureStorage[call.arguments['key']];
+        default:
+          return null;
+      }
+    });
     mockBlockchain = MockBlockchainService();
     mockGateway = MockIpfsGatewayClient();
     mockKeyService = MockVaultKeyService();
@@ -84,6 +107,8 @@ void main() {
   });
 
   tearDown(() async {
+    TestWidgetsFlutterBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(secureStorageChannel, null);
     await tempDir.delete(recursive: true);
   });
 
@@ -237,6 +262,55 @@ void main() {
         containsAll(['local-only.com', 'local-only-2.com']));
     verifyNever(() => mockGateway.fetch(any()));
     expect(await File(vaultPath).readAsBytes(), equals(localBlobBefore));
+  });
+
+  test(
+      'puxar versão mais nova de outro device marca como publicada — sem '
+      '"pending changes" fantasma (bug real, Sessão 130)', () async {
+    final bytes = _plaintextBlob([_entry('example.com')]);
+    final digest = bytesToHex(keccak256(bytes), include0x: true);
+
+    when(() => mockBlockchain.hasVault(identityId))
+        .thenAnswer((_) async => true);
+    when(() => mockBlockchain.getVault(identityId)).thenAnswer((_) async =>
+        VaultRef(
+            cid: 'bafyTestCid',
+            contentHashHex: digest,
+            updatedAt: updatedAt,
+            version: 5));
+    when(() => mockGateway.fetch('bafyTestCid')).thenAnswer((_) async => bytes);
+
+    final outcome = await syncService.sync(identityId);
+
+    expect(outcome.status, VaultSyncStatus.synced);
+    expect(await repository.pendingChanges(), 0);
+  });
+
+  test(
+      'local já nasce sincronizado com a versão on-chain (ex: recém-pareado) '
+      '— marca como publicada, sem esperar um sync mais à frente', () async {
+    // Simula um device que recebeu o vault via ECIES no pareamento, com o
+    // mesmo conteúdo/versão que já está publicada on-chain, e nunca chamou
+    // markPublished() localmente (nunca publicou nada por conta própria).
+    final bytes = _plaintextBlob([_entry('example.com')]);
+    await repository.overwriteCache(bytes);
+    final localVersion = await repository.currentVersion();
+    final digest = bytesToHex(keccak256(bytes), include0x: true);
+
+    when(() => mockBlockchain.hasVault(identityId))
+        .thenAnswer((_) async => true);
+    when(() => mockBlockchain.getVault(identityId)).thenAnswer((_) async =>
+        VaultRef(
+            cid: 'bafyTestCid',
+            contentHashHex: digest,
+            updatedAt: updatedAt,
+            version: localVersion));
+
+    final outcome = await syncService.sync(identityId);
+
+    expect(outcome.status, VaultSyncStatus.synced);
+    verifyNever(() => mockGateway.fetch(any()));
+    expect(await repository.pendingChanges(), 0);
   });
 
   test('falha de rede sem cache nenhum — syncFailedNoCache', () async {
