@@ -28,6 +28,8 @@
 	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>TruthID uses your local network to send vault entries directly to your browser extension over Wi-Fi (Vault session, Fase 13.9).</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>TruthID uses Face ID (or your device passcode) to lock the app when app lock is enabled in Security settings.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../services/bundler_config_service.dart';
 import '../theme.dart';
 import 'deeplink_self_test_screen.dart';
+import 'security_screen.dart';
 
 // Tela de configuracao do bundler (Pimlico ou custom). Permite ao usuario
 // informar sua propria API key + rede, em vez de usar a chave do dev
@@ -157,8 +158,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     'TruthID is decentralized — there is no company server paying your blockchain fees. Your smart account holds ETH and pays the bundler directly. The API key is only to reach the bundler node.',
                     style: TextStyle(color: AppColors.textMuted, fontSize: 13),
                   ),
+                  const SizedBox(height: 32),
+                  const Divider(),
+                  const SizedBox(height: 8),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.security, color: AppColors.textMuted),
+                    title: const Text('Security'),
+                    subtitle: const Text(
+                      'App lock via your device biometrics or PIN',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const SecurityScreen()),
+                    ),
+                  ),
                   if (kDebugMode) ...[
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 8),
                     const Divider(),
                     const SizedBox(height: 8),
                     ListTile(

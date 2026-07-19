@@ -43,6 +43,7 @@ dependencies:
   elliptic: ^0.3.11
   app_links: ^6.0.0
   pointycastle: ^3.9.1
+  local_auth: ^2.3.0
   # Pinado em 10.3.6 (não ^) de propósito: 8.x/9.x hardcodeiam compileSdk 34
   # no build.gradle do plugin (quebra com flutter_plugin_android_lifecycle,
   # que exige compileSdk 36+); 11.x só aplica o Kotlin Gradle Plugin quando

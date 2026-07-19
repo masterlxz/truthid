@@ -11,6 +11,7 @@ import 'screens/sessions_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/vault_screen.dart';
 import 'screens/wallet_screen.dart';
+import 'services/app_lock_service.dart';
 import 'services/deep_link_router.dart';
 import 'services/deep_link_service.dart';
 import 'theme.dart';
@@ -38,7 +39,147 @@ class TruthIDApp extends StatelessWidget {
       navigatorKey: navigatorKey,
       title: 'TruthID',
       theme: appTheme,
-      home: const RootScreen(),
+      home: const AppLockGate(),
+    );
+  }
+}
+
+/// Overlay de bloqueio (biometria/PIN/padrão/senha do dispositivo) sobre a
+/// `RootScreen` — nunca substitui `RootScreen` condicionalmente, ela sempre
+/// monta imediatamente pra `DeepLinkService.init()` (chamado no initState
+/// dela) não atrasar e não perder um deep link recebido com o app fechado.
+/// O overlay só cobre visualmente o conteúdo até autenticar.
+class AppLockGate extends StatefulWidget {
+  final AppLockService? lockService;
+  const AppLockGate({super.key, this.lockService});
+
+  @override
+  State<AppLockGate> createState() => _AppLockGateState();
+}
+
+class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
+  late final AppLockService _lockService;
+  // Cobre a tela até a 1a checagem de isEnabled() resolver — evita qualquer
+  // flash de conteúdo antes de saber se o bloqueio está ligado.
+  bool _checking = true;
+  bool _locked = false;
+  bool _authenticating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _lockService = widget.lockService ?? AppLockService();
+    WidgetsBinding.instance.addObserver(this);
+    _init();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  Future<void> _init() async {
+    // Fail-open de propósito: esta camada é conveniência sobre o Vault, que
+    // já tem sua própria proteção criptográfica real — uma falha de leitura
+    // do storage não pode deixar o app inteiro inacessível.
+    bool enabled;
+    try {
+      enabled = await _lockService.isEnabled();
+    } catch (_) {
+      enabled = false;
+    }
+    if (!mounted) return;
+    setState(() {
+      _checking = false;
+      _locked = enabled;
+    });
+    if (enabled) _authenticate();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused) {
+      _lockOnNextResume();
+    } else if (state == AppLifecycleState.resumed && _locked && !_authenticating) {
+      _authenticate();
+    }
+  }
+
+  Future<void> _lockOnNextResume() async {
+    bool enabled;
+    try {
+      enabled = await _lockService.isEnabled();
+    } catch (_) {
+      enabled = false;
+    }
+    if (enabled && mounted) setState(() => _locked = true);
+  }
+
+  Future<void> _authenticate() async {
+    if (_authenticating) return;
+    _authenticating = true;
+    bool success;
+    try {
+      success = await _lockService.authenticate();
+    } catch (_) {
+      success = false;
+    }
+    _authenticating = false;
+    if (!mounted) return;
+    if (success) setState(() => _locked = false);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        const RootScreen(),
+        if (_checking)
+          const Positioned.fill(
+            child: Material(
+              color: AppColors.background,
+              child: SizedBox.shrink(),
+            ),
+          )
+        else if (_locked)
+          Positioned.fill(child: _LockOverlay(onUnlock: _authenticate)),
+      ],
+    );
+  }
+}
+
+class _LockOverlay extends StatelessWidget {
+  final VoidCallback onUnlock;
+  const _LockOverlay({required this.onUnlock});
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.background,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.lock_outline, size: 64, color: AppColors.accent),
+            const SizedBox(height: 16),
+            const Text(
+              'TruthID is locked',
+              style: TextStyle(fontSize: 18, color: AppColors.textPrimary),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: onUnlock,
+              icon: const Icon(Icons.fingerprint),
+              label: const Text('Unlock'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accent,
+                foregroundColor: AppColors.background,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
