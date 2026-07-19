@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-17 (Sessão 117 — deep link app-to-app pro sign-message/sign-request, implementado e validado em hardware real; fecha a ideia registrada na Sessão 114)
+> Última atualização: 2026-07-19 (Sessão 128 — item 6 do roadmap pós-Fase 14 fechado de escopo: permissões de device no Mobile, gerador de senha, força de senha, favoritos e bloqueio biométrico/PIN; só falta validar o bloqueio biométrico em hardware físico)
 >
 > ⚠️ **LEMBRETE**: ao final do projeto (todas as fases concluídas), fazer uma revisão completa deste arquivo — consolidar endereços, remover seções obsoletas, e garantir que a tabela de Pendências de Deploy está zerada. Sessão 68.
 
@@ -5210,6 +5210,87 @@ erro depois do fix.
 **Item 5 do roadmap (reforma da extensão) fecha 100%** — visual e autofill de usuário/senha
 validados em hardware real. TOTP autofill fica registrado como possível item futuro, dependente de
 uma decisão de segurança separada (reverter a exclusão de `totp_secret` da extensão).
+
+### Sessão 128 — 2026-07-18/19: item 6 do roadmap (Mobile como gerenciador de senhas completo) —
+gap de paridade fechado + 4 features novas pedidas pelo dono do projeto
+
+Seguindo a ordem travada na Sessão 122, com itens 1-5 fechados, esta sessão atacou o item 6.
+Levantamento de gap achou só 2 features exclusivas do Desktop no Vault: "permissões por device" e
+"autorizações de app terceiro pro pinning" — a segunda não é feature de Vault portável, é parte do
+projeto [[project-delegated-signing]] (`/truthid/v1/pin`), cujo equivalente cross-device já tinha
+sido implementado separadamente. O resto do gap (gerador de senha, força de senha, favoritos) não é
+gap de paridade, é feature nova pros dois lados — pedido explícito do dono do projeto na mesma
+sessão. Uma última feature (bloqueio de app via biometria/PIN) também foi pedida, sem precedente
+nenhum no projeto (o app nunca teve nenhum bloqueio nem detecção de background antes).
+
+**Permissões de device no Mobile** (`b6978f1`): até aqui o Mobile só lia a própria permissão de
+escrita (`canWriteVault`), nunca gerenciava a de nenhum device. Nova
+`VaultDevicePermissionsScreen` lista os devices ativos da identidade (novo
+`BlockchainService.getDevicesForIdentity`, ABI `getDevicesByIdentity`) e permite conceder/revogar
+`canWrite` por device, espelhando `Vault::set_device_permission` (Rust) via novo
+`VaultRepository.setDevicePermission`. Isso fecha o gap de paridade e conclui o escopo original do
+item 6.
+
+**Gerador de senha customizável** (`a2df7e4`): ao criar/editar uma entrada, gerar em vez de digitar
+— tamanho + categorias de caractere (maiúsculas/minúsculas/números/símbolos), garantindo 1 de cada
+categoria selecionada (shuffle Fisher-Yates). Implementado independentemente nos dois lados, sem
+paridade byte-a-byte exigida — cada lado usa sua própria fonte cripto-segura
+(`crypto.getRandomValues` com rejection sampling no Desktop em
+`desktop/src/utils/passwordGenerator.ts`, `Random.secure()` no Mobile em
+`mobile/lib/utils/password_generator.dart`). Painel inline no `EntryForm`/`VaultManagement.tsx` e
+bottom sheet no `vault_entry_form_screen.dart`. **Validado com clique real no Desktop nativo**
+(`GDK_BACKEND=x11`): toggle de categoria regenera a preview, validação de tamanho mínimo aparece
+corretamente, "Usar esta senha" aplica de fato no campo do formulário.
+
+**Indicador de força de senha** (`89f2868`): complementa o gerador — mostra ao vivo, embaixo do
+campo Senha, quão forte é a senha atual. Heurística própria baseada em entropia estimada em bits
+(comprimento efetivo × log2 do alfabeto usado; sequências/repetições óbvias de 3+ param de contar a
+partir do 3º caractere), 4 níveis (Fraca/Razoável/Forte/Muito forte) mapeados pras 4 cores já
+existentes no tema de cada plataforma, sem inventar cor nova.
+`desktop/src/utils/passwordStrength.ts` + `mobile/lib/utils/password_strength.dart`, barra de 4
+segmentos + label abaixo do campo Senha nos dois formulários, atualiza ao vivo. **Validado com
+clique real no Desktop nativo**: Fraca/Forte/Muito forte confirmados visualmente, inclusive
+integrado com o gerador.
+
+**Favoritos + ordenação** (`41a1aed`): estrela clicável por entrada, favoritos aparecem primeiro na
+lista (partição, não sort com comparador — `List.sort` do Dart não garante estabilidade). Escopo
+confirmado com o dono do projeto: favorito **sincroniza** entre Desktop/Mobile (mesmo padrão de
+perfis/permissões/TOTP/passkeys, não preferência local), exige `canWrite` e conta como mudança
+pendente até publicar. Novo campo `favorite: bool` nos 3 lugares que espelham o schema de
+`VaultEntry` (`desktop/src-tauri/src/vault.rs`, `desktop/src/types.ts`,
+`mobile/lib/services/vault_repository.dart`), toggle via comando dedicado
+(`Vault::set_favorite`/`vault_set_favorite` no Rust, `VaultRepository.setFavorite` no Dart) que
+**não** passa por upsert/`copyWith` — evita renovar `updated_at` só por causa do toggle, mesmo
+padrão já usado por `set_device_permission`. **Validado com clique real no Desktop nativo**: estrela
+alterna ☆/★ (cinza/ciano) e tooltip muda corretamente; só 1 entrada de teste no vault, então a
+reordenação visual (2+ favoritos) não foi observada ao vivo, só coberta pelos testes automatizados
+de partição. Filtro "só favoritos" ficou de fora de propósito (fora de escopo desta rodada).
+
+**Bloqueio de app via biometria/PIN do dispositivo** (`5b874a4`): pedido explícito — pedir a
+biometria/PIN/padrão/senha **do celular** (não uma senha nova cadastrada no app) pra abrir o
+TruthID Mobile inteiro (não só o Vault). Feature nova do zero. Delegação total pro SO via
+`local_auth` (`biometricOnly: false`, cai pro PIN/padrão/senha automaticamente). Novo
+`mobile/lib/services/app_lock_service.dart` (flag em `flutter_secure_storage` + wrapper injetável
+de `LocalAuthentication`), `mobile/lib/screens/security_screen.dart` (nova, navegada do
+`SettingsScreen`, que virou hub de verdade com um 2º item de navegação), `AppLockGate` novo em
+`main.dart` — **overlay em `Stack` sobre `RootScreen`**, não substituição condicional (decisão
+importante: `RootScreen` sempre monta, senão `DeepLinkService.init()` atrasaria e um deep link
+recebido com o app fechado se perderia). Achado real no caminho: `test/widget_test.dart` (pump de
+`TruthIDApp()` sem mock) quebraria com `MissingPluginException` do `FlutterSecureStorage` sem canal
+nativo em ambiente de teste — corrigido com fail-open (try/catch tratando erro como "não
+bloqueado", já que essa camada é conveniência sobre o Vault, que tem sua própria proteção
+criptográfica real). `MainActivity.kt` trocado de `FlutterActivity` pra `FlutterFragmentActivity`
+(exigência do `local_auth_android`, usa `androidx.biometric.BiometricPrompt`). Permissões novas:
+`USE_BIOMETRIC` (Android manifest), `NSFaceIDUsageDescription` (iOS Info.plist, não testado — sem
+device iOS nesta máquina). Build Android real (`./dev.sh build`) compilou sem conflito de plugin
+nativo. **Sem device físico conectado nesta sessão** — o prompt biométrico real (toque do
+dedo/Face) nunca foi observado funcionando de ponta a ponta, só a lógica em volta dele (testes
+automatizados + build real). **Pendência de validação em hardware.**
+
+**Item 6 do roadmap pós-Fase 14 fecha de escopo** — gap de paridade original resolvido, mais 4
+features novas pedidas ao longo da sessão. Única pendência: validar o bloqueio biométrico num
+device físico Android/iOS (prompt real de dedo/Face, comportamento ao errar o PIN, comportamento
+ao voltar do background). Ver [[project-mobile-backlog]] e [[project-roadmap-priority]].
 
 ---
 
