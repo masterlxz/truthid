@@ -2,7 +2,14 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-19 (Sessão 134 — passkey na extensão, Fase 2/criação [item 6]: Desktop e extensão fechados e validados por teste automatizado; **Mobile ainda não implementado, sessão pausada a pedido do dono do projeto**. Nenhuma validação manual em hardware feita ainda pra esta feature. Plano em ~/.claude/plans/streamed-churning-truffle.md. Restam além disso: QR no TOTP no Mobile [hardware pendente], senha nova via extensão, gerador de senha em popup, code review + docs + publicação)
+> Última atualização: 2026-07-19 (Sessão 135 — fatia Mobile do vault-edit implementada e validada em
+> hardware real; achado+corrigido bug real do saldo sumido no Wallet Mobile; achado+corrigido 2 bugs
+> reais na validação em hardware da extensão (storage bloqueado no Brave, retry de QR); rodado
+> `/code-review max` sobre o diff da sessão — 15 achados, **4 CONFIRMED já corrigidos e commitados**
+> (scan de username ~275x mais lento no caso comum, passkey perdida em erro de approve, mensagem de
+> confirmação apagada na hora, + 2 corridas de estado relacionadas). **Restam 11 achados PLAUSIBLE**,
+> sendo corrigidos aos poucos — ver seção "Achados do /code-review max" mais abaixo pro detalhe de
+> cada um e o que já foi feito.)
 >
 > ⚠️ **LEMBRETE**: ao final do projeto (todas as fases concluídas), fazer uma revisão completa deste arquivo — consolidar endereços, remover seções obsoletas, e garantir que a tabela de Pendências de Deploy está zerada. Sessão 68.
 
@@ -5806,38 +5813,56 @@ em cima do que foi encontrado acima.
 Todos os 10 ângulos rodaram. Verificação feita por leitura direta do código (não spawnou
 verificador por achado, dado o volume) + forte corroboração cruzada entre agentes independentes.
 15 achados finais reportados via `ReportFindings`, 4 CONFIRMED e 11 PLAUSIBLE, nenhum REFUTED.
-Nada foi corrigido ainda — ficam registrados aqui pra decidir o que vale a pena consertar.
 
-**CONFIRMED (4)**:
-1. `blockchain_service.dart:298` — o scan de username agora é ~275x mais lento no caso comum
-   (identidade recém-criada) pra corrigir o caso raro (identidade antiga). Tradeoff documentado no
-   próprio comentário do código, mas o agente de efficiency achou que vale reconsiderar: tentar
-   scan-pra-trás primeiro (rápido, caso comum), só cair pro scan-pra-frente-do-deploy se vier vazio.
-2. `wallet_screen.dart:139` — a aba Wallet agora trava no spinner enquanto esse scan roda (antes
-   era fire-and-forget), e pull-to-refresh reinicia o scan do zero sem nenhum checkpoint (o
-   `_loadActivity` no mesmo arquivo já tem esse cache via `ActivityCacheService` e não foi
-   reaproveitado).
-3. `vault_edit_approval_screen.dart:514` — se a resolução da smart account falhar na aprovação, o
-   único botão é "Back", que descarta a proposta já decifrada pra sempre (a extensão já removeu da
-   fila dela assim que o PUT chegou, sem esperar confirmação) — perde a passkey recém-criada.
-4. `extension/entrypoints/popup/main.ts:328` — a mensagem "Sent to your phone" é escrita e
-   imediatamente apagada pelo próprio `finally` (`refreshPendingEdits()` zera o texto quando
-   `pending.length === 0`, o que já é verdade nesse ponto). Mesmo bug já existia no handler do
-   "Send to this computer" antes desta sessão ("Saved."/"Rejected on the Desktop." têm o mesmo
-   problema).
+### ✅ CONFIRMED (4/4) — todos corrigidos, commit `ba2ae08`
 
-**PLAUSIBLE (11)**: 3 telas irmãs (`sign_request_approval_screen.dart`, `sessions_screen.dart`,
-`show_device_qr_screen.dart`, `vault_screen.dart`) nunca receberam o fix de retry de username desta
-sessão — mesmo bug, sem correção; a lógica de retry está duplicada entre 2 arquivos; um slot
-`activeMobileDelivery` obsoleto pode reenviar proposta já aprovada se o usuário alternar entre
-"Send to this computer"/"Send to phone" com 2+ propostas pendentes; clique duplo em "Send to
-phone" corre antes dos botões desabilitarem; `setState` sem checar `mounted` (mascarado por
-catchError); erro de `getIdentityByUsername` não capturado localmente; falha de RPC num chunk
-específico pode causar falso "not found"; `pushToMobile` re-varre a LAN inteira do zero a cada
-retry; o fix do bug do Brave cobriu só 1 call site, `pendingEdits.ts` continua livre pra qualquer
-content script futuro reintroduzir o mesmo bug; falha no `renderQrToCanvas` deixa card de QR em
-branco sem status. Detalhe completo de cada achado (file/line/failure_scenario) foi reportado via
-`ReportFindings` na sessão — não duplicado aqui pra não inflar o arquivo.
+1. **`blockchain_service.dart:298`** — o scan de username tinha ficado ~275x mais lento no caso
+   comum (identidade recém-criada) pra corrigir o caso raro (identidade antiga). **Fix**: duas
+   fases — scan-pra-trás limitado primeiro (~50 chunks, mesma janela da versão original, cobre o
+   caso comum em 1-2 chamadas), só cai pro scan-pra-frente-do-deploy sem teto se não achar (cobre
+   o caso raro sem penalizar o comum).
+2. **`wallet_screen.dart:139`** (aba Wallet travava no spinner + pull-to-refresh sem checkpoint) —
+   **não precisou de fix separado**: resolvido de graça pelo fix do item 1 acima (o caso comum
+   volta a ser ~1 chamada, o bloqueio na UI deixa de importar na prática; o caso raro que ainda
+   bloqueia é aceitável, é o mesmo tradeoff que a versão original já tinha).
+3. **`vault_edit_approval_screen.dart:514`** (passkey recém-criada perdida pra sempre se o approve
+   falhar) — **fix**: botão "Try again" na tela de erro quando a proposta já foi decifrada
+   (`_proposal != null`), com guarda `_entryPersisted` contra duplicar a entrada no vault se
+   `addEntry` já tinha tido sucesso numa tentativa anterior e só `publish()` falhou depois.
+4. **`extension/entrypoints/popup/main.ts:328`** (mensagem de confirmação apagada na mesma
+   execução) — **fix**: `scheduleRefreshAfterTerminalMessage()` dá ~2.5s antes de rodar o
+   `refreshPendingEdits()` que esconde a seção, só quando a proposta foi de fato removida (falha
+   continua com refresh imediato). Aplicado nos dois handlers (`sendToDesktopButton` e
+   `attemptMobileDelivery`), já que os dois tinham o mesmo bug.
+
+**Corrigidos de brinde no mesmo commit** (eram PLAUSIBLE, mas estavam na mesma região de código dos
+achados 3 e 4 acima, baratos de resolver juntos): `getIdentityByUsername` sem try/catch local
+(mensagem de erro crua em vez da específica); clique duplo em "Send to phone" podia gerar 2 sessões
+de entrega sobrepostas; `activeMobileDelivery` obsoleto podia reenviar uma proposta já aprovada via
+Desktop.
+
+### ⏳ PLAUSIBLE (8 restantes, sendo corrigidos aos poucos)
+
+- 3 telas irmãs (`sign_request_approval_screen.dart`, `sessions_screen.dart`,
+  `show_device_qr_screen.dart`, `vault_screen.dart`) nunca receberam o fix de retry de username
+  desta sessão — mesmo bug, sem correção.
+- A lógica de retry de username está duplicada entre `wallet_screen.dart` e
+  `vault_edit_approval_screen.dart` (candidata a virar um helper compartilhado, especialmente dado
+  o ponto acima).
+- `setState` sem checar `mounted` em `vault_edit_approval_screen.dart` (mascarado por `catchError`,
+  baixo risco real).
+- Falha de RPC num chunk específico do scan pode causar falso "not found" (`_fetchIdentityCreatedLogs`
+  engole erro e trata como "sem log nesse chunk").
+- `pushToMobile` (extensão) re-varre a LAN inteira do zero a cada clique de retry, sem lembrar quem
+  respondeu da vez anterior.
+- O fix do bug do Brave (`chrome.storage.session` bloqueado em content script) cobriu só o 1 call
+  site que quebrou — `pendingEdits.ts` continua livre pra qualquer content script futuro
+  reintroduzir o mesmo bug, sem lint/import-boundary impedindo.
+- Falha no `renderQrToCanvas` (extensão) deixa o card de QR em branco sem nenhum status explicando
+  o que houve.
+
+Detalhe completo de cada achado (file/line/failure_scenario) foi reportado via `ReportFindings` na
+sessão — não duplicado aqui pra não inflar o arquivo.
 
 ---
 
