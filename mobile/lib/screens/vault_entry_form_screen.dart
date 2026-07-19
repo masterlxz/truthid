@@ -7,6 +7,7 @@ import '../services/totp_service.dart';
 import '../services/vault_repository.dart';
 import '../services/webauthn_service.dart' as webauthn;
 import '../theme.dart';
+import '../utils/password_generator.dart';
 
 // Tela compartilhada de criar/editar uma entrada do vault — mirror do
 // `EntryForm` do Desktop (`VaultManagement.tsx`). `entry` null = criar.
@@ -90,6 +91,148 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
         createdAt: DateTime.fromMillisecondsSinceEpoch(created.createdAt * 1000, isUtc: true),
       );
     });
+  }
+
+  // Abre o painel de opções do gerador de senha (mirror do painel inline do
+  // Desktop em VaultManagement.tsx) e devolve a senha escolhida, ou null se
+  // o usuário cancelar sem confirmar. showModalBottomSheet + StatefulBuilder
+  // é o único precedente de painel de opções com estado mutável no Mobile
+  // (ver wallet_screen.dart, _showDepositSheet).
+  Future<void> _openPasswordGenerator() async {
+    var options = const PasswordGeneratorOptions(
+      length: 16,
+      uppercase: true,
+      lowercase: true,
+      numbers: true,
+      symbols: true,
+    );
+    var preview = '';
+    String? error;
+
+    void regenerate() {
+      try {
+        preview = generatePassword(options);
+        error = null;
+      } catch (e) {
+        preview = '';
+        error = '$e';
+      }
+    }
+
+    regenerate();
+
+    final generated = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: EdgeInsets.only(
+            left: 24,
+            right: 24,
+            top: 24,
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 32,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                const Text('Generate password',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    const Text('Length', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.remove_circle_outline),
+                      onPressed: options.length <= 1
+                          ? null
+                          : () => setSheetState(() {
+                                options = options.copyWith(length: options.length - 1);
+                                regenerate();
+                              }),
+                    ),
+                    Text('${options.length}', style: const TextStyle(fontSize: 16)),
+                    IconButton(
+                      icon: const Icon(Icons.add_circle_outline),
+                      onPressed: () => setSheetState(() {
+                        options = options.copyWith(length: options.length + 1);
+                        regenerate();
+                      }),
+                    ),
+                  ],
+                ),
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    ('Uppercase', options.uppercase,
+                        (bool v) => options.copyWith(uppercase: v)),
+                    ('Lowercase', options.lowercase,
+                        (bool v) => options.copyWith(lowercase: v)),
+                    ('Numbers', options.numbers, (bool v) => options.copyWith(numbers: v)),
+                    ('Symbols', options.symbols, (bool v) => options.copyWith(symbols: v)),
+                  ].map((entry) {
+                    final (label, selected, apply) = entry;
+                    return FilterChip(
+                      label: Text(label),
+                      selected: selected,
+                      onSelected: (v) => setSheetState(() {
+                        options = apply(v);
+                        regenerate();
+                      }),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: AppColors.surfaceAlt,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          preview.isNotEmpty ? preview : '—',
+                          style: const TextStyle(fontFamily: 'monospace', fontSize: 15),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.refresh),
+                        tooltip: 'Regenerate',
+                        onPressed: () => setSheetState(regenerate),
+                      ),
+                    ],
+                  ),
+                ),
+                if (error != null) ...[
+                  const SizedBox(height: 8),
+                  Text(error!, style: const TextStyle(color: AppColors.danger, fontSize: 13)),
+                ],
+                const SizedBox(height: 20),
+                ElevatedButton(
+                  onPressed: preview.isEmpty ? null : () => Navigator.of(ctx).pop(preview),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accent,
+                    foregroundColor: AppColors.background,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  ),
+                  child: const Text('Use this password'),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    if (generated != null) setState(() => _passwordCtrl.text = generated);
   }
 
   Future<void> _loadProfileOptions() async {
@@ -198,17 +341,29 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                     onChanged: (_) => setState(() {}),
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: _passwordCtrl,
-                    obscureText: !_showPassword,
-                    decoration: InputDecoration(
-                      labelText: 'Password *',
-                      suffixIcon: IconButton(
-                        icon: Icon(_showPassword ? Icons.visibility_off : Icons.visibility),
-                        onPressed: () => setState(() => _showPassword = !_showPassword),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _passwordCtrl,
+                          obscureText: !_showPassword,
+                          decoration: InputDecoration(
+                            labelText: 'Password *',
+                            suffixIcon: IconButton(
+                              icon: Icon(_showPassword ? Icons.visibility_off : Icons.visibility),
+                              onPressed: () => setState(() => _showPassword = !_showPassword),
+                            ),
+                          ),
+                          onChanged: (_) => setState(() {}),
+                        ),
                       ),
-                    ),
-                    onChanged: (_) => setState(() {}),
+                      IconButton(
+                        icon: const Icon(Icons.casino_outlined),
+                        tooltip: 'Generate password',
+                        onPressed: _openPasswordGenerator,
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   TextField(

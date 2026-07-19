@@ -13,6 +13,7 @@ import { TotpCode } from "./TotpCode";
 import { parseTotpSecret } from "../utils/totp";
 import { PasskeyBadge } from "./PasskeyBadge";
 import { createPasskey } from "../utils/webauthn";
+import { generatePassword, type PasswordGeneratorOptions } from "../utils/passwordGenerator";
 
 const VAULT_KEY_MESSAGE = "TruthID Vault Key v1";
 
@@ -122,6 +123,16 @@ function EntryForm({
   const [form, setForm] = useState<FormState>(initial);
   const [showPw, setShowPw] = useState(false);
   const [totpError, setTotpError] = useState<string | null>(null);
+  const [genOpen, setGenOpen] = useState(false);
+  const [genOptions, setGenOptions] = useState<PasswordGeneratorOptions>({
+    length: 16,
+    uppercase: true,
+    lowercase: true,
+    numbers: true,
+    symbols: true,
+  });
+  const [genPreview, setGenPreview] = useState("");
+  const [genError, setGenError] = useState<string | null>(null);
 
   function set(field: keyof FormState, val: string | string[]) {
     setForm((f) => ({ ...f, [field]: val }));
@@ -145,6 +156,39 @@ function EntryForm({
     } catch (e) {
       setTotpError(String(e));
     }
+  }
+
+  function handleRegenerate(options: PasswordGeneratorOptions) {
+    try {
+      setGenPreview(generatePassword(options));
+      setGenError(null);
+    } catch (e) {
+      setGenPreview("");
+      setGenError(String(e instanceof Error ? e.message : e));
+    }
+  }
+
+  function handleOpenGenerator() {
+    setGenOpen(true);
+    handleRegenerate(genOptions);
+  }
+
+  function handleToggleCategory(field: keyof Omit<PasswordGeneratorOptions, "length">) {
+    const next = { ...genOptions, [field]: !genOptions[field] };
+    setGenOptions(next);
+    handleRegenerate(next);
+  }
+
+  function handleGenLengthChange(length: number) {
+    const next = { ...genOptions, length };
+    setGenOptions(next);
+    handleRegenerate(next);
+  }
+
+  function handleUseGeneratedPassword() {
+    if (!genPreview) return;
+    set("password", genPreview);
+    setGenOpen(false);
   }
 
   function handleGeneratePasskey() {
@@ -192,7 +236,68 @@ function EntryForm({
             <button type="button" onClick={() => setShowPw((v) => !v)} style={{ padding: "0.3em 0.6em", fontSize: "0.9em" }}>
               {showPw ? "🙈" : "👁"}
             </button>
+            <button
+              type="button"
+              onClick={() => (genOpen ? setGenOpen(false) : handleOpenGenerator())}
+              style={{ padding: "0.3em 0.6em", fontSize: "0.9em" }}
+              title="Gerar senha"
+            >
+              🎲
+            </button>
           </div>
+          {genOpen && (
+            <div className="card" style={{ marginTop: "0.5rem", padding: "0.75rem" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
+                <label style={{ fontSize: "0.82em" }}>
+                  Tamanho:{" "}
+                  <input
+                    type="number"
+                    min={1}
+                    value={genOptions.length}
+                    onChange={(e) => handleGenLengthChange(Math.max(1, Number(e.target.value)))}
+                    style={{ width: "4.5rem" }}
+                  />
+                </label>
+                {(
+                  [
+                    ["uppercase", "Maiúsculas"],
+                    ["lowercase", "Minúsculas"],
+                    ["numbers", "Números"],
+                    ["symbols", "Símbolos"],
+                  ] as const
+                ).map(([field, label]) => (
+                  <button
+                    key={field}
+                    type="button"
+                    onClick={() => handleToggleCategory(field)}
+                    style={{
+                      padding: "0.25em 0.75em",
+                      fontSize: "0.82em",
+                      borderColor: genOptions[field] ? "var(--color-accent)" : "var(--color-border)",
+                      color: genOptions[field] ? "var(--color-accent)" : "var(--color-text-muted)",
+                      background: genOptions[field] ? "rgba(77,208,225,0.1)" : "transparent",
+                    }}
+                  >
+                    {genOptions[field] ? "✓ " : ""}{label}
+                  </button>
+                ))}
+              </div>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.6rem" }}>
+                <code style={{ flex: 1, fontSize: "0.9em", wordBreak: "break-all" }}>
+                  {genPreview || "—"}
+                </code>
+                <button type="button" onClick={() => handleRegenerate(genOptions)} style={{ padding: "0.2em 0.6em", fontSize: "0.8em" }}>
+                  🔄 Gerar
+                </button>
+              </div>
+              {genError && <p className="error-text" style={{ margin: "0.4em 0 0", fontSize: "0.82em" }}>{genError}</p>}
+              <div className="actions-row" style={{ marginTop: "0.6rem" }}>
+                <button type="button" onClick={handleUseGeneratedPassword} disabled={!genPreview}>
+                  Usar esta senha
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
       <div className="field">
