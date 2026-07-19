@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-19 (Sessão 128 — item 6 do roadmap pós-Fase 14 fechado de escopo: permissões de device no Mobile, gerador de senha, força de senha, favoritos e bloqueio biométrico/PIN; só falta validar o bloqueio biométrico em hardware físico)
+> Última atualização: 2026-07-19 (Sessão 129 — item 6 do roadmap pós-Fase 14 fecha 100%: bloqueio biométrico/PIN validado em hardware real, Samsung Galaxy S25 FE. Próximo: item 7, monetização)
 >
 > ⚠️ **LEMBRETE**: ao final do projeto (todas as fases concluídas), fazer uma revisão completa deste arquivo — consolidar endereços, remover seções obsoletas, e garantir que a tabela de Pendências de Deploy está zerada. Sessão 68.
 
@@ -5291,6 +5291,25 @@ automatizados + build real). **Pendência de validação em hardware.**
 features novas pedidas ao longo da sessão. Única pendência: validar o bloqueio biométrico num
 device físico Android/iOS (prompt real de dedo/Face, comportamento ao errar o PIN, comportamento
 ao voltar do background). Ver [[project-mobile-backlog]] e [[project-roadmap-priority]].
+
+### Sessão 129 — 2026-07-19: validação em hardware real do bloqueio biométrico — item 6 fecha 100%
+
+Pendência da Sessão 128 resolvida. Celular físico (Samsung Galaxy S25 FE, `192.168.1.55` via ADB
+wireless) pareado e conectado, build debug instalado (`./dev.sh build` + `adb install`).
+
+**Validado de ponta a ponta no hardware**: `Settings → Security → App lock` ativado, sensor de
+digital físico do aparelho acionado de verdade (`BiometricPromptRoot` confirmado no `logcat` do
+sistema, sem nenhuma `FATAL EXCEPTION` do processo `com.truthid.truthid_mobile` durante o fluxo
+inteiro). App mandado pra background (`KEYCODE_HOME`) e reaberto — `AppLockGate` bloqueou a tela
+corretamente e pediu autenticação de novo antes de mostrar `RootScreen`; autenticação bem-sucedida
+liberou o app normalmente. Achado incidental, não é bug: `adb screencap` captura preto durante o
+prompt biométrico — comportamento esperado do Android (`FLAG_SECURE` em diálogos de biometria),
+não falha de renderização.
+
+**Item 6 do roadmap pós-Fase 14 fecha 100%** — sem nenhuma pendência de validação restante (exceto
+`NSFaceIDUsageDescription`/iOS, que segue sem device pra testar, mesma situação já registrada pro
+Local Network Privacy do item 1 — não bloqueia o resto da fila). Próximo da ordem travada na Sessão
+122: item 7, frente de monetização.
 
 ---
 
