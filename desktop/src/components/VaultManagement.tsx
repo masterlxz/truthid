@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
+import { readFile } from "@tauri-apps/plugin-fs";
 import { useAccount, useReadContract, useReadContracts, useSignMessage } from "wagmi";
 import { hexToSignature } from "viem";
 import { useIdentity } from "../contexts/IdentityContext";
@@ -10,7 +12,9 @@ import { VaultSettings } from "./VaultSettings";
 import { VaultBackup } from "./VaultBackup";
 import { useVaultPublish } from "../hooks/useVaultPublish";
 import { TotpCode } from "./TotpCode";
+import { TotpQrScanner } from "./TotpQrScanner";
 import { parseTotpSecret } from "../utils/totp";
+import { decodeQrFromImageBytes } from "../utils/qrDecode";
 import { PasskeyBadge } from "./PasskeyBadge";
 import { createPasskey } from "../utils/webauthn";
 import { generatePassword, type PasswordGeneratorOptions } from "../utils/passwordGenerator";
@@ -169,6 +173,7 @@ function EntryForm({
   });
   const [genPreview, setGenPreview] = useState("");
   const [genError, setGenError] = useState<string | null>(null);
+  const [qrScannerOpen, setQrScannerOpen] = useState(false);
 
   function set(field: keyof FormState, val: string | string[]) {
     setForm((f) => ({ ...f, [field]: val }));
@@ -183,6 +188,29 @@ function EntryForm({
     } catch (e) {
       setTotpError(String(e));
     }
+  }
+
+  // Aplica um QR escaneado (webcam ou upload) do mesmo jeito que colar o
+  // texto manualmente — handleTotpChange já aceita tanto o secret base32 cru
+  // quanto a URI otpauth://... completa (parseTotpSecret normaliza no save).
+  function handleQrDetected(raw: string) {
+    handleTotpChange(raw);
+    setQrScannerOpen(false);
+  }
+
+  async function handleUploadQrImage() {
+    const path = await open({
+      multiple: false,
+      filters: [{ name: "Image", extensions: ["png", "jpg", "jpeg", "gif", "bmp", "webp"] }],
+    });
+    if (!path || Array.isArray(path)) return;
+    const bytes = await readFile(path);
+    const raw = await decodeQrFromImageBytes(bytes);
+    if (!raw) {
+      setTotpError("No QR code found in that image");
+      return;
+    }
+    handleTotpChange(raw);
   }
 
   function handleSave() {
@@ -347,13 +375,35 @@ function EntryForm({
       </div>
       <div className="field">
         <label>Segredo 2FA (opcional)</label>
-        <input
-          value={form.totp_secret}
-          onChange={(e) => handleTotpChange(e.target.value)}
-          placeholder="Segredo base32 ou URI otpauth://..."
-        />
+        <div style={{ display: "flex", gap: "0.4rem" }}>
+          <input
+            style={{ flex: 1 }}
+            value={form.totp_secret}
+            onChange={(e) => handleTotpChange(e.target.value)}
+            placeholder="Segredo base32 ou URI otpauth://..."
+          />
+          <button
+            type="button"
+            onClick={() => setQrScannerOpen(true)}
+            title="Escanear QR pela webcam"
+            style={{ padding: "0.2em 0.6em", fontSize: "0.9em" }}
+          >
+            📷
+          </button>
+          <button
+            type="button"
+            onClick={handleUploadQrImage}
+            title="Carregar QR de uma imagem"
+            style={{ padding: "0.2em 0.6em", fontSize: "0.9em" }}
+          >
+            🖼
+          </button>
+        </div>
         {totpError && <p className="error-text" style={{ margin: "0.25em 0 0", fontSize: "0.82em" }}>{totpError}</p>}
       </div>
+      {qrScannerOpen && (
+        <TotpQrScanner onDetected={handleQrDetected} onClose={() => setQrScannerOpen(false)} />
+      )}
       <div className="field">
         <label>Passkey (opcional)</label>
         {form.passkey ? (

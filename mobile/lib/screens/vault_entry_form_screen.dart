@@ -1,7 +1,9 @@
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../services/totp_service.dart';
 import '../services/vault_repository.dart';
@@ -9,6 +11,7 @@ import '../services/webauthn_service.dart' as webauthn;
 import '../theme.dart';
 import '../utils/password_generator.dart';
 import '../utils/password_strength.dart';
+import 'scan_screen.dart';
 
 // Tela compartilhada de criar/editar uma entrada do vault — mirror do
 // `EntryForm` do Desktop (`VaultManagement.tsx`). `entry` null = criar.
@@ -310,6 +313,71 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
     });
   }
 
+  // Reaproveita a mesma câmera do pareamento (mobile_scanner), agora
+  // generalizada em ScanScreen<T>. parseTotpSecret já sabe extrair o secret
+  // de um otpauth://... (formato que a maioria dos sites codifica no QR de
+  // configuração do 2FA) — QR inválido faz a tela de scan mostrar o aviso e
+  // continuar escaneando, sem fechar.
+  Future<void> _scanTotpQr() async {
+    final secret = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (_) => ScanScreen<String>(
+          title: 'Scan 2FA QR code',
+          instructions:
+              'Point the camera at the QR code shown when setting up 2FA',
+          parse: (raw) {
+            try {
+              return parseTotpSecret(raw);
+            } catch (_) {
+              return null;
+            }
+          },
+        ),
+      ),
+    );
+    if (secret == null || !mounted) return;
+    _totpSecretCtrl.text = secret;
+    _onTotpChanged(secret);
+  }
+
+  // Alternativa ao scan ao vivo: escolhe uma imagem já salva (print de tela,
+  // foto do QR impresso) e decodifica com o mesmo motor nativo do
+  // mobile_scanner (`analyzeImage`, ML Kit/Vision — não depende da câmera
+  // estar aberta). Útil quando o QR está numa outra tela/documento e não dá
+  // pra apontar a câmera ao vivo pra ele.
+  Future<void> _pickTotpQrImage() async {
+    final result = await FilePicker.platform.pickFiles(type: FileType.image);
+    final path = result?.files.single.path;
+    if (path == null || !mounted) return;
+
+    final controller = MobileScannerController();
+    BarcodeCapture? capture;
+    try {
+      capture = await controller.analyzeImage(path);
+    } finally {
+      await controller.dispose();
+    }
+    if (!mounted) return;
+
+    final raw = capture?.barcodes.firstOrNull?.rawValue;
+    if (raw == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('No QR code found in that image')),
+      );
+      return;
+    }
+
+    try {
+      final secret = parseTotpSecret(raw);
+      _totpSecretCtrl.text = secret;
+      _onTotpChanged(secret);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('QR found but not a valid 2FA secret: $e')),
+      );
+    }
+  }
+
   Future<void> _save() async {
     String? totpSecret;
     if (_totpSecretCtrl.text.trim().isNotEmpty) {
@@ -418,6 +486,21 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                       labelText: '2FA secret (optional)',
                       hintText: 'base32 secret or otpauth://... URI',
                       errorText: _totpError,
+                      suffixIcon: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.qr_code_scanner),
+                            tooltip: 'Scan QR code',
+                            onPressed: _scanTotpQr,
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.photo_library_outlined),
+                            tooltip: 'Upload QR from photo',
+                            onPressed: _pickTotpQrImage,
+                          ),
+                        ],
+                      ),
                     ),
                     onChanged: _onTotpChanged,
                   ),

@@ -278,7 +278,17 @@ class _RootScreenState extends State<RootScreen> {
 
   Future<void> _openScanner() async {
     final payload = await Navigator.of(context).push<Map<String, dynamic>>(
-      MaterialPageRoute(builder: (_) => const ScanScreen()),
+      MaterialPageRoute(
+        builder: (_) => ScanScreen<Map<String, dynamic>>(
+          parse: (raw) {
+            try {
+              return jsonDecode(raw) as Map<String, dynamic>;
+            } catch (_) {
+              return null;
+            }
+          },
+        ),
+      ),
     );
     if (payload == null || !mounted) return;
     DeepLinkRouter.handlePayload(context, payload);

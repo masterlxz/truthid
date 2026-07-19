@@ -740,6 +740,29 @@ pub fn run() {
             // pra rodar em tauri::async_runtime::spawn — um State<'_, T> tomado
             // aqui ficaria preso ao lifetime do `app` desta closure de setup.
             use tauri::{Emitter, Manager};
+
+            // Linux (WebKitGTK) nega todo pedido de permissão do navegador por
+            // padrão — sem isso, getUserMedia (scan de QR via webcam) sempre
+            // falha com NotAllowedError, mesmo com o usuário nunca tendo visto
+            // um prompt. Escopado só pra UserMediaPermissionRequest (câmera/
+            // microfone) — qualquer outro tipo (geolocalização, notificação,
+            // etc.) devolve `false` e cai no comportamento padrão (negar),
+            // sem abrir a porta pra tudo. Ver PROJECT_STATE.md, "QR no TOTP".
+            #[cfg(target_os = "linux")]
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.with_webview(|webview| {
+                    use webkit2gtk::{glib::ObjectExt, PermissionRequestExt, UserMediaPermissionRequest, WebViewExt};
+                    webview.inner().connect_permission_request(|_, request| {
+                        if request.is::<UserMediaPermissionRequest>() {
+                            request.allow();
+                            true
+                        } else {
+                            false
+                        }
+                    });
+                });
+            }
+
             let handle = app.handle().clone();
             let notify_handle = handle.clone();
             let notify_handle_message = handle.clone();

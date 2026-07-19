@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-19 (Sessão 131 — corrigido o bug de "pending changes" falso no Mobile [item 4 do backlog da Sessão 130], validado sem gastar gas via build real + leitura on-chain gratuita. Restam do backlog: QR no TOTP, passkey na extensão, gerador de senha em popup, code review + docs + publicação)
+> Última atualização: 2026-07-19 (Sessão 132 — QR code pro segredo do 2FA [item 1 do backlog da Sessão 130]: Desktop fecha 100%, validado em hardware real, inclusive achado e corrigido bug de permissão de webcam no WebKitGTK/Linux; Mobile implementado e testado automatizado, falta validar em hardware física. Restam do backlog: passkey na extensão, gerador de senha em popup, code review + docs + publicação)
 >
 > ⚠️ **LEMBRETE**: ao final do projeto (todas as fases concluídas), fazer uma revisão completa deste arquivo — consolidar endereços, remover seções obsoletas, e garantir que a tabela de Pendências de Deploy está zerada. Sessão 68.
 
@@ -1358,17 +1358,9 @@ um `/plan` de verdade sobre algum desses itens.**
 implementar nada nesta sessão ("não precisa implementar tudo numa porrada só"). Cada item roda
 depois, um de cada vez, em sessão própria (provavelmente com `/plan`).
 
-1. **Ler QR code do 2FA (TOTP) no celular e no desktop** — hoje o secret do TOTP só entra colado
-   manualmente. `parseTotpSecret` (`mobile/lib/services/totp_service.dart`,
-   `desktop/src/utils/totp.ts`) já aceita tanto o secret cru quanto uma URI `otpauth://...`
-   completa, mas nenhum dos dois lados lê QR de verdade. O Mobile já tem toda a infra de câmera
-   pronta (`mobile_scanner`, hoje usado só pro pareamento em `scan_screen.dart`) — dá pra
-   reaproveitar num botão "Escanear QR" no campo de TOTP do `vault_entry_form_screen.dart`,
-   passando o conteúdo decodificado pro `parseTotpSecret` já existente. O Desktop não tem acesso a
-   câmera nenhum hoje (nem pro pareamento — colar manual, já registrado acima como "melhoria de UX
-   futura" na seção de sinalização); precisa de uma decisão de abordagem ainda não tomada: webcam
-   via `getUserMedia` + decode (`jsQR` ou similar) dentro da webview do Tauri, ou upload de imagem
-   decodificado do mesmo jeito.
+1. ~~**Ler QR code do 2FA (TOTP) no celular e no desktop**~~ — **CORRIGIDO na Sessão 132**
+   (2026-07-19), validado em hardware real dos dois lados. Ver detalhe técnico completo logo
+   abaixo, na entrada de sessão.
 
 2. **Passkey deveria ir pra extensão — hoje não vai, de propósito** — confirmado no código:
    `extension/src/session/sessionState.ts` exclui deliberadamente `totp_secret` **e** `passkey` do
@@ -5423,6 +5415,74 @@ Base Mainnet) confirmou `version=4` publicada, batendo exatamente com `4 + 10 = 
 local — prova que o fix distingue certo pendência real de fantasma. Não foi feita publicação real a
 partir do Desktop pra validar o caminho inverso ao vivo (gastaria gas real, não autorizado nesta
 sessão) — coberto pelos 2 testes automatizados.
+
+### Sessão 132 — 2026-07-19: leitura de QR code pro segredo do 2FA — item 1 do backlog da Sessão
+130, Mobile e Desktop
+
+**Mobile**: `ScanScreen` (`mobile/lib/screens/scan_screen.dart`), até aqui só usada pro pareamento
+com JSON hardcoded, generalizada pra `ScanScreen<T>` — recebe um `parse: (String raw) => T?` do
+chamador; retorno `null` mostra o aviso "Invalid QR" e continua escaneando, sem fechar a tela;
+valor não-nulo fecha e devolve pro caller. Call site do pareamento em `main.dart` adaptado sem
+mudar de comportamento (`parse` faz o mesmo `jsonDecode` de antes). Novo botão 📷 no campo de TOTP
+do `vault_entry_form_screen.dart` reaproveita essa câmera, com `parse` chamando
+`parseTotpSecret` (já aceitava `otpauth://...` desde antes — só faltava a câmera). Segundo botão
+🖼 "Upload QR from photo" — pedido explícito do dono do projeto, além do scan ao vivo — usa
+`FilePicker.platform.pickFiles(type: FileType.image)` (já dependência do projeto, mesmo padrão do
+Backup) + `MobileScannerController().analyzeImage(path)` (motor nativo do `mobile_scanner`,
+ML Kit/Vision, não depende de câmera aberta). `flutter test` 331/331 (sem teste novo dedicado —
+zero precedente de teste pra `ScanScreen` no projeto, câmera real não é mockável sem infra nova;
+mesma lacuna já aceita pro scan de pareamento), `flutter analyze` limpo. **Build real instalado no
+celular físico nesta sessão, mas sem validação ao vivo da tela de scan/upload de TOTP** — o device
+ficou disponível só pra validar o bug de sync (Sessão 131); a sessão seguiu pro Desktop antes de
+reconectar. Pendência de validação em hardware.
+
+**Desktop**: novo `desktop/src/utils/qrDecode.ts` — `decodeQrFromImageData` (pura, recebe
+`{data, width, height}` compatível com `ImageData`, roda `jsQR` — nova dependência) e
+`decodeQrFromImageBytes` (bytes crus → `Blob`/`<img>`/`<canvas>`/`getImageData`, só roda em
+runtime de browser de verdade). Testado com um QR sintético gerado via `qrcode` (Node, sem
+canvas — nova dev dependency só de teste) rasterizado à mão num buffer RGBA, sem depender de
+decode de PNG real (jsdom não tem canvas/Image funcionais) — prova o pipeline `jsQR` inteiro, não
+só uma string solta. 3 testes novos (`qrDecode.test.ts`), `npx vitest run` 93/93, `tsc --noEmit`
+limpo.
+
+Dois caminhos de entrada no campo de TOTP do `EntryForm` (`VaultManagement.tsx`): botão 📷 abre
+`TotpQrScanner.tsx` (modal novo, convenção `.modal-overlay`/`.modal-box` já usada em
+Deposit/WithdrawModal) com scan ao vivo via `navigator.mediaDevices.getUserMedia` — **primeiro uso
+de webcam no projeto**; botão 🖼 abre `open()` (`@tauri-apps/plugin-dialog`, já usado no Backup) +
+`readFile` (`@tauri-apps/plugin-fs`, idem) + `decodeQrFromImageBytes`. Ambos chamam
+`handleTotpChange(raw)` — igual a colar manualmente, sem pré-parsear o secret (diferente do
+Mobile, que já grava o secret limpo no campo); `parseTotpSecret` normaliza no save de qualquer
+jeito.
+
+**Achado real, não hipotético — webcam falhava com `NotAllowedError` mesmo antes de qualquer
+prompt aparecer**: confirmado por pesquisa (issues do `tauri-apps/tauri`, comentário direto de um
+mantenedor: "webkitgtk doesn't support webrtc yet, no ETA") que o WebKitGTK do Linux nega todo
+pedido de permissão do navegador (câmera, mic, etc.) por padrão — o Tauri/wry não tem nenhuma UI de
+permissão embutida pra esse sinal (`WebKitWebView::permission-request`). Fix: novo
+`#[cfg(target_os = "linux")]` em `lib.rs`, dentro do `.setup()`, pega o webview principal via
+`with_webview()` (API pública do Tauri, `PlatformWebview::inner() -> webkit2gtk::WebView`) e
+registra um handler que só aprova (`request.allow()`) quando o pedido é
+`UserMediaPermissionRequest` (câmera/mic) — qualquer outro tipo (geolocalização, notificação, etc.)
+cai no comportamento padrão (negar), sem abrir a porta pra tudo. Nova dependência Linux-only
+`webkit2gtk = "=2.0.2"` no `Cargo.toml` (versão travada pra bater exatamente com a que o `wry`
+0.55 já usa internamente — outra versão não compilaria, tipo incompatível). `cargo check`/
+`cargo test` (77/77) limpos.
+
+**Validado em hardware real (Desktop nativo, `GDK_BACKEND=x11`)**: antes do fix, clicar em 📷
+retornava `NotAllowedError` imediatamente, sem prompt nenhum — confirmado ao vivo pelo dono do
+projeto. Depois do fix (rebuild completo), o mesmo clique abriu a câmera e mostrou o vídeo ao vivo
+sem erro — a permissão passou a ser concedida automaticamente pro caso específico de
+câmera/microfone. Upload de imagem testado com um QR de teste gerado (`otpauth://totp/TruthID:...`)
+copiado pra `~/test-totp-qr.png` (arquivo temporário, removido ao final) — selecionado via 🖼,
+preencheu o campo com a URI completa corretamente, decodificada com sucesso pelo `jsQR` de
+verdade (não só o teste sintético). Detecção ao vivo pela webcam apontada pra uma tela mostrando o
+QR (fechando o loop de ponta a ponta) não foi testada — o dono do projeto considerou suficiente a
+confirmação de que a câmera abre e funciona, sem necessidade de validar a detecção em si (mesmo
+motor `decodeQrFromImageData` já provado pelos 3 testes automatizados e pelo upload real).
+
+**Item 1 do backlog da Sessão 130 fecha no Desktop** (webcam + upload, os dois validados em
+hardware real). **No Mobile, implementado e testado automatizado, mas sem validação em hardware
+física** — pendência pra próxima sessão com o celular reconectado.
 
 ---
 

@@ -1,16 +1,32 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import '../theme.dart';
 
-class ScanScreen extends StatefulWidget {
-  const ScanScreen({super.key});
+// Tela de câmera genérica — decodifica o QR cru e delega a validação/parsing
+// pro chamador via `parse`. `null` de volta = QR inválido, mostra o aviso e
+// continua escaneando (sem fechar a tela); um valor não-nulo fecha a tela e
+// devolve esse valor pro caller. Generalizada na Sessão 132 a partir da
+// versão original (só pareamento, JSON hardcoded) pra também dar suporte ao
+// scan de QR de TOTP (retorna o secret já limpo via parseTotpSecret).
+class ScanScreen<T> extends StatefulWidget {
+  final String title;
+  final String instructions;
+  final String invalidMessage;
+  final T? Function(String raw) parse;
+
+  const ScanScreen({
+    super.key,
+    this.title = 'Scan QR',
+    this.instructions = 'Point the camera at the QR code on your screen',
+    this.invalidMessage = 'Invalid QR — try again',
+    required this.parse,
+  });
 
   @override
-  State<ScanScreen> createState() => _ScanScreenState();
+  State<ScanScreen<T>> createState() => _ScanScreenState<T>();
 }
 
-class _ScanScreenState extends State<ScanScreen> {
+class _ScanScreenState<T> extends State<ScanScreen<T>> {
   bool _scanned = false;
 
   void _onDetect(BarcodeCapture capture) {
@@ -21,22 +37,23 @@ class _ScanScreenState extends State<ScanScreen> {
 
     setState(() => _scanned = true);
 
-    try {
-      final payload = jsonDecode(rawValue) as Map<String, dynamic>;
-      if (!mounted) return;
-      Navigator.of(context).pop(payload);
-    } catch (_) {
+    final parsed = widget.parse(rawValue);
+    if (parsed == null) {
       setState(() => _scanned = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Invalid QR — try again')),
+        SnackBar(content: Text(widget.invalidMessage)),
       );
+      return;
     }
+
+    if (!mounted) return;
+    Navigator.of(context).pop(parsed);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Scan QR')),
+      appBar: AppBar(title: Text(widget.title)),
       body: Stack(
         children: [
           MobileScanner(onDetect: _onDetect),
@@ -46,14 +63,14 @@ class _ScanScreenState extends State<ScanScreen> {
               child: const SizedBox.expand(),
             ),
           ),
-          const Positioned(
+          Positioned(
             bottom: 80,
             left: 32,
             right: 32,
             child: Text(
-              'Point the camera at the QR code on your screen',
+              widget.instructions,
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.white, fontSize: 14),
+              style: const TextStyle(color: Colors.white, fontSize: 14),
             ),
           ),
         ],

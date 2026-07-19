@@ -39,3 +39,13 @@ reqwest = { version = "0.12", features = ["json", "multipart"] }
 axum = "0.8"
 tokio = { version = "1", features = ["macros", "sync", "time", "net", "rt"] }
 
+# Só pra registrar o handler do sinal `permission-request` do WebKitGTK e
+# aprovar getUserMedia (scan de QR via webcam) — sem isso, todo pedido de
+# câmera/microfone é negado por padrão pelo wry/Tauri no Linux (nenhuma UI de
+# permissão embutida ainda). Versão travada em "=2.0.2" pra bater exatamente
+# com a que o wry 0.55 já usa internamente (mesmo tipo `webkit2gtk::WebView`
+# retornado por `PlatformWebview::inner()` — uma versão diferente não
+# compilaria). Ver PROJECT_STATE.md, item "QR no TOTP" do backlog.
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = "=2.0.2"
+
