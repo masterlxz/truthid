@@ -488,6 +488,18 @@ fn vault_set_device_permission(pub_key: String, can_write: bool) -> Result<(), S
     vault::save(&v)
 }
 
+/// Marca/desmarca uma entrada como favorita. Comando dedicado (não
+/// vault_upsert_entry) pra não renovar updated_at só por causa do toggle —
+/// mesmo motivo de vault_set_device_permission.
+#[tauri::command]
+fn vault_set_favorite(id: String, favorite: bool) -> Result<(), String> {
+    let mut v = vault::load()?;
+    if !v.set_favorite(&id, favorite) {
+        return Err(format!("vault entry not found: {id}"));
+    }
+    vault::save(&v)
+}
+
 /// Decifra um blob gerado por vault_encrypt.
 /// Entrada: blob em Base64. Saída: plaintext em Base64.
 #[tauri::command]
@@ -795,6 +807,7 @@ pub fn run() {
             vault_set_providers,
             vault_get_device_permissions,
             vault_set_device_permission,
+            vault_set_favorite,
             local_signer_start,
             local_signer_stop,
             local_signer_status,

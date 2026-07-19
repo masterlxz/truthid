@@ -76,6 +76,11 @@ class VaultEntry {
   /// Credencial WebAuthn (passkey) da entrada, se o usuário gerou uma. Nunca
   /// deve ser incluída no payload enviado à extensão — usar [toJsonForExtension].
   final Passkey? passkey;
+  /// Favorito — sincroniza entre devices como qualquer outro campo do vault
+  /// (não é preferência local). Trocado via [VaultRepository.setFavorite],
+  /// não via [VaultRepository.updateEntry], pra não renovar `updatedAt` só
+  /// por causa do toggle.
+  final bool favorite;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -89,6 +94,7 @@ class VaultEntry {
     this.profiles = const [],
     this.totpSecret,
     this.passkey,
+    this.favorite = false,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -114,6 +120,7 @@ class VaultEntry {
       passkey: json['passkey'] != null
           ? Passkey.fromJson(json['passkey'] as Map<String, dynamic>)
           : null,
+      favorite: json['favorite'] as bool? ?? false,
       createdAt: DateTime.fromMillisecondsSinceEpoch(
         (json['created_at'] as int) * 1000,
         isUtc: true,
@@ -135,6 +142,7 @@ class VaultEntry {
         'profiles': profiles,
         'totp_secret': totpSecret,
         'passkey': passkey?.toJson(),
+        'favorite': favorite,
         'created_at': createdAt.millisecondsSinceEpoch ~/ 1000,
         'updated_at': updatedAt.millisecondsSinceEpoch ~/ 1000,
       };
@@ -163,6 +171,7 @@ class VaultEntry {
     List<String>? profiles,
     Object? totpSecret = _unset,
     Object? passkey = _unset,
+    bool? favorite,
   }) =>
       VaultEntry(
         id: id,
@@ -175,6 +184,7 @@ class VaultEntry {
         totpSecret:
             identical(totpSecret, _unset) ? this.totpSecret : totpSecret as String?,
         passkey: identical(passkey, _unset) ? this.passkey : passkey as Passkey?,
+        favorite: favorite ?? this.favorite,
         createdAt: createdAt,
         updatedAt: DateTime.now().toUtc(),
       );
@@ -321,6 +331,41 @@ class VaultRepository {
   Future<List<VaultDevicePermission>> listDevicePermissions() async {
     final data = await _load();
     return data.devicePermissions;
+  }
+
+  // Marca/desmarca uma entrada como favorita. Mirror de Vault::set_favorite
+  // (desktop/src-tauri/src/vault.rs) — não usa copyWith de propósito
+  // (copyWith sempre renova updatedAt); reconstrução direta preserva o
+  // updatedAt original, mesmo motivo do lado Rust. Lança se o id não existir.
+  Future<void> setFavorite(String id, bool favorite) async {
+    final data = await _load();
+    final index = data.entries.indexWhere((e) => e.id == id);
+    if (index < 0) {
+      throw Exception('Vault entry not found: $id');
+    }
+    final target = data.entries[index];
+    final updatedEntry = VaultEntry(
+      id: target.id,
+      site: target.site,
+      url: target.url,
+      username: target.username,
+      password: target.password,
+      notes: target.notes,
+      profiles: target.profiles,
+      totpSecret: target.totpSecret,
+      passkey: target.passkey,
+      favorite: favorite,
+      createdAt: target.createdAt,
+      updatedAt: target.updatedAt,
+    );
+    final entries = [...data.entries];
+    entries[index] = updatedEntry;
+    await _save(_VaultData(
+      version: data.version + 1,
+      entries: entries,
+      profileNames: data.profileNames,
+      devicePermissions: data.devicePermissions,
+    ));
   }
 
   // Concede/revoga a permissão de escrita de um device. Mirror de

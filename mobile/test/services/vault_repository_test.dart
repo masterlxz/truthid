@@ -365,6 +365,93 @@ void main() {
     });
   });
 
+  group('VaultRepository favorite', () {
+    test('nova entrada nasce com favorite false por padrão', () async {
+      final entry = await repo.addEntry(
+        site: 'github.com',
+        username: 'fab',
+        password: 'x',
+      );
+      expect(entry.favorite, isFalse);
+    });
+
+    test('setFavorite marca uma entrada existente', () async {
+      final entry = await repo.addEntry(
+        site: 'github.com',
+        username: 'fab',
+        password: 'x',
+      );
+
+      await repo.setFavorite(entry.id, true);
+
+      final updated =
+          (await repo.listEntries()).firstWhere((e) => e.id == entry.id);
+      expect(updated.favorite, isTrue);
+    });
+
+    test('setFavorite desmarca uma entrada já favoritada', () async {
+      final entry = await repo.addEntry(
+        site: 'github.com',
+        username: 'fab',
+        password: 'x',
+      );
+      await repo.setFavorite(entry.id, true);
+      await repo.setFavorite(entry.id, false);
+
+      final updated =
+          (await repo.listEntries()).firstWhere((e) => e.id == entry.id);
+      expect(updated.favorite, isFalse);
+    });
+
+    test('setFavorite preserva os outros campos, incluindo updatedAt',
+        () async {
+      await repo.addEntry(
+        site: 'github.com',
+        username: 'fab',
+        password: 'x',
+        notes: 'nota original',
+      );
+      // Relê depois do round-trip de serialização (que trunca pra precisão
+      // de segundo) — comparar contra o valor em memória do addEntry
+      // acusaria falso positivo por causa da própria truncação, não por
+      // causa de setFavorite.
+      final beforeToggle = (await repo.listEntries()).first;
+      final originalUpdatedAt = beforeToggle.updatedAt;
+
+      await repo.setFavorite(beforeToggle.id, true);
+
+      final updated = (await repo.listEntries())
+          .firstWhere((e) => e.id == beforeToggle.id);
+      expect(updated.notes, 'nota original');
+      expect(updated.updatedAt, originalUpdatedAt,
+          reason: 'updatedAt não deve mudar só por favoritar');
+    });
+
+    test('setFavorite só afeta a entrada alvo', () async {
+      final a = await repo.addEntry(site: 'github.com', username: 'a', password: 'x');
+      final b = await repo.addEntry(site: 'gitlab.com', username: 'b', password: 'y');
+
+      await repo.setFavorite(a.id, true);
+
+      final entries = await repo.listEntries();
+      expect(entries.firstWhere((e) => e.id == a.id).favorite, isTrue);
+      expect(entries.firstWhere((e) => e.id == b.id).favorite, isFalse);
+    });
+
+    test('setFavorite incrementa a versão do vault', () async {
+      final entry = await repo.addEntry(site: 'github.com', username: 'fab', password: 'x');
+      final before = await repo.currentVersion();
+
+      await repo.setFavorite(entry.id, true);
+
+      expect(await repo.currentVersion(), before + 1);
+    });
+
+    test('setFavorite de id inexistente lança erro', () async {
+      expect(() => repo.setFavorite('does-not-exist', true), throwsException);
+    });
+  });
+
   group('VaultRepository device permissions', () {
     test('listDevicePermissions em vault vazio retorna lista vazia', () async {
       expect(await repo.listDevicePermissions(), isEmpty);

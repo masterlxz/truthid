@@ -572,6 +572,16 @@ export function VaultManagement() {
     }
   }
 
+  // ── Favoritos ────────────────────────────────────────────────────────────
+  async function handleToggleFavorite(id: string, favorite: boolean) {
+    try {
+      await invoke<void>("vault_set_favorite", { id, favorite });
+      setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, favorite } : e)));
+    } catch (e) {
+      setMutateError(String(e));
+    }
+  }
+
   // ── Permissões ───────────────────────────────────────────────────────────
   async function handleTogglePerm(pubKey: string, canWrite: boolean) {
     setPermError(null);
@@ -624,14 +634,17 @@ export function VaultManagement() {
     }
   }
 
-  // ── Filtragem ─────────────────────────────────────────────────────────────
+  // ── Ordenação (favoritos primeiro) + filtragem ──────────────────────────────
+  // Partição em vez de sort com comparador — preserva a ordem relativa dentro
+  // de cada grupo sem depender de garantia de estabilidade de sort.
+  const sortedEntries = [...entries.filter((e) => e.favorite), ...entries.filter((e) => !e.favorite)];
   const filtered = filter.trim()
-    ? entries.filter((e) =>
+    ? sortedEntries.filter((e) =>
         e.site.toLowerCase().includes(filter.toLowerCase()) ||
         e.username.toLowerCase().includes(filter.toLowerCase()) ||
         e.profiles.some((p) => p.toLowerCase().includes(filter.toLowerCase()))
       )
-    : entries;
+    : sortedEntries;
 
   // ── View: settings ────────────────────────────────────────────────────────
   if (view === "settings") {
@@ -824,6 +837,21 @@ export function VaultManagement() {
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", flexWrap: "wrap" }}>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleFavorite(entry.id, !entry.favorite)}
+                        title={entry.favorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+                        style={{
+                          padding: "0 0.2em",
+                          fontSize: "1em",
+                          lineHeight: 1,
+                          border: "none",
+                          background: "transparent",
+                          color: entry.favorite ? "var(--color-accent)" : "var(--color-text-muted)",
+                        }}
+                      >
+                        {entry.favorite ? "★" : "☆"}
+                      </button>
                       <strong>{entry.site}</strong>
                       {entry.profiles.map((p) => (
                         <span key={p} className="status-badge" style={{ fontSize: "0.75em", padding: "0.15em 0.5em" }}>{p}</span>

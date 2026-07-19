@@ -40,6 +40,11 @@ pub(crate) struct VaultEntry {
     /// nunca deve ser incluído no payload enviado à extensão de navegador.
     #[serde(default)]
     pub passkey: Option<Passkey>,
+    /// Favorito — sincroniza entre devices como qualquer outro campo do
+    /// Vault (não é preferência local). Trocado via `Vault::set_favorite`,
+    /// não via `upsert`, pra não renovar `updated_at` só por causa do toggle.
+    #[serde(default)]
+    pub favorite: bool,
     pub created_at: u64,
     pub updated_at: u64,
 }
@@ -155,6 +160,18 @@ impl Vault {
         for entry in &mut self.entries {
             entry.profiles.retain(|p| p != name);
         }
+        self.version += 1;
+        true
+    }
+
+    // Marca/desmarca uma entrada como favorita. No-op (sem bump de version)
+    // se o id não existir. Mesmo padrão de set_device_permission: mexe só no
+    // campo alvo, não passa por upsert (preserva updated_at).
+    pub(crate) fn set_favorite(&mut self, id: &str, favorite: bool) -> bool {
+        let Some(entry) = self.entries.iter_mut().find(|e| e.id == id) else {
+            return false;
+        };
+        entry.favorite = favorite;
         self.version += 1;
         true
     }
@@ -419,6 +436,7 @@ mod tests {
             profile: String::new(),
             totp_secret: None,
             passkey: None,
+            favorite: false,
             created_at: 0,
             updated_at: 0,
         }
@@ -591,6 +609,67 @@ mod tests {
         }
 
         assert_eq!(reparsed.profile_names, vec!["Trabalho".to_string(), "Casa".to_string()]);
+    }
+
+    // --- testes de favoritos ---
+
+    #[test]
+    fn set_favorite_marks_existing_entry() {
+        let mut vault = Vault::default();
+        vault.entries.push(make_entry("id1", "github.com"));
+
+        let found = vault.set_favorite("id1", true);
+
+        assert!(found);
+        assert!(vault.entries[0].favorite);
+        assert_eq!(vault.version, 1);
+    }
+
+    #[test]
+    fn set_favorite_unmarks_existing_entry() {
+        let mut vault = Vault::default();
+        vault.entries.push(make_entry("id1", "github.com"));
+        vault.set_favorite("id1", true);
+        vault.set_favorite("id1", false);
+
+        assert!(!vault.entries[0].favorite);
+        assert_eq!(vault.version, 2);
+    }
+
+    #[test]
+    fn set_favorite_preserves_other_fields_including_updated_at() {
+        let mut vault = Vault::default();
+        let mut entry = make_entry("id1", "github.com");
+        entry.updated_at = 12345;
+        vault.entries.push(entry);
+
+        vault.set_favorite("id1", true);
+
+        assert_eq!(vault.entries[0].updated_at, 12345, "updated_at não deve mudar só por favoritar");
+        assert_eq!(vault.entries[0].site, "github.com");
+    }
+
+    #[test]
+    fn set_favorite_only_affects_the_targeted_entry() {
+        let mut vault = Vault::default();
+        vault.entries.push(make_entry("id1", "github.com"));
+        vault.entries.push(make_entry("id2", "gitlab.com"));
+
+        vault.set_favorite("id1", true);
+
+        assert!(vault.entries[0].favorite);
+        assert!(!vault.entries[1].favorite);
+    }
+
+    #[test]
+    fn set_favorite_unknown_id_is_noop() {
+        let mut vault = Vault::default();
+        vault.entries.push(make_entry("id1", "github.com"));
+
+        let found = vault.set_favorite("does-not-exist", true);
+
+        assert!(!found);
+        assert_eq!(vault.version, 0, "id inexistente não deve bumpar version");
     }
 
     // --- testes de permissão de escrita por device (Sessão 97) ---

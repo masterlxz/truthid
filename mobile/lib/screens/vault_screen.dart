@@ -223,15 +223,44 @@ class _VaultScreenState extends State<VaultScreen> {
     if (saved == true) _load();
   }
 
+  // Favoritos primeiro — partição em vez de sort com comparador, já que
+  // List.sort do Dart não garante estabilidade (diferente do JS): separar
+  // em duas listas e concatenar preserva a ordem relativa dentro de cada
+  // grupo sem depender disso.
+  List<VaultEntry> get _sortedEntries => [
+        ..._entries.where((e) => e.favorite),
+        ..._entries.where((e) => !e.favorite),
+      ];
+
   List<VaultEntry> get _filteredEntries {
-    if (_query.isEmpty) return _entries;
+    if (_query.isEmpty) return _sortedEntries;
     final q = _query.toLowerCase();
-    return _entries
+    return _sortedEntries
         .where((e) =>
             e.site.toLowerCase().contains(q) ||
             e.username.toLowerCase().contains(q) ||
             e.profiles.any((p) => p.toLowerCase().contains(q)))
         .toList();
+  }
+
+  Future<void> _toggleFavorite(VaultEntry entry) async {
+    final newValue = !entry.favorite;
+    try {
+      await _repository.setFavorite(entry.id, newValue);
+      final pending = await _repository.pendingChanges();
+      if (!mounted) return;
+      setState(() {
+        _entries = _entries
+            .map((e) => e.id == entry.id ? e.copyWith(favorite: newValue) : e)
+            .toList();
+        _pendingChanges = pending;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to update favorite: $e')),
+      );
+    }
   }
 
   @override
@@ -407,6 +436,7 @@ class _VaultScreenState extends State<VaultScreen> {
               ..._filteredEntries.map(
                 (e) => _VaultEntryCard(
                   entry: e,
+                  canWrite: _canWrite,
                   onTap: () => Navigator.of(context).push<bool>(
                     MaterialPageRoute(
                       builder: (_) => VaultEntryDetailScreen(
@@ -416,6 +446,7 @@ class _VaultScreenState extends State<VaultScreen> {
                       ),
                     ),
                   ).then((deleted) { if (deleted == true) _load(); }),
+                  onToggleFavorite: () => _toggleFavorite(e),
                 ),
               ),
           ],
@@ -492,8 +523,15 @@ class _VaultScreenState extends State<VaultScreen> {
 
 class _VaultEntryCard extends StatelessWidget {
   final VaultEntry entry;
+  final bool canWrite;
   final VoidCallback onTap;
-  const _VaultEntryCard({required this.entry, required this.onTap});
+  final VoidCallback onToggleFavorite;
+  const _VaultEntryCard({
+    required this.entry,
+    required this.canWrite,
+    required this.onTap,
+    required this.onToggleFavorite,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -501,6 +539,14 @@ class _VaultEntryCard extends StatelessWidget {
       margin: const EdgeInsets.only(bottom: 8),
       child: ListTile(
         onTap: onTap,
+        leading: IconButton(
+          icon: Icon(entry.favorite ? Icons.star : Icons.star_border),
+          color: entry.favorite ? AppColors.accent : AppColors.textMuted,
+          tooltip: entry.favorite
+              ? 'Remove from favorites'
+              : 'Add to favorites',
+          onPressed: canWrite ? onToggleFavorite : null,
+        ),
         title: Text(entry.site,
             style: const TextStyle(fontWeight: FontWeight.w600)),
         subtitle: Column(

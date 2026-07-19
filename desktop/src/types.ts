@@ -35,6 +35,8 @@ export type VaultEntry = {
   totp_secret?: string;
   /** Credencial WebAuthn (passkey) da entrada, se o usuário gerou uma. */
   passkey?: Passkey;
+  /** Favorito — sincroniza entre devices, trocado via vault_set_favorite. */
+  favorite: boolean;
   created_at: number;
   updated_at: number;
 };
