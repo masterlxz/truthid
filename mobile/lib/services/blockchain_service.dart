@@ -127,6 +127,9 @@ class BlockchainService {
   // scan de histórico completo da aba Wallet.
   static const deviceRegistryDeployBlock = 48294070;
   static const sessionRegistryDeployBlock = 48294090;
+  // IdentityRegistry é deployado antes dos outros dois no mesmo script —
+  // ponto de partida do scan pra frente em getUsernameForIdentity.
+  static const identityRegistryDeployBlock = 48294068;
 
   // Única rede configurada hoje é Base Mainnet (ver _rpcUrls acima) — por
   // isso um único chainId fixo, em vez de um mapa rede→chainId que nada usaria.
@@ -274,21 +277,24 @@ class BlockchainService {
   // não dá pra simplesmente omitir os dois, tem que paginar.
   static const _maxLogRangeBlocks = 2000;
 
-  // Quantas faixas de _maxLogRangeBlocks percorrer pra trás a partir de
-  // "latest" antes de desistir. 50 faixas ≈ 100k blocos ≈ ~55h de histórico
-  // na Base (bloco a cada ~2s) — cobre confortavelmente uma identidade
-  // pareada há pouco tempo (o caso de uso real: DevicesScreen chama isso
-  // logo depois de descobrir um pareamento novo), sem escanear a chain
-  // inteira desde o genesis.
-  static const _maxLogLookbackChunks = 50;
-
   // Resolve o @username da identidade via eth_getLogs no evento IdentityCreated.
   // O contrato não tem um getter id→username, então a única fonte é o log.
-  // Pagina pra trás a partir do bloco mais recente (ver _maxLogRangeBlocks/
-  // _maxLogLookbackChunks) — identidades criadas há mais tempo que isso não
-  // são encontradas (limitação conhecida, não um caso genérico de indexação).
-  // Retorna null se não encontrar (identidade não existe, é antiga demais
-  // pra essa janela, ou o RPC falhou).
+  // Pagina PRA FRENTE a partir de identityRegistryDeployBlock (nunca antes
+  // disso) até "latest" — cobre qualquer identidade, não só as recentes.
+  //
+  // Achado real (Sessão 134): a versão anterior paginava pra trás a partir
+  // de "latest" com uma janela fixa de 50 faixas (~100k blocos) — suficiente
+  // só pra identidade pareada há pouco tempo (o caso de uso original,
+  // DevicesScreen logo após descobrir um pareamento novo). Meses depois, com
+  // a chain ~550k blocos à frente do deploy, a identidade #1 (criada junto
+  // do deploy) ficou permanentemente fora dessa janela — username nunca mais
+  // resolvia, travando saldo/atividade da aba Wallet pra sempre (nenhum
+  // retry corrigia, o scan sempre parava na mesma janela recente vazia).
+  // Escanear pra frente a partir do deploy garante achar qualquer identidade
+  // mais cedo ou mais tarde — pra uma identidade antiga, a resposta vem já
+  // no primeiro chunk (perto do próprio deploy); pra uma criada há pouco, o
+  // scan varre até o fim antes de achar, mais chunks mas ainda correto.
+  // Retorna null se não encontrar (identidade não existe) ou se o RPC falhar.
   Future<String?> getUsernameForIdentity(BigInt identityId) async {
     // keccak256("IdentityCreated(uint256,string,address)") — topic[0]
     final sigBytes = keccak256(
@@ -301,10 +307,11 @@ class BlockchainService {
     final latestBlock = await getLatestBlockNumber();
     if (latestBlock == null) return null;
 
-    var toBlock = latestBlock;
-    for (var chunk = 0; chunk < _maxLogLookbackChunks; chunk++) {
-      final fromBlock =
-          toBlock - _maxLogRangeBlocks + 1 > 0 ? toBlock - _maxLogRangeBlocks + 1 : 0;
+    var fromBlock = identityRegistryDeployBlock;
+    while (fromBlock <= latestBlock) {
+      final toBlock = fromBlock + _maxLogRangeBlocks - 1 < latestBlock
+          ? fromBlock + _maxLogRangeBlocks - 1
+          : latestBlock;
 
       final logs = await _fetchIdentityCreatedLogs(
         eventTopic: eventTopic,
@@ -316,8 +323,7 @@ class BlockchainService {
         return _decodeUsernameFromLog(logs.first as Map<String, dynamic>);
       }
 
-      if (fromBlock == 0) break; // chegou no genesis, não tem mais o que buscar
-      toBlock = fromBlock - 1;
+      fromBlock = toBlock + 1;
     }
     return null;
   }

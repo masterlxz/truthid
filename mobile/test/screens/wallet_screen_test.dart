@@ -233,6 +233,43 @@ void main() {
     );
   });
 
+  group('username não persistido (achado real, Sessão 134)', () {
+    // identityId já pareado, mas o username nunca foi salvo (o fetch em
+    // background do pareamento original falhou uma vez, sem retry) — antes
+    // do fix, isso travava saldo/atividade pra sempre.
+    setUp(() {
+      when(() => mockStorage.getPairedUsername()).thenAnswer((_) async => null);
+      when(() => mockStorage.savePairedUsername(any())).thenAnswer((_) async {});
+      when(() => mockBlockchain.getUsernameForIdentity(BigInt.one))
+          .thenAnswer((_) async => 'alice');
+    });
+
+    testWidgets('resolve o username on-chain, persiste e carrega o saldo',
+        (tester) async {
+      await tester.pumpWidget(buildScreen());
+      await tester.pumpAndSettle();
+
+      verify(() => mockBlockchain.getUsernameForIdentity(BigInt.one)).called(1);
+      verify(() => mockStorage.savePairedUsername('alice')).called(1);
+      expect(find.text('0.1230 ETH'), findsOneWidget);
+    });
+
+    testWidgets(
+        'falha ao resolver o username não trava a tela (fica pra próximo load)',
+        (tester) async {
+      when(() => mockBlockchain.getUsernameForIdentity(BigInt.one))
+          .thenThrow(Exception('log scan timed out'));
+
+      await tester.pumpWidget(buildScreen());
+      await tester.pumpAndSettle();
+
+      verifyNever(() => mockStorage.savePairedUsername(any()));
+      expect(find.text('0.1230 ETH'), findsNothing);
+      // A tela segue de pé (sem crash, sem travar em loading) mesmo sem saldo.
+      expect(find.text('Balance'), findsOneWidget);
+    });
+  });
+
   testWidgets('botão Refresh limpa o cache e re-escaneia', (tester) async {
     await tester.pumpWidget(buildScreen());
     await tester.pumpAndSettle();

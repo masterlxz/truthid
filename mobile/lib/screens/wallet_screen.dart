@@ -111,12 +111,6 @@ class _WalletScreenState extends State<WalletScreen> {
       if (identityId == null) {
         identityId = device.identityId.toString();
         await _storage.savePairedIdentity(identityId);
-        _blockchain.getUsernameForIdentity(device.identityId).then((u) {
-          if (u != null) {
-            _storage.savePairedUsername(u);
-            if (mounted) setState(() => _pairedUsername = u);
-          }
-        });
       }
     } else if (identityId != null) {
       await _storage.clearPairedIdentity();
@@ -132,6 +126,25 @@ class _WalletScreenState extends State<WalletScreen> {
         });
       }
       return;
+    }
+
+    // O scan de `getUsernameForIdentity` (varredura de logs) pode falhar por
+    // um hiccup de rede pontual — sem retry aqui, um único load com falha
+    // deixava o username nunca persistido, travando saldo/atividade pra
+    // sempre (achado real, Sessão 134: identityId resolvido, username null
+    // indefinidamente). Tenta de novo em todo load enquanto não persistir.
+    if (username == null) {
+      try {
+        final resolved =
+            await _blockchain.getUsernameForIdentity(BigInt.parse(identityId));
+        if (resolved != null) {
+          await _storage.savePairedUsername(resolved);
+          username = resolved;
+        }
+      } catch (_) {
+        // Tenta de novo no próximo load — identidade/device já resolvidos
+        // não devem travar por causa disso.
+      }
     }
 
     if (mounted) {
