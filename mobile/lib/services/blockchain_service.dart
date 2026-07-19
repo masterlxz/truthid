@@ -32,11 +32,19 @@ class DeviceInfo {
   final BigInt identityId;
   final bool revoked;
   final bool exists;
+  // Opcionais, default vazio — não populados pelos call sites antigos deste
+  // tipo (só `getDevice()` os preenche hoje). Adicionados pra dar suporte à
+  // tela de "Permissões por device" (mirror de `DeviceInfo` no Desktop,
+  // `desktop/src/types.ts:1-8`, que já tem os dois).
+  final String pubKey;
+  final String label;
 
   const DeviceInfo({
     required this.identityId,
     required this.revoked,
     required this.exists,
+    this.pubKey = '',
+    this.label = '',
   });
 }
 
@@ -379,10 +387,25 @@ class BlockchainService {
         identityId: tuple[0] as BigInt,
         revoked: tuple[4] as bool,
         exists: true,
+        pubKey: address,
+        label: tuple[2] as String,
       );
     } catch (_) {
       return null;
     }
+  }
+
+  // Lista os pubkeys de todos os devices já registrados pra uma identidade
+  // (ativos ou revogados — quem chama filtra). Usado pela tela de
+  // "Permissões por device" pra montar a lista completa antes de cruzar com
+  // `VaultRepository.listDevicePermissions()`. Mirror do par
+  // `getDevicesByIdentity`+`getDevice` que o Desktop já usa em
+  // `VaultManagement.tsx` (`useReadContract`/`useReadContracts`).
+  Future<List<String>> getDevicesForIdentity(BigInt identityId) async {
+    final fn = _deviceContract.function('getDevicesByIdentity');
+    final result = await _ethCall(_deviceRegistryAddress, fn, [identityId]);
+    final addresses = (result[0] as List<dynamic>).cast<EthereumAddress>();
+    return addresses.map((a) => a.hex).toList();
   }
 
   Future<Uint8List?> getDeviceVaultKey(String address) async {

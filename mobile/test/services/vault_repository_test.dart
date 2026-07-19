@@ -365,6 +365,74 @@ void main() {
     });
   });
 
+  group('VaultRepository device permissions', () {
+    test('listDevicePermissions em vault vazio retorna lista vazia', () async {
+      expect(await repo.listDevicePermissions(), isEmpty);
+    });
+
+    test('setDevicePermission cria uma permissão nova', () async {
+      await repo.setDevicePermission('0xAAA', true);
+
+      final permissions = await repo.listDevicePermissions();
+      expect(permissions, hasLength(1));
+      expect(permissions.first.pubKey, '0xAAA');
+      expect(permissions.first.canWrite, isTrue);
+    });
+
+    test('setDevicePermission atualiza uma permissão já existente', () async {
+      await repo.setDevicePermission('0xAAA', true);
+      await repo.setDevicePermission('0xAAA', false);
+
+      final permissions = await repo.listDevicePermissions();
+      expect(permissions, hasLength(1));
+      expect(permissions.first.canWrite, isFalse);
+    });
+
+    test('setDevicePermission é case-insensitive pro pubKey', () async {
+      await repo.setDevicePermission('0xAAA', true);
+      await repo.setDevicePermission('0xaaa', false);
+
+      final permissions = await repo.listDevicePermissions();
+      expect(permissions, hasLength(1));
+      expect(permissions.first.canWrite, isFalse);
+    });
+
+    test('setDevicePermission preserva as permissões de outros devices',
+        () async {
+      await repo.setDevicePermission('0xAAA', true);
+      await repo.setDevicePermission('0xBBB', false);
+
+      final permissions = await repo.listDevicePermissions();
+      expect(permissions, hasLength(2));
+      expect(
+        permissions.map((p) => p.pubKey).toSet(),
+        equals({'0xAAA', '0xBBB'}),
+      );
+    });
+
+    test('setDevicePermission incrementa a versão do vault', () async {
+      final before = await repo.currentVersion();
+      await repo.setDevicePermission('0xAAA', true);
+      expect(await repo.currentVersion(), before + 1);
+    });
+
+    test('setDevicePermission não altera entries nem perfis já existentes',
+        () async {
+      await repo.addProfile('Trabalho');
+      final entry = await repo.addEntry(
+        site: 'github.com',
+        username: 'fab',
+        password: 'x',
+      );
+
+      await repo.setDevicePermission('0xAAA', true);
+
+      expect(await repo.listProfileNames(), equals(['Trabalho']));
+      final entries = await repo.listEntries();
+      expect(entries.map((e) => e.id), contains(entry.id));
+    });
+  });
+
   group('VaultRepository backup export/import', () {
     test('exportBackup retorna bytes começando com o magic TIDVLTB1', () async {
       await repo.addEntry(site: 'github.com', username: 'fab', password: 'x');

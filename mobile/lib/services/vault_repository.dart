@@ -181,8 +181,10 @@ class VaultEntry {
 }
 
 /// Permissão de escrita de um device no vault (`pubKey` = endereço do device).
-/// Concedida só pelo Desktop/controller — o Mobile só lê, nunca escreve esse
-/// campo (ver PROJECT_STATE.md, Sessão 97).
+/// Normalmente concedida pelo Desktop/controller, mas o Mobile também pode
+/// gerenciar (ver `VaultRepository.setDevicePermission`) — trava de UX
+/// (mesma que já protege as outras telas de escrita do Vault, `canWrite`),
+/// não é imposta pelo contrato (ver PROJECT_STATE.md, Sessão 97).
 class VaultDevicePermission {
   final String pubKey;
   final bool canWrite;
@@ -209,7 +211,7 @@ class _VaultData {
   /// só pelo Desktop (Mobile é somente-leitura pro Vault), ver PROJECT_STATE.md
   /// Sessão 97.
   final List<String> profileNames;
-  /// Permissões de escrita por device — Mobile só lê (ver VaultDevicePermission).
+  /// Permissões de escrita por device (ver VaultDevicePermission).
   final List<VaultDevicePermission> devicePermissions;
   const _VaultData({
     required this.version,
@@ -312,6 +314,36 @@ class VaultRepository {
       if (p.pubKey.toLowerCase() == myPubKey.toLowerCase()) return p.canWrite;
     }
     return false;
+  }
+
+  // Todas as permissões de device conhecidas — usado pela tela de
+  // "Device permissions" pra cruzar com a lista de devices vinda on-chain.
+  Future<List<VaultDevicePermission>> listDevicePermissions() async {
+    final data = await _load();
+    return data.devicePermissions;
+  }
+
+  // Concede/revoga a permissão de escrita de um device. Mirror de
+  // Vault::set_device_permission (desktop/src-tauri/src/vault.rs) —
+  // find-or-insert por pubKey (case-insensitive, mesma comparação de
+  // canWriteVault), bump de versão.
+  Future<void> setDevicePermission(String pubKey, bool canWrite) async {
+    final data = await _load();
+    final updated = [...data.devicePermissions];
+    final index = updated
+        .indexWhere((p) => p.pubKey.toLowerCase() == pubKey.toLowerCase());
+    final entry = VaultDevicePermission(pubKey: pubKey, canWrite: canWrite);
+    if (index >= 0) {
+      updated[index] = entry;
+    } else {
+      updated.add(entry);
+    }
+    await _save(_VaultData(
+      version: data.version + 1,
+      entries: data.entries,
+      profileNames: data.profileNames,
+      devicePermissions: updated,
+    ));
   }
 
   Future<VaultEntry> addEntry({

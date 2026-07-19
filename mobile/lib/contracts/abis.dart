@@ -160,5 +160,12 @@ const String deviceRegistryAbi = '''[
     "inputs": [{"name": "", "type": "address"}],
     "outputs": [{"name": "", "type": "bytes"}],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getDevicesByIdentity",
+    "inputs": [{"name": "identityId", "type": "uint256"}],
+    "outputs": [{"name": "", "type": "address[]"}],
+    "stateMutability": "view"
   }
 ]''';

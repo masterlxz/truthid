@@ -14,6 +14,7 @@ import '../services/vault_sync_service.dart';
 import '../theme.dart';
 import 'pinning_providers_screen.dart';
 import 'vault_backup_screen.dart';
+import 'vault_device_permissions_screen.dart';
 import 'vault_entry_detail_screen.dart';
 import 'vault_entry_form_screen.dart';
 import 'vault_profiles_screen.dart';
@@ -67,6 +68,7 @@ class _VaultScreenState extends State<VaultScreen> {
   String _query = '';
 
   bool _canWrite = false;
+  String? _identityId;
   int _pendingChanges = 0;
   EthereumAddress? _smartAccountAddress;
   bool _publishing = false;
@@ -152,6 +154,7 @@ class _VaultScreenState extends State<VaultScreen> {
         _error = outcome.error;
         _isLoading = false;
         _canWrite = canWrite;
+        _identityId = identityId;
         _pendingChanges = pending;
       });
     }
@@ -308,6 +311,19 @@ class _VaultScreenState extends State<VaultScreen> {
                     ),
                   ).then((_) => _load()),
                 ),
+                if (_identityId != null)
+                  IconButton(
+                    icon: const Icon(Icons.security),
+                    tooltip: 'Device permissions',
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => VaultDevicePermissionsScreen(
+                          identityId: _identityId!,
+                          repository: _repository,
+                        ),
+                      ),
+                    ).then((_) => _load()),
+                  ),
                 IconButton(
                   icon: const Icon(Icons.add),
                   tooltip: 'New entry',
