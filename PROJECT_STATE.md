@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-19 (Sessão 132 — QR code pro segredo do 2FA [item 1 do backlog da Sessão 130]: Desktop fecha 100%, validado em hardware real, inclusive achado e corrigido bug de permissão de webcam no WebKitGTK/Linux; Mobile implementado e testado automatizado, falta validar em hardware física. Restam do backlog: passkey na extensão, gerador de senha em popup, code review + docs + publicação)
+> Última atualização: 2026-07-19 (Sessão 133 — passkey na extensão, Fase 1/login [item 2 do backlog da Sessão 130], validado em hardware real com página de teste local. Fase 2 [create() + aprovação em lote via Device] registrada como item 6 novo, escopo grande — não implementada. Restam: QR no TOTP no Mobile [hardware pendente], gerador de senha em popup, code review + docs + publicação)
 >
 > ⚠️ **LEMBRETE**: ao final do projeto (todas as fases concluídas), fazer uma revisão completa deste arquivo — consolidar endereços, remover seções obsoletas, e garantir que a tabela de Pendências de Deploy está zerada. Sessão 68.
 
@@ -1362,16 +1362,10 @@ depois, um de cada vez, em sessão própria (provavelmente com `/plan`).
    (2026-07-19), validado em hardware real dos dois lados. Ver detalhe técnico completo logo
    abaixo, na entrada de sessão.
 
-2. **Passkey deveria ir pra extensão — hoje não vai, de propósito** — confirmado no código:
-   `extension/src/session/sessionState.ts` exclui deliberadamente `totp_secret` **e** `passkey` do
-   que chega na extensão (comentário no arquivo cobre os dois: "2FA e passkeys ficam isolados").
-   Reflete uma decisão de escopo já registrada na fundação de Passkeys (Sessão 124): interceptar
-   `navigator.credentials` num site real "fica pra a reforma da extensão (item 5 do roadmap)" — mas
-   o item 5 (Sessão 127) só implementou autofill de usuário/senha, nunca voltou pra fechar essa
-   parte. Pedido agora: reverter isso especificamente pro passkey (TOTP continua de fora, decisão
-   de segurança separada e deliberada, não mexer). Implica content script + bridge de main-world
-   pra interceptar `navigator.credentials.create()/get()` de verdade num site — não existe hoje na
-   extensão, que só tem autofill de formulário (`extension/entrypoints/autofill.content.ts`).
+2. ~~**Passkey deveria ir pra extensão — hoje não vai, de propósito**~~ — **Fase 1 (login)
+   CORRIGIDA na Sessão 133**, validada em hardware real. Fase 2 (criação de passkey via extensão +
+   canal de aprovação em lote) registrada como item novo do backlog, ver entrada de sessão logo
+   abaixo pro detalhe técnico completo.
 
 3. **Gerador de senha do Desktop "esquisito" — virar popup** — hoje é um painel inline dentro do
    próprio formulário (`desktop/src/components/VaultManagement.tsx`, bloco dos toggles de
@@ -1425,6 +1419,20 @@ depois, um de cada vez, em sessão própria (provavelmente com `/plan`).
 5. **Depois de tudo isso**: code review completo do app inteiro, atualizar documentação, e publicar
    o app — registrado como sequência pedida pro fim desta leva de trabalho, sem detalhe adicional
    ainda (nenhum escopo de code review ou plano de publicação definido nesta sessão).
+
+6. **Passkey na extensão, Fase 2: criação (`navigator.credentials.create()`) + aprovação via
+   Device** — registrado ao fechar a Sessão 133 (item 2 acima, Fase 1/login, fechou). Confirmado
+   com o dono do projeto: a extensão também deve interceptar o cadastro de passkey novo direto num
+   site, mas **qualquer alteração no Vault iniciada pela extensão precisa de aprovação de um
+   Device** (Desktop/Mobile) — a extensão nunca tem autoridade de escrita, princípio já registrado
+   na seção "Decisões de arquitetura já discutidas pra extensão de navegador" acima. Isso exige
+   construir do zero o "Sync em lote (batch sync)" descrito nessa mesma seção (2.1) — extensão
+   acumula a passkey nova em memória de sessão cifrada → gera QR → Device escaneia, mostra resumo +
+   taxa de gas → aprova → smart account assina uma `UserOperation` (pinning no IPFS antes do commit
+   on-chain, ordem crítica) — **nada disso existe hoje**, é só desenho de papel. Peça de
+   infraestrutura do tamanho do `/truthid/v1/pin` inteiro (3 sessões). Precisa portar
+   `createPasskey`/`buildAttestationObject`/CBOR pra extensão também (Fase 1 só portou
+   `signAssertion`, de propósito). Nenhum `/plan` detalhado rodado ainda.
 
 Nada implementado nesta entrada — só levantamento e registro de causa raiz (item 4), pra rodar item
 por item nas próximas sessões.
@@ -5483,6 +5491,99 @@ motor `decodeQrFromImageData` já provado pelos 3 testes automatizados e pelo up
 **Item 1 do backlog da Sessão 130 fecha no Desktop** (webcam + upload, os dois validados em
 hardware real). **No Mobile, implementado e testado automatizado, mas sem validação em hardware
 física** — pendência pra próxima sessão com o celular reconectado.
+
+### Sessão 133 — 2026-07-19: passkey na extensão, Fase 1 (login) — item 2 do backlog da Sessão 130
+
+Planejado via `/plan` completo antes de implementar (2 agentes de exploração em paralelo —
+arquitetura de mensagens/sessão da extensão e a crypto de passkey já validada em Desktop/Mobile —
+seguidos de decisão explícita do dono do projeto sobre escopo). Achado que mudou o escopo da
+rodada: `navigator.credentials.create()` (cadastro de passkey novo direto num site) exige um canal
+de aprovação via Device que não existe — o "Sync em lote" já desenhado em brainstorm (seção
+"Decisões de arquitetura... extensão de navegador" acima), nunca implementado, do tamanho do
+`/truthid/v1/pin` inteiro. Além disso, **nenhuma passkey do TruthID foi registrada em nenhum
+relying party real ainda** (o único "sign" que existia era o self-test local do Desktop) — ou seja,
+mesmo com `create()` pronto, só dá pra testar contra um site real depois que os dois lados (criação
++ login) existirem juntos. Por isso esta sessão implementou só **Fase 1: login com passkey já
+existente** (gerada como hoje, via Desktop/Mobile) — self-contida, sem depender de nenhuma infra de
+aprovação nova. Fase 2 (`create()` + aprovação em lote) registrada como item 6 do backlog acima.
+
+**Reversão da exclusão** (só passkey — TOTP continua isolado, decisão de segurança separada):
+`mobile/lib/services/vault_repository.dart`, `toJsonForExtension()` para de remover `passkey` do
+payload que sai pra extensão (só remove `totp_secret` agora). `extension/src/session/
+sessionState.ts` ganha o tipo `Passkey` (espelho do `desktop/src/types.ts`) e o campo
+`passkey?: Passkey` na `VaultEntry` da extensão.
+
+**Crypto portada** (`extension/src/webauthn.ts`, novo): só `signAssertion` +
+`buildAuthenticatorData` + helpers — não porta `createPasskey`/`buildAttestationObject`/CBOR (só
+usados no `create()`, Fase 2). Mesmo padrão de duplicação por plataforma já estabelecido no
+projeto (ver `crypto/ecies.ts`), incluindo o cuidado com `{ lowS: true }` explícito no
+`p256.sign()` (mesmo achado do Desktop — a doc do `@noble/curves` diz que é o padrão, não é, na
+prática). `extension/src/webauthn.test.ts` reusa o vetor fixo já validado cross-plataforma
+TS↔Dart (Sessão 124-125) e confirma saída **byte-a-byte idêntica** — prova o port sem precisar de
+nenhum site real.
+
+**Matching por rpId**: `extension/src/session/entryMatching.ts` ganha `matchesRpId(rpId,
+hostname)`, reaproveitando a mesma tolerância a subdomínio de `matchesOrigin` (não duplica lógica).
+
+**Canal de mensagem em 2 passos** (mesmo padrão do `GET_MATCHING_ENTRIES_MESSAGE` já existente):
+`WEBAUTHN_FIND_PASSKEY_MESSAGE` (acha sem assinar, decide se mostra o prompt) e
+`WEBAUTHN_SIGN_ASSERTION_MESSAGE` (assina de verdade, só depois do clique de aprovação) —
+`extension/src/autofill/messages.ts` + 2 handlers novos em `background.ts`. `sign_count`
+incrementa **só na cópia em memória da sessão** (`chrome.storage.session`) — a extensão nunca
+escreve de volta no Vault sincronizado (sem autoridade de escrita, mesma limitação que o "Testar
+assinatura" do Desktop já aceita, que também não persiste o `newSignCount`).
+
+**Prompt de confirmação** (`extension/src/webauthnPrompt.ts`, novo): Shadow DOM `closed`, mesmo
+padrão visual de `autofill/overlay.ts`, mas centrado na tela (não ancorado a um campo — um pedido
+de `get()` não tem necessariamente um input visível perto). "Sign in with your TruthID passkey?" +
+Approve/Cancel. Sem clique aprovando, nunca assina — decisão confirmada com o dono do projeto,
+preserva uma noção de presença do usuário (o mais próximo possível do toque no sensor do WebAuthn
+nativo, dentro do que uma extensão consegue oferecer).
+
+**Interceptação real — main-world + bridge isolated-world** (dois content scripts novos, primeiro
+uso de `world: 'MAIN'` no projeto):
+- `extension/entrypoints/webauthn.content.ts` (`world: 'MAIN'`, `runAt: 'document_start'`) —
+  guarda o `navigator.credentials.get` original antes de sobrescrever; se a chamada tem
+  `options.publicKey`, manda o pedido (rpId, challenge, origin) via `window.postMessage` pro
+  bridge e aguarda resposta com timeout de 20s. MAIN-world não tem acesso a `chrome.*` (restrição
+  do browser), por isso precisa do bridge — mas *pode* importar módulos TS normais como
+  `webauthn.ts` (a restrição é só de runtime, não de bundling). Sem match/cancelado/erro/timeout →
+  cai pro `get()` nativo salvo, nunca quebra passkeys reais/chaves de segurança física.
+- `extension/entrypoints/webauthn-bridge.content.ts` (isolated world, mesmo `matches` do
+  autofill) — escuta o `postMessage`, orquestra `WEBAUTHN_FIND_PASSKEY_MESSAGE` → prompt → 
+  `WEBAUTHN_SIGN_ASSERTION_MESSAGE` → responde de volta pro main-world, tudo correlacionado por um
+  `requestId` único (múltiplas chamadas concorrentes possíveis). `event.source !== window` checado
+  nos dois lados — nunca confia em mensagem vinda de iframe/outra origem.
+- Resposta final construída como um objeto no formato de `PublicKeyCredential`/
+  `AuthenticatorAssertionResponse` (`id`, `rawId`, `type`, `response.{authenticatorData,
+  clientDataJSON, signature, userHandle}`, `getClientExtensionResults`) — documentado como
+  best-effort (não passa em `instanceof PublicKeyCredential`, mas expõe os campos que bibliotecas
+  cliente de WebAuthn normalmente leem direto).
+
+**Verificação automatizada**: `npx vitest run` (extensão) 45/45 (12 novos), `tsc --noEmit`
+(extensão) limpo, `npm run build` (extensão) gerou o manifest com `webauthn.js` isolado em
+`world: "MAIN"` + `run_at: "document_start"`, `webauthn-bridge.js` junto do `autofill.js` no
+isolated world — confirmado inspecionando o `manifest.json` de saída. `flutter test` (Mobile)
+331/331 (1 teste invertido — antes provava exclusão do passkey, agora prova inclusão —, `flutter
+analyze` limpo.
+
+**Validação manual em hardware real, sem depender de nenhum site de produção**: página HTML
+estática mínima (`navigator.credentials.get({publicKey: {challenge, rpId: location.hostname}})`)
+servida por `python3 -m http.server` local, sessão de teste injetada direto em
+`chrome.storage.session` via console do service worker (mesmo truque já usado na Sessão 127 pra
+validar o autofill sem precisar re-parear o celular) com uma passkey usando o vetor fixo já
+provado nos testes automatizados. No navegador de verdade (extensão recarregada a partir do build
+novo): clicar em "Sign in with passkey" mostrou o prompt de confirmação, aprovar retornou um objeto
+`PublicKeyCredential`-shaped completo e correto — `id`/`rawIdLen`/`userHandleLen` batendo com a
+passkey injetada, `authenticatorDataLen: 37` (32 rpIdHash + 1 flag + 4 signCount, sem attested
+credential, certo pra um `get()`), `clientDataJSON` decodificado mostrando o challenge real gerado
+pela página e o origin correto (`http://localhost:8765`), assinatura DER de 71 bytes. Prova a
+interceptação de ponta a ponta num navegador real — validação contra um site de produção real
+(GitHub, webauthn.io etc.) fica pra depois que a Fase 2 (`create()`) existir, porque nenhuma
+passkey do TruthID está registrada em nenhum relying party de verdade ainda.
+
+**Item 2 do backlog da Sessão 130 fecha na Fase 1 (login)** — Fase 2 (criação + aprovação em lote)
+registrada como item 6 novo do mesmo backlog, escopo grande o suficiente pra sessão própria.
 
 ---
 

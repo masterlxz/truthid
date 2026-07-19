@@ -5,9 +5,10 @@ import { attachAutofillIconIfMatches } from '../src/autofill/overlay';
 // qualquer página HTTP/HTTPS e oferece preencher usuário/senha a partir do
 // vault (nunca o código 2FA: `totp_secret` não existe em `VaultEntry` na
 // extensão, de propósito — ver sessionState.ts). Roda no isolated world
-// padrão de content script MV3: não precisa de bridge de main-world (isso
-// só seria necessário pra interceptar `navigator.credentials`/WebAuthn,
-// fora de escopo aqui).
+// padrão de content script MV3: não precisa de bridge de main-world, ao
+// contrário de `webauthn.content.ts`/`webauthn-bridge.content.ts` (Sessão
+// 132), que interceptam `navigator.credentials.get` — autofill de
+// formulário nunca precisa tocar o main-world da página.
 export default defineContentScript({
   matches: ['http://*/*', 'https://*/*'],
   main() {

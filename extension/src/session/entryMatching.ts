@@ -35,3 +35,13 @@ export function matchesOrigin(entry: Pick<VaultEntry, 'site' | 'url'>, hostname:
       candidate.endsWith(`.${target}`),
   );
 }
+
+/**
+ * Mesma tolerância a subdomínio de `matchesOrigin`, mas pra `passkey.rp_id`
+ * (Sessão 132) — um `rp_id` é sempre só um hostname (nunca uma URL com
+ * protocolo/path), então reaproveita `matchesOrigin` passando o mesmo valor
+ * como `site` e `url` vazia, sem duplicar a lógica de comparação.
+ */
+export function matchesRpId(rpId: string, hostname: string): boolean {
+  return matchesOrigin({ site: rpId, url: '' }, hostname);
+}

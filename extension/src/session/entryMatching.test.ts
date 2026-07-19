@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { matchesOrigin } from './entryMatching';
+import { matchesOrigin, matchesRpId } from './entryMatching';
 
 describe('matchesOrigin', () => {
   it('bate por hostname exato de entry.url', () => {
@@ -36,5 +36,19 @@ describe('matchesOrigin', () => {
 
   it('comparação não diferencia maiúsculas/minúsculas', () => {
     expect(matchesOrigin({ site: 'GitHub.com', url: '' }, 'github.com')).toBe(true);
+  });
+});
+
+describe('matchesRpId', () => {
+  it('bate por rp_id exato', () => {
+    expect(matchesRpId('github.com', 'github.com')).toBe(true);
+  });
+
+  it('bate quando a página é subdomínio do rp_id', () => {
+    expect(matchesRpId('github.com', 'www.github.com')).toBe(true);
+  });
+
+  it('não bate com domínio diferente', () => {
+    expect(matchesRpId('github.com', 'gitlab.com')).toBe(false);
   });
 });

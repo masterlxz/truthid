@@ -1,11 +1,16 @@
 import { decrypt } from '../src/crypto/ecies';
-import { matchesOrigin } from '../src/session/entryMatching';
+import { matchesOrigin, matchesRpId } from '../src/session/entryMatching';
 import { tryFetchDeadDrop } from '../src/session/deadDropPolling';
 import type { VaultEntry } from '../src/session/sessionState';
 import { isExpired } from '../src/session/sessionState';
 import { clearSession, loadSession, saveSession } from '../src/storage/sessionStore';
 import { hexToBytes } from '../src/util/bytes';
-import { GET_MATCHING_ENTRIES_MESSAGE } from '../src/autofill/messages';
+import {
+  GET_MATCHING_ENTRIES_MESSAGE,
+  WEBAUTHN_FIND_PASSKEY_MESSAGE,
+  WEBAUTHN_SIGN_ASSERTION_MESSAGE,
+} from '../src/autofill/messages';
+import { signAssertion } from '../src/webauthn';
 
 // Único job do service worker: garantir que a sessão some do
 // `chrome.storage.session` quando o TTL expira, mesmo que a popup nunca
@@ -89,6 +94,71 @@ export default defineBackground(() => {
         sendResponse({ entries });
       })();
       return true; // mantém o canal aberto pro sendResponse assíncrono
+    },
+  );
+
+  // Login com passkey (Sessão 132) — mesmo padrão do canal acima, em 2
+  // passos de propósito (ver comentário em messages.ts): achar sem assinar
+  // primeiro, deixa o bridge isolated-world decidir se mostra o prompt de
+  // confirmação antes de gastar uma assinatura de verdade.
+  chrome.runtime.onMessage.addListener(
+    (message: { type?: string; hostname?: string } | undefined, _sender, sendResponse) => {
+      if (message?.type !== WEBAUTHN_FIND_PASSKEY_MESSAGE) return;
+      void (async () => {
+        const session = await loadSession();
+        const matches = (session?.entries ?? [])
+          .filter((entry) => entry.passkey && matchesRpId(entry.passkey.rp_id, message.hostname ?? ''))
+          .map((entry) => ({ entryId: entry.id, rpId: entry.passkey!.rp_id, site: entry.site }));
+        sendResponse({ matches });
+      })();
+      return true;
+    },
+  );
+
+  chrome.runtime.onMessage.addListener(
+    (
+      message:
+        | { type?: string; entryId?: string; challenge?: number[]; origin?: string }
+        | undefined,
+      _sender,
+      sendResponse,
+    ) => {
+      if (message?.type !== WEBAUTHN_SIGN_ASSERTION_MESSAGE) return;
+      void (async () => {
+        const session = await loadSession();
+        const entries = session?.entries ?? [];
+        const index = entries.findIndex((entry) => entry.id === message.entryId);
+        const passkey = index >= 0 ? entries[index].passkey : undefined;
+        if (!session || !passkey || !message.challenge || !message.origin) {
+          sendResponse({ ok: false, error: 'not-found' });
+          return;
+        }
+
+        const assertion = signAssertion({
+          privateKeyHex: passkey.private_key_hex,
+          rpId: passkey.rp_id,
+          signCount: passkey.sign_count,
+          challenge: Uint8Array.from(message.challenge),
+          origin: message.origin,
+        });
+
+        // Incrementa só a cópia em memória da sessão (chrome.storage.session)
+        // — a extensão nunca escreve de volta no Vault sincronizado (sem
+        // autoridade de escrita), mesma limitação que o "Testar assinatura"
+        // do Desktop já aceita (também não persiste o signCount novo).
+        entries[index] = { ...entries[index], passkey: { ...passkey, sign_count: assertion.newSignCount } };
+        await saveSession({ ...session, entries });
+
+        sendResponse({
+          ok: true,
+          credentialIdB64: passkey.credential_id_b64,
+          userHandleB64: passkey.user_handle_b64,
+          authenticatorData: Array.from(assertion.authenticatorData),
+          clientDataJSON: assertion.clientDataJSON,
+          signatureDer: Array.from(assertion.signatureDer),
+        });
+      })();
+      return true;
     },
   );
 });

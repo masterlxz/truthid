@@ -73,8 +73,9 @@ class VaultEntry {
   /// Segredo TOTP (RFC 6238) em base32, se 2FA estiver configurado. Nunca deve
   /// ser incluído no payload enviado à extensão — usar [toJsonForExtension].
   final String? totpSecret;
-  /// Credencial WebAuthn (passkey) da entrada, se o usuário gerou uma. Nunca
-  /// deve ser incluída no payload enviado à extensão — usar [toJsonForExtension].
+  /// Credencial WebAuthn (passkey) da entrada, se o usuário gerou uma.
+  /// Incluída no payload enviado à extensão desde a Sessão 132 — usar
+  /// [toJsonForExtension] (que continua removendo só o `totpSecret`).
   final Passkey? passkey;
   /// Favorito — sincroniza entre devices como qualquer outro campo do vault
   /// (não é preferência local). Trocado via [VaultRepository.setFavorite],
@@ -147,14 +148,15 @@ class VaultEntry {
         'updated_at': updatedAt.millisecondsSinceEpoch ~/ 1000,
       };
 
-  /// Igual a [toJson], mas sem `totp_secret`/`passkey` — usar sempre que a
-  /// entrada for sair pro canal da extensão de navegador (LAN/dead-drop em
-  /// vault_session_screen.dart). 2FA e passkeys ficam isolados no Device por
-  /// design; a extensão nunca deve receber esses segredos.
+  /// Igual a [toJson], mas sem `totp_secret` — usar sempre que a entrada for
+  /// sair pro canal da extensão de navegador (LAN/dead-drop em
+  /// vault_session_screen.dart). 2FA continua isolado no Device por design
+  /// (fatores separados); `passkey` já é enviado desde a Sessão 132 — a
+  /// extensão precisa da chave privada pra assinar `navigator.credentials.get`
+  /// em sites reais (ver `extension/src/webauthn.ts`).
   Map<String, dynamic> toJsonForExtension() {
     final json = toJson();
     json.remove('totp_secret');
-    json.remove('passkey');
     return json;
   }
 
