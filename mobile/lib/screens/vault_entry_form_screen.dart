@@ -8,6 +8,7 @@ import '../services/vault_repository.dart';
 import '../services/webauthn_service.dart' as webauthn;
 import '../theme.dart';
 import '../utils/password_generator.dart';
+import '../utils/password_strength.dart';
 
 // Tela compartilhada de criar/editar uma entrada do vault — mirror do
 // `EntryForm` do Desktop (`VaultManagement.tsx`). `entry` null = criar.
@@ -235,6 +236,44 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
     if (generated != null) setState(() => _passwordCtrl.text = generated);
   }
 
+  static const _strengthColors = [
+    AppColors.danger,
+    AppColors.warning,
+    AppColors.accent,
+    AppColors.success,
+  ];
+
+  Widget _buildStrengthMeter() {
+    if (_passwordCtrl.text.isEmpty) return const SizedBox.shrink();
+    final result = passwordStrength(_passwordCtrl.text);
+    final color = _strengthColors[result.score];
+    return Padding(
+      padding: const EdgeInsets.only(top: 6),
+      child: Row(
+        children: [
+          Expanded(
+            child: Row(
+              children: List.generate(4, (i) {
+                return Expanded(
+                  child: Container(
+                    height: 4,
+                    margin: EdgeInsets.only(right: i < 3 ? 3 : 0),
+                    decoration: BoxDecoration(
+                      color: i <= result.score ? color : AppColors.border,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                );
+              }),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text(result.label, style: TextStyle(fontSize: 11, color: color)),
+        ],
+      ),
+    );
+  }
+
   Future<void> _loadProfileOptions() async {
     final names = await _repository.listProfileNames();
     if (mounted) setState(() { _profileOptions = names; _loadingProfiles = false; });
@@ -365,6 +404,7 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                       ),
                     ],
                   ),
+                  _buildStrengthMeter(),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _notesCtrl,

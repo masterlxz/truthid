@@ -14,6 +14,7 @@ import { parseTotpSecret } from "../utils/totp";
 import { PasskeyBadge } from "./PasskeyBadge";
 import { createPasskey } from "../utils/webauthn";
 import { generatePassword, type PasswordGeneratorOptions } from "../utils/passwordGenerator";
+import { passwordStrength, type PasswordStrengthScore } from "../utils/passwordStrength";
 
 const VAULT_KEY_MESSAGE = "TruthID Vault Key v1";
 
@@ -99,6 +100,41 @@ function ProfilePicker({
           {value.includes(p) ? "✓ " : ""}{p}
         </button>
       ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sub-componente: medidor de força de senha
+// ---------------------------------------------------------------------------
+
+const STRENGTH_COLORS: Record<PasswordStrengthScore, string> = {
+  0: "var(--color-danger)",
+  1: "#e2b25c",
+  2: "var(--color-accent)",
+  3: "#4caf7d",
+};
+
+function StrengthMeter({ password }: { password: string }) {
+  if (!password) return null;
+  const { score, label } = passwordStrength(password);
+  const color = STRENGTH_COLORS[score];
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.35rem" }}>
+      <div style={{ display: "flex", gap: "3px", flex: 1 }}>
+        {[0, 1, 2, 3].map((i) => (
+          <div
+            key={i}
+            style={{
+              height: "4px",
+              flex: 1,
+              borderRadius: "2px",
+              background: i <= score ? color : "var(--color-border)",
+            }}
+          />
+        ))}
+      </div>
+      <span style={{ fontSize: "0.78em", color }}>{label}</span>
     </div>
   );
 }
@@ -245,6 +281,7 @@ function EntryForm({
               🎲
             </button>
           </div>
+          <StrengthMeter password={form.password} />
           {genOpen && (
             <div className="card" style={{ marginTop: "0.5rem", padding: "0.75rem" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
