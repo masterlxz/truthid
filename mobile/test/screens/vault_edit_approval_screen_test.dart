@@ -361,6 +361,54 @@ void main() {
             passkey: any(named: 'passkey'),
           ));
     });
+
+    testWidgets(
+        '"Try again" reaparece no erro (proposta já decifrada) e retenta '
+        'sem duplicar a entrada', (tester) async {
+      // Achado real (Sessão 135, ultrareview): antes deste fix, "Back" era
+      // a única opção — descartava a proposta já decifrada pra sempre numa
+      // falha transiente de rede. Simula falhar uma vez, depois funcionar.
+      var callCount = 0;
+      when(() => mockBlockchain.getIdentityByUsername('alice')).thenAnswer((_) async {
+        callCount++;
+        if (callCount == 1) throw Exception('RPC timeout');
+        return IdentityInfo(id: BigInt.one, controller: smartAccountAddress);
+      });
+
+      await pumpToApproval(tester);
+      await tester.tap(find.text('Approve'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Try again'), findsOneWidget);
+      expect(find.textContaining('Could not resolve'), findsOneWidget);
+
+      await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Saved'), findsOneWidget);
+      // addEntry só uma vez mesmo com 2 tentativas de _approve() — a 1ª
+      // falhou DEPOIS de já ter persistido a entrada (getIdentityByUsername
+      // é chamado depois de addEntry na 2ª leva do fluxo), retry não deve
+      // duplicar.
+      verify(() => mockRepository.addEntry(
+            site: 'example.com',
+            url: '',
+            username: 'alice',
+            password: 'hunter2',
+            notes: '',
+            passkey: null,
+          )).called(1);
+    });
+
+    testWidgets(
+        'erro de validação do QR (antes de decifrar) não mostra "Try again"',
+        (tester) async {
+      await pumpAndOpen(tester, validPayload(sessionId: ''));
+
+      expect(find.textContaining('Invalid QR'), findsOneWidget);
+      expect(find.text('Try again'), findsNothing);
+      expect(find.text('Back'), findsOneWidget);
+    });
   });
 
   group('fase 2 — Reject', () {

@@ -277,24 +277,31 @@ class BlockchainService {
   // não dá pra simplesmente omitir os dois, tem que paginar.
   static const _maxLogRangeBlocks = 2000;
 
+  // Quantas faixas de _maxLogRangeBlocks a fase 1 (rápida) cobre a partir do
+  // tip — mesma janela (~100k blocos) que a versão original (Sessão 134)
+  // usava como única estratégia. Cobre o caso comum (identidade pareada há
+  // pouco tempo) em 1-2 chunks.
+  static const _recentLookbackChunks = 50;
+
   // Resolve o @username da identidade via eth_getLogs no evento IdentityCreated.
   // O contrato não tem um getter id→username, então a única fonte é o log.
-  // Pagina PRA FRENTE a partir de identityRegistryDeployBlock (nunca antes
-  // disso) até "latest" — cobre qualquer identidade, não só as recentes.
   //
-  // Achado real (Sessão 134): a versão anterior paginava pra trás a partir
-  // de "latest" com uma janela fixa de 50 faixas (~100k blocos) — suficiente
-  // só pra identidade pareada há pouco tempo (o caso de uso original,
-  // DevicesScreen logo após descobrir um pareamento novo). Meses depois, com
-  // a chain ~550k blocos à frente do deploy, a identidade #1 (criada junto
-  // do deploy) ficou permanentemente fora dessa janela — username nunca mais
-  // resolvia, travando saldo/atividade da aba Wallet pra sempre (nenhum
-  // retry corrigia, o scan sempre parava na mesma janela recente vazia).
-  // Escanear pra frente a partir do deploy garante achar qualquer identidade
-  // mais cedo ou mais tarde — pra uma identidade antiga, a resposta vem já
-  // no primeiro chunk (perto do próprio deploy); pra uma criada há pouco, o
-  // scan varre até o fim antes de achar, mais chunks mas ainda correto.
-  // Retorna null se não encontrar (identidade não existe) ou se o RPC falhar.
+  // Duas fases, achado real da Sessão 135 (revisão do fix da Sessão 134):
+  // fase 1 pagina PRA TRÁS a partir de "latest", limitada a
+  // _recentLookbackChunks — cobre rápido o caso comum (DevicesScreen logo
+  // após descobrir um pareamento novo, identidade criada perto do tip).
+  // Fase 2, só se a 1 não achar, pagina PRA FRENTE a partir de
+  // identityRegistryDeployBlock até onde a fase 1 já começou (sem repetir
+  // blocos) — sem teto, mas só roda pro caso raro de identidade antiga
+  // (ex: identidade #1, criada junto do deploy, é o motivo desta fase
+  // existir: só scan pra trás com janela fixa a deixava fora de alcance pra
+  // sempre, travando saldo/atividade da aba Wallet). A fase 1 sozinha (como
+  // na Sessão 134 original) resolvia isso trocando pra frente incondicional,
+  // mas aí uma identidade recém-criada passava a precisar de centenas de
+  // chunks sequenciais pra ser achada — regressão real no caso comum pra
+  // corrigir o raro. As duas fases juntas cobrem os dois sem penalizar um
+  // pelo outro. Retorna null se não encontrar (identidade não existe) ou se
+  // o RPC falhar.
   Future<String?> getUsernameForIdentity(BigInt identityId) async {
     // keccak256("IdentityCreated(uint256,string,address)") — topic[0]
     final sigBytes = keccak256(
@@ -307,11 +314,18 @@ class BlockchainService {
     final latestBlock = await getLatestBlockNumber();
     if (latestBlock == null) return null;
 
-    var fromBlock = identityRegistryDeployBlock;
-    while (fromBlock <= latestBlock) {
-      final toBlock = fromBlock + _maxLogRangeBlocks - 1 < latestBlock
-          ? fromBlock + _maxLogRangeBlocks - 1
-          : latestBlock;
+    final recentWindowStartUnclamped =
+        latestBlock - _recentLookbackChunks * _maxLogRangeBlocks + 1;
+    final recentWindowStart = recentWindowStartUnclamped > identityRegistryDeployBlock
+        ? recentWindowStartUnclamped
+        : identityRegistryDeployBlock;
+
+    // Fase 1 — pra trás, limitada, cobre [recentWindowStart, latestBlock].
+    var toBlock = latestBlock;
+    while (toBlock >= recentWindowStart) {
+      final fromBlock = toBlock - _maxLogRangeBlocks + 1 > recentWindowStart
+          ? toBlock - _maxLogRangeBlocks + 1
+          : recentWindowStart;
 
       final logs = await _fetchIdentityCreatedLogs(
         eventTopic: eventTopic,
@@ -323,7 +337,30 @@ class BlockchainService {
         return _decodeUsernameFromLog(logs.first as Map<String, dynamic>);
       }
 
-      fromBlock = toBlock + 1;
+      toBlock = fromBlock - 1;
+    }
+
+    // Fase 2 — pra frente, sem teto, cobre [identityRegistryDeployBlock,
+    // recentWindowStart - 1] (o que a fase 1 ainda não cobriu). Só executa
+    // se recentWindowStart > identityRegistryDeployBlock — perto do deploy,
+    // a fase 1 já cobre a chain inteira e este loop não roda.
+    var fromBlock = identityRegistryDeployBlock;
+    while (fromBlock < recentWindowStart) {
+      final chunkEnd = fromBlock + _maxLogRangeBlocks - 1 < recentWindowStart - 1
+          ? fromBlock + _maxLogRangeBlocks - 1
+          : recentWindowStart - 1;
+
+      final logs = await _fetchIdentityCreatedLogs(
+        eventTopic: eventTopic,
+        idTopic: idTopic,
+        fromBlock: fromBlock,
+        toBlock: chunkEnd,
+      );
+      if (logs != null && logs.isNotEmpty) {
+        return _decodeUsernameFromLog(logs.first as Map<String, dynamic>);
+      }
+
+      fromBlock = chunkEnd + 1;
     }
     return null;
   }

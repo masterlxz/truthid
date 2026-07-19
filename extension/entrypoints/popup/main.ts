@@ -272,6 +272,22 @@ async function refreshPendingEdits(): Promise<void> {
   }
 }
 
+// Achado real (Sessão 135): `refreshPendingEdits()` esconde a seção inteira
+// (e limpa `pendingEditsStatus`) assim que `pending.length === 0` — se a
+// proposta acabou de ser removida (approve/reject/send bem-sucedido), isso
+// acontecia no mesmo instante em que a mensagem terminal ("Saved.", "Sent to
+// your phone...") era escrita, apagando-a antes de o usuário ter qualquer
+// chance de ler. Dá um tempo antes de deixar `refreshPendingEdits()` rodar
+// nesses casos — só quando a proposta continua pendente (falha, sem remoção)
+// é que o refresh imediato é seguro (nada pra esconder/limpar).
+const TERMINAL_MESSAGE_DISPLAY_MS = 2500;
+
+function scheduleRefreshAfterTerminalMessage(): void {
+  setTimeout(() => {
+    void refreshPendingEdits();
+  }, TERMINAL_MESSAGE_DISPLAY_MS);
+}
+
 els.sendToDesktopButton.addEventListener('click', async () => {
   const pending = await listPendingEdits();
   const proposal = pending[0];
@@ -280,24 +296,41 @@ els.sendToDesktopButton.addEventListener('click', async () => {
   els.pendingEditsStatus.textContent = 'Looking for TruthID Desktop on this computer...';
   els.sendToDesktopButton.disabled = true;
   els.sendToPhoneButton.disabled = true;
+  let removed = false;
   try {
     const result = await sendToDesktop(proposal);
     if (result.status === 'approved') {
       await removePendingEdit(proposal.id);
       els.pendingEditsStatus.textContent = 'Saved.';
+      removed = true;
     } else if (result.status === 'rejected') {
       await removePendingEdit(proposal.id);
       els.pendingEditsStatus.textContent = 'Rejected on the Desktop.';
+      removed = true;
     } else if (result.status === 'not-found') {
       els.pendingEditsStatus.textContent =
         "Couldn't find TruthID Desktop running on this computer.";
     } else {
       els.pendingEditsStatus.textContent = `Failed: ${result.status}${result.error ? ` (${result.error})` : ''}`;
     }
+    // Achado real (Sessão 135): se essa MESMA proposta também tinha um QR de
+    // celular pendente (usuário mandou pro celular, ainda não escaneou,
+    // trocou de ideia e aprovou pelo Desktop em vez disso), o botão de retry
+    // do celular continuava vivo apontando pra uma proposta já
+    // removida/aprovada — clicá-lo reenviaria a mesma proposta pro celular,
+    // que poderia aprovar de novo. Limpa a sessão de celular junto.
+    if (removed && activeMobileDelivery?.proposal.id === proposal.id) {
+      activeMobileDelivery = null;
+      els.pendingEditQrWrapper.hidden = true;
+    }
   } finally {
     els.sendToDesktopButton.disabled = false;
     els.sendToPhoneButton.disabled = false;
-    await refreshPendingEdits();
+    if (removed) {
+      scheduleRefreshAfterTerminalMessage();
+    } else {
+      await refreshPendingEdits();
+    }
   }
 });
 
@@ -317,6 +350,7 @@ async function attemptMobileDelivery(
   els.sendToDesktopButton.disabled = true;
   els.sendToPhoneButton.disabled = true;
   els.pendingEditRetryButton.disabled = true;
+  let delivered = false;
   try {
     const sent = await session.send();
     if (sent) {
@@ -328,6 +362,7 @@ async function attemptMobileDelivery(
       els.pendingEditsStatus.textContent = 'Sent to your phone — check it to approve.';
       els.pendingEditQrWrapper.hidden = true;
       activeMobileDelivery = null;
+      delivered = true;
     } else {
       // Achado real (Sessão 135): o primeiro envio roda ANTES de o usuário
       // ter tido tempo de escanear o QR de verdade — quase sempre falha na
@@ -342,7 +377,11 @@ async function attemptMobileDelivery(
     els.sendToDesktopButton.disabled = false;
     els.sendToPhoneButton.disabled = false;
     els.pendingEditRetryButton.disabled = false;
-    await refreshPendingEdits();
+    if (delivered) {
+      scheduleRefreshAfterTerminalMessage();
+    } else {
+      await refreshPendingEdits();
+    }
   }
 }
 
@@ -351,9 +390,19 @@ els.sendToPhoneButton.addEventListener('click', async () => {
   const proposal = pending[0];
   if (!proposal) return;
 
+  // Achado real (Sessão 135): sem desabilitar aqui, um clique duplo rápido
+  // corre pelas 3 chamadas assíncronas abaixo (permission/startMobileDelivery/
+  // renderQrToCanvas) antes de attemptMobileDelivery desabilitar os botões,
+  // gerando 2 sessões de entrega sobrepostas (a 2ª sobrescreve
+  // `activeMobileDelivery` da 1ª no meio do envio).
+  els.sendToDesktopButton.disabled = true;
+  els.sendToPhoneButton.disabled = true;
+
   const granted = await ensureHostPermission();
   if (!granted) {
     els.pendingEditsStatus.textContent = 'Permission denied.';
+    els.sendToDesktopButton.disabled = false;
+    els.sendToPhoneButton.disabled = false;
     return;
   }
 

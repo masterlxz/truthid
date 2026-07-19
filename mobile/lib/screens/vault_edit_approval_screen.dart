@@ -87,6 +87,11 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
   String? _errorMsg;
   List<String> _localIps = [];
   bool _showPassword = false;
+  // Guarda "Try again" (achado real, Sessão 135) de recriar a entrada no
+  // vault a cada retry — se addEntry já teve sucesso numa tentativa
+  // anterior e só publish() falhou depois, retentar não deve chamar
+  // addEntry de novo (criaria uma 2ª entrada duplicada pro mesmo site).
+  bool _entryPersisted = false;
 
   late final RemoteSignerLanServer _lanServer;
   late final VaultRepository _repository;
@@ -230,7 +235,16 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
       return null;
     }
 
-    final identity = await _blockchain.getIdentityByUsername(username);
+    // Guardado explicitamente (achado real, Sessão 135/ultrareview): sem
+    // isso, uma falha aqui (ex: RPC fora do ar) caía no catch genérico de
+    // _approve() e mostrava uma mensagem de erro crua em vez desta,
+    // consistente com o branch "identity == null" logo abaixo.
+    IdentityInfo? identity;
+    try {
+      identity = await _blockchain.getIdentityByUsername(username);
+    } catch (_) {
+      identity = null;
+    }
     if (identity == null) {
       if (!mounted) return null;
       setState(() {
@@ -270,16 +284,19 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
       final smartAccountAddress = await _resolveSmartAccountAddress();
       if (smartAccountAddress == null) return; // erro já setado acima
 
-      final proposal = _proposal!;
-      final passkeyJson = proposal['passkey'] as Map<String, dynamic>?;
-      await _repository.addEntry(
-        site: proposal['site'] as String? ?? '',
-        url: proposal['url'] as String? ?? '',
-        username: proposal['username'] as String? ?? '',
-        password: proposal['password'] as String? ?? '',
-        notes: proposal['notes'] as String? ?? '',
-        passkey: passkeyJson != null ? Passkey.fromJson(passkeyJson) : null,
-      );
+      if (!_entryPersisted) {
+        final proposal = _proposal!;
+        final passkeyJson = proposal['passkey'] as Map<String, dynamic>?;
+        await _repository.addEntry(
+          site: proposal['site'] as String? ?? '',
+          url: proposal['url'] as String? ?? '',
+          username: proposal['username'] as String? ?? '',
+          password: proposal['password'] as String? ?? '',
+          notes: proposal['notes'] as String? ?? '',
+          passkey: passkeyJson != null ? Passkey.fromJson(passkeyJson) : null,
+        );
+        _entryPersisted = true;
+      }
 
       final publishService = await _ensurePublishService();
       await publishService.publish(smartAccountAddress);
@@ -522,6 +539,14 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
   }
 
   Widget _buildErrorUI() {
+    // Achado real (Sessão 135): se o conteúdo já chegou e foi decifrado
+    // (_proposal != null), o erro aconteceu durante o approve (ex: RPC
+    // falhou ao resolver a smart account) — a proposta já decifrada
+    // continua em memória, não precisa de um QR novo pra tentar de novo.
+    // "Back" descartava ela pra sempre mesmo quando o retry era trivial.
+    // Erros de validação do QR ou de decrypt (_proposal ainda null) não têm
+    // o que retentar — só "Back" faz sentido nesses.
+    final canRetry = _proposal != null;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -536,7 +561,14 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
               style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 24),
-            ElevatedButton(
+            if (canRetry) ...[
+              ElevatedButton(
+                onPressed: _approve,
+                child: const Text('Try again'),
+              ),
+              const SizedBox(height: 12),
+            ],
+            OutlinedButton(
               onPressed: () => Navigator.of(context).pop(),
               child: const Text('Back'),
             ),
