@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-19 (Sessão 129 — item 6 do roadmap pós-Fase 14 fecha 100%: bloqueio biométrico/PIN validado em hardware real, Samsung Galaxy S25 FE. Próximo: item 7, monetização)
+> Última atualização: 2026-07-19 (Sessão 130 — registrado backlog de 5 itens pedidos pelo dono do projeto: QR no TOTP, passkey na extensão, gerador de senha em popup no Desktop, bug de "pending changes" falso no Mobile [causa raiz já localizada em vault_sync_service.dart:119], depois code review + docs + publicação. Nada implementado ainda)
 >
 > ⚠️ **LEMBRETE**: ao final do projeto (todas as fases concluídas), fazer uma revisão completa deste arquivo — consolidar endereços, remover seções obsoletas, e garantir que a tabela de Pendências de Deploy está zerada. Sessão 68.
 
@@ -1348,6 +1348,75 @@ alterada, e reduz custo de gas (1 transação por sessão de edição, não por 
 
 **Nada implementado, nada desenhado em detalhe — fica pra quando o dono do projeto quiser rodar
 um `/plan` de verdade sobre algum desses itens.**
+
+---
+
+### Backlog pós-item 6: QR no TOTP, passkey na extensão, gerador de senha em popup, bug de
+"pending changes" falso no Mobile (registrado 2026-07-19, Sessão 130)
+
+**Contexto**: pedido explícito do dono do projeto — só registrar estas 5 ideias/achados agora, sem
+implementar nada nesta sessão ("não precisa implementar tudo numa porrada só"). Cada item roda
+depois, um de cada vez, em sessão própria (provavelmente com `/plan`).
+
+1. **Ler QR code do 2FA (TOTP) no celular e no desktop** — hoje o secret do TOTP só entra colado
+   manualmente. `parseTotpSecret` (`mobile/lib/services/totp_service.dart`,
+   `desktop/src/utils/totp.ts`) já aceita tanto o secret cru quanto uma URI `otpauth://...`
+   completa, mas nenhum dos dois lados lê QR de verdade. O Mobile já tem toda a infra de câmera
+   pronta (`mobile_scanner`, hoje usado só pro pareamento em `scan_screen.dart`) — dá pra
+   reaproveitar num botão "Escanear QR" no campo de TOTP do `vault_entry_form_screen.dart`,
+   passando o conteúdo decodificado pro `parseTotpSecret` já existente. O Desktop não tem acesso a
+   câmera nenhum hoje (nem pro pareamento — colar manual, já registrado acima como "melhoria de UX
+   futura" na seção de sinalização); precisa de uma decisão de abordagem ainda não tomada: webcam
+   via `getUserMedia` + decode (`jsQR` ou similar) dentro da webview do Tauri, ou upload de imagem
+   decodificado do mesmo jeito.
+
+2. **Passkey deveria ir pra extensão — hoje não vai, de propósito** — confirmado no código:
+   `extension/src/session/sessionState.ts` exclui deliberadamente `totp_secret` **e** `passkey` do
+   que chega na extensão (comentário no arquivo cobre os dois: "2FA e passkeys ficam isolados").
+   Reflete uma decisão de escopo já registrada na fundação de Passkeys (Sessão 124): interceptar
+   `navigator.credentials` num site real "fica pra a reforma da extensão (item 5 do roadmap)" — mas
+   o item 5 (Sessão 127) só implementou autofill de usuário/senha, nunca voltou pra fechar essa
+   parte. Pedido agora: reverter isso especificamente pro passkey (TOTP continua de fora, decisão
+   de segurança separada e deliberada, não mexer). Implica content script + bridge de main-world
+   pra interceptar `navigator.credentials.create()/get()` de verdade num site — não existe hoje na
+   extensão, que só tem autofill de formulário (`extension/entrypoints/autofill.content.ts`).
+
+3. **Gerador de senha do Desktop "esquisito" — virar popup** — hoje é um painel inline dentro do
+   próprio formulário (`desktop/src/components/VaultManagement.tsx`, bloco dos toggles de
+   categoria/preview em volta da linha 280-330), embutido no fluxo do form em vez de ser um
+   popup/modal separado. O Mobile já resolveu isso como bottom sheet
+   (`vault_entry_form_screen.dart`, Sessão 128) — pedido é trazer o Desktop pro mesmo tratamento
+   (dialog/popup flutuante em vez de painel inline).
+
+4. **Bug reportado: "pending changes" falso no Mobile depois de sync** — publicar uma entrada nova
+   no Desktop, o Mobile puxa a atualização certinho (aparece a entrada nova), mas continua
+   mostrando "N pending changes" como se tivesse mudança local não publicada. **Causa raiz já
+   localizada por inspeção de código, não corrigida ainda**: `VaultRepository.pendingChanges()`
+   (`mobile/lib/services/vault_repository.dart:494`) calcula `data.version - last`, onde `last` vem
+   de uma chave própria do device (`vault_last_published_version` no `flutter_secure_storage`) que
+   só é atualizada por `markPublished()` — chamado exclusivamente em
+   `vault_publish_service.dart:66`, ou seja, só quando o **próprio Mobile** publica algo. Quando
+   `VaultSyncService.sync()` puxa uma versão mais nova vinda de outro device e sobrescreve o cache
+   local (`vault_sync_service.dart:119`, `_repository.overwriteCache(bytes)` — o mesmo caminho do
+   fix da Sessão 126 pro bug de perda de dados), ele nunca chama `markPublished(ref.version)`. Então
+   `data.version` sobe (reflete a versão nova sincronizada) mas o marcador de "última publicada por
+   este device" fica parado no valor antigo, e a subtração vira um número positivo de "pendências"
+   que não existem de verdade. Fix provável: `sync()` também chamar `markPublished(ref.version)`
+   sempre que aceitar uma versão vinda do chain/IPFS (não só nas publicações locais) — não
+   implementado ainda, só localizado. **Não confirmado no Desktop**: `desktop/src-tauri/src/vault.rs`
+   não tem nenhum mecanismo de pull/sync automático (só `load()` local e `mark_published()`/
+   `vault_publish()` — nunca busca do IPFS), então o Desktop não passa pelo mesmo caminho de código
+   que causa esse bug específico no Mobile. Pode ser que o dono do projeto tenha observado outra
+   coisa no Desktop (vale reproduzir/perguntar antes de assumir que é o mesmo bug), ou que o gap
+   real no Desktop seja simplesmente a ausência de qualquer sync automático — aí seria feature
+   faltando, não bug.
+
+5. **Depois de tudo isso**: code review completo do app inteiro, atualizar documentação, e publicar
+   o app — registrado como sequência pedida pro fim desta leva de trabalho, sem detalhe adicional
+   ainda (nenhum escopo de code review ou plano de publicação definido nesta sessão).
+
+Nada implementado nesta entrada — só levantamento e registro de causa raiz (item 4), pra rodar item
+por item nas próximas sessões.
 
 ---
 
