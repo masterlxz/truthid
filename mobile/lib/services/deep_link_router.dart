@@ -4,6 +4,7 @@ import '../screens/approval_screen.dart';
 import '../screens/pin_approval_screen.dart';
 import '../screens/sign_message_approval_screen.dart';
 import '../screens/sign_request_approval_screen.dart';
+import '../screens/vault_edit_approval_screen.dart';
 import '../screens/vault_session_screen.dart';
 
 /// Dispatch de `payload['action']` pra tela de aprovação certa — extraído de
@@ -44,6 +45,12 @@ class DeepLinkRouter {
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => PinApprovalScreen(payload: payload),
+        ),
+      );
+    } else if (action == 'truthid-vault-edit') {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => VaultEditApprovalScreen(payload: payload),
         ),
       );
     } else {
