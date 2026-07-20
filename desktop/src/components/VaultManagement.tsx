@@ -18,6 +18,7 @@ import { decodeQrFromImageBytes } from "../utils/qrDecode";
 import { PasskeyBadge } from "./PasskeyBadge";
 import { createPasskey } from "../utils/webauthn";
 import { generatePassword, type PasswordGeneratorOptions } from "../utils/passwordGenerator";
+import { PasswordGeneratorModal } from "./PasswordGeneratorModal";
 import { passwordStrength, type PasswordStrengthScore } from "../utils/passwordStrength";
 
 const VAULT_KEY_MESSAGE = "TruthID Vault Key v1";
@@ -310,61 +311,20 @@ function EntryForm({
             </button>
           </div>
           <StrengthMeter password={form.password} />
-          {genOpen && (
-            <div className="card" style={{ marginTop: "0.5rem", padding: "0.75rem" }}>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap" }}>
-                <label style={{ fontSize: "0.82em" }}>
-                  Tamanho:{" "}
-                  <input
-                    type="number"
-                    min={1}
-                    value={genOptions.length}
-                    onChange={(e) => handleGenLengthChange(Math.max(1, Number(e.target.value)))}
-                    style={{ width: "4.5rem" }}
-                  />
-                </label>
-                {(
-                  [
-                    ["uppercase", "Maiúsculas"],
-                    ["lowercase", "Minúsculas"],
-                    ["numbers", "Números"],
-                    ["symbols", "Símbolos"],
-                  ] as const
-                ).map(([field, label]) => (
-                  <button
-                    key={field}
-                    type="button"
-                    onClick={() => handleToggleCategory(field)}
-                    style={{
-                      padding: "0.25em 0.75em",
-                      fontSize: "0.82em",
-                      borderColor: genOptions[field] ? "var(--color-accent)" : "var(--color-border)",
-                      color: genOptions[field] ? "var(--color-accent)" : "var(--color-text-muted)",
-                      background: genOptions[field] ? "rgba(77,208,225,0.1)" : "transparent",
-                    }}
-                  >
-                    {genOptions[field] ? "✓ " : ""}{label}
-                  </button>
-                ))}
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginTop: "0.6rem" }}>
-                <code style={{ flex: 1, fontSize: "0.9em", wordBreak: "break-all" }}>
-                  {genPreview || "—"}
-                </code>
-                <button type="button" onClick={() => handleRegenerate(genOptions)} style={{ padding: "0.2em 0.6em", fontSize: "0.8em" }}>
-                  🔄 Gerar
-                </button>
-              </div>
-              {genError && <p className="error-text" style={{ margin: "0.4em 0 0", fontSize: "0.82em" }}>{genError}</p>}
-              <div className="actions-row" style={{ marginTop: "0.6rem" }}>
-                <button type="button" onClick={handleUseGeneratedPassword} disabled={!genPreview}>
-                  Usar esta senha
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       </div>
+      {genOpen && (
+        <PasswordGeneratorModal
+          options={genOptions}
+          preview={genPreview}
+          error={genError}
+          onToggleCategory={handleToggleCategory}
+          onLengthChange={handleGenLengthChange}
+          onRegenerate={() => handleRegenerate(genOptions)}
+          onUse={handleUseGeneratedPassword}
+          onClose={() => setGenOpen(false)}
+        />
+      )}
       <div className="field">
         <label>Notas</label>
         <input value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="notas opcionais" />
