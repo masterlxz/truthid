@@ -41,6 +41,29 @@ describe('startMobileDelivery', () => {
     expect(encryptedBody.length).toBeGreaterThan(12 + 16);
   });
 
+  it('sendTo() cifra a proposta e tenta cada porta candidata no host até uma aceitar', async () => {
+    const putAt = vi
+      .fn(async (_host: string, port: number, _sessionId: string, _body: Uint8Array) => port === 48052)
+      .mockName('putAt');
+    const session = startMobileDelivery(proposal, { putAt });
+
+    const ok = await session.sendTo('192.168.1.42');
+
+    expect(ok).toBe(true);
+    expect(putAt).toHaveBeenCalledTimes(3);
+    for (const call of putAt.mock.calls) {
+      expect(call[0]).toBe('192.168.1.42');
+      expect(call[2]).toBe(session.qrPayload.sessionId);
+    }
+  });
+
+  it('sendTo() devolve false se nenhuma porta aceitar', async () => {
+    const putAt = vi.fn(async () => false);
+    const session = startMobileDelivery(proposal, { putAt });
+
+    expect(await session.sendTo('192.168.1.42')).toBe(false);
+  });
+
   it('duas sessões geram sessionIds diferentes', () => {
     const a = startMobileDelivery(proposal);
     const b = startMobileDelivery(proposal);

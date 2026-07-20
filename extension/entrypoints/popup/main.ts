@@ -90,6 +90,12 @@ const els = {
   pendingEditRetryButton: document.getElementById(
     'pending-edit-retry',
   ) as HTMLButtonElement,
+  pendingEditManualIpInput: document.getElementById(
+    'pending-edit-manual-ip',
+  ) as HTMLInputElement,
+  pendingEditManualConnectButton: document.getElementById(
+    'pending-edit-manual-connect',
+  ) as HTMLButtonElement,
 };
 
 let currentState: SessionState | null = null;
@@ -346,13 +352,15 @@ let activeMobileDelivery: { session: MobileDeliverySession; proposal: VaultEditP
 async function attemptMobileDelivery(
   session: MobileDeliverySession,
   proposal: VaultEditProposal,
+  deliver: () => Promise<boolean> = () => session.send(),
 ): Promise<void> {
   els.sendToDesktopButton.disabled = true;
   els.sendToPhoneButton.disabled = true;
   els.pendingEditRetryButton.disabled = true;
+  els.pendingEditManualConnectButton.disabled = true;
   let delivered = false;
   try {
-    const sent = await session.send();
+    const sent = await deliver();
     if (sent) {
       // Best-effort: a extensão não tem como receber confirmação de volta
       // de que o celular publicou de verdade (não roda servidor nenhum) —
@@ -377,6 +385,7 @@ async function attemptMobileDelivery(
     els.sendToDesktopButton.disabled = false;
     els.sendToPhoneButton.disabled = false;
     els.pendingEditRetryButton.disabled = false;
+    els.pendingEditManualConnectButton.disabled = false;
     if (delivered) {
       scheduleRefreshAfterTerminalMessage();
     } else {
@@ -433,6 +442,18 @@ els.sendToPhoneButton.addEventListener('click', async () => {
 els.pendingEditRetryButton.addEventListener('click', async () => {
   if (!activeMobileDelivery) return;
   await attemptMobileDelivery(activeMobileDelivery.session, activeMobileDelivery.proposal);
+});
+
+// Fallback manual (Sessão 136): a varredura automática de `send()` depende
+// de `chrome.system.network`, indisponível no Brave (mesma limitação já
+// documentada pro fluxo de leitura do vault, ver `manual-connect` acima) —
+// sem isto, "Send to phone"/retry nunca entrega nada no Brave, silenciosamente.
+els.pendingEditManualConnectButton.addEventListener('click', async () => {
+  if (!activeMobileDelivery) return;
+  const ip = els.pendingEditManualIpInput.value.trim();
+  if (!ip) return;
+  const { session, proposal } = activeMobileDelivery;
+  await attemptMobileDelivery(session, proposal, () => session.sendTo(ip));
 });
 
 void init();

@@ -2,7 +2,14 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-19 (Sessão 135 — fatia Mobile do vault-edit implementada e validada em
+> Última atualização: 2026-07-20 (Sessão 136 — **Fase 2 do passkey na extensão fecha 100% em
+> hardware real**: approve real no Desktop (device key, não precisa de Ledger — correção de suposição
+> errada) e approve real via QR+celular (publicou de verdade, Base Mainnet), causa raiz do bug de
+> porta LAN confirmada (restrição padrão do Android de rede em segundo plano, documentada, não
+> corrigida a pedido do dono do projeto), bug real corrigido no `pushToMobile` da extensão (sem
+> fallback de IP manual, nunca entregava nada no Brave), e achado novo registrado — contador de
+> "pending changes" soma sem cancelar em toggles de favorito — ver "Sessão 136" mais abaixo pro
+> detalhe completo). Sessão 135 — fatia Mobile do vault-edit implementada e validada em
 > hardware real; achado+corrigido bug real do saldo sumido no Wallet Mobile; achado+corrigido 2 bugs
 > reais na validação em hardware da extensão (storage bloqueado no Brave, retry de QR); rodado
 > `/code-review max` sobre o diff da sessão — **todos os 15 achados fechados** (4 CONFIRMED + 11
@@ -5894,6 +5901,142 @@ Validado: extensão (`tsc`/`vitest` 65/65/`build`) e mobile (`flutter analyze` l
 PLAUSIBLE — corrigidos ou, no caso de `pushToMobile`, avaliados e descartados com justificativa
 registrada). Detalhe completo de cada achado (file/line/failure_scenario) foi reportado via
 `ReportFindings` na sessão — não duplicado aqui pra não inflar o arquivo.
+
+---
+
+### Sessão 136 — 2026-07-20: causa raiz confirmada do bug de porta LAN no celular (item 6 do
+backlog, `PasskeyExtensão Fase 2`)
+
+Retomando a pendência #2 da Fase 2 (passkey na extensão — criação + aprovação via Device, ver
+Sessão 133/134 acima): a Sessão 135 achou que o celular físico não conseguia abrir
+`RemoteSignerLanServer` nas portas `48050-48054` durante o teste `extensão → QR → celular`, e
+suspeitou de Auto Blocker do Samsung ou isolamento de cliente/AP no roteador, sem investigar a
+fundo.
+
+**Causa raiz confirmada nesta sessão, reproduzida de forma 100% confiável e reversível — não é
+nenhuma das duas hipóteses anteriores**: é a restrição padrão do Android de rede em segundo plano
+(qualquer app sem foreground service ativo tem o tráfego de entrada bloqueado pelo firewall
+por-UID do SO, `dumpsys netpolicy` mostra `blocked=APP_BACKGROUND, effective=APP_BACKGROUND`, ~1min
+depois do app sair de primeiro plano). Isso afeta as 4 telas que compartilham
+`RemoteSignerLanServer.receiveOnce()`/`serveOnce()`: `pin_approval_screen.dart`,
+`sign_message_approval_screen.dart`, `sign_request_approval_screen.dart`,
+`vault_edit_approval_screen.dart`.
+
+**Método de reprodução** (sem precisar rodar a extensão inteira): celular pareado via `adb` wireless
+(`adb pair`/`adb connect`), payload de teste injetado direto via deep link (`adb shell am start -a
+android.intent.action.VIEW -d 'truthid://vault-edit?v=1&sessionId=...&ephemeralPubKey=deadbeef&
+expiresAt=...&appName=DebugTest'` — abre a tela de aprovação real sem precisar de QR nem da
+extensão), e `curl -X PUT` de outra máquina na mesma rede simulando a entrega:
+- App em primeiro plano: bind na porta 48050, conexão de outra máquina na mesma LAN chega em
+  30-200ms, sempre. Decrypt falha de propósito (payload de teste não é ciphertext real) — confirma
+  que o caminho HTTP fim-a-fim funciona.
+- App genuinamente em segundo plano (outro app em foco, ~60s): porta continua de pé do lado do
+  processo (`/proc/net/tcp` mostra `LISTEN`), mas o SO derruba o SYN de entrada silenciosamente —
+  `curl` trava até estourar timeout. `dumpsys netpolicy` confirma `effective=APP_BACKGROUND` nesse
+  exato momento.
+- Trazendo o app de volta pro topo: reconecta na hora, sem precisar reabrir a tela.
+
+Bate exatamente com o sintoma original da Sessão 135 (usuário escaneou o QR, ficou esperando, UI
+travada no spinner sem erro nem timeout até o TTL de 3min estourar).
+
+**Decisão do dono do projeto**: só documentar como limitação conhecida por ora, não mexer em código
+(a correção real — foreground service, ou pelo menos um aviso de UX detectando
+`WidgetsBindingObserver` — fica pra quando/se isso incomodar de verdade no uso real). Enquanto isso,
+qualquer teste manual em hardware das 4 telas de aprovação via LAN precisa manter o celular em
+primeiro plano (tela acesa, app na tela) do início ao fim da espera.
+
+Debug de rede feito com `dumpsys netpolicy`/`dumpsys deviceidle`/`/proc/net/tcp` via `adb shell`; a
+pista falsa do usuário 150 (`Secure Folder`) apareceu nos primeiros comandos de diagnóstico
+(`pm list packages`/`dumpsys package` sem `--user 0` explícito erram nesse device por causa do
+perfil secundário) mas não tem relação nenhuma com o bug real — o app roda inteiro no user 0.
+
+**Achado de documentação, fora do escopo técnico**: a narrativa completa da Sessão 135 (fatia Mobile
+do vault-edit, os 2 bugs achados na validação em hardware — storage bloqueado no Brave, retry de QR
+cedo demais) nunca foi de fato escrita neste arquivo, só ficou registrada na memória entre sessões
+do Claude Code. Fica como pendência pro item 5 do backlog (`code review + docs + publicação`) —
+reconstruir esse trecho a partir da memória antes de considerar a documentação atualizada.
+
+**Pendências que restam pra fechar a Fase 2 100% em hardware**:
+1. ~~Approve real no caminho Desktop~~ — **fechado nesta sessão**. Correção importante sobre o que
+   foi registrado antes: **não precisa de Ledger/WalletConnect** — `VaultEditApprovalModal.tsx`
+   publica via `publishVaultViaDeviceKey`/`executeViaUserOp`, a mesma device key local do Desktop
+   (`~/.truthid/device.key`), igual ao Mobile. A suposição de que precisava de wallet conectada
+   (registrada na entrada da Sessão 135) estava errada — o Ledger foi conectado à toa nesta sessão.
+   Ambiente de teste montado do zero (Brave descartável + extensão carregada + página HTML local com
+   `navigator.credentials.create()` + IPFS local + Desktop nativo): `create()` interceptado → "Send
+   to this computer" → modal real no Desktop → **Approve real, publicou de verdade** (pin no IPFS +
+   `updateVault` via UserOp on-chain, Base Mainnet). 2 achados reais no caminho:
+   - `~/.truthid/bundler_config.json` não existia nessa máquina (API key do Pimlico nunca
+     configurada aqui) — sem tela de Settings no Desktop pra isso ainda (só no Mobile), precisou
+     escrever o arquivo manualmente. Sem ação de código, só setup de ambiente.
+   - Primeira tentativa de approve voltou **`AA24 signature error`** do EntryPoint — causa raiz:
+     **este Desktop nunca tinha sido pareado como device da identidade** (`DeviceRegistry.
+     getDevicesByIdentity` on-chain não listava o endereço da device key desta máquina). Não é bug
+     de código — confirmado pareando o Desktop como device novo (QR de outro device já pareado) e
+     repetindo o fluxo do zero, que aí publicou com sucesso. Fica registrado como pegadinha real de
+     ambiente novo: qualquer Desktop precisa estar pareado como device *antes* de conseguir aprovar
+     qualquer coisa via device key (pin, sign-message, sign-request, vault-edit — todos o mesmo
+     mecanismo).
+2. ~~Investigar por que o celular físico não abre `RemoteSignerLanServer`~~ — **causa raiz
+   confirmada acima**.
+3. ~~Approve real via QR+celular~~ — **fechado nesta sessão**, mantendo o celular em primeiro
+   plano durante toda a espera (por causa do item 2). Achado real de código no caminho, corrigido:
+   **`pushToMobile` (`extension/src/vaultEdit/lanDelivery.ts`) nunca entregava nada no Brave** —
+   depende 100% de `chrome.system.network.getNetworkInterfaces()` pra descobrir a sub-rede local a
+   varrer, API que o Brave bloqueia por padrão (mesma limitação já documentada na Sessão 127 pro
+   fluxo de leitura do vault). Sem host pra varrer, `pushToMobile` retorna `false` imediatamente,
+   sempre — e diferente do fluxo de leitura (que já tinha um campo de IP manual desde a Sessão 127),
+   o "Send to phone"/retry de vault-edit (Sessão 134) nunca ganhou esse fallback. **Fix**: novo
+   `MobileDeliverySession.sendTo(host)` em `mobileDelivery.ts` (tenta as 5 portas candidatas nesse
+   host específico, reaproveitando a mesma cifra/sessionId de `send()`), campo "Phone IP" +
+   botão "Send" novos em `pending-edit-qr-wrapper` (popup), mesmo padrão visual do `manual-connect`
+   já existente. 2 testes novos (`mobileDelivery.test.ts`), `npx vitest run` 67/67, `tsc --noEmit`
+   limpo, `npm run build` ok.
+
+   **Validado em hardware real, ponta a ponta, publicação de verdade**: `create()` interceptado →
+   "Send to phone" → celular escaneou o QR real (câmera física) → IP manual (`192.168.1.55` — o
+   automático continua não achando o celular, por design do fix acima, que é fallback não descoberta
+   automática) → tela de aprovação real no celular (site/username/passkey corretos) → **Approve real
+   → "Saved — the new credential was saved to your vault and published."** (pin no IPFS + UserOp
+   on-chain via device key do celular, Base Mainnet).
+
+   3 achados de ambiente reais no caminho (nenhum é bug de código):
+   - Mobile: `Exception: Nenhum provider de pin configurado` — precisou configurar um provider
+     `kubo` em Pinning Providers apontando pro IPFS local desta máquina.
+   - Endpoint tem que incluir o scheme (`http://192.168.1.53:5001`, não só `192.168.1.53:5001`) —
+     erro `FormatException: Scheme not starting with alphabetic character` se faltar.
+   - O IPFS local por padrão só escuta a API em `127.0.0.1:5001` (`Addresses.API` no `ipfs config`)
+     — inacessível pro celular na LAN. Precisou reconfigurar pra `/ip4/0.0.0.0/tcp/5001` e reiniciar
+     o daemon. Mesmo depois disso, o **`ufw` desta máquina** (ativo, política padrão nega entrada)
+     bloqueava a conexão do celular na porta 5001 — `SocketException: Connection timed out` no
+     celular era esse bloqueio, não o IPFS. Resolvido com `sudo ufw allow from <ip-do-celular> to
+     any port 5001 proto tcp`.
+
+   **Achado de UX/produto, registrado como backlog novo** (não implementado, a pedido do dono do
+   projeto): o caminho "celular via QR" pra credencial nova é **LAN-only por design**, sem nenhum
+   fallback cross-network — diferente do pareamento de leitura do vault, que já tem um mecanismo de
+   dead-drop via IPFS/IPNS pra funcionar mesmo em redes diferentes. Se phone e computer não
+   estiverem na mesma rede, hoje não há como completar a entrega (nem QR automático nem IP manual).
+   Portar o mesmo dead-drop pro `vaultEdit/mobileDelivery.ts` fica pra uma sessão futura.
+
+**Fase 2 do passkey na extensão fecha 100% em hardware real** — os dois caminhos de entrega
+(Desktop mesma máquina e celular via QR+LAN) publicaram de verdade na Base Mainnet nesta sessão.
+
+## Achado real fora de escopo (Sessão 136): contador de "pending changes" soma sem cancelar em
+toggles de favorito
+
+Reportado pelo dono do projeto ao testar o app em paralelo: marcar/desmarcar uma entrada do Vault
+como favorita soma no contador de "pending changes" nas duas operações, sem nunca cancelar mesmo
+voltando pro conteúdo idêntico ao publicado (fazer + desfazer = +2, não +0). **Causa raiz**:
+`VaultRepository.setFavorite` (`mobile/lib/services/vault_repository.dart:342`) sempre grava
+`version: data.version + 1`, e `pendingChanges()` é puramente `data.version - lastPublishedVersion`
+— não há comparação de conteúdo contra a última versão publicada, só contagem de versões locais.
+Mesmo mecanismo já confirmado correto pra outros casos na Sessão 131 (não é regressão daquele fix),
+só que aqui produz um resultado contra-intuitivo pro usuário (esperar que desfazer uma ação zere a
+pendência). **Não corrigido nesta sessão** (decisão do dono do projeto, registrar e rodar depois em
+sessão própria) — possível direção futura: compreender pendências por diff de conteúdo contra a
+última versão publicada, em vez de contagem de versão, mas isso é uma mudança de modelo maior que
+pode ter efeitos colaterais em outros lugares que dependem de `pendingChanges()` hoje.
 
 ---
 
