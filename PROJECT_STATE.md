@@ -6017,7 +6017,17 @@ reconstruir esse trecho a partir da memória antes de considerar a documentaçã
    fallback cross-network — diferente do pareamento de leitura do vault, que já tem um mecanismo de
    dead-drop via IPFS/IPNS pra funcionar mesmo em redes diferentes. Se phone e computer não
    estiverem na mesma rede, hoje não há como completar a entrega (nem QR automático nem IP manual).
-   Portar o mesmo dead-drop pro `vaultEdit/mobileDelivery.ts` fica pra uma sessão futura.
+
+   **Direção escolhida pra resolver, a estudar antes de implementar** (dono do projeto confirmou,
+   perguntou se dava pra evitar o campo de IP manual de vez — resposta: o bloqueio do
+   `chrome.system.network` no Brave é definitivo, não dá pra contornar via código da extensão; das 3
+   alternativas discutidas — dead-drop IPFS/IPNS, hostname mDNS `.local`, native messaging host — a
+   escolhida foi a **1: portar o mesmo dead-drop pro `vaultEdit/mobileDelivery.ts`**, por reaproveitar
+   infra já validada no pareamento de leitura do vault e resolver a limitação cross-network de
+   brinde). mDNS descartado por depender de resolução `.local` do SO do usuário (capenga no Windows
+   sem Bonjour); native messaging host descartado por exigir instalador nativo por plataforma, peso
+   de manutenção maior. O campo de IP manual continua como fallback de qualquer forma — o dead-drop
+   substitui a varredura automática de LAN, não os dois caminhos de entrega.
 
 **Fase 2 do passkey na extensão fecha 100% em hardware real** — os dois caminhos de entrega
 (Desktop mesma máquina e celular via QR+LAN) publicaram de verdade na Base Mainnet nesta sessão.
