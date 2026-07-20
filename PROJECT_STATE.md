@@ -7,7 +7,10 @@
 > reais na validação em hardware da extensão (storage bloqueado no Brave, retry de QR); rodado
 > `/code-review max` sobre o diff da sessão — **todos os 15 achados fechados** (4 CONFIRMED + 11
 > PLAUSIBLE, corrigidos ou avaliados/descartados com justificativa) — ver seção "Achados do
-> /code-review max" mais abaixo pro detalhe de cada um.)
+> /code-review max" mais abaixo pro detalhe de cada um; gerador de senha do Desktop virou popup
+> (item 3 do backlog da Sessão 130, paridade com o bottom sheet do Mobile), validado com clique
+> real. Restam do backlog: QR do TOTP no Mobile (hardware pendente) e fechar a Fase 2 do passkey
+> na extensão (approve real no Desktop com wallet + approve real via celular).)
 >
 > ⚠️ **LEMBRETE**: ao final do projeto (todas as fases concluídas), fazer uma revisão completa deste arquivo — consolidar endereços, remover seções obsoletas, e garantir que a tabela de Pendências de Deploy está zerada. Sessão 68.
 
@@ -1372,12 +1375,16 @@ depois, um de cada vez, em sessão própria (provavelmente com `/plan`).
    canal de aprovação em lote) registrada como item novo do backlog, ver entrada de sessão logo
    abaixo pro detalhe técnico completo.
 
-3. **Gerador de senha do Desktop "esquisito" — virar popup** — hoje é um painel inline dentro do
-   próprio formulário (`desktop/src/components/VaultManagement.tsx`, bloco dos toggles de
-   categoria/preview em volta da linha 280-330), embutido no fluxo do form em vez de ser um
-   popup/modal separado. O Mobile já resolveu isso como bottom sheet
-   (`vault_entry_form_screen.dart`, Sessão 128) — pedido é trazer o Desktop pro mesmo tratamento
-   (dialog/popup flutuante em vez de painel inline).
+3. ~~**Gerador de senha do Desktop "esquisito" — virar popup**~~ — **CORRIGIDO na Sessão 135**
+   (2026-07-19). Era um painel inline dentro do próprio formulário
+   (`desktop/src/components/VaultManagement.tsx`); Mobile já resolvia isso como bottom sheet
+   (`vault_entry_form_screen.dart`, Sessão 128), Desktop ficava fora da paridade. Novo
+   `desktop/src/components/PasswordGeneratorModal.tsx`, mesmo padrão de modal já usado por
+   `TotpQrScanner` (`modal-overlay`/`modal-box`) — a lógica de estado (`genOptions`/`genPreview`/
+   `genError`) continua em `VaultManagement.tsx`, só a apresentação virou popup. `tsc --noEmit`
+   limpo, `vitest` 93/93. **Validado com clique real no Desktop nativo** (`GDK_BACKEND=x11`): popup
+   abre ao clicar 🎲, toggle de categoria regenera a preview ao vivo, "Usar esta senha" aplica no
+   campo Senha (medidor de força confirmou "Muito forte") e fecha o popup.
 
 4. ~~**Bug reportado: "pending changes" falso no Mobile depois de sync**~~ — **CORRIGIDO na Sessão
    131** (2026-07-19). Publicar uma entrada nova no Desktop, o Mobile puxava a atualização certinho
