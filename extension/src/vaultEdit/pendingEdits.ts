@@ -8,6 +8,19 @@ import type { Passkey } from '../session/sessionState';
 // recarregada). A extensão nunca tem autoridade de escrita no Vault: cada
 // proposta aqui só vira uma entrada de verdade depois que um Device
 // (Desktop ou Mobile) aprova via /truthid/v1/vault-edit ou QR+LAN.
+//
+// ⚠️ NUNCA importe este módulo de um content script (entrypoints/*.content.ts)
+// — `chrome.storage.session` não é acessível nesse contexto no Brave
+// ("Access to storage is not allowed from this context", achado real,
+// Sessão 135: era chamado direto de `webauthn-bridge.content.ts` e falhava
+// silenciosamente, nenhuma proposta era enfileirada). Content scripts devem
+// mandar `chrome.runtime.sendMessage({ type: VAULT_EDIT_ENQUEUE_MESSAGE, ... })`
+// pro background (único contexto com storage liberado) chamar `addPendingEdit`
+// por eles — ver `entrypoints/background.ts` e `entrypoints/webauthn-bridge.
+// content.ts`. `listPendingEdits`/`removePendingEdit` são seguros só em
+// contextos de extensão de verdade (popup, background) — nunca em content
+// script. O projeto não tem ESLint configurado pra uma regra de
+// import-boundary automática; este comentário é a única barreira.
 const STORAGE_KEY = 'truthid_pending_vault_edits';
 
 export interface VaultEditProposal {

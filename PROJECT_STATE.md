@@ -5,11 +5,9 @@
 > Última atualização: 2026-07-19 (Sessão 135 — fatia Mobile do vault-edit implementada e validada em
 > hardware real; achado+corrigido bug real do saldo sumido no Wallet Mobile; achado+corrigido 2 bugs
 > reais na validação em hardware da extensão (storage bloqueado no Brave, retry de QR); rodado
-> `/code-review max` sobre o diff da sessão — 15 achados, **4 CONFIRMED já corrigidos e commitados**
-> (scan de username ~275x mais lento no caso comum, passkey perdida em erro de approve, mensagem de
-> confirmação apagada na hora, + 2 corridas de estado relacionadas). **Restam 11 achados PLAUSIBLE**,
-> sendo corrigidos aos poucos — ver seção "Achados do /code-review max" mais abaixo pro detalhe de
-> cada um e o que já foi feito.)
+> `/code-review max` sobre o diff da sessão — **todos os 15 achados fechados** (4 CONFIRMED + 11
+> PLAUSIBLE, corrigidos ou avaliados/descartados com justificativa) — ver seção "Achados do
+> /code-review max" mais abaixo pro detalhe de cada um.)
 >
 > ⚠️ **LEMBRETE**: ao final do projeto (todas as fases concluídas), fazer uma revisão completa deste arquivo — consolidar endereços, remover seções obsoletas, e garantir que a tabela de Pendências de Deploy está zerada. Sessão 68.
 
@@ -5857,22 +5855,38 @@ Desktop.
 
 Validado: `flutter analyze` limpo, `flutter test` 361/361 (4 testes novos do helper).
 
-### ⏳ PLAUSIBLE (6 restantes)
+### ✅ Os 5 achados restantes — todos tratados, commit seguinte
 
-- `setState` sem checar `mounted` em `vault_edit_approval_screen.dart` (mascarado por `catchError`,
-  baixo risco real).
-- Falha de RPC num chunk específico do scan pode causar falso "not found" (`_fetchIdentityCreatedLogs`
-  engole erro e trata como "sem log nesse chunk").
-- `pushToMobile` (extensão) re-varre a LAN inteira do zero a cada clique de retry, sem lembrar quem
-  respondeu da vez anterior.
-- O fix do bug do Brave (`chrome.storage.session` bloqueado em content script) cobriu só o 1 call
-  site que quebrou — `pendingEdits.ts` continua livre pra qualquer content script futuro
-  reintroduzir o mesmo bug, sem lint/import-boundary impedindo.
-- Falha no `renderQrToCanvas` (extensão) deixa o card de QR em branco sem nenhum status explicando
-  o que houve.
+- **`setState` sem checar `mounted`** em `vault_edit_approval_screen.dart::_receiveContent` —
+  **fix**: guarda `if (!mounted) return;` antes do `setState`, igual ao resto do arquivo (exigiu
+  trocar `.then((ips) => ...)` por corpo de bloco + `.then<void>(...)` explícito — sem o `<void>`,
+  a inferência de tipo do Dart quebrava com `.catchError`).
+- **Falha de RPC num chunk pode causar falso "not found"** — **fix**: `_fetchIdentityCreatedLogs`
+  ganhou uma 2ª rodada completa de tentativa (com o mesmo backoff já usado em `_rpcCall`) antes de
+  desistir do chunk, reduzindo a chance acumulada de um chunk específico (o que tem o log de
+  verdade) ser pulado por acaso — mais relevante agora que a fase 2 do scan pode varrer centenas de
+  chunks pra identidades antigas.
+- **`pushToMobile` re-varre a LAN do zero a cada retry** — **avaliado e descartado, não é bug**: na
+  falha real, NENHUM dos ~1270 alvos respondeu, não existe "host conhecido" pra priorizar num
+  retry; e a API rápida de descoberta de rede já é bloqueada no Brave (o navegador testado), então
+  não há atalho barato aqui sem uma mudança arquitetural maior (cache cross-feature com a descoberta
+  de LAN da leitura do vault). Registrado como decisão consciente, não pendência.
+- **Fix do bug do Brave cobriu só 1 call site** — **fix**: comentário de aviso bem grande no topo de
+  `pendingEdits.ts` explicando por que nunca deve ser importado de um content script (o projeto não
+  tem ESLint configurado pra uma regra de import-boundary automática — o comentário é a barreira
+  possível hoje).
+- **Falha no `renderQrToCanvas` deixa QR em branco sem status** — **fix**: bloco try/catch em volta
+  de `startMobileDelivery`/`renderQrToCanvas` no handler do "Send to phone" — falha agora limpa o
+  estado (esconde o QR, reabilita os botões) e mostra uma mensagem de erro em vez de travar tudo em
+  silêncio.
 
-Detalhe completo de cada achado (file/line/failure_scenario) foi reportado via `ReportFindings` na
-sessão — não duplicado aqui pra não inflar o arquivo.
+Validado: extensão (`tsc`/`vitest` 65/65/`build`) e mobile (`flutter analyze` limpo, `flutter test`
+361/361) limpos.
+
+**Os 15 achados do `/code-review max` desta sessão estão todos fechados** (4 CONFIRMED + 11
+PLAUSIBLE — corrigidos ou, no caso de `pushToMobile`, avaliados e descartados com justificativa
+registrada). Detalhe completo de cada achado (file/line/failure_scenario) foi reportado via
+`ReportFindings` na sessão — não duplicado aqui pra não inflar o arquivo.
 
 ---
 

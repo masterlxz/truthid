@@ -376,25 +376,37 @@ class BlockchainService {
     }
   }
 
+  // _rpcCall já tenta 3 rounds × 3 URLs (9 tentativas) antes de desistir —
+  // mas o loop de getUsernameForIdentity trata "chunk falhou" e "chunk sem
+  // logs" como a mesma coisa (null), então uma falha aqui pula o chunk
+  // silenciosamente em vez de tentar de novo. Achado real (ultrareview): com
+  // a fase 2 (sem teto) podendo varrer centenas de chunks pra identidades
+  // antigas, a chance acumulada de UM chunk específico (o que tem o log de
+  // verdade) falhar por acaso cresce — uma 2ª rodada completa aqui reduz
+  // bastante essa chance, sem mudar o contrato de retorno (String?) que
+  // todo mundo já espera.
   Future<List<dynamic>?> _fetchIdentityCreatedLogs({
     required String eventTopic,
     required String idTopic,
     required int fromBlock,
     required int toBlock,
   }) async {
-    try {
-      final result = await _rpcCall('eth_getLogs', [
-        {
-          'address': _identityRegistryAddress,
-          'topics': [eventTopic, idTopic],
-          'fromBlock': '0x${fromBlock.toRadixString(16)}',
-          'toBlock': '0x${toBlock.toRadixString(16)}',
-        }
-      ]);
-      return result as List<dynamic>;
-    } catch (_) {
-      return null;
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        final result = await _rpcCall('eth_getLogs', [
+          {
+            'address': _identityRegistryAddress,
+            'topics': [eventTopic, idTopic],
+            'fromBlock': '0x${fromBlock.toRadixString(16)}',
+            'toBlock': '0x${toBlock.toRadixString(16)}',
+          }
+        ]);
+        return result as List<dynamic>;
+      } catch (_) {
+        if (attempt == 0) await Future.delayed(_rpcRetryBackoff);
+      }
     }
+    return null;
   }
 
   String _decodeUsernameFromLog(Map<String, dynamic> log) {

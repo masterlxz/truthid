@@ -167,8 +167,11 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
   Future<void> _receiveContent() async {
     unawaited(
       VaultLanServerService.getLocalIpAddresses()
-          .then((ips) => setState(() => _localIps = ips))
-          .catchError((_) => <String>[]),
+          .then<void>((ips) {
+            if (!mounted) return;
+            setState(() => _localIps = ips);
+          })
+          .catchError((_) {}),
     );
 
     final encrypted = await _lanServer.receiveOnce(

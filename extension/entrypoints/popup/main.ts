@@ -406,11 +406,26 @@ els.sendToPhoneButton.addEventListener('click', async () => {
     return;
   }
 
-  const session = startMobileDelivery(proposal);
-  activeMobileDelivery = { session, proposal };
-  els.pendingEditQrWrapper.hidden = false;
-  await renderQrToCanvas(els.pendingEditQrCanvas, JSON.stringify(session.qrPayload));
-  els.pendingEditsStatus.textContent = 'Scan with your phone...';
+  // Achado real (Sessão 135, ultrareview): sem guarda aqui, uma falha do
+  // QRCode.toCanvas (ex: payload grande demais) deixava o card visível mas
+  // em branco, sem status nenhum explicando o que houve, e os botões
+  // ficavam presos desabilitados (nada chegava no finally de
+  // attemptMobileDelivery, que nunca era alcançado).
+  let session: MobileDeliverySession;
+  try {
+    session = startMobileDelivery(proposal);
+    activeMobileDelivery = { session, proposal };
+    els.pendingEditQrWrapper.hidden = false;
+    await renderQrToCanvas(els.pendingEditQrCanvas, JSON.stringify(session.qrPayload));
+    els.pendingEditsStatus.textContent = 'Scan with your phone...';
+  } catch (e) {
+    activeMobileDelivery = null;
+    els.pendingEditQrWrapper.hidden = true;
+    els.pendingEditsStatus.textContent = `Failed to generate the QR code: ${e}`;
+    els.sendToDesktopButton.disabled = false;
+    els.sendToPhoneButton.disabled = false;
+    return;
+  }
 
   await attemptMobileDelivery(session, proposal);
 });
