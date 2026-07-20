@@ -6050,6 +6050,79 @@ pode ter efeitos colaterais em outros lugares que dependem de `pendingChanges()`
 
 ---
 
+### Sessão 137 — 2026-07-20: dead-drop cross-network pro vault-edit mobile delivery (item 6 do
+backlog, implementado)
+
+Retomando a direção escolhida no fim da Sessão 136: portar o dead-drop via IPFS/IPNS (já usado no
+pareamento de leitura do vault) pro caminho "celular via QR" do vault-edit
+(`extension/src/vaultEdit/`), que era LAN-only por design — sem fallback se o navegador e o celular
+não estivessem na mesma rede.
+
+**Achado de design desta sessão**: os dois fluxos têm papéis invertidos. No pareamento de leitura,
+o **celular publica** (já tem pinning provider Kubo configurado) e a **extensão lê** (só `fetch` num
+gateway público, zero config). No vault-edit é o oposto — a extensão tem o conteúdo pronto assim que
+a proposta é enfileirada, e é o celular que precisa recebê-lo. Solução: portar o **algoritmo de
+publish** (só existia em Dart, `IpfsPinClient.publishDeadDrop`) pra extensão, e o **algoritmo de
+poll** (só existia em TS, `deadDropPolling.ts`) pro celular — trocando de lado quem faz o quê, sem
+inventar protocolo/crypto novo. Domain separation: novo salt/info HKDF
+(`"TruthID Vault Edit IPNS"`/`"dead-drop-key-v1"`), diferente do namespace do pareamento de leitura,
+em arquivos paralelos — `ipnsKey.ts`/`ipns_key_service.dart` (já validados em hardware) continuam
+intocados.
+
+**Extensão (vira publisher)**:
+- `extension/src/vaultEdit/deadDropIpnsKey.ts` (novo) — deriva o par Ed25519 completo a partir do
+  `sessionId` (reusa `@noble/curves/ed25519`/`@noble/hashes/hkdf`, já dependências do projeto) e
+  monta o protobuf `PrivateKey`/`PublicKey` do libp2p.
+- `extension/src/vaultEdit/deadDropPublish.ts` (novo) — mirror de `IpfsPinClient.publishDeadDrop`
+  via `fetch`/`FormData` (mais simples que a montagem manual de multipart do Dart): `POST
+  /api/v0/add` → `key/import` (trata "already exists" como sucesso) → `name/publish?lifetime=5m` →
+  `key/rm` (best-effort). Retorna `null` sem lançar se não há provider configurado ou qualquer passo
+  falhar — não pode derrubar a varredura LAN que roda em paralelo.
+- `extension/src/vaultEdit/pinningProviderConfig.ts` (novo) — config mínima só do endpoint Kubo
+  (`chrome.storage.local`, persistente), sem o conceito multi-provider do Mobile.
+- Popup ganha uma seção `<details>` de configuração ("Cross-network delivery settings") com o campo
+  do endpoint Kubo — `entrypoints/popup/index.html`/`main.ts`.
+- `mobileDelivery.ts::startMobileDelivery` dispara o publish fire-and-forget assim que o QR é
+  montado (mesmo timing do Mobile no pareamento de leitura — publish roda junto com o serve LAN, não
+  depois). Nenhuma permissão nova: `optional_host_permissions: ['http://*/*']` já cobre qualquer
+  endpoint Kubo LAN, reusa `ensureHostPermission()` já chamado antes de `startMobileDelivery`.
+
+**Mobile (vira poller)**:
+- `mobile/lib/services/vault_edit_dead_drop_ipns_key_service.dart` (novo) — só a metade pública da
+  derivação (`computeIpnsNameForSession`), mesmos salt/info da extensão; o celular nunca precisa da
+  chave privada aqui.
+- `mobile/lib/services/vault_edit_dead_drop_polling_service.dart` (novo) — mirror de
+  `tryFetchDeadDrop` (GET no gateway público, não-200/erro de rede = "ainda não", nunca lança) +
+  `pollUntil(sessionId, expiresAt)`, repete a cada ~15s até achar conteúdo ou expirar. Sem
+  `chrome.alarms`: o celular já está em primeiro plano nesta tela.
+- `VaultEditApprovalScreen._receiveContent` — corrida nova (`_receiveViaAnyChannel`) entre
+  `_lanServer.receiveOnce(...)` e `pollUntil(...)`, resolve com o primeiro resultado não-nulo; só
+  dá timeout se os dois derem `null`.
+- Observação registrada no código: diferente do caminho LAN (que depende do celular em primeiro
+  plano por causa da restrição de rede em background do Android, achada na Sessão 136), o dead-drop
+  só faz requisição de saída (GET) — não deve ser bloqueado pelo Android em background.
+
+**Cifra do conteúdo, schema do QR e caminho Desktop não mudam** — o `cipher.ts`/
+`vault_edit_content_cipher_service.dart` já era ciphertext autocontido, sem dependência do
+transporte; reusado como está.
+
+**Validado**: `npx vitest run` (extensão) 81/81 (14 testes novos: `deadDropIpnsKey.test.ts` com
+fixture calculado — mesma codificação protobuf/multihash/CID/base36 já validada contra Kubo real
+pelo namespace irmão, só muda o material de entrada do HKDF —, `deadDropPublish.test.ts` com `fetch`
+mockado cobrindo add/import/publish/rm e "already exists", `pinningProviderConfig.test.ts`),
+`tsc --noEmit` limpo, `npm run build` ok. `flutter test` (Mobile) 373/373 (11 testes novos: vetor
+cruzado TS↔Dart pro nome IPNS — bate byte-a-byte —, poll com `HttpServer` local real mockando o
+gateway, e um teste novo na tela de aprovação provando que o dead-drop entrega a proposta quando a
+LAN nunca responde), `flutter analyze` limpo (só achados pré-existentes em arquivos não tocados
+nesta sessão).
+
+**Não validado em hardware real cross-network** (celular e PC em redes diferentes de verdade) —
+pendência igual à das últimas rodadas de vault-edit: precisa de um Kubo acessível publicamente (ou
+ao menos por ambas as redes) configurado no popup da extensão e no celular numa rede separada da do
+PC pra confirmar ponta a ponta. Registrar como próximo passo quando houver ambiente disponível.
+
+---
+
 ## Como Usar Este Arquivo
 
 1. **Ao começar uma sessão**: Diga ao Claude Code "leia o PROJECT_STATE.md e me ajude a continuar"

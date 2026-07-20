@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:web3dart/web3dart.dart' show EthereumAddress;
@@ -12,6 +13,7 @@ import '../services/pimlico_bundler_client.dart';
 import '../services/remote_signer_lan_server.dart';
 import '../services/session_creator.dart';
 import '../services/vault_edit_content_cipher_service.dart';
+import '../services/vault_edit_dead_drop_polling_service.dart';
 import '../services/vault_lan_server_service.dart';
 import '../services/vault_publish_service.dart';
 import '../services/vault_repository.dart';
@@ -62,6 +64,7 @@ class VaultEditApprovalScreen extends StatefulWidget {
   final BlockchainService? blockchainService;
   final BundlerConfigService? bundlerConfigService;
   final VaultPublishService? publishService;
+  final VaultEditDeadDropPollingService? deadDropPollingService;
 
   const VaultEditApprovalScreen({
     super.key,
@@ -72,6 +75,7 @@ class VaultEditApprovalScreen extends StatefulWidget {
     this.blockchainService,
     this.bundlerConfigService,
     this.publishService,
+    this.deadDropPollingService,
   });
 
   @override
@@ -99,6 +103,7 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
   late final LocalStorageService _storage;
   late final BlockchainService _blockchain;
   late final BundlerConfigService _bundlerConfigService;
+  late final VaultEditDeadDropPollingService _deadDropPollingService;
   VaultPublishService? _publishService;
 
   @override
@@ -110,6 +115,8 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
     _blockchain = widget.blockchainService ?? BlockchainService();
     _bundlerConfigService =
         widget.bundlerConfigService ?? BundlerConfigService();
+    _deadDropPollingService =
+        widget.deadDropPollingService ?? VaultEditDeadDropPollingService();
     _publishService = widget.publishService;
 
     final validationError = _validatePayload();
@@ -174,10 +181,7 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
           .catchError((_) {}),
     );
 
-    final encrypted = await _lanServer.receiveOnce(
-      sessionId: _sessionId!,
-      expiresAt: _expiresAt!,
-    );
+    final encrypted = await _receiveViaAnyChannel();
     if (!mounted) return;
 
     if (encrypted == null) {
@@ -202,6 +206,40 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
         _errorMsg = 'Failed to decrypt the received proposal: $e';
       });
     }
+  }
+
+  // Corrida entre os dois canais de entrega da proposta cifrada (item 6 do
+  // backlog, dead-drop cross-network): LAN (`_lanServer.receiveOnce`,
+  // depende de estar na mesma rede que o PC — e, achado da Sessão 136, do
+  // celular ficar em primeiro plano) e dead-drop
+  // (`_deadDropPollingService.pollUntil`, GET público, funciona cross-
+  // network e mesmo em background). Resolve com o primeiro resultado
+  // não-nulo; se os dois derem `null` (timeout dos dois lados), devolve
+  // `null` — mesmo contrato que `_lanServer.receiveOnce` tinha sozinho.
+  Future<Uint8List?> _receiveViaAnyChannel() async {
+    final completer = Completer<Uint8List?>();
+    var pending = 2;
+
+    void handle(Uint8List? result) {
+      if (completer.isCompleted) return;
+      if (result != null) {
+        completer.complete(result);
+        return;
+      }
+      pending--;
+      if (pending == 0) completer.complete(null);
+    }
+
+    unawaited(
+      _lanServer
+          .receiveOnce(sessionId: _sessionId!, expiresAt: _expiresAt!)
+          .then(handle),
+    );
+    unawaited(
+      _deadDropPollingService.pollUntil(_sessionId!, _expiresAt!).then(handle),
+    );
+
+    return completer.future;
   }
 
   Future<EthereumAddress?> _resolveSmartAccountAddress() async {

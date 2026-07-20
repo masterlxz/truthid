@@ -63,6 +63,22 @@
       </div>
     </section>
 
+    <section id="settings-section">
+      <details class="card">
+        <summary class="muted">Cross-network delivery settings</summary>
+        <div class="field" style="margin-top: 0.75rem">
+          <label for="kubo-endpoint">
+            Kubo endpoint (lets "Send to phone" reach a phone on a different network)
+          </label>
+          <div class="manual-row">
+            <input id="kubo-endpoint" type="text" placeholder="http://192.168.1.53:5001" />
+            <button id="kubo-endpoint-save">Save</button>
+          </div>
+        </div>
+        <p id="kubo-endpoint-status" class="muted" style="margin: 0.35rem 0 0"></p>
+      </details>
+    </section>
+
     <script type="module" src="./main.ts"></script>
   </body>
 </html>

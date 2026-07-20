@@ -28,6 +28,7 @@ import { bytesToHex, hexToBytes } from '../../src/util/bytes';
 import { listPendingEdits, removePendingEdit, type VaultEditProposal } from '../../src/vaultEdit/pendingEdits';
 import { sendToDesktop } from '../../src/vaultEdit/desktopDelivery';
 import { startMobileDelivery, type MobileDeliverySession } from '../../src/vaultEdit/mobileDelivery';
+import { loadPinningProviderConfig, savePinningProviderConfig } from '../../src/vaultEdit/pinningProviderConfig';
 
 const SESSION_EXPIRY_ALARM = 'truthid-vault-session-expiry';
 const START_DEAD_DROP_POLL_MESSAGE = 'truthid-start-dead-drop-poll';
@@ -96,6 +97,9 @@ const els = {
   pendingEditManualConnectButton: document.getElementById(
     'pending-edit-manual-connect',
   ) as HTMLButtonElement,
+  kuboEndpointInput: document.getElementById('kubo-endpoint') as HTMLInputElement,
+  kuboEndpointSaveButton: document.getElementById('kubo-endpoint-save') as HTMLButtonElement,
+  kuboEndpointStatus: document.getElementById('kubo-endpoint-status') as HTMLElement,
 };
 
 let currentState: SessionState | null = null;
@@ -455,6 +459,22 @@ els.pendingEditManualConnectButton.addEventListener('click', async () => {
   const { session, proposal } = activeMobileDelivery;
   await attemptMobileDelivery(session, proposal, () => session.sendTo(ip));
 });
+
+// Config do endpoint Kubo usado só pra publicar o dead-drop cross-network
+// do vault-edit (item 6 do backlog, `deadDropPublish.ts`) — opcional, sem
+// endpoint configurado o "Send to phone" continua funcionando normal via
+// LAN/IP manual, só sem o fallback cross-network.
+async function loadKuboEndpointIntoForm(): Promise<void> {
+  const config = await loadPinningProviderConfig();
+  els.kuboEndpointInput.value = config?.kuboEndpointUrl ?? '';
+}
+
+els.kuboEndpointSaveButton.addEventListener('click', async () => {
+  await savePinningProviderConfig(els.kuboEndpointInput.value);
+  els.kuboEndpointStatus.textContent = 'Saved.';
+});
+
+void loadKuboEndpointIntoForm();
 
 void init();
 void refreshPendingEdits();

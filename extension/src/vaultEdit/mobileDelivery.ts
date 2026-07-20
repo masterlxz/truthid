@@ -3,6 +3,7 @@ import { secp256k1 } from '@noble/curves/secp256k1';
 import { bytesToHex } from '../util/bytes';
 import { buildVaultEditQrPayload, randomSessionId, type VaultEditQrPayload } from '../session/qrPayload';
 import { deriveVaultEditContentKey, encryptVaultEditContent } from './cipher';
+import { publishDeadDrop } from './deadDropPublish';
 import { MOBILE_CANDIDATE_PORTS, pushToMobile, putSessionContent } from './lanDelivery';
 import type { VaultEditProposal } from './pendingEdits';
 
@@ -31,10 +32,15 @@ export interface MobileDeliverySession {
  */
 export function startMobileDelivery(
   proposal: Omit<VaultEditProposal, 'id' | 'createdAtMs'>,
-  deps: { push?: typeof pushToMobile; putAt?: typeof putSessionContent } = {},
+  deps: {
+    push?: typeof pushToMobile;
+    putAt?: typeof putSessionContent;
+    publish?: typeof publishDeadDrop;
+  } = {},
 ): MobileDeliverySession {
   const push = deps.push ?? pushToMobile;
   const putAt = deps.putAt ?? putSessionContent;
+  const publish = deps.publish ?? publishDeadDrop;
   const sessionId = randomSessionId();
   const ephemeralPubKeyHex = bytesToHex(
     secp256k1.getPublicKey(secp256k1.utils.randomPrivateKey(), true),
@@ -46,6 +52,16 @@ export function startMobileDelivery(
     const plaintext = new TextEncoder().encode(JSON.stringify(proposal));
     return encryptVaultEditContent(plaintext, key);
   }
+
+  // Dead-drop cross-network (item 6 do backlog): dispara em paralelo com o
+  // resto, assim que o QR existe — mesmo timing do Mobile no pareamento de
+  // leitura (`vault_session_screen.dart`, publish roda junto com o serve
+  // LAN, não depois). Fire-and-forget: `publishDeadDrop` já é best-effort
+  // internamente (sem provider configurado ou qualquer falha vira `null`),
+  // uma falha aqui não pode atrapalhar `send()`/`sendTo()`.
+  void encryptedBody()
+    .then((body) => publish(sessionId, body))
+    .catch(() => {});
 
   async function send(): Promise<boolean> {
     return push(sessionId, await encryptedBody());

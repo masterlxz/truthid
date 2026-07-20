@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -11,11 +12,15 @@ import 'package:truthid_mobile/services/blockchain_service.dart';
 import 'package:truthid_mobile/services/local_storage_service.dart';
 import 'package:truthid_mobile/services/remote_signer_lan_server.dart';
 import 'package:truthid_mobile/services/vault_edit_content_cipher_service.dart';
+import 'package:truthid_mobile/services/vault_edit_dead_drop_polling_service.dart';
 import 'package:truthid_mobile/services/vault_publish_service.dart';
 import 'package:truthid_mobile/services/vault_repository.dart';
 
 class MockRemoteSignerLanServer extends Mock
     implements RemoteSignerLanServer {}
+
+class MockVaultEditDeadDropPollingService extends Mock
+    implements VaultEditDeadDropPollingService {}
 
 class MockVaultRepository extends Mock implements VaultRepository {}
 
@@ -27,6 +32,7 @@ class MockVaultPublishService extends Mock implements VaultPublishService {}
 
 void main() {
   late MockRemoteSignerLanServer mockLanServer;
+  late MockVaultEditDeadDropPollingService mockDeadDropPollingService;
   late MockVaultRepository mockRepository;
   late MockLocalStorageService mockStorage;
   late MockBlockchainService mockBlockchain;
@@ -70,10 +76,20 @@ void main() {
 
   setUp(() {
     mockLanServer = MockRemoteSignerLanServer();
+    mockDeadDropPollingService = MockVaultEditDeadDropPollingService();
     mockRepository = MockVaultRepository();
     mockStorage = MockLocalStorageService();
     mockBlockchain = MockBlockchainService();
     mockPublishService = MockVaultPublishService();
+
+    // Por padrão o dead-drop nunca acha nada (resolve `null` de cara) — os
+    // testes que exercitam a fase 1 (recebimento) continuam controlando o
+    // resultado via `mockLanServer`, como já faziam antes deste canal
+    // existir. Precisa resolver (não travar pra sempre) pro cenário de
+    // timeout continuar funcionando: `_receiveViaAnyChannel` só decide
+    // "nada chegou" quando os DOIS canais dizem `null`.
+    when(() => mockDeadDropPollingService.pollUntil(any(), any()))
+        .thenAnswer((_) async => null);
 
     when(() => mockStorage.getPairedIdentityId())
         .thenAnswer((_) async => '1');
@@ -123,6 +139,7 @@ void main() {
                     builder: (_) => VaultEditApprovalScreen(
                       payload: payload,
                       lanServer: mockLanServer,
+                      deadDropPollingService: mockDeadDropPollingService,
                       repository: mockRepository,
                       localStorageService: mockStorage,
                       blockchainService: mockBlockchain,
@@ -239,6 +256,34 @@ void main() {
       await pumpAndOpen(tester, validPayload());
 
       expect(find.text('+ passkey'), findsOneWidget);
+    });
+
+    testWidgets(
+        'dead-drop entrega a proposta quando a LAN nunca responde '
+        '(corrida cross-network, item 6 do backlog)', (tester) async {
+      final encrypted = await encryptProposal({
+        'id': 'proposal-1',
+        'site': 'example.com',
+        'url': 'https://example.com',
+        'username': 'alice',
+        'password': 'hunter2',
+        'notes': '',
+        'createdAtMs': 0,
+      });
+      // LAN nunca resolve (celular numa rede diferente do PC) — só o
+      // dead-drop entrega.
+      when(() => mockLanServer.receiveOnce(
+            sessionId: any(named: 'sessionId'),
+            expiresAt: any(named: 'expiresAt'),
+          )).thenAnswer((_) => Completer<Uint8List?>().future);
+      when(() => mockDeadDropPollingService.pollUntil(any(), any()))
+          .thenAnswer((_) async => encrypted);
+
+      await pumpAndOpen(tester, validPayload());
+
+      expect(find.text('TruthID Extension wants to save a new credential'),
+          findsOneWidget);
+      expect(find.text('example.com'), findsOneWidget);
     });
 
     testWidgets('conteúdo cifrado com sessionId errado mostra erro',
