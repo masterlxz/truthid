@@ -192,4 +192,38 @@ void main() {
 
     expect(await repo.pendingChanges(), 0);
   });
+
+  test(
+      'pendingChanges: toggle cancela mesmo com outra pendência real no meio '
+      '(achado da Sessão 139: fix da S138 só cancelava se o vault inteiro '
+      'voltasse a bater com o publicado — com qualquer outra pendência real '
+      'junto, caía no diff de version, que nunca cancela)', () async {
+    when(() => mockProviderService.load()).thenAnswer((_) async => [provider]);
+    when(() => mockPinClient.pinVault(any(), any())).thenAnswer((_) async => const PinResult(
+          cid: 'QmTestCid',
+          contentHash: '0xabc123',
+          providersOk: ['kubo'],
+          providersFailed: [],
+        ));
+    when(() => mockSessionCreator.updateVault(
+          smartAccountAddress: any(named: 'smartAccountAddress'),
+          cid: any(named: 'cid'),
+          contentHashHex: any(named: 'contentHashHex'),
+        )).thenAnswer((_) async => const SessionCreationResult(userOpHash: '0xUserOpHash'));
+
+    final entry = await repo.addEntry(site: 'a.com', username: 'u', password: 'p');
+    await publishService.publish(smartAccountAddress);
+    expect(await repo.pendingChanges(), 0);
+
+    // Pendência real: nova entrada, nunca publicada.
+    await repo.addEntry(site: 'b.com', username: 'u2', password: 'p2');
+    expect(await repo.pendingChanges(), 1);
+
+    await repo.setFavorite(entry.id, true);
+    expect(await repo.pendingChanges(), 2);
+    await repo.setFavorite(entry.id, false);
+
+    expect(await repo.pendingChanges(), 1,
+        reason: 'toggle deveria cancelar, sobrando só a entrada nova');
+  });
 }

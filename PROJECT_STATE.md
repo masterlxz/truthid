@@ -6162,6 +6162,72 @@ Item 7 do backlog fechado.
 
 ---
 
+### Sessão 139 — 2026-07-21: item 1 (QR TOTP) validado em hardware no Mobile + correção real do
+item 7 (o fix da S138 não era suficiente)
+
+**Item 1 fecha 100%**: build real instalado no celular físico (Samsung Galaxy S25 FE, ADB
+wireless). Scan ao vivo testado apontando a câmera pra um QR gerado com `qrencode`
+(`otpauth://totp/TruthID:test@example.com?secret=...`) mostrado na tela do Desktop — leu
+corretamente, sem `FATAL EXCEPTION` no logcat (só ruído de sistema Android/Samsung/Firebase,
+nada do pacote do app). Upload de foto (botão 🖼) também testado — arquivo empurrado via
+`adb push` pra `/sdcard/Download` + `MEDIA_SCANNER_SCAN_FILE` pra aparecer no seletor — leu
+certo também.
+
+**Item 7 reabriu**: dono do projeto reportou, testando em paralelo, que o bug (favoritar/
+desfavoritar sem cancelar no contador de pending changes) continuava acontecendo mesmo depois
+do fix da S138. Reproduzido com teste automatizado antes de mexer em qualquer coisa
+(`vault_publish_service_test.dart`, teste descartável): publicar → resta 0 → adicionar uma
+entrada nova (pendência real, nunca publicada) → favoritar uma entrada já publicada → 2 →
+desfavoritar de volta → **3**, nunca cancela. **Causa raiz real**: o fix da S138 só zera quando
+o vault inteiro volta a bater *byte a byte* com o hash global do último publicado — com
+qualquer outra pendência real no meio (o caso comum, quase sempre tem alguma edição pendente),
+a comparação de hash nunca bate, cai pro cálculo antigo por `version` (monotônica, nunca
+cancela), e o toggle volta a vazar.
+
+**Fix de verdade, escolhido explicitamente pelo dono do projeto** (opção "diff de conteúdo
+real" vs. "só registrar e adiar"): em vez de comparar hash global, guardar uma cópia cifrada do
+último conteúdo publicado (`vault.published.enc`, mesma chave/cifra do `vault.enc` — não é
+exposição nova de texto plano) e comparar **entrada por entrada** contra ela — cada entrada
+adicionada/removida/modificada conta 1, idem pra permissão de device e nome de perfil. Um
+toggle que volta ao estado original nunca soma, mesmo com outras pendências reais em paralelo,
+porque cada entrada é avaliada independentemente.
+
+- **Desktop** (`desktop/src-tauri/src/vault.rs`): `published_snapshot_path()` (novo,
+  `~/.truthid/vault.published.enc`), `load_published_snapshot`/`save_published_snapshot`
+  (cifra/decifra com as mesmas `encrypt`/`decrypt` do vault principal), `diff_count(current,
+  published)` (nova função pura, HashMap por id pra entries/permissions, HashSet pra
+  profile_names). `mark_published` agora grava o snapshot além do meta antigo (hash+version,
+  mantido só como fallback). `pending_changes` tenta o snapshot primeiro; sem ele (vault
+  publicado antes desta sessão), cai pro comportamento antigo até a próxima publicação criar um
+  snapshot novo — **sem migração**, autocura sozinho. 4 testes novos (`diff_count_*`), todos
+  puros (sem tocar `$HOME`, mesmo padrão dos testes de `content_signature`), `cargo test --lib`
+  92/92.
+- **Mobile** (`mobile/lib/services/vault_repository.dart`): mirror exato —
+  `_publishedSnapshotPath`/`_loadPublishedSnapshot`/`_savePublishedSnapshot` (arquivo separado
+  do `vault.enc`, mesmo `_cipherService`), `_diffCount` (mesma lógica, Map/Set do Dart).
+  `markPublished`/`pendingChanges` com o mesmo fallback autocurável. 1 teste de regressão novo
+  reproduzindo o cenário exato do bug real (entrada nova pendente + toggle), `flutter test`
+  375/375, `flutter analyze` sem achados novos.
+
+**Achado real no caminho, não hipotético**: build automatizado tinha passado limpo (teste
+unitário do cenário simples "só toggle, sem mais nada" continuava verde mesmo com o bug real
+presente — o teste da S138 não cobria "toggle com outra pendência no meio"). Validação em
+hardware pegou isso porque o dono do projeto testa com um vault real, que quase sempre tem algo
+pendente. Depois do fix, validação ao vivo no celular físico revelou uma segunda pista: mesmo
+com o fix novo instalado, o contador continuava "vazando" — instrumentado com prints de
+diagnóstico temporários (removidos depois), descoberto que **nenhum publish real tinha
+acontecido ainda** desde a instalação do fix (sem publish, sem snapshot local, sem diff novo —
+`pendingChanges()` seguia caindo no fallback antigo, que é exatamente o comportamento que
+supostamente tinha sido corrigido). Depois do primeiro clique real em "Publish" (snapshot
+criado com sucesso, confirmado no log), toggle de favoritar validado em hardware real:
+`1 → 0 → 1 → 0 → 1 → 0 → 1`, cancelando certinho a cada volta, inclusive com outras entradas
+(TOTP de teste) pendentes em paralelo.
+
+Item 7 fecha de verdade agora, validado em hardware físico com publish real na Base Mainnet.
+Item 1 do backlog (QR TOTP) fecha 100% nos dois lados.
+
+---
+
 ## Como Usar Este Arquivo
 
 1. **Ao começar uma sessão**: Diga ao Claude Code "leia o PROJECT_STATE.md e me ajude a continuar"

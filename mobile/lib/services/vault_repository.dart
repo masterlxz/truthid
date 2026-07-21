@@ -486,13 +486,9 @@ class VaultRepository {
   static const _publishedContentHashKey = 'vault_last_published_content_hash';
   static const _storage = FlutterSecureStorage();
 
-  // Assinatura do conteúdo do vault (tudo, exceto `version`) — usada por
-  // pendingChanges() pra distinguir "conteúdo diferente do publicado" de "só
-  // a versão local subiu". Achado da Sessão 136: favoritar+desfavoritar bumpa
-  // version duas vezes mas devolve o conteúdo exato de antes (setFavorite
-  // preserva updatedAt de propósito), e a versão sozinha nunca "cancela".
-  // Serialização de Map literal é determinística (mesma ordem de chaves
-  // sempre), então o hash é estável pro mesmo conteúdo.
+  // Assinatura do conteúdo do vault (tudo, exceto `version`) — usada só como
+  // fallback em pendingChanges() pra vaults publicados antes da Sessão 139
+  // (sem snapshot local ainda, ver _loadPublishedSnapshot).
   String _contentSignature(_VaultData data) {
     final map = {
       'entries': data.entries.map((e) => e.toJson()).toList(),
@@ -502,6 +498,82 @@ class VaultRepository {
     return sha256.convert(utf8.encode(jsonEncode(map))).toString();
   }
 
+  Future<String> _publishedSnapshotPath() async {
+    if (_testPath != null) return '$_testPath.published';
+    final dir = await getApplicationDocumentsDirectory();
+    return '${dir.path}/vault.published.enc';
+  }
+
+  // Cópia cifrada (mesma chave do vault.enc) do conteúdo publicado pela
+  // última vez — usada por pendingChanges() pra diffar entrada por entrada,
+  // em vez de só comparar hash global. Retorna null se ainda não existe
+  // (vault nunca publicado desde que este mecanismo foi introduzido).
+  Future<_VaultData?> _loadPublishedSnapshot() async {
+    final path = await _publishedSnapshotPath();
+    final file = File(path);
+    if (!await file.exists()) return null;
+    final blob = await file.readAsBytes();
+    final json = await _cipherService.decrypt(blob);
+    return _parseVaultJson(json);
+  }
+
+  Future<void> _savePublishedSnapshot(_VaultData data) async {
+    final json = _serializeVaultData(data);
+    final blob = await _cipherService.encrypt(json);
+    final path = await _publishedSnapshotPath();
+    await File(path).writeAsBytes(blob);
+  }
+
+  // Conta mudanças reais de conteúdo entre o vault atual e o último snapshot
+  // publicado — cada entrada adicionada/removida/modificada conta 1, idem
+  // pra permissão de device e nome de perfil. Mirror exato de diff_count
+  // (desktop/src-tauri/src/vault.rs). Achado da Sessão 139: o diff por hash
+  // global (Sessão 138) só zerava quando o vault voltava 100% idêntico ao
+  // publicado — com qualquer outra pendência real no meio (ex: uma entrada
+  // nova ainda não publicada), o toggle de favorito voltava a "vazar" porque
+  // caía no diff por version, que é monotônica e nunca cancela.
+  int _diffCount(_VaultData current, _VaultData published) {
+    var count = 0;
+
+    final publishedById = {for (final e in published.entries) e.id: e};
+    final currentById = {for (final e in current.entries) e.id: e};
+    for (final entry in currentById.entries) {
+      final prev = publishedById[entry.key];
+      if (prev == null) {
+        count++; // adicionada
+      } else if (jsonEncode(entry.value.toJson()) != jsonEncode(prev.toJson())) {
+        count++; // modificada
+      }
+    }
+    for (final id in publishedById.keys) {
+      if (!currentById.containsKey(id)) count++; // removida
+    }
+
+    final publishedPerms = {
+      for (final p in published.devicePermissions) p.pubKey.toLowerCase(): p.canWrite,
+    };
+    final currentPerms = {
+      for (final p in current.devicePermissions) p.pubKey.toLowerCase(): p.canWrite,
+    };
+    for (final entry in currentPerms.entries) {
+      final prev = publishedPerms[entry.key];
+      if (prev == null || prev != entry.value) count++;
+    }
+    for (final key in publishedPerms.keys) {
+      if (!currentPerms.containsKey(key)) count++;
+    }
+
+    final publishedProfiles = published.profileNames.toSet();
+    final currentProfiles = current.profileNames.toSet();
+    count += currentProfiles.difference(publishedProfiles).length;
+    count += publishedProfiles.difference(currentProfiles).length;
+
+    return count;
+  }
+
+  // Persiste a versão + assinatura de conteúdo do vault que acabou de ser
+  // publicado no IPFS (fallback pra vaults sem snapshot ainda, ver
+  // pendingChanges), e um snapshot cifrado do conteúdo pra diff futuro.
   Future<void> markPublished(int version) async {
     final data = await _load();
     await _storage.write(
@@ -512,13 +584,20 @@ class VaultRepository {
       key: _publishedContentHashKey,
       value: _contentSignature(data),
     );
+    await _savePublishedSnapshot(data);
   }
 
-  // Quantas versões do vault local ainda não foram publicadas. 0 = nada
-  // pendente — inclusive quando a versão local subiu mas o conteúdo final é
-  // idêntico ao que já foi publicado (ver _contentSignature).
+  // Quantas mudanças de conteúdo o vault local tem em relação ao último
+  // publicado no IPFS. 0 = nada pendente.
   Future<int> pendingChanges() async {
     final data = await _load();
+    final snapshot = await _loadPublishedSnapshot();
+    if (snapshot != null) {
+      return _diffCount(data, snapshot);
+    }
+    // Fallback pra vaults publicados antes da Sessão 139 (sem snapshot local
+    // ainda) — mesmo comportamento de antes, até a próxima publicação gravar
+    // um snapshot novo e este branch nunca mais rodar pra esse vault.
     final lastHash = await _storage.read(key: _publishedContentHashKey);
     if (lastHash != null && lastHash == _contentSignature(data)) {
       return 0;

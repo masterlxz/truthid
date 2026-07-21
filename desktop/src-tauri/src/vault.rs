@@ -354,6 +354,102 @@ fn meta_path() -> Result<PathBuf, String> {
     Ok(dir.join("vault.meta.json"))
 }
 
+fn published_snapshot_path() -> Result<PathBuf, String> {
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
+    let dir = std::path::Path::new(&home).join(".truthid");
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    Ok(dir.join("vault.published.enc"))
+}
+
+// Cópia cifrada (mesma chave do vault.enc) do conteúdo publicado pela última
+// vez — usada por `pending_changes` pra diffar entrada por entrada, em vez
+// de só comparar hash global. Retorna None se ainda não existe (vault nunca
+// publicado desde que este mecanismo foi introduzido, Sessão 139).
+fn load_published_snapshot() -> Result<Option<Vault>, String> {
+    let path = published_snapshot_path()?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    let blob = std::fs::read(&path).map_err(|e| e.to_string())?;
+    let json = decrypt(&blob)?;
+    let vault: Vault = serde_json::from_slice(&json).map_err(|e| e.to_string())?;
+    Ok(Some(vault))
+}
+
+fn save_published_snapshot(vault: &Vault) -> Result<(), String> {
+    let json = serde_json::to_vec(vault).map_err(|e| e.to_string())?;
+    let blob = encrypt(&json)?;
+    let path = published_snapshot_path()?;
+    std::fs::write(&path, blob).map_err(|e| e.to_string())
+}
+
+/// Conta mudanças reais de conteúdo entre o vault atual e o último snapshot
+/// publicado — cada entrada adicionada/removida/modificada conta 1, idem pra
+/// permissão de device e nome de perfil. Achado da Sessão 139: o diff por
+/// hash global (Sessão 138) só zera quando o vault volta 100% idêntico ao
+/// publicado — com qualquer outra pendência real no meio (ex: uma entrada
+/// nova ainda não publicada), o toggle de favorito voltava a "vazar" porque
+/// caía no diff por `version`, que é monotônica e nunca cancela. Diff por
+/// entrada resolve isso pra qualquer combinação, sem depender de `version`.
+fn diff_count(current: &Vault, published: &Vault) -> u64 {
+    use std::collections::{HashMap, HashSet};
+
+    let mut count = 0u64;
+
+    let published_by_id: HashMap<&str, &VaultEntry> =
+        published.entries.iter().map(|e| (e.id.as_str(), e)).collect();
+    let current_by_id: HashMap<&str, &VaultEntry> =
+        current.entries.iter().map(|e| (e.id.as_str(), e)).collect();
+
+    for (id, entry) in &current_by_id {
+        match published_by_id.get(id) {
+            None => count += 1, // adicionada
+            Some(prev) => {
+                if serde_json::to_vec(entry).unwrap_or_default()
+                    != serde_json::to_vec(prev).unwrap_or_default()
+                {
+                    count += 1; // modificada
+                }
+            }
+        }
+    }
+    for id in published_by_id.keys() {
+        if !current_by_id.contains_key(id) {
+            count += 1; // removida
+        }
+    }
+
+    let published_perms: HashMap<String, bool> = published
+        .device_permissions
+        .iter()
+        .map(|p| (p.pub_key.to_lowercase(), p.can_write))
+        .collect();
+    let current_perms: HashMap<String, bool> = current
+        .device_permissions
+        .iter()
+        .map(|p| (p.pub_key.to_lowercase(), p.can_write))
+        .collect();
+    for (key, can_write) in &current_perms {
+        match published_perms.get(key) {
+            None => count += 1,
+            Some(prev) if prev != can_write => count += 1,
+            _ => {}
+        }
+    }
+    for key in published_perms.keys() {
+        if !current_perms.contains_key(key) {
+            count += 1;
+        }
+    }
+
+    let published_profiles: HashSet<&String> = published.profile_names.iter().collect();
+    let current_profiles: HashSet<&String> = current.profile_names.iter().collect();
+    count += current_profiles.difference(&published_profiles).count() as u64;
+    count += published_profiles.difference(&current_profiles).count() as u64;
+
+    count
+}
+
 /// Assinatura do conteúdo do vault (tudo, exceto `version`) — usada por
 /// `pending_changes` pra distinguir "conteúdo diferente do publicado" de "só
 /// a versão local subiu". Achado da Sessão 136: favoritar+desfavoritar bumpa
@@ -378,7 +474,10 @@ fn content_signature(vault: &Vault) -> String {
 }
 
 /// Persiste a versão + assinatura de conteúdo do vault que acabou de ser
-/// publicado no IPFS.
+/// publicado no IPFS, e um snapshot cifrado do conteúdo pra diff futuro
+/// (`diff_count`). O meta antigo (hash+version) continua sendo escrito só
+/// como fallback pra vaults que ainda não tiverem o snapshot novo (ver
+/// `pending_changes`).
 pub(crate) fn mark_published(version: u64) -> Result<(), String> {
     let vault = load()?;
     let path = meta_path()?;
@@ -387,14 +486,20 @@ pub(crate) fn mark_published(version: u64) -> Result<(), String> {
         "last_published_content_hash": content_signature(&vault),
     });
     std::fs::write(&path, serde_json::to_string(&meta).map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string())?;
+    save_published_snapshot(&vault)
 }
 
-/// Retorna quantas versões do vault ainda não foram publicadas no IPFS.
-/// 0 = nada pendente — inclusive quando a versão local subiu mas o conteúdo
-/// final é idêntico ao que já foi publicado (ver `content_signature`).
+/// Retorna quantas mudanças de conteúdo o vault local tem em relação ao
+/// último publicado no IPFS. 0 = nada pendente.
 pub(crate) fn pending_changes() -> Result<u64, String> {
     let vault = load()?;
+    if let Some(snapshot) = load_published_snapshot()? {
+        return Ok(diff_count(&vault, &snapshot));
+    }
+    // Fallback pra vaults publicados antes da Sessão 139 (sem snapshot local
+    // ainda) — mesmo comportamento de antes, até a próxima publicação gravar
+    // um snapshot novo e este branch nunca mais rodar pra esse vault.
     let path = meta_path()?;
     if !path.exists() {
         return Ok(vault.version);
@@ -738,6 +843,78 @@ mod tests {
 
         assert_eq!(vault.version, 2);
         assert_eq!(content_signature(&vault), sig_before);
+    }
+
+    // --- testes de diff_count (Sessão 139, achado: toggle não cancelava com
+    // outra pendência real no meio) ---
+
+    #[test]
+    fn diff_count_zero_for_identical_vaults() {
+        let mut vault = Vault::default();
+        vault.entries.push(make_entry("id1", "github.com"));
+        let published = Vault {
+            version: vault.version,
+            entries: vault.entries.clone(),
+            profile_names: vault.profile_names.clone(),
+            device_permissions: vault.device_permissions.clone(),
+        };
+        assert_eq!(diff_count(&vault, &published), 0);
+    }
+
+    #[test]
+    fn diff_count_counts_new_entry() {
+        let published = Vault::default();
+        let mut current = Vault::default();
+        current.entries.push(make_entry("id1", "github.com"));
+        assert_eq!(diff_count(&current, &published), 1);
+    }
+
+    #[test]
+    fn diff_count_toggle_cancels_even_with_other_pending_entry() {
+        // Reprodução exata do bug real: uma entrada nova (pendência real,
+        // nunca publicada) + favoritar/desfavoritar outra entrada já
+        // publicada. O diff por entrada não deve contar o toggle, só a
+        // entrada nova de fato pendente.
+        let mut published = Vault::default();
+        published.entries.push(make_entry("id1", "github.com"));
+
+        let mut current = Vault {
+            version: published.version,
+            entries: published.entries.clone(),
+            profile_names: published.profile_names.clone(),
+            device_permissions: published.device_permissions.clone(),
+        };
+        current.entries.push(make_entry("id2", "b.com")); // pendência real
+        assert_eq!(diff_count(&current, &published), 1);
+
+        current.set_favorite("id1", true);
+        assert_eq!(diff_count(&current, &published), 2);
+
+        current.set_favorite("id1", false);
+        assert_eq!(
+            diff_count(&current, &published),
+            1,
+            "toggle deveria cancelar, sobrando só a entrada nova"
+        );
+    }
+
+    #[test]
+    fn diff_count_counts_removed_entry_and_permission_change() {
+        let mut published = Vault::default();
+        published.entries.push(make_entry("id1", "github.com"));
+        published.device_permissions.push(DeviceVaultPermission {
+            pub_key: "0xABC".to_string(),
+            can_write: false,
+        });
+
+        let mut current = Vault::default();
+        current.device_permissions.push(DeviceVaultPermission {
+            pub_key: "0xabc".to_string(), // mesma chave, case diferente
+            can_write: true,              // mudou
+        });
+
+        // entrada removida (1) + permissão mudou (1)
+        assert_eq!(diff_count(&current, &published), 2);
     }
 
     // --- testes de permissão de escrita por device (Sessão 97) ---
