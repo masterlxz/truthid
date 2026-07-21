@@ -6123,6 +6123,45 @@ PC pra confirmar ponta a ponta. Registrar como próximo passo quando houver ambi
 
 ---
 
+### Sessão 138 — 2026-07-20: corrige item 7 do backlog (contador de "pending changes" soma sem
+cancelar em toggles)
+
+Bug achado na Sessão 136 (favoritar/desfavoritar uma entrada do Vault soma +2 no contador de
+"pending changes", nunca cancela mesmo voltando pro conteúdo idêntico ao publicado). Causa raiz:
+`pendingChanges()`/`pending_changes()` sempre foi `versão local − última versão publicada`, uma
+contagem pura de bumps de `version` sem olhar pro conteúdo — e `version` é monotônica por design
+(nunca desce), então duas mudanças que se cancelam no conteúdo (toggle + toggle de volta) nunca
+cancelam na contagem.
+
+**Fix**: em vez de trocar o modelo de `version` (mudança maior, com efeitos colaterais em outros
+lugares que dependem dela — upsert, delete, profiles etc. continuam bumpando normalmente), adicionou
+uma **assinatura de conteúdo** (hash de tudo, exceto `version`: entries, profile_names,
+device_permissions) guardada junto da versão no momento da publicação. `pending_changes` agora
+primeiro compara a assinatura atual contra a última publicada — se baterem, retorna 0 direto,
+independente de quantos bumps de version rolaram no meio; só cai pro diff de version (comportamento
+de antes) se o conteúdo realmente mudou.
+
+- **Desktop** (`desktop/src-tauri/src/vault.rs`): nova `content_signature(&Vault)` (serializa
+  entries/profile_names/device_permissions com serde — ordem de campo determinística — e hasheia com
+  SHA-256, já dependência do projeto). `mark_published` agora carrega o vault atual e grava
+  `last_published_content_hash` junto de `last_published_version` no `vault.meta.json`.
+  `pending_changes` checa o hash primeiro. Meta antigo sem o campo novo (`None`) cai automaticamente
+  pro comportamento anterior — sem migração necessária. 3 testes novos (`content_signature_ignores_version`,
+  `content_signature_changes_with_entry_content`, `content_signature_matches_after_favorite_toggle_round_trip`),
+  `cargo test --lib` 88/88.
+- **Mobile** (`mobile/lib/services/vault_repository.dart`): mirror exato — `_contentSignature`
+  (mesma ideia, `package:crypto`'s `sha256` sobre o mesmo Map de campos, já dependência do projeto),
+  `markPublished`/`pendingChanges` seguindo a mesma lógica. Não precisa bater byte-a-byte com o hash
+  do Rust (cada lado só compara contra o próprio histórico, nunca um com o outro). 1 teste de
+  regressão novo em `vault_publish_service_test.dart` (publica → favorita → `pendingChanges() == 1`
+  → desfavorita → `pendingChanges() == 0`), `flutter test` 374/374, `flutter analyze` sem achados
+  novos (só o que já era pré-existente em `vault_repository.dart:556`, `!` redundante não relacionado
+  a esta mudança).
+
+Item 7 do backlog fechado.
+
+---
+
 ## Como Usar Este Arquivo
 
 1. **Ao começar uma sessão**: Diga ao Claude Code "leia o PROJECT_STATE.md e me ajude a continuar"

@@ -4,6 +4,7 @@ use aes_gcm::{
 };
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 
 use crate::{get_vault_key, derive_vault_key_legacy};
@@ -353,26 +354,57 @@ fn meta_path() -> Result<PathBuf, String> {
     Ok(dir.join("vault.meta.json"))
 }
 
-/// Persiste a versão do vault que acabou de ser publicada no IPFS.
+/// Assinatura do conteúdo do vault (tudo, exceto `version`) — usada por
+/// `pending_changes` pra distinguir "conteúdo diferente do publicado" de "só
+/// a versão local subiu". Achado da Sessão 136: favoritar+desfavoritar bumpa
+/// version duas vezes mas devolve o conteúdo exato de antes (`set_favorite`
+/// preserva `updated_at` de propósito), e a versão sozinha nunca "cancela".
+/// Serialização de struct é determinística (ordem de campo fixa do serde),
+/// então o hash é estável pro mesmo conteúdo.
+fn content_signature(vault: &Vault) -> String {
+    #[derive(Serialize)]
+    struct Signable<'a> {
+        entries: &'a [VaultEntry],
+        profile_names: &'a [String],
+        device_permissions: &'a [DeviceVaultPermission],
+    }
+    let signable = Signable {
+        entries: &vault.entries,
+        profile_names: &vault.profile_names,
+        device_permissions: &vault.device_permissions,
+    };
+    let json = serde_json::to_vec(&signable).unwrap_or_default();
+    hex::encode(Sha256::digest(&json))
+}
+
+/// Persiste a versão + assinatura de conteúdo do vault que acabou de ser
+/// publicado no IPFS.
 pub(crate) fn mark_published(version: u64) -> Result<(), String> {
+    let vault = load()?;
     let path = meta_path()?;
-    let meta = serde_json::json!({ "last_published_version": version });
+    let meta = serde_json::json!({
+        "last_published_version": version,
+        "last_published_content_hash": content_signature(&vault),
+    });
     std::fs::write(&path, serde_json::to_string(&meta).map_err(|e| e.to_string())?)
         .map_err(|e| e.to_string())
 }
 
 /// Retorna quantas versões do vault ainda não foram publicadas no IPFS.
-/// 0 = nada pendente.
+/// 0 = nada pendente — inclusive quando a versão local subiu mas o conteúdo
+/// final é idêntico ao que já foi publicado (ver `content_signature`).
 pub(crate) fn pending_changes() -> Result<u64, String> {
     let vault = load()?;
     let path = meta_path()?;
-    let last = if path.exists() {
-        let raw = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-        let val: serde_json::Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
-        val["last_published_version"].as_u64().unwrap_or(0)
-    } else {
-        0
-    };
+    if !path.exists() {
+        return Ok(vault.version);
+    }
+    let raw = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let val: serde_json::Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
+    if val["last_published_content_hash"].as_str() == Some(content_signature(&vault).as_str()) {
+        return Ok(0);
+    }
+    let last = val["last_published_version"].as_u64().unwrap_or(0);
     Ok(vault.version.saturating_sub(last))
 }
 
@@ -670,6 +702,42 @@ mod tests {
 
         assert!(!found);
         assert_eq!(vault.version, 0, "id inexistente não deve bumpar version");
+    }
+
+    // --- testes de content_signature / pending_changes (Sessão 138, item 7) ---
+
+    #[test]
+    fn content_signature_ignores_version() {
+        let mut vault = Vault::default();
+        vault.entries.push(make_entry("id1", "github.com"));
+        let sig_before = content_signature(&vault);
+        vault.version += 5; // simula bumps de version sem mudar conteúdo
+        assert_eq!(content_signature(&vault), sig_before);
+    }
+
+    #[test]
+    fn content_signature_changes_with_entry_content() {
+        let mut vault = Vault::default();
+        vault.entries.push(make_entry("id1", "github.com"));
+        let sig_before = content_signature(&vault);
+        vault.set_favorite("id1", true);
+        assert_ne!(content_signature(&vault), sig_before);
+    }
+
+    #[test]
+    fn content_signature_matches_after_favorite_toggle_round_trip() {
+        // Achado da Sessão 136: favoritar+desfavoritar bumpa version duas
+        // vezes, mas o conteúdo final é idêntico ao original — a assinatura
+        // precisa "cancelar" mesmo a version não cancelando.
+        let mut vault = Vault::default();
+        vault.entries.push(make_entry("id1", "github.com"));
+        let sig_before = content_signature(&vault);
+
+        vault.set_favorite("id1", true);
+        vault.set_favorite("id1", false);
+
+        assert_eq!(vault.version, 2);
+        assert_eq!(content_signature(&vault), sig_before);
     }
 
     // --- testes de permissão de escrita por device (Sessão 97) ---

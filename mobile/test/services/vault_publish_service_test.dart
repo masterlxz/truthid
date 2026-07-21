@@ -164,4 +164,32 @@ void main() {
     await repo.addEntry(site: 'b.com', username: 'u', password: 'p');
     expect(await repo.pendingChanges(), 1);
   });
+
+  test(
+      'pendingChanges volta a 0 depois de favoritar e desfavoritar de volta '
+      '(achado da Sessão 136: version bumpa duas vezes mas o conteúdo final '
+      'é idêntico ao publicado)', () async {
+    when(() => mockProviderService.load()).thenAnswer((_) async => [provider]);
+    when(() => mockPinClient.pinVault(any(), any())).thenAnswer((_) async => const PinResult(
+          cid: 'QmTestCid',
+          contentHash: '0xabc123',
+          providersOk: ['kubo'],
+          providersFailed: [],
+        ));
+    when(() => mockSessionCreator.updateVault(
+          smartAccountAddress: any(named: 'smartAccountAddress'),
+          cid: any(named: 'cid'),
+          contentHashHex: any(named: 'contentHashHex'),
+        )).thenAnswer((_) async => const SessionCreationResult(userOpHash: '0xUserOpHash'));
+
+    final entry = await repo.addEntry(site: 'a.com', username: 'u', password: 'p');
+    await publishService.publish(smartAccountAddress);
+    expect(await repo.pendingChanges(), 0);
+
+    await repo.setFavorite(entry.id, true);
+    expect(await repo.pendingChanges(), 1);
+    await repo.setFavorite(entry.id, false);
+
+    expect(await repo.pendingChanges(), 0);
+  });
 }

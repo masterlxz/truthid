@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:math';
 import 'dart:typed_data';
 
+import 'package:crypto/crypto.dart' show sha256;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -482,19 +483,46 @@ class VaultRepository {
   // Desktop (desktop/src-tauri/src/vault.rs), guardado localmente via
   // flutter_secure_storage em vez de um arquivo separado.
   static const _publishedVersionKey = 'vault_last_published_version';
+  static const _publishedContentHashKey = 'vault_last_published_content_hash';
   static const _storage = FlutterSecureStorage();
 
+  // Assinatura do conteúdo do vault (tudo, exceto `version`) — usada por
+  // pendingChanges() pra distinguir "conteúdo diferente do publicado" de "só
+  // a versão local subiu". Achado da Sessão 136: favoritar+desfavoritar bumpa
+  // version duas vezes mas devolve o conteúdo exato de antes (setFavorite
+  // preserva updatedAt de propósito), e a versão sozinha nunca "cancela".
+  // Serialização de Map literal é determinística (mesma ordem de chaves
+  // sempre), então o hash é estável pro mesmo conteúdo.
+  String _contentSignature(_VaultData data) {
+    final map = {
+      'entries': data.entries.map((e) => e.toJson()).toList(),
+      'profile_names': data.profileNames,
+      'device_permissions': data.devicePermissions.map((p) => p.toJson()).toList(),
+    };
+    return sha256.convert(utf8.encode(jsonEncode(map))).toString();
+  }
+
   Future<void> markPublished(int version) async {
+    final data = await _load();
     await _storage.write(
       key: _publishedVersionKey,
       value: version.toString(),
     );
+    await _storage.write(
+      key: _publishedContentHashKey,
+      value: _contentSignature(data),
+    );
   }
 
   // Quantas versões do vault local ainda não foram publicadas. 0 = nada
-  // pendente.
+  // pendente — inclusive quando a versão local subiu mas o conteúdo final é
+  // idêntico ao que já foi publicado (ver _contentSignature).
   Future<int> pendingChanges() async {
     final data = await _load();
+    final lastHash = await _storage.read(key: _publishedContentHashKey);
+    if (lastHash != null && lastHash == _contentSignature(data)) {
+      return 0;
+    }
     final raw = await _storage.read(key: _publishedVersionKey);
     final last = raw != null ? int.tryParse(raw) ?? 0 : 0;
     final pending = data.version - last;
