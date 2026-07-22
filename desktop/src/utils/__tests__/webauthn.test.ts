@@ -1,5 +1,6 @@
 import { p256 } from "@noble/curves/p256";
 import { sha256 } from "@noble/hashes/sha2";
+import { bytesToHex, hexToBytes } from "@noble/hashes/utils";
 import type {
   AuthenticationResponseJSON,
   RegistrationResponseJSON,
@@ -16,20 +17,6 @@ import {
   signAssertion,
 } from "../webauthn";
 import { base64UrlEncode } from "../base64";
-
-function toHex(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-function fromHex(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
-  }
-  return bytes;
-}
 
 const RP_ID = "example.com";
 const ORIGIN = "https://example.com";
@@ -125,22 +112,22 @@ const FIXED_ORIGIN = "https://vault.truthid.test";
 describe("fixed vector (cross-checked with the Dart implementation)", () => {
   it("derives the expected public key coordinates", () => {
     const publicKey = p256.getPublicKey(
-      fromHex(FIXED_PRIVATE_KEY_HEX),
+      hexToBytes(FIXED_PRIVATE_KEY_HEX),
       false,
     );
     const x = publicKey.slice(1, 33);
     const y = publicKey.slice(33, 65);
-    expect(toHex(x)).toBe(
+    expect(bytesToHex(x)).toBe(
       "515c3d6eb9e396b904d3feca7f54fdcd0cc1e997bf375dca515ad0a6c3b4035f",
     );
-    expect(toHex(y)).toBe(
+    expect(bytesToHex(y)).toBe(
       "4536be3a50f318fbf9a5475902a221502bef0d57e08c53b2cc0a56f17d9f9354",
     );
   });
 
   it("builds the expected authenticatorData for a registration", () => {
     const publicKey = p256.getPublicKey(
-      fromHex(FIXED_PRIVATE_KEY_HEX),
+      hexToBytes(FIXED_PRIVATE_KEY_HEX),
       false,
     );
     const x = publicKey.slice(1, 33);
@@ -157,15 +144,15 @@ describe("fixed vector (cross-checked with the Dart implementation)", () => {
 
     // rpIdHash(32) || flags(1)=0x45 || signCount(4)=0 || aaguid(16)=0 ||
     // credIdLen(2)=16 || credId(16) || COSE key.
-    expect(toHex(sha256(new TextEncoder().encode(FIXED_RP_ID)))).toBe(
-      toHex(authData.slice(0, 32)),
+    expect(bytesToHex(sha256(new TextEncoder().encode(FIXED_RP_ID)))).toBe(
+      bytesToHex(authData.slice(0, 32)),
     );
     expect(authData[32]).toBe(0x45);
     expect(Array.from(authData.slice(33, 37))).toEqual([0, 0, 0, 0]);
-    expect(toHex(authData.slice(37, 53))).toBe("00".repeat(16));
+    expect(bytesToHex(authData.slice(37, 53))).toBe("00".repeat(16));
     expect(Array.from(authData.slice(53, 55))).toEqual([0, 16]);
-    expect(toHex(authData.slice(55, 71))).toBe(toHex(FIXED_CREDENTIAL_ID));
-    expect(toHex(authData.slice(71))).toBe(toHex(cosePublicKey));
+    expect(bytesToHex(authData.slice(55, 71))).toBe(bytesToHex(FIXED_CREDENTIAL_ID));
+    expect(bytesToHex(authData.slice(71))).toBe(bytesToHex(cosePublicKey));
   });
 
   it("signs the expected assertion (deterministic ECDSA, RFC 6979)", () => {
@@ -185,7 +172,7 @@ describe("fixed vector (cross-checked with the Dart implementation)", () => {
         origin: FIXED_ORIGIN,
       }),
     );
-    expect(toHex(assertion.signatureDer)).toBe(
+    expect(bytesToHex(assertion.signatureDer)).toBe(
       "3045022100ccd3940608dc3a8c278322b9ec9facf9d9ad93d142f975ba7cf30c5ddaa50454022019f943e29741ee8cb0d4b142947d1cec20c403a50d2d3885c37461f0bce0763f",
     );
   });

@@ -1,5 +1,6 @@
 import { p256 } from "@noble/curves/p256";
 import { sha256 } from "@noble/hashes/sha2";
+import { bytesToHex, concatBytes, hexToBytes } from "@noble/hashes/utils";
 import { encodeBytes, encodeInt, encodeMap, encodeText } from "./cbor";
 import { base64UrlEncode } from "./base64";
 
@@ -15,31 +16,6 @@ import { base64UrlEncode } from "./base64";
  */
 
 const AAGUID = new Uint8Array(16); // zeros — sem attestation de hardware real nesta fase.
-
-function toHex(bytes: Uint8Array): string {
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
-
-function fromHex(hex: string): Uint8Array {
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
-  }
-  return bytes;
-}
-
-function concatBytes(...chunks: Uint8Array[]): Uint8Array {
-  const total = chunks.reduce((sum, c) => sum + c.length, 0);
-  const out = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    out.set(chunk, offset);
-    offset += chunk.length;
-  }
-  return out;
-}
 
 function randomBytes(length: number): Uint8Array {
   const bytes = new Uint8Array(length);
@@ -159,7 +135,7 @@ export function createPasskey(params: {
   });
 
   return {
-    privateKeyHex: toHex(privateKey),
+    privateKeyHex: bytesToHex(privateKey),
     credentialIdB64: base64UrlEncode(credentialId),
     userHandleB64: base64UrlEncode(userHandle),
     clientDataJSON,
@@ -202,7 +178,7 @@ export function signAssertion(params: {
   const clientDataHash = sha256(new TextEncoder().encode(clientDataJSON));
   const message = concatBytes(authenticatorData, clientDataHash);
 
-  const privateKey = fromHex(params.privateKeyHex);
+  const privateKey = hexToBytes(params.privateKeyHex);
   // Explicit `lowS: true` for a canonical (malleability-resistant) signature
   // — needed even though this option's doc claims it's the default; it is
   // not, empirically, in the installed @noble/curves version. Dart's mirror

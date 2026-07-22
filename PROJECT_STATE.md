@@ -6757,8 +6757,7 @@ Trocar de identidade durante scan → ref nunca reseta → scan da nova identida
 .catch(()=>{}); clear()` — só o nome do comando varia. Um helper `respondToRequest` cobriria
 todos.
 
-**48. `webauthn.ts` reimplementa `toHex`/`fromHex`/`concatBytes` já disponíveis em
-`@noble/hashes/utils`** (dependência transitiva já no projeto).
+**48. `webauthn.ts` reimplementa `toHex`/`fromHex`/`concatBytes` já disponíveis em -- FIXED Session 146**
 
 **49. `useVaultBackup.ts` reimplementa `bytesToBase64` já existente em `webauthn.ts` -- FIXED Session 146**
 `bytesToBase64` (standard), `base64ToBytes` (inverse) e `base64UrlEncode` (URL-safe) extraídas para `desktop/src/utils/base64.ts` (novo). `useVaultBackup.ts`, `webauthn.ts` e `webauthn.test.ts` removem cópias private e importam do arquivo único.
