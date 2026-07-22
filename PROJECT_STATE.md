@@ -2,22 +2,11 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-20 (Sessão 136 — **Fase 2 do passkey na extensão fecha 100% em
-> hardware real**: approve real no Desktop (device key, não precisa de Ledger — correção de suposição
-> errada) e approve real via QR+celular (publicou de verdade, Base Mainnet), causa raiz do bug de
-> porta LAN confirmada (restrição padrão do Android de rede em segundo plano, documentada, não
-> corrigida a pedido do dono do projeto), bug real corrigido no `pushToMobile` da extensão (sem
-> fallback de IP manual, nunca entregava nada no Brave), e achado novo registrado — contador de
-> "pending changes" soma sem cancelar em toggles de favorito — ver "Sessão 136" mais abaixo pro
-> detalhe completo). Sessão 135 — fatia Mobile do vault-edit implementada e validada em
-> hardware real; achado+corrigido bug real do saldo sumido no Wallet Mobile; achado+corrigido 2 bugs
-> reais na validação em hardware da extensão (storage bloqueado no Brave, retry de QR); rodado
-> `/code-review max` sobre o diff da sessão — **todos os 15 achados fechados** (4 CONFIRMED + 11
-> PLAUSIBLE, corrigidos ou avaliados/descartados com justificativa) — ver seção "Achados do
-> /code-review max" mais abaixo pro detalhe de cada um; gerador de senha do Desktop virou popup
-> (item 3 do backlog da Sessão 130, paridade com o bottom sheet do Mobile), validado com clique
-> real. Restam do backlog: QR do TOTP no Mobile (hardware pendente) e fechar a Fase 2 do passkey
-> na extensão (approve real no Desktop com wallet + approve real via celular).)
+> Última atualização: 2026-07-22 (Sessão 141 — `/code-review max --path desktop/`: 9 agentes
+> paralelos, 8/9 completos (Invariant Auditor rodou mas não produziu resumo final), ~78k chars de
+> achados consolidados. Cobriu 12 módulos Rust + ~50 arquivos React/TS do Desktop: duplicação de
+> código, performance, segurança, pitfalls, wrappers, arquitetura, simplificação e dead code.
+> Nenhum achado corrigido ainda — registro puro, aguardando decisão do dono do projeto)
 >
 > ⚠️ **LEMBRETE**: ao final do projeto (todas as fases concluídas), fazer uma revisão completa deste arquivo — consolidar endereços, remover seções obsoletas, e garantir que a tabela de Pendências de Deploy está zerada. Sessão 68.
 
@@ -6449,7 +6438,359 @@ no deploy não reverte, só quebra em produção).
 **Nada corrigido ainda** — todos os achados são só registro, à espera de decisão do dono do
 projeto sobre priorização. Os 2 CRÍTICOS (reentrância na recovery + revogação de device que não
 revoga de verdade) envolvem contratos **já em produção na Base Mainnet sem proxy** — merecem
+Nada corrigido ainda — todos os achados são só registro, à espera de decisão do dono do
+projeto sobre priorização. Os 2 CRÍTICOS (reentrância na recovery + revogação de device que não
+revoga de verdade) envolvem contratos **já em produção na Base Mainnet sem proxy** — merecem
 avaliação de urgência independente da ordem do resto do backlog.
+
+---
+
+### Sessão 141 — 2026-07-22: `/code-review max --path desktop/` — 8/9 agentes completos, ~70 achados
+
+Pedido explícito do dono do projeto ("pensei em rodar mais code reviews agora e ir anotando e
+depois arrumamos as coisas"). Escopo: **todo o diretório `desktop/`** (12 módulos Rust em
+`desktop/src-tauri/src/` + ~50 arquivos React/TypeScript — componentes, hooks, serviços, utils,
+contextos). Não é um diff — é a codebase inteira do Desktop.
+
+**Metodologia `max`**: 9 agentes buscadores em paralelo com ângulos especializados, cada um
+lendo o código inteiro. Resultados salvos em `code-review-max-results.md` (consolidados e
+preservados independentemente da sessão do Claude Code).
+
+| Agente | Status | Chars | Foco |
+|--------|--------|-------|------|
+| Reuse/Deduplication | ✓ Completo | 10,907 | Código duplicado entre Rust/TS |
+| IPC Tracer | ✓ Completo | 10,826 | `invoke()` ↔ `#[tauri::command]` |
+| Simplification | ✓ Completo | 10,350 | Complexidade desnecessária |
+| Wrapper/Adapter | ✓ Completo | 8,986 | Correção de wrappers/proxies |
+| Altitude | ✓ Completo | 8,616 | Arquitetura/generalização |
+| Line-by-line | ✓ Completo | 8,007 | Varredura completa de bugs |
+| Invariant Auditor | ✓ Completo | 7,989 | Quebra de invariantes de segurança |
+| Efficiency | ✓ Completo | 6,997 | Performance/desperdício |
+| Pitfalls | ✓ Completo | 6,015 | Armadilhas Rust/TypeScript |
+
+---
+
+### Achados Consolidados — Desktop
+
+Abaixo, cada ângulo com seus achados. Nenhum corrigido ainda — registro puro. Ordenado por
+severidade estimada.
+
+---
+
+#### 🔴 Severidade Alta (bugs reais, risco de dados/sessão)
+
+**1. `SignRequestModal` fica permanentemente desabilitado após 1ª aprovação com sucesso**
+(`desktop/src/components/SignRequestModal.tsx:51,58-68,90-121,132,181,184`)
+`stage` (`"idle"|"signing"|"error"`) só é resetado pelo `useEffect` de expiração, que não toca em
+`stage`. Após aprovação bem-sucedida, `stage="signing"` nunca volta pra `"idle"`. Componente é
+montado incondicionalmente (`App.tsx`), então o próximo sign-request recebido renderiza com
+`stage="signing"` e ambos Approve/Reject ficam `disabled` pra sempre até reiniciar o app.
+Mesma classe de bug já corrigida em `VaultEditApprovalModal`/`PairDevice`/`CreateIdentity` — regressão.
+
+**2. `vault.enc` truncado/corrompido causa panic (crash) em vez de erro tratável**
+(`desktop/src-tauri/src/vault.rs:243`)
+No fallback de migração de chave legada, `Nonce::from_slice(&blob[..12])` é chamado sem validar
+`blob.len() >= 12`. Se o vault for truncado (crash mid-write, disco cheio, tampering),
+**panica** em vez de retornar `Err`. Todo comando de vault (`vault_list_entries`,
+`vault_upsert_entry`, etc.) passa por `vault::load()` — arquivo corrompido crasha o comando.
+
+**3. Concorrência de escrita no vault: dois comandos podem perder dados permanentemente**
+(`desktop/src-tauri/src/vault.rs:228,305` + `lib.rs:296,305,496`)
+Nenhum mutex entre `load()` → mutate → `save()`. `VaultManagement` e `VaultEditApprovalModal`
+(montado incondicionalmente) podem ambos chamar `vault_upsert_entry`/`vault_delete_entry`
+concorrentemente. Ambos leem o mesmo `vault.enc`, adicionam sua entrada, salvam — o último
+sobrescreve o arquivo, e a entrada do outro é **silenciosamente perdida** sem erro.
+
+**4. Sign-request executa UserOperation mesmo depois do timeout do servidor**
+(`desktop/src/components/SignRequestModal.tsx:90-111` vs `sign_request.rs:232-238`)
+`handleApprove()` chama `executeViaUserOp()` (nonce fresco, assina, submete ao bundler) **antes**
+de `respond_to_sign_request`. O timeout de 300s em Rust só controla o HTTP status code do
+caller original — se o usuário aprovar com a janela minimizada (webview throttle `setInterval`),
+uma UserOperation real é enviada pra Base Mainnet mesmo com o caller já tendo recebido 408 e
+desistido. Nenhum gate server-side — só timer client-side.
+
+**5. "Enviar" (Ledger) e "Publicar via device key" são independentemente clicáveis**
+(`desktop/src/components/VaultManagement.tsx:770,778-779` + `useVaultPublish.ts:188`)
+Os dois botões controlam estados separados (`publishState`/`isTxPending`/`isConfirming` vs
+`deviceKeyPublishState`). Podem disparar simultaneamente dois `vault_publish` IPFS paralelos +
+duas transações on-chain independentes (EOA + UserOp) — gas real gasto 2x, e se versão
+diferir, o CID que confirmar por último vence silenciosamente.
+
+**6. `local_signer_server` reporta "running" pra sempre mesmo após crash do HTTP bridge**
+(`local_signer_server.rs:254-260`)
+`axum::serve(...).await` tem o `Result` descartado com `let _ = ...`. Se o servidor errar
+pós-bind, `RunningServer` fica armazenado e `local_signer_status` retorna `running: true`
+indefinidamente — toda a bridge cross-app (sign-request/sign-message/pin/vault-edit) morre
+silenciosamente enquanto a UI mostra ativa.
+
+---
+
+#### 🟠 Severidade Média (bugs de UX/confiabilidade, edge cases)
+
+**7. Dashboard fica preso em "Scanning..." pra sempre após Refresh durante scan**
+(`useSmartAccountActivity.ts:104-152`)
+Clique em "Refresh activity" durante scan vê `scanInFlight.current === true` e retorna sem
+iniciar novo scan. O scan antigo ao terminar tem `cancelled = true` (pq o efeito foi
+re-executado) e pula `setIsScanning(false)` — `isScanning` fica `true` sem scan ativo.
+
+**8. `ActiveSessions`: "Revoke all" bem-sucedido mascara sessões futuras como revogadas**
+(`ActiveSessions.tsx:144`)
+`isRevokeAllSuccess` nunca reseta pra `false` após sucesso. Sessões criadas depois (ex: via
+QuickLogin, que é overlay sobre ActiveSessions) renderizam com badge "Revoked" e sem botão
+individual de revogação — inconsistente: `activeSessions.filter(s => !s.revoked)` conta
+certinho mas a renderização mente.
+
+**9. Vault-edit approve diz "aprovado" antes de salvar; retry impossível**
+(`VaultEditApprovalModal.tsx:42-78`)
+`respond_to_vault_edit_request` (linha 52) libera HTTP 200 pro caller **antes** de
+`vault_upsert_entry` (linha 70) e `publishVaultViaDeviceKey` (linha 71). Se os últimos
+falharem, o caller já recebeu sucesso. Clicar Approve de novo reenvia o mesmo `id` — mas
+Rust já consumiu o slot, retorna `Err("no pending vault edit request...")` pra sempre.
+
+**10. Segunda proposta vault-edit pode ser descartada silenciosamente**
+(`useIncomingVaultEditRequest.ts:36` + `VaultEditApprovalModal.tsx:42-78`)
+Proposta A aprovada → `respond` libera slot → `vault_upsert`/`publish` ainda rodam.
+Proposta B chega nessa janela, estaciona no slot livre, sobrescreve `request` no React.
+Quando A termina, `clear()` zera o request atual (= B), descartando B sem o usuário ver.
+
+**11. `get_ledger_address` colapsa erro "access_denied" → "not_connected"**
+(`ledger.rs:224`)
+`open_ledger_device` classifica corretamente `access_denied` mas `get_ledger_address` joga
+tudo em `"not_connected"`. `ConnectLedger.tsx` nunca alcança o branch "Close Ledger Live" —
+usuário vê "Conecte o USB" pra sempre quando o fix é um clique (fechar Ledger Live).
+
+**12. `DesktopDevice` — stuck phase após erro de commit**
+(`DesktopDevice.tsx:55-141`)
+`PairDevice.tsx` já tem fix documentado ("mesma classe de bug do débito #44") resetando
+`phase` no erro — `DesktopDevice` não tem. Commit rejeitado → `phase` fica `"committing"` →
+botão "Register" fica permanentemente desabilitado até reiniciar o app.
+
+**13. Parar local signer pode travar por até 5 minutos sem feedback**
+(`local_signer_server.rs:277-287` + `useLocalSignerServer.ts:36-41`)
+Se uma request estiver estacionada aguardando aprovação (até 300s), `stop()` espera
+graceful shutdown concluir — o botão "Stop" fica sem spinner/disabled parecendo congelado
+por até 5 min.
+
+---
+
+#### 🟡 Severidade Baixa (qualidade de código, manutenção, performance)
+
+**14. `vault_publish` decripta o vault duas vezes seguidas**
+(`lib.rs:438-439` + `vault.rs:481-491`)
+`vault_publish` chama `load()` pra pegar `v.version`, passa só `version` pra `mark_published`,
+que chama `load()` de novo pra computar `content_signature`. Duas leituras de disco + keyring
++ AES-GCM decrypt + JSON parse do mesmo vault inalterado por clique de "Publish".
+
+**15. 4 hooks `useIncoming*Request` são o mesmo código copiado 4x**
+(`hooks/useIncoming{Pin,SignMessage,SignRequest,VaultEdit}Request.ts`)
+~20 linhas idênticas cada — `useState<T|null>` → `invoke(getPendingX)` → `listen(event)` →
+`clear()`. Só variam tipo genérico + 2 strings. Um factory `useIncomingRequest<T>(cmd, event)`
+reduziria ~170 linhas a ~25 + 4 one-liners.
+
+**16. 4 modais de aprovação duplicam o mesmo efeito de expiração**
+(`{Pin,SignMessage,SignRequest,VaultEdit}ApprovalModal.tsx`)
+Mesmo `useEffect` com `setInterval` de 1s checando `expiresAtMs` copiado 4x. Já mostra drift:
+`VaultEditApprovalModal` adicionou reset de `showPassword`/`stage`/`error` só na sua cópia.
+Extrair `useRequestExpiry(expiresAtMs)` → cada modal ganha `const expired = useRequestExpiry(...)`.
+
+**17. 4 canais Rust duplicam a mesma máquina de estados "single pending request"**
+(`pin.rs:245-520`, `sign_request.rs:163-273`, `sign_message.rs:155-268`, `vault_edit.rs:187-290`)
+Mesmo padrão `Mutex<Option<PendingX>>` + `oneshot` + `timeout` + `resolve` copiado ~150
+linhas por canal. Os comentários justificam pra testabilidade, mas uma abstração genérica
+`SingleSlotChannel<Payload, Decision>` preservaria a mesma testabilidade.
+
+**18. `local_signer_server::start()` cresceu pra 8 parâmetros posicionais**
+(`local_signer_server.rs:30-40,212-222` + `lib.rs:608-644,814-833`)
+Cada canal novo adiciona um par (state, notifier). Testes precisam passar closures no-op.
+Um builder `ServerBuilder::new().channel(...).build()` eliminaria a duplicação posicional.
+
+**19. `$HOME/.truthid` + load/save duplicado ~11 vezes em 5 arquivos Rust**
+(`ipfs.rs`, `bundler.rs`, `pin.rs`, `vault.rs`, `lib.rs`)
+Path construction + `serde_json::from_str`/`to_string_pretty` idênticos pra cada tipo de
+config. Um helper `local_config_path` + `load_json_or_default`/`save_json_pretty` genéricos
+serviria todos.
+
+**20. `useVaultKey.ts` é dead code — zero importers, e a lógica que ele terceiriza foi
+reimplementada (com drift) em `CreateIdentity.tsx` e `VaultManagement.tsx`**
+3 cópias da constante `"TruthID Vault Key v1"` — introduzir v2 quebraria silenciosamente
+derivação cross-device se aplicado só em 1 ou 2 das 3 cópias.
+
+**21. `computeSmartAccountAddress` async (modo on-chain via multicall) nunca chamado**
+(`computeSmartAccountAddress.ts:64-99`)
+Só `computeSmartAccountAddressSync` é usado. O union type + type guard + ABI da factory
+existem sem nenhum caller — superfície desnecessária pra manter.
+
+**22. `vault_edit.rs` divide um struct em dois só pra separar Serialize/Deserialize**
+(`vault_edit.rs:50-65,86-108`)
+`VaultEditRequestBody` (Deserialize) + `VaultEditRequestBodyOut` (Serialize) com 6 campos
+idênticos + `From` impl manual — ~20 linhas que o resto do codebase não precisa (ex:
+`PasskeyProposal` deriva ambos num struct só).
+
+**23. `useVaultPublish.ts` duplica "mark as published" em dois handlers**
+(`useVaultPublish.ts:111-118,159-164`)
+Mesma sequência `refetchHasVault → refetchVaultRef → onPublished → setJustPublished(true) →
+setTimeout(3000)` em `isTxSuccess` e `handleEnviarViaDeviceKey`. Extrair helper local.
+
+**24. `IdentityContext.tsx` recria objeto em todo render**
+(`contexts/IdentityContext.tsx:31`)
+`value={{ username, identityId, smartAccountAddress }}` sem `useMemo` — toda query do
+wagmi re-renderiza todos os consumidores (4 tabs inteiras). Fix: `useMemo` com dependências.
+
+**25. `WalletModalContext` aloca nova closure + objeto todo render do App**
+(`App.tsx:142`)
+`value={{ openConnectModal: () => setConnectModalOpen(true) }}` sem `useCallback`/`useMemo`.
+`App` re-renderiza com frequência (`useAccount`, `useReadContract`, `useSwitchChain`) —
+cascateia pra toda a árvore de componentes.
+
+**26. `VaultManagement.loadAll()` dispara ~5 decrypts do vault por mutação**
+(`VaultManagement.tsx:502-520`)
+Após cada add/edit/delete, `Promise.all` sobre 4 comandos que cada um chama `vault::load()`
+— e `vault_pending_changes` sozinho faz `load()` + `load_published_snapshot()`. 5 leituras
+de disco + keyring + AES-GCM decrypt + JSON parse + migration scan por clique.
+
+**27. IPFS pinning sequencial com `reqwest::Client::new()` por chamada**
+(`ipfs.rs:63-73,83-88,105,148`)
+Pinning pra N providers é soma de latências (sequencial), cada um com TCP+TLS handshake
+novo. Fix: `join_all` por fase (Kubo → PSA) + `Client` compartilhado.
+
+**28. `userOpExecutor` faz 2 chamadas de rede sequenciais independentes**
+(`userOpExecutor.ts:82-89`)
+`getNonce` (on-chain) e `getUserOperationGasPrice` (Pimlico HTTP) não dependem um do outro
+— cada UserOperation paga +100-500ms. Fix: `Promise.all`.
+
+**29. `sortedEntries`/`filtered` em VaultManagement não são `useMemo`**
+Recomputa sobre toda a lista de entradas em cada render — inclusive toggles de UI não
+relacionados (abrir form, visibilidade de senha). `useMemo([entries, filter])`.
+
+**30. `scanSmartAccountActivity` faz RPC calls sequenciais dentro do chunk**
+(`scanSmartAccountActivity.ts:119-139`)
+`getTransactionReceipt` e `getBlock` são chamados um por vez em loop — primeiro scan de
+identidade antiga paga RTT sequencial pra cada tx/bloco único.
+
+**31. `publishVaultViaDeviceKey` silencia warning de redundância parcial**
+(`vaultPublishViaDeviceKey.ts:25-28`)
+Só lança se `providers_ok.length === 0`. O caminho Ledger (`useVaultPublish.ts`) mostra
+`pinWarning` pra falha parcial. O device-key path nunca avisa — publish ocorre com
+redundância degradada sem o usuário saber.
+
+**32. `bundler not configured` copiado por call site, já com drift de idioma**
+(`vaultPublishViaDeviceKey.ts:30-35` vs `SignRequestModal.tsx:93-96`)
+Uma cópia em português, outra em inglês — mesmo guard. `userOpExecutor` nunca valida.
+
+**33. Ledger APDU chunking duplicado entre sign-tx e sign-personal-message**
+(`ledger.rs:251-277,345-372`)
+Loops de chunking idênticos, diferem só no byte de instrução + prefixo de 4 bytes.
+`eth_signTypedData_v4` stubbed como `unsupported` — quando implementado, será a 3ª cópia.
+
+**34. `backup.rs` — iterações PBKDF2 lidas de arquivo não-confiável sem teto**
+(`backup.rs:76`)
+Arquivo `.truthid-backup` malicioso com `iterations = u32::MAX` → `pbkdf2_hmac` trava
+por tempo extremamente longo, sem timeout e sem cancelamento da UI.
+
+**35. `SignRequestModal` — comparação de seletor case-sensitive**
+(`SignRequestModal.tsx:29-30`)
+`callData` uppercase válido (byte-idêntico) vs seletor computado lowercase gera warning
+falso de "⚠ Could not verify declared function".
+
+**36. `handleToggleFavorite`/`handleTogglePerm` nunca atualizam contador de pending**
+(`VaultManagement.tsx:586-608`)
+`pendingCount` só atualiza via `loadAll()` (chamado em add/edit/delete, nunca nos toggles)
+ou resetado por `onPublished`. Toggle sem publish deixa o contador desatualizado até
+próxima operação pesada ou troca de tab.
+
+**37. Pin/Sign-Message approve engole erro de resolução — falso sucesso**
+(`PinApprovalModal.tsx:33-40`, `SignMessageModal.tsx:32-39`)
+`respond_to_..._request` em `.catch(() => {})` + `clear()` incondicional. Se o Rust já
+expirou o slot (race de ~1s entre timer do servidor e `setInterval` do cliente), a rejeição
+é engolida e o modal fecha como se tivesse dado certo.
+
+**38. `executeViaUserOp` dropa flag `success` do recibo ERC-4337**
+(`userOpExecutor.ts:143,39-42,147-150`)
+Retorna só `{ userOpHash, transactionHash }` — `success` booleano do `UserOperationReceipt`
+é descartado. UserOp minerado mas revertido é indistinguível de sucesso pra todos os callers.
+
+**39. `useVaultPublish` — caminho Ledger nunca checa `receipt.status`**
+(`useVaultPublish.ts:68-69,110-119`)
+`isTxSuccess` (de `useWaitForTransactionReceipt`) é `true` mesmo com `status: "reverted"`.
+UI mostra "Enviado ✓" mesmo quando `updateVault` nunca rodou.
+
+**40. Sign-request reporta "executed" com `transactionHash: null`**
+(`SignRequestModal.tsx:98-110`)
+Se bundler não confirmar em ~60s, `transactionHash` é `null` — mas `outcome: "executed"`
+é enviado mesmo assim. Caller não tem como saber que a op ainda está pendente.
+
+**41. Ledger provider bypassa fallback de RPC do wagmi**
+(`connectors/ledger.ts:189-208`)
+`eth_getTransactionCount`/`eth_estimateGas` usam `fetch` direto contra `rpcUrls[0]` só,
+ignorando `fallback([mainnet.base.org, publicnode.com, drpc.org])` configurado em
+`wagmi.ts`. Se `mainnet.base.org` rate-limitar, toda escrita Ledger falha.
+
+**42. `computeSmartAccountAddress` offline vs on-chain — immutables hardcoded sem
+verificação cruzada** (`truthidAccount.ts:19-24` + `computeSmartAccountAddress.ts:64-99`)
+Redeploy da factory → precisa atualizar constantes em 2 lugares independentes (ninguém
+cross-checka contra `factory.getAddress()`). O caminho on-chain que verificaria existe
+no código mas não é chamado por nada.
+
+**43. Local signer router não tem autenticação — qualquer processo local pode forjar
+pedidos** (`local_signer_server.rs:42-46,189-198` + `vault_edit.rs:45-65`)
+Rotas como `/truthid/v1/vault-edit` não validam origem. A porta é documentada pra
+integrações third-party mas o vault-edit assume ser a extensão first-party. Qualquer
+processo local pode injetar credenciais com aparência legítima.
+
+**44. PIN fast-path autoriza por `app_name` auto-reportado, sem autenticação**
+(`pin.rs:294-311,430-447`)
+Quota de 50/dia é consumida por string `appName` fornecida pelo caller. Qualquer
+processo pode usar o nome de um app já autorizado e consumir quota silenciosamente.
+
+**45. Revogação de permissão de escrita no vault (`canWriteVault`) não é enforcement**
+(`vault.rs:63-71,180-191` + `vault_edit.rs`)
+`device_permissions.can_write` existe, persiste, tem UI pra gerenciar — mas `vault_edit::
+handle_incoming` nunca consulta. Dispositivo "revogado" continua escrevendo normalmente.
+
+**46. `useSmartAccountActivity` — `scanInFlight` compartilhado entre identidades**
+(`useSmartAccountActivity.ts:110`)
+Trocar de identidade durante scan → ref nunca reseta → scan da nova identidade é pulado
+→ dashboard mostra dados da identidade anterior.
+
+**47. `handleReject` byte-idêntico nos 4 modais de aprovação**
+4× o mesmo corpo `if(!request) return; await invoke(cmd, {id, decision:{outcome:"rejected"}})
+.catch(()=>{}); clear()` — só o nome do comando varia. Um helper `respondToRequest` cobriria
+todos.
+
+**48. `webauthn.ts` reimplementa `toHex`/`fromHex`/`concatBytes` já disponíveis em
+`@noble/hashes/utils`** (dependência transitiva já no projeto).
+
+**49. `useVaultBackup.ts` reimplementa `bytesToBase64` já existente em `webauthn.ts`**
+
+**50. `vault_pending_changes` pode derrubar `vault_list_entries` se snapshot corromper**
+(`VaultManagement.tsx:505-516`)
+`Promise.all` compartilhado — se `load_published_snapshot` falhar (arquivo truncado), toda
+a lista de entradas é escondida com "sem vault ainda — tudo vazio é ok".
+
+**51. `vault_edit.rs` — `VaultEditRequestBody` sem campo `pub_key`**
+O canal de vault-edit (único caminho que dispositivo externo usa pra propor escrita) não
+identifica quem enviou — impossível fazer enforcement de permissão por dispositivo mesmo
+que a checagem existisse.
+
+**52. `useVaultKey.ts:36` — `setState(exists ? "ready" : "ready")` — ambos os branches idênticos**
+Dead code (hook não importado), mas se fosse reativado reportaria "ready" mesmo sem chave derivada.
+
+---
+
+#### Resumo por tipo
+
+| Tipo | Qtd |
+|------|-----|
+| Bug real (dados/sessão/fundos em risco) | 13 |
+| UX/confiabilidade (stuck state, falso sucesso) | 8 |
+| Performance/eficiência | 7 |
+| Duplicação/manutenção | 12 |
+| Segurança (invariants quebrados) | 5 |
+| Dead code / superfície não usada | 7 |
+
+**Nada corrigido ainda** — registro puro, aguardando decisão do dono do projeto sobre
+priorização e ordem de ataque. O arquivo `code-review-max-results.md` na raiz contém o
+texto original de cada agente pra referência completa.
 
 ---
 
