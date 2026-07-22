@@ -6226,6 +6226,231 @@ criado com sucesso, confirmado no log), toggle de favoritar validado em hardware
 Item 7 fecha de verdade agora, validado em hardware físico com publish real na Base Mainnet.
 Item 1 do backlog (QR TOTP) fecha 100% nos dois lados.
 
+### Sessão 140 — 2026-07-21: `/code-review 623a6db..HEAD` — 10 achados, todos verificados por
+leitura direta do código (não só corroboração entre agentes)
+
+Pedido explícito do dono do projeto antes de considerar o item 5 do backlog (code review
+completo + docs + publicação) fechado — o `/code-review max` anterior (Sessão 135) só cobriu o
+diff daquela sessão específica (bug do saldo + fatia Mobile do vault-edit + hardware fixes),
+nunca o range de 8 commits seguintes (Fase 2 do passkey em hardware, dead-drop cross-network
+inteiro, as duas rodadas do fix de pending changes). 8 agentes buscadores rodaram em paralelo (3
+correctness + reuse + simplification + efficiency + altitude + conventions), 0 achados de
+conventions (nenhum CLAUDE.md existe no repo). Cada achado abaixo foi conferido lendo o arquivo
+atual (não só o diff/comentário de commit) antes de entrar na lista final.
+
+**1. `pending_changes()`/`pendingChanges()` ainda reproduz o bug original pra vault nunca
+publicado** (`desktop/src-tauri/src/vault.rs:504-505`, mirror `mobile/lib/services/
+vault_repository.dart:605-608`) — sem `meta.json`/snapshot (usuário novo, nunca publicou), o
+fallback é `return Ok(vault.version)` cru. Repro trivial: criar entrada (v1) → favoritar (v2) →
+desfavoritar (v3) antes do 1º publish → `pending_changes()` = 3, não 1. Exatamente o shape do
+bug que a Sessão 139 fechou, só que num caminho (primeiro uso) que os testes da própria S139 não
+cobriram.
+
+**2. Vault inteiro pode "sumir" da UI do Desktop se `vault.published.enc` corromper**
+(`desktop/src/components/VaultManagement.tsx:505-516`) — `vault_pending_changes` é uma das 4
+chamadas do mesmo `Promise.all` de `vault_list_entries`; se `load_published_snapshot()`
+(`vault.rs:374`) falhar ao decifrar (arquivo truncado por crash no meio do `mark_published`, ou
+chave antiga), o `Promise.all` inteiro rejeita e o `catch` (linha 515, "sem vault ainda — tudo
+vazio é ok") esconde a lista de entradas real. Vault continua intacto, UI mostra vazio.
+
+**3. `_receiveViaAnyChannel` trava pra sempre se o lado LAN lançar exceção**
+(`mobile/lib/screens/vault_edit_approval_screen.dart:233-240`) — `.then(handle)` sem
+`catchError`; se `_lanServer.receiveOnce()` lançar (`StateError` quando as 5 portas 48050-48054
+já estão todas ligadas por outra tela), esse lado nunca decrementa `pending`. Se o dead-drop
+também expirar em `null`, `completer.future` nunca resolve — spinner "receiving" infinito, sem
+erro.
+
+**4. Fallback pra vaults publicados entre S138 e S139 (têm hash mas não snapshot ainda) só
+cancela em match 100% byte-a-byte** (`vault.rs:509-513`) — revive o bug relatado originalmente
+até a próxima publicação criar o snapshot novo, que pode nunca acontecer no curto prazo.
+
+**5. Publish do dead-drop cross-network (item 6) provavelmente nunca completa no uso real** —
+`startMobileDelivery()` (`extension/entrypoints/popup/main.ts:429`, disparo fire-and-forget em
+`extension/src/vaultEdit/mobileDelivery.ts:62`) roda inteiramente dentro do script do popup, sem
+o relay via `chrome.alarms`/`background.ts` que o fluxo irmão de leitura do vault já usa
+explicitamente (`main.ts:58-65`, comentário "sobrevive à popup fechada") por essa razão exata. A
+ação natural do usuário depois de ver o QR é fechar o popup pra olhar o celular — o publish (4
+chamadas HTTP sequenciais ao Kubo, medido manualmente em ~60-90s até confirmar) é abortado no
+meio. **Achado direto relevante pra validação em hardware pendente do item 6** — se a validação
+cross-network falhar, este é o primeiro suspeito antes de suspeitar de rede/Kubo.
+
+**6. TOCTOU em `mark_published`**: `load()` interno (`vault.rs:482`) não tem nenhuma amarração
+com o que foi de fato pinado no IPFS. Se o usuário editar durante o `await` de
+`ipfs::pin_vault` (`lib.rs:436`), a edição (nunca publicada) é silenciosamente marcada como
+"publicada" — `pending_changes()` reporta 0 pra uma mudança que não está no IPFS. Mobile evita
+essa variante específica (`markPublished` roda só depois do `updateVault` on-chain confirmar,
+`vault_publish_service.dart:60-66`).
+
+**7. `VaultEditApprovalScreen` não tem `dispose()`** — o canal perdedor da corrida LAN vs
+dead-drop continua rodando depois da tela fechar: se dead-drop vencer, o listener LAN fica
+ligado até seu timeout; se LAN vencer, o `pollUntil` do dead-drop continua batendo no gateway
+público `https://ipfs.io` a cada ~15s por até o TTL da sessão inteiro, sem cancelamento.
+
+**8. `mark_published()` escreve `meta.json` e o snapshot cifrado como 2 operações não-atômicas**
+(`vault.rs:481-490`) — crash/disco cheio entre as duas deixa um snapshot desatualizado no disco;
+`pending_changes()` seguinte superestima o que está pendente mesmo após um publish real
+bem-sucedido.
+
+**9. (cleanup) CID/base36 duplicado verbatim** entre `extension/src/session/ipnsKey.ts:36-44` e
+`extension/src/vaultEdit/deadDropIpnsKey.ts:44-54` (mesmo padrão em
+`mobile/lib/services/vault_edit_dead_drop_ipns_key_service.dart` vs `ipns_key_service.dart`) — só
+a derivação HKDF precisa ser domain-separada entre os dois namespaces (leitura vs dead-drop), a
+montagem de CID/multihash é matemática pura e podia ser uma função compartilhada parametrizada.
+
+**10. (eficiência) `pending_changes()`/`pendingChanges()` decripta vault + snapshot do zero em
+toda chamada**, sem cache — no Desktop é uma de 4 chamadas irmãs no mesmo `Promise.all` que já
+decriptam o vault cada uma, ~5 passadas de decrypt+parse por refresh de tela em vez de ~4.
+
+**Nada corrigido ainda nesta sessão** — achados registrados, aguardando decisão do dono do
+projeto sobre quais corrigir antes de fechar o item 5 do backlog (code review + docs +
+publicação). Achado #5 é o mais urgente de investigar antes da validação em hardware do item 6
+(dead-drop cross-network), pendente desde a Sessão 137/139 por falta de celular e PC em redes
+de fato diferentes.
+
+### Sessão 140 (continuação) — 2026-07-21: `/code-review` sobre `contracts/` (Solidity, todo o
+diretório, não só um diff) — 2 achados CRÍTICOS, nada corrigido ainda
+
+Pedido explícito do dono do projeto ("pensei em rodar mais code reviews agora e ir anotando e
+depois arrumamos as coisas") — contratos são o alvo de maior risco do projeto: rodam na Base
+Mainnet **sem proxy de upgrade**, um bug que vaza pra produção não tem hotfix, só redeploy em
+cascata (já custou uma identidade real perdida numa sessão passada). O `PROJECT_STATE.md` já
+tinha uma nota desde a Sessão 53 pedindo um `/code-review` completo antes de qualquer shipping —
+os reviews anteriores (Sessões 24, 53, 55, 57) foram pontuais por contrato/fase, nunca uma
+passada única sobre o estado atual dos 9 arquivos (`IdentityRegistry`, `DeviceRegistry`,
+`RecoveryManager`, `SessionRegistry`, `TruthIDAccount`, `TruthIDAccountFactory`, `VaultRegistry`,
+`IdentityResolver`, `ERC4337Constants`, ~1672 linhas). 7 agentes buscadores rodaram em paralelo
+com ângulos de segurança específicos pra Solidity (controle de acesso, reentrância, assinatura/
+replay, confiança cross-contract, DoS/gas, edge cases, gaps de teste) em vez do conjunto genérico
+de ângulos usado nos reviews de app. Achados mais graves verificados por leitura direta do
+código (não só corroboração entre agentes) antes de entrar na lista.
+
+#### 🔴 CRÍTICO 1 — Reentrância real em `RecoveryManager.executeRecovery` permite sequestrar o
+destino da recovery, contornando aprovação de guardians (`contracts/src/RecoveryManager.sol:212-251`)
+
+Achado de forma independente por **dois agentes diferentes** (reentrância e controle de acesso) e
+**verificado por leitura direta do código**. `proposal` (linha 212) é um ponteiro `storage`, não
+uma cópia `memory`. `proposal.executed = true` é gravado na linha 224 — **antes** da chamada
+externa `identity.controller.emergencyWithdraw(proposal.newController)` (linha 233). Se o
+`controller` atual da identidade for um contrato malicioso (exatamente o cenário em que a
+recovery social existe pra resolver — atacante tomou a wallet e trocou o controller), o
+`emergencyWithdraw` chamado nele pode reentrar `proposeRecovery` durante essa janela: o guard
+`!proposal.executed` não bloqueia (já é `true`), então a proposta em storage é sobrescrita com um
+`newController` arbitrário do atacante, `executed` volta a `false`. Quando a execução retorna pra
+`executeRecovery` (linha 240), `proposal.newController` é lido de novo do **mesmo slot de
+storage** — agora contém o valor injetado pelo atacante, não o endereço que os guardians de fato
+aprovaremos. `_identityRegistry.recoverController` entrega a identidade pro atacante.
+**Agravante**: a limpeza de `_guardianConfigs` (linha 247-248, que zera o `threshold`) roda depois
+disso, deixando uma "proposta fantasma" criada durante a reentrância que fica executável por
+**qualquer um, sem nenhuma aprovação de guardian**, 7 dias depois — um segundo sequestro completo
+sem precisar de mais nada. Nenhum teste em `RecoveryManager.t.sol` exercita um controller
+adversarial reentrando; não existe `nonReentrant` em lugar nenhum do código. Fix mínimo: cachear
+`proposal.newController` numa variável `memory` antes da chamada externa (ou reordenar pra ler
+tudo que precisa antes de qualquer external call) + considerar bloquear `newController` ser um
+contrato, ou adicionar guard de reentrância.
+
+#### 🔴 CRÍTICO 2 — Revogar um device no `DeviceRegistry` não desautoriza a assinatura de fato na
+`TruthIDAccount` (`contracts/src/TruthIDAccount.sol:83,296` + `DeviceRegistry.sol`)
+
+Achado pelo agente de controle de acesso, **verificado por leitura direta**: `_validateSignature`
+(linha 296) checa só `authorizedDevices[signer]`, um mapping **interno** da própria
+`TruthIDAccount`, gerenciado só por `addDevice`/`removeDevice` (funções separadas, só
+owner/entryPoint/self). `deviceRegistry` (linha 83) é guardado só como referência pro
+`blockedForDevices` (comentário do próprio código: "comparação real via blockedForDevices") —
+**nunca é consultado** em `_validateSignature`. Ou seja: `DeviceRegistry.revokeDevice(x)` — a
+função que um usuário chamaria com a expectativa razoável de "cortar" um device perdido/roubado —
+**não tem efeito nenhum** no poder desse device de assinar UserOperations e chamar
+`execute`/`executeBatch` (incluindo `VaultRegistry.updateVault`, ou seja, tomar o vault) na
+`TruthIDAccount`. Só `removeDevice` (chamada separada, direto na smart account) revoga de
+verdade. Isso é uma quebra do modelo mental do usuário sobre o que "revogar" faz — relacionado ao
+achado abaixo (recovery também não limpa devices).
+
+#### 🟠 ALTO 3 — `executeRecovery` troca o controller mas nunca toca no `DeviceRegistry`
+(`contracts/src/RecoveryManager.sol:240`)
+
+Devices são indexados por `identityId` (não muda numa recovery) — só `IdentityRegistry.controller`
+muda. Depois de uma recovery social bem-sucedida (ex: Ledger roubado), um device já registrado
+sob o controller antigo continua `isDeviceActive == true` e pode chamar
+`SessionRegistry.createSession` normalmente, criando sessões autenticadas em qualquer site que
+use o SDK — sem nenhum rastro on-chain de que a recovery aconteceu. O novo controller precisaria
+enumerar `getDevicesByIdentity` e chamar `revokeDevice` manualmente pra cada device antigo; nada
+força ou automatiza isso. Zero cobertura de teste (`RecoveryManager.t.sol` nunca importa
+`DeviceRegistry` nos testes de recovery).
+
+#### 🟠 ALTO 4 — Replay cross-chain no `SessionRegistry.createSession`
+(`contracts/src/SessionRegistry.sol:94-95`)
+
+O device assina um `hash` opaco fornecido pelo chamador, sem vínculo on-chain com chainId,
+endereço do contrato ou "tipo" de mensagem — diferente do `IdentityRegistry.createIdentity`, que
+liga explicitamente `block.chainid`+`address(this)` no hash assinado (fix do débito #17). Como o
+projeto deploya bytecode idêntico na Base Mainnet e Base Sepolia (frequentemente com o mesmo
+device key reusado em dev/QA), uma assinatura de sessão feita na Sepolia é replayável
+verbatim na Mainnet, plantando uma sessão autenticada fantasma pra aquela identidade. Também sem
+enforcement de low-s (inconsistente com o padrão já usado em `TruthIDAccount`).
+
+#### 🟠 ALTO 5 — `IdentityRegistry.setRecoveryManager` sem checagem de endereço zero, setter de
+uso único (`contracts/src/IdentityRegistry.sol:188-193`)
+
+Só pode ser chamado uma vez (`RecoveryManagerAlreadySet` bloqueia uma 2ª chamada) e não rejeita
+`rm == address(0)`. Uma única chamada errada (bug de script de deploy, variável de ambiente
+trocada) desativa a recovery social **pra sempre, pra todas as identidades** dessa deployment —
+sem proxy, sem forma de corrigir. `IdentityRegistry.t.sol` só testa a proteção de dupla-chamada,
+nunca o caso de endereço zero.
+
+#### 🟠 ALTO 6 — 3 arrays por identidade sem limite, mesmo padrão que já foi resolvido em
+`RecoveryManager` (`DeviceRegistry.sol:140`, `SessionRegistry.sol:112`, `VaultRegistry.sol:89`)
+
+`_devicesByIdentity`, `_sessionsByIdentity` e `_vaultHistory` só crescem (push, sem remoção),
+diferente de `RecoveryManager` que já tem `MAX_GUARDIANS=20`. Depois de ~12-24 mil entradas
+(o histórico do Vault é o que cresce mais rápido — 1 entrada por `updateVault`), o getter
+correspondente passa do limite de gas do `eth_call` de provedores públicos e reverte pra sempre —
+sem forma de remover entradas, quebra permanente da tela de "gerenciar devices"/"sessões ativas"/
+"histórico do vault" daquela identidade.
+
+#### 🟡 MÉDIO 7 — `configureGuardians` aceita guardians duplicados, pode tornar o threshold
+inatingível (`contracts/src/RecoveryManager.sol:124-129`)
+
+Sem dedup: `configureGuardians(id, [A, A, B], 3)` passa na validação (`3 == length`), mas só A e B
+podem aprovar de fato (2ª aprovação de A reverte `AlreadyApproved`) — `executeRecovery` nunca
+atinge o threshold, recovery fica travada pra sempre exatamente no cenário em que existe pra
+ajudar (dono já perdeu acesso, não pode chamar `configureGuardians` de novo pra corrigir).
+
+#### 🟡 MÉDIO 8 — Cascata de endereços imutáveis não documentada fora do padrão já conhecido
+(`TruthIDAccount.sol`, `TruthIDAccountFactory.sol`)
+
+`IdentityRegistry._factory` já é mutável de propósito ("porque a factory já foi redeployada 2x",
+comentário no próprio código) — mas o mesmo risco pros endereços `deviceRegistry`/
+`identityRegistry`/`recoveryManager`, gravados como `immutable` tanto em `TruthIDAccount` quanto
+em `TruthIDAccountFactory`, não tem o mesmo tratamento nem está documentado. Um redeploy futuro de
+qualquer um desses (pra corrigir os achados acima, por exemplo) deixa toda `TruthIDAccount`
+existente — e toda conta nova criada pela factory ainda não redeployada — validando contra a
+instância antiga/abandonada, silenciosamente.
+
+#### 🟡 MÉDIO 9 — `try/catch` ao redor de `emergencyWithdraw` engole qualquer revert, sem evento
+(`contracts/src/RecoveryManager.sol:233-238`)
+
+Um `newController` aprovado mas malicioso pode reverter deliberadamente no `receive()` — a
+migração de ETH falha silenciosamente toda vez, sem nenhum evento, e os fundos ficam presos na
+`TruthIDAccount` antiga permanentemente (a troca de controller continua acontecendo normalmente).
+
+#### Gaps de teste (achado dedicado, cobertura geral "incomum, bem completa" nas palavras do
+próprio agente — 161 `test_` funções inventariadas)
+
+Nenhum teste liga `transferController`/`recoverController` de verdade a instâncias reais de
+`DeviceRegistry`/`SessionRegistry`/`VaultRegistry` — cada suíte de teste usa sua própria
+`IdentityRegistry` isolada, então uma regressão na propagação do controller não seria pega por
+nenhum teste hoje. Também faltam: teste de fronteira exata pro `<=` de
+`SessionRegistry.isSessionRevoked` (sessão criada no mesmo timestamp de um `revokeAllSessions`);
+teste de `newController` adquirindo identidade própria durante o timelock de 7 dias (trava a
+recovery permanentemente); teste de `unblockDestinationForDevices(address(this))` continuar
+bloqueado mesmo assim; teste de rejeição de chamador não-autorizado em `executeBatch` (existe só
+pra `execute`); `IdentityResolver` sem teste dedicado de constructor (troca de ordem de argumento
+no deploy não reverte, só quebra em produção).
+
+**Nada corrigido ainda** — todos os achados são só registro, à espera de decisão do dono do
+projeto sobre priorização. Os 2 CRÍTICOS (reentrância na recovery + revogação de device que não
+revoga de verdade) envolvem contratos **já em produção na Base Mainnet sem proxy** — merecem
+avaliação de urgência independente da ordem do resto do backlog.
+
 ---
 
 ## Como Usar Este Arquivo
