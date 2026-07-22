@@ -6615,7 +6615,7 @@ reimplementada (com drift) em `CreateIdentity.tsx` e `VaultManagement.tsx` -- FI
 3 cópias da constante `"TruthID Vault Key v1"` — introduzir v2 quebraria silenciosamente
 derivação cross-device se aplicado só em 1 ou 2 das 3 cópias. Hook removido; constante extraída pra `desktop/src/config/vaultKey.ts` compartilhada.
 
-**21. `computeSmartAccountAddress` async (modo on-chain via multicall) nunca chamado**
+**21. `computeSmartAccountAddress` async (modo on-chain via multicall) nunca chamado -- FIXED Session 146**
 (`computeSmartAccountAddress.ts:64-99`)
 Só `computeSmartAccountAddressSync` é usado. O union type + type guard + ABI da factory
 existem sem nenhum caller — superfície desnecessária pra manter.
