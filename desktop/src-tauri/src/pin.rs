@@ -404,6 +404,18 @@ where
     handle_incoming_with_timeout(state, body, notify, pin, PIN_REQUEST_TIMEOUT).await
 }
 
+/// Normaliza o nome do app para evitar duplicatas por casing ou espaçamento.
+/// Ainda não há autenticação de origem: qualquer processo local pode consumir
+/// a quota de um app já autorizado — aceito deliberadamente porque localhost
+/// já é confiável (qualquer processo teria acesso total à máquina).
+fn normalize_app_name(raw: &str) -> String {
+    raw.trim()
+        .to_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
 async fn handle_incoming_with_timeout<F, Fut>(
     state: &PinState,
     body: PinRequestBody,
@@ -417,7 +429,7 @@ where
 {
     use base64::{engine::general_purpose::STANDARD, Engine as _};
 
-    let app_name = body.app_name.trim().to_string();
+    let app_name = normalize_app_name(&body.app_name);
     if app_name.is_empty() {
         return PinOutcome::Invalid("appName is required".to_string());
     }

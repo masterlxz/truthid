@@ -6737,10 +6737,13 @@ Rotas como `/truthid/v1/vault-edit` não validam origem. A porta é documentada 
 integrações third-party mas o vault-edit assume ser a extensão first-party. Qualquer
 processo local pode injetar credenciais com aparência legítima.
 
-**44. PIN fast-path autoriza por `app_name` auto-reportado, sem autenticação**
+**44. PIN fast-path autoriza por `app_name` auto-reportado, sem autenticação -- FIXED Session 146**
 (`pin.rs:294-311,430-447`)
-Quota de 50/dia é consumida por string `appName` fornecida pelo caller. Qualquer
-processo pode usar o nome de um app já autorizado e consumir quota silenciosamente.
+Quota de 50/dia era consumida por string `appName` fornecida pelo caller sem normalização —
+variação de casing criava entradas separadas. Adicionada `normalize_app_name()` (lowercase +
+whitespace collapse) antes de qualquer lookup/armazenamento. Risco residual documentado:
+qualquer processo localhost pode consumir quota de app já autorizado — aceito
+deliberadamente (localhost é inerentemente confiável).
 
 **45. Revogação de permissão de escrita no vault (`canWriteVault`) não é enforcement -- FIXED Session 146 (junto com #51)**
 
