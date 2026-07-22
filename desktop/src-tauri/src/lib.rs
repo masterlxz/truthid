@@ -294,6 +294,7 @@ fn vault_list_entries() -> Result<Vec<vault::VaultEntry>, String> {
 /// Se `entry.id` estiver vazio, gera um novo id. Persiste em disco.
 #[tauri::command]
 fn vault_upsert_entry(entry: vault::VaultEntry) -> Result<vault::VaultEntry, String> {
+    let _guard = vault::lock_vault();
     let mut v = vault::load()?;
     let saved = v.upsert(entry);
     vault::save(&v)?;
@@ -303,6 +304,7 @@ fn vault_upsert_entry(entry: vault::VaultEntry) -> Result<vault::VaultEntry, Str
 /// Remove uma entrada do vault pelo id. Persiste em disco.
 #[tauri::command]
 fn vault_delete_entry(id: String) -> Result<(), String> {
+    let _guard = vault::lock_vault();
     let mut v = vault::load()?;
     v.delete(&id);
     vault::save(&v)
@@ -317,6 +319,7 @@ fn vault_list_profiles() -> Result<Vec<String>, String> {
 /// Cria um novo perfil (nome livre). Persiste em disco.
 #[tauri::command]
 fn vault_add_profile(name: String) -> Result<(), String> {
+    let _guard = vault::lock_vault();
     let mut v = vault::load()?;
     v.add_profile(&name);
     vault::save(&v)
@@ -325,6 +328,7 @@ fn vault_add_profile(name: String) -> Result<(), String> {
 /// Renomeia um perfil e atualiza em cascata as entradas que o usam. Persiste em disco.
 #[tauri::command]
 fn vault_rename_profile(old_name: String, new_name: String) -> Result<(), String> {
+    let _guard = vault::lock_vault();
     let mut v = vault::load()?;
     v.rename_profile(&old_name, &new_name);
     vault::save(&v)
@@ -333,6 +337,7 @@ fn vault_rename_profile(old_name: String, new_name: String) -> Result<(), String
 /// Remove um perfil e limpa a tag das entradas que o usam. Persiste em disco.
 #[tauri::command]
 fn vault_delete_profile(name: String) -> Result<(), String> {
+    let _guard = vault::lock_vault();
     let mut v = vault::load()?;
     v.delete_profile(&name);
     vault::save(&v)
@@ -494,6 +499,7 @@ fn vault_set_device_permission(pub_key: String, can_write: bool) -> Result<(), S
 /// mesmo motivo de vault_set_device_permission.
 #[tauri::command]
 fn vault_set_favorite(id: String, favorite: bool) -> Result<(), String> {
+    let _guard = vault::lock_vault();
     let mut v = vault::load()?;
     if !v.set_favorite(&id, favorite) {
         return Err(format!("vault entry not found: {id}"));
@@ -531,6 +537,7 @@ fn vault_export_backup(password: String) -> Result<String, String> {
 /// a versão importada estiver desatualizada frente à on-chain).
 #[tauri::command]
 fn vault_import_backup(blob_b64: String, password: String) -> Result<(), String> {
+    let _guard = vault::lock_vault();
     use base64::{engine::general_purpose::STANDARD, Engine as _};
     let blob = STANDARD.decode(&blob_b64).map_err(|e| e.to_string())?;
     let json = backup::decrypt(&blob, &password)?;

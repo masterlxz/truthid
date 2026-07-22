@@ -6494,7 +6494,7 @@ No fallback de migração de chave legada, `Nonce::from_slice(&blob[..12])` é c
 **panica** em vez de retornar `Err`. Todo comando de vault (`vault_list_entries`,
 `vault_upsert_entry`, etc.) passa por `vault::load()` — arquivo corrompido crasha o comando.
 
-**3. Concorrência de escrita no vault: dois comandos podem perder dados permanentemente**
+**3. Concorrência de escrita no vault: dois comandos podem perder dados permanentemente -- FIXED Session 146**
 (`desktop/src-tauri/src/vault.rs:228,305` + `lib.rs:296,305,496`)
 Nenhum mutex entre `load()` → mutate → `save()`. `VaultManagement` e `VaultEditApprovalModal`
 (montado incondicionalmente) podem ambos chamar `vault_upsert_entry`/`vault_delete_entry`

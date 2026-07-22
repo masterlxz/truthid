@@ -6,6 +6,7 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::path::PathBuf;
+use std::sync::Mutex;
 
 use crate::{get_vault_key, derive_vault_key_legacy};
 
@@ -211,6 +212,19 @@ fn now_secs() -> u64 {
 // ---------------------------------------------------------------------------
 // I/O em disco
 // ---------------------------------------------------------------------------
+
+/// Mutex serializando todas as operações de load→mutate→save no vault. Sem
+/// esta trava, duas chamadas concorrentes (ex: `vault_upsert_entry` + `vault_set_favorite`)
+/// perdem dados: ambas leem o mesmo `vault.enc`, modificam suas cópias em
+/// memória, e a última `save()` sobrescreve a mudança da outra (bug #3).
+static VAULT_MUTEX: Mutex<()> = Mutex::new(());
+
+/// Adquire a trava do vault. Comandos de mutação chamam isso no início para
+/// garantir exclusão mútua entre load→mutate→save. Comandos de leitura podem
+/// pular (race de leitura não perde dados).
+pub(crate) fn lock_vault() -> std::sync::MutexGuard<'static, ()> {
+    VAULT_MUTEX.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 
 pub(crate) fn vault_path() -> Result<PathBuf, String> {
     let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
