@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-22 (Sessão 144 — Correção de 3 bugs do code review: DesktopDevice stuck phase, ActiveSessions revokeAll flag, VaultManagement pendingCount)
+> Última atualização: 2026-07-22 (Sessão 145 — SignRequestModal stale stage + vault.enc truncated panic fix)
 > paralelos, 8/9 completos (Invariant Auditor rodou mas não produziu resumo final), ~78k chars de
 > achados consolidados. Cobriu 12 módulos Rust + ~50 arquivos React/TS do Desktop: duplicação de
 > código, performance, segurança, pitfalls, wrappers, arquitetura, simplificação e dead code.
@@ -6870,6 +6870,31 @@ novas (QuickLogin) eram falsamente mostradas como "Revoked". Substituído por es
 `handleToggleFavorite` e `handleTogglePerm` faziam optimistic update local mas nunca chamavam
 `vault_pending_changes` — o contador ficava zerado, usuário achava que não precisava publicar.
 Adicionada chamada `invoke<number>("vault_pending_changes")` + `setPendingCount(p)` em ambos.
+
+**TypeScript + Rust compilando limpo.**
+
+---
+
+### Sessão 145 — 2026-07-22: SignRequestModal stale stage + próximas correções do code review
+
+**Bug 5 — `SignRequestModal.tsx`: stage travado após aprovação (Pitfalls #1)**
+Após a 1ª aprovação bem-sucedida, `clear()` setava `request=null` mas `stage` continuava
+`"signing"` — o `useEffect` de expiração (linha 58) só resetava `expired`, não `stage`/`error`.
+Na próxima request, `busy = stage === "signing"` era `true` e ambos Approve/Reject ficavam
+permanentemente desabilitados até reiniciar o app. Mesma classe de bug já corrigida em
+`VaultEditApprovalModal`, `PairDevice` e `CreateIdentity`. Fix: adicionado `setStage("idle");
+setError(null)` no guard `!request` do `useEffect` — padrão idêntico ao VaultEditApprovalModal.
+
+**TypeScript compilando limpo.**
+
+**Bug 6 — `vault.rs`: panic em vault truncado (Pitfalls #2, continuado)**
+No fallback de migração de chave legada (linha 243), `Nonce::from_slice(&blob[..12])` era
+chamado sem verificar `blob.len() >= 12`. O `decrypt()` normal tem guard `blob.len() < 28`,
+mas quando esse `Err` é capturado pelo `Err(_)`, o fallback legado reusava o mesmo `blob`
+sem check — arquivo truncado (crash mid-write, disco cheio, tampering) causava **panic**
+em vez de `Err`. Adicionado `if blob.len() < 28 { return Err(...); }` antes da derivação
+da chave legada. Todos os comandos de vault (`vault_list_entries`, etc.) agora retornam
+erro limpo em vez de crashar com arquivo corrompido.
 
 **TypeScript + Rust compilando limpo.**
 

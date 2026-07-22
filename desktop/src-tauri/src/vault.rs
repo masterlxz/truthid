@@ -237,6 +237,9 @@ pub(crate) fn load() -> Result<Vault, String> {
         Ok(json) => json,
         Err(_) => {
             // Fallback: tenta chave legada (device-key) para migração
+            if blob.len() < 28 {
+                return Err("vault decrypt failed — blob corrupted or wrong key".to_string());
+            }
             let legacy_key = derive_vault_key_legacy()?;
             let key = Key::<Aes256Gcm>::from_slice(&legacy_key);
             let cipher = Aes256Gcm::new(key);

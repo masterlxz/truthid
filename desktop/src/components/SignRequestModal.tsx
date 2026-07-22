@@ -56,7 +56,7 @@ export function SignRequestModal({ smartAccountAddress }: { smartAccountAddress:
   // terceiro), isso só fecha o modal de quem ficou olhando a tela — não
   // depende disso pra segurança.
   useEffect(() => {
-    if (!request) { setExpired(false); return; }
+    if (!request) { setExpired(false); setStage("idle"); setError(null); return; }
     setExpired(Date.now() > request.expiresAtMs);
     const timer = setInterval(() => {
       if (Date.now() > request.expiresAtMs) {
