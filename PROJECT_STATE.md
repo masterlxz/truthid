@@ -6730,10 +6730,11 @@ ignorando `fallback([mainnet.base.org, publicnode.com, drpc.org])` configurado e
 `wagmi.ts`. Se `mainnet.base.org` rate-limitar, toda escrita Ledger falha.
 
 **42. `computeSmartAccountAddress` offline vs on-chain — immutables hardcoded sem
-verificação cruzada** (`truthidAccount.ts:19-24` + `computeSmartAccountAddress.ts:64-99`)
-Redeploy da factory → precisa atualizar constantes em 2 lugares independentes (ninguém
-cross-checka contra `factory.getAddress()`). O caminho on-chain que verificaria existe
-no código mas não é chamado por nada.
+verificação cruzada -- FIXED Session 146** (`truthidAccount.ts:19-24`)
+Redeploy da factory → ninguém cross-checkava os immutables contra `factory.getAddress()`.
+Novo teste `factoryImmutables.test.ts` lê os 4 imutáveis via `eth_call` em Mainnet e
+compara byte-a-byte contra `FACTORY_IMMUTABLES`. Se um redeploy futuro atualizar só o
+código de produção e esquecer as constantes, o teste falha.
 
 **43. Local signer router não tem autenticação — qualquer processo local pode forjar
 pedidos** (`local_signer_server.rs:42-46,189-198` + `vault_edit.rs:45-65`)
