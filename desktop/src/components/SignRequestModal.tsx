@@ -7,11 +7,6 @@ import { executeViaUserOp } from "../services/userOpExecutor";
 import { respondToRequest } from "../services/respondToRequest";
 import { useWalletModal } from "../contexts/WalletModalContext";
 
-interface BundlerConfig {
-  api_key: string;
-  network: string;
-}
-
 type DecodedCall =
   | { verified: true; functionName: string; args: readonly unknown[] }
   | { verified: false; reason: string };
@@ -91,18 +86,11 @@ export function SignRequestModal({ smartAccountAddress }: { smartAccountAddress:
     setStage("signing");
     setError(null);
     try {
-      const bundlerConfig = await invoke<BundlerConfig>("get_bundler_config");
-      if (!bundlerConfig.api_key) {
-        throw new Error("Bundler not configured — set api_key/network in ~/.truthid/bundler_config.json.");
-      }
-
       const { userOpHash, transactionHash, success } = await executeViaUserOp({
         smartAccountAddress,
         dest: request.dest,
         value: BigInt(request.value || "0"),
         callData: request.callData,
-        bundlerApiKey: bundlerConfig.api_key,
-        bundlerNetwork: bundlerConfig.network || "base",
       });
 
       if (!transactionHash) {

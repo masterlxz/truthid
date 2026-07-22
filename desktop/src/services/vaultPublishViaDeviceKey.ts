@@ -5,11 +5,6 @@ import { VAULT_REGISTRY_ADDRESS, VAULT_REGISTRY_ABI } from "../config/contracts"
 import { executeViaUserOp } from "./userOpExecutor";
 import type { PinResult } from "../types";
 
-interface BundlerConfig {
-  api_key: string;
-  network: string;
-}
-
 /**
  * Extraído de `useVaultPublish.ts::handleEnviarViaDeviceKey` — mesma cadeia
  * (pin local no IPFS via `vault_publish`, depois assina/envia a
@@ -27,13 +22,6 @@ export async function publishVaultViaDeviceKey(
     throw new Error(`Todos os providers falharam: ${result.providers_failed.join(", ")}`);
   }
 
-  const bundlerConfig = await invoke<BundlerConfig>("get_bundler_config");
-  if (!bundlerConfig.api_key) {
-    throw new Error(
-      "Bundler não configurado — grave api_key/network em ~/.truthid/bundler_config.json."
-    );
-  }
-
   const callData = encodeFunctionData({
     abi: VAULT_REGISTRY_ABI,
     functionName: "updateVault",
@@ -45,8 +33,6 @@ export async function publishVaultViaDeviceKey(
     dest: VAULT_REGISTRY_ADDRESS,
     value: 0n,
     callData,
-    bundlerApiKey: bundlerConfig.api_key,
-    bundlerNetwork: bundlerConfig.network || "base",
   });
 
   if (!success) throw new Error("Failed to publish vault: on-chain transaction reverted");

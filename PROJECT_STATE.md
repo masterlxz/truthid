@@ -6673,7 +6673,7 @@ Só lança se `providers_ok.length === 0`. O caminho Ledger (`useVaultPublish.ts
 `pinWarning` pra falha parcial. O device-key path nunca avisa — publish ocorre com
 redundância degradada sem o usuário saber.
 
-**32. `bundler not configured` copiado por call site, já com drift de idioma**
+**32. `bundler not configured` copiado por call site, já com drift de idioma -- FIXED Session 146**
 (`vaultPublishViaDeviceKey.ts:30-35` vs `SignRequestModal.tsx:93-96`)
 Uma cópia em português, outra em inglês — mesmo guard. `userOpExecutor` nunca valida.
 

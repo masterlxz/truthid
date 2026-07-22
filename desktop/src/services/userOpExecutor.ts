@@ -36,6 +36,11 @@ const RECEIPT_POLL_MAX_ATTEMPTS = 30;
 
 const ZERO_SIGNATURE_65_BYTES: Hex = `0x${"00".repeat(65)}`;
 
+interface BundlerConfig {
+  api_key: string;
+  network: string;
+}
+
 export interface ExecuteViaUserOpResult {
   userOpHash: Hex;
   transactionHash: Hex | null;
@@ -60,18 +65,19 @@ export async function executeViaUserOp({
   dest,
   value,
   callData,
-  bundlerApiKey,
-  bundlerNetwork,
 }: {
   smartAccountAddress: Address;
   dest: Address;
   value: bigint;
   callData: Hex;
-  bundlerApiKey: string;
-  bundlerNetwork: string;
 }): Promise<ExecuteViaUserOpResult> {
+  const bundlerConfig = await invoke<BundlerConfig>("get_bundler_config");
+  if (!bundlerConfig.api_key) {
+    throw new Error("Bundler not configured — set api_key/network in ~/.truthid/bundler_config.json.");
+  }
+
   const bundlerClient = new PimlicoBundlerClient({
-    bundlerUrl: pimlicoBundlerUrl({ apiKey: bundlerApiKey, network: bundlerNetwork }),
+    bundlerUrl: pimlicoBundlerUrl({ apiKey: bundlerConfig.api_key, network: bundlerConfig.network || "base" }),
   });
 
   const executeCallData = encodeFunctionData({
