@@ -2,6 +2,7 @@ import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { save, open } from "@tauri-apps/plugin-dialog";
 import { writeFile, readFile } from "@tauri-apps/plugin-fs";
+import { bytesToBase64, base64ToBytes } from "../utils/base64";
 
 // Export/import de um backup criptografado do vault inteiro (senhas, TOTP,
 // passkeys, perfis, permissões de device), item 4 do roadmap pós-Fase 14.
@@ -13,19 +14,6 @@ export function useVaultBackup() {
   const [exportError, setExportError] = useState<string | null>(null);
   const [importState, setImportState] = useState<"idle" | "importing" | "done" | "error">("idle");
   const [importError, setImportError] = useState<string | null>(null);
-
-  function base64ToBytes(b64: string): Uint8Array {
-    const binary = atob(b64);
-    const bytes = new Uint8Array(binary.length);
-    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-    return bytes;
-  }
-
-  function bytesToBase64(bytes: Uint8Array): string {
-    let binary = "";
-    for (const b of bytes) binary += String.fromCharCode(b);
-    return btoa(binary);
-  }
 
   async function exportBackup(password: string) {
     setExportError(null);

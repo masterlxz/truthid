@@ -15,12 +15,7 @@ import {
   encodeCoseP256PublicKey,
   signAssertion,
 } from "../webauthn";
-
-function base64UrlEncode(bytes: Uint8Array): string {
-  let binary = "";
-  for (const b of bytes) binary += String.fromCharCode(b);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
+import { base64UrlEncode } from "../base64";
 
 function toHex(bytes: Uint8Array): string {
   return Array.from(bytes)

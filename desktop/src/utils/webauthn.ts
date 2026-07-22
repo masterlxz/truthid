@@ -1,6 +1,7 @@
 import { p256 } from "@noble/curves/p256";
 import { sha256 } from "@noble/hashes/sha2";
 import { encodeBytes, encodeInt, encodeMap, encodeText } from "./cbor";
+import { base64UrlEncode } from "./base64";
 
 /**
  * Virtual WebAuthn authenticator — fundação do Passkey (item 3 do roadmap
@@ -27,12 +28,6 @@ function fromHex(hex: string): Uint8Array {
     bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
   }
   return bytes;
-}
-
-function base64UrlEncode(bytes: Uint8Array): string {
-  let binary = "";
-  for (const b of bytes) binary += String.fromCharCode(b);
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 function concatBytes(...chunks: Uint8Array[]): Uint8Array {
