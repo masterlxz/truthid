@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-22 (Sessão 143 — Fix DoS: sanitização do campo `iterations` no backup)
+> Última atualização: 2026-07-22 (Sessão 144 — Correção de 3 bugs do code review: DesktopDevice stuck phase, ActiveSessions revokeAll flag, VaultManagement pendingCount)
 > paralelos, 8/9 completos (Invariant Auditor rodou mas não produziu resumo final), ~78k chars de
 > achados consolidados. Cobriu 12 módulos Rust + ~50 arquivos React/TS do Desktop: duplicação de
 > código, performance, segurança, pitfalls, wrappers, arquitetura, simplificação e dead code.
@@ -6848,6 +6848,30 @@ antes de derivar a chave.
     iterations com `0xFFFFFFFF` e espera `FormatException` com mensagem específica.
 
 **9/9 testes Rust + 8/8 testes Dart passando.**
+
+---
+
+### Sessão 144 — 2026-07-22: Correção de 3 bugs do `/code-review max`
+
+Primeira leva de correções dos achados de severidade alta. Três bugs reais resolvidos:
+
+**Bug 1 — `DesktopDevice.tsx`: fase travada após tx rejeitada (IPC #6)**
+Regressão do débito #44 já corrigido em `PairDevice.tsx`/`CreateIdentity.tsx`. Quando a Ledger
+rejeitava o commit/register, `phase` ficava preso em `"committing"`/`"registering"` e o botão
+"Register this desktop" ficava permanentemente desabilitado. Adicionado `useEffect` que reseta
+`phase="idle"` em `isCommitError || isRegisterError` — mesmo padrão de `PairDevice.tsx:134-136`.
+
+**Bug 2 — `ActiveSessions.tsx`: `isRevokeAllSuccess` nunca reseta (Line-by-line #2)**
+Após `revokeAllSessions`, o `isRevokeAllSuccess` do wagmi ficava `true` para sempre. Sessões
+novas (QuickLogin) eram falsamente mostradas como "Revoked". Substituído por estado local
+`revokeAllDone` que reseta via `useEffect` quando `sessionResults` é atualizado pós-refetch.
+
+**Bug 3 — `VaultManagement.tsx`: toggle favorite/perm não atualiza `pendingCount` (IPC #7)**
+`handleToggleFavorite` e `handleTogglePerm` faziam optimistic update local mas nunca chamavam
+`vault_pending_changes` — o contador ficava zerado, usuário achava que não precisava publicar.
+Adicionada chamada `invoke<number>("vault_pending_changes")` + `setPendingCount(p)` em ambos.
+
+**TypeScript + Rust compilando limpo.**
 
 ---
 

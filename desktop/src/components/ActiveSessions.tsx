@@ -108,6 +108,8 @@ export function ActiveSessions() {
   const { isLoading: isRevokeAllConfirming, isSuccess: isRevokeAllSuccess } =
     useWaitForTransactionReceipt({ hash: revokeAllTxHash });
 
+  const [revokeAllDone, setRevokeAllDone] = useState(false);
+
   function handleRevokeAll() {
     if (!isConnected) { openConnectModal(); return; }
     sendRevokeAll({
@@ -120,10 +122,15 @@ export function ActiveSessions() {
 
   useEffect(() => {
     if (isRevokeAllSuccess) {
+      setRevokeAllDone(true);
       refetchHashes();
       refetchSessions();
     }
   }, [isRevokeAllSuccess]);
+
+  useEffect(() => {
+    setRevokeAllDone(false);
+  }, [sessionResults]);
 
   // ── Renderização ──────────────────────────────────────────────────────────
 
@@ -143,7 +150,7 @@ export function ActiveSessions() {
         const isBeingRevoked = revokingHash === session.hash;
         const isRevoked =
           session.revoked ||
-          (isRevokeAllSuccess && !session.revoked);
+          (revokeAllDone && !session.revoked);
         const createdAt = new Date(
           Number(session.createdAt) * 1000
         ).toLocaleString();

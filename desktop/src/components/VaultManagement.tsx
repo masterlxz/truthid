@@ -587,6 +587,8 @@ export function VaultManagement() {
     try {
       await invoke<void>("vault_set_favorite", { id, favorite });
       setEntries((prev) => prev.map((e) => (e.id === id ? { ...e, favorite } : e)));
+      const p = await invoke<number>("vault_pending_changes");
+      setPendingCount(p);
     } catch (e) {
       setMutateError(String(e));
     }
@@ -602,6 +604,8 @@ export function VaultManagement() {
         if (existing) return prev.map((p) => p.pub_key === pubKey ? { ...p, can_write: canWrite } : p);
         return [...prev, { pub_key: pubKey, can_write: canWrite }];
       });
+      const p = await invoke<number>("vault_pending_changes");
+      setPendingCount(p);
     } catch (e) {
       setPermError(String(e));
     }

@@ -102,9 +102,12 @@ export function DesktopDevice({ onRegistered }: { onRegistered: () => void }) {
     if (!isRegisterSuccess || phase !== "registering") return;
     setPhase("idle");
     queryClient.invalidateQueries();
-    // Wait for the RPC node to index the new block before refetching
     setTimeout(() => { refetch(); onRegistered(); }, 3000);
   }, [isRegisterSuccess]);
+
+  useEffect(() => {
+    if (isCommitError || isRegisterError) setPhase("idle");
+  }, [isCommitError, isRegisterError]);
 
   function handleRegister() {
     if (!isConnected) { openConnectModal(); return; }
