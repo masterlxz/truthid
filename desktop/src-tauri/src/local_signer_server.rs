@@ -46,7 +46,7 @@ struct SignRequestRouterState {
 /// terceiro (ex: Practice Valuation) quando essa integração acontecer.
 pub const CANDIDATE_PORTS: [u16; 5] = [47950, 47951, 47952, 47953, 47954];
 
-struct RunningServer {
+pub(crate) struct RunningServer {
     port: u16,
     shutdown_tx: oneshot::Sender<()>,
     join_handle: tauri::async_runtime::JoinHandle<()>,
@@ -55,8 +55,13 @@ struct RunningServer {
 /// tokio::sync::Mutex, não std::sync::Mutex: o guard atravessa pontos de
 /// .await em start()/stop() (esperar o socket ser liberado no stop, esperar
 /// o bind no start).
-#[derive(Default)]
-pub struct LocalSignerServerState(Mutex<Option<RunningServer>>);
+impl Default for LocalSignerServerState {
+    fn default() -> Self {
+        Self(Arc::new(Mutex::new(None)))
+    }
+}
+
+pub struct LocalSignerServerState(pub(crate) Arc<Mutex<Option<RunningServer>>>);
 
 #[derive(Serialize, Clone)]
 pub struct LocalSignerStatus {
@@ -252,12 +257,23 @@ pub async fn start(
     };
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
+    let state_for_spawn = Arc::clone(&state.0);
+    let port_for_spawn = port;
     let join_handle = tauri::async_runtime::spawn(async move {
-        let _ = axum::serve(listener, router(router_state))
+        if let Err(e) = axum::serve(listener, router(router_state))
             .with_graceful_shutdown(async {
                 let _ = shutdown_rx.await;
             })
-            .await;
+            .await
+        {
+            eprintln!("local_signer_server crashed: {e}");
+            let mut guard = state_for_spawn.lock().await;
+            if let Some(ref running) = *guard {
+                if running.port == port_for_spawn {
+                    *guard = None;
+                }
+            }
+        }
     });
 
     *guard = Some(RunningServer {

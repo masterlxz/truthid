@@ -6516,7 +6516,7 @@ Os dois botões controlam estados separados (`publishState`/`isTxPending`/`isCon
 duas transações on-chain independentes (EOA + UserOp) — gas real gasto 2x, e se versão
 diferir, o CID que confirmar por último vence silenciosamente.
 
-**6. `local_signer_server` reporta "running" pra sempre mesmo após crash do HTTP bridge**
+**6. `local_signer_server` reporta "running" pra sempre mesmo após crash do HTTP bridge -- FIXED Session 146**
 (`local_signer_server.rs:254-260`)
 `axum::serve(...).await` tem o `Result` descartado com `let _ = ...`. Se o servidor errar
 pós-bind, `RunningServer` fica armazenado e `local_signer_status` retorna `running: true`
