@@ -10,12 +10,14 @@ export interface VaultEditEntryProposal {
   password: string;
   notes: string;
   passkey?: Passkey;
+  pubKey?: string;
 }
 
 export interface IncomingVaultEditRequest {
   id: string;
   entry: VaultEditEntryProposal;
   expiresAtMs: number;
+  pubKey?: string;
 }
 
 /**

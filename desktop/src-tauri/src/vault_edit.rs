@@ -4,6 +4,8 @@ use rand::RngCore;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{oneshot, Mutex};
 
+use crate::vault;
+
 /// Tempo que um POST /truthid/v1/vault-edit fica pendurado esperando o
 /// usuário aprovar/rejeitar antes de devolver 408 — mesmo valor de
 /// `pin::PIN_REQUEST_TIMEOUT`. Diferente do `/pin`, aqui **todo** pedido
@@ -47,6 +49,11 @@ pub struct PasskeyProposal {
 /// `app_name`: ao contrário do `/pin` (app terceiro qualquer), este canal só
 /// é falado pela própria extensão TruthID, então não há "quem está pedindo"
 /// pra mostrar na aprovação — só "o que está sendo proposto".
+///
+/// `pub_key` identifica o device que originou a proposta (endereço do
+/// desktop local ou do mobile no caminho cross-device). Opcional: na rota
+/// desktop loopback (localhost), pode vir `None` — o próprio Desktop é
+/// controller, sempre tem permissão de escrita.
 #[derive(Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct VaultEditRequestBody {
@@ -62,6 +69,8 @@ pub struct VaultEditRequestBody {
     pub notes: String,
     #[serde(default)]
     pub passkey: Option<PasskeyProposal>,
+    #[serde(default)]
+    pub pub_key: Option<String>,
 }
 
 /// O que vai pro evento Tauri e pro comando get_pending_vault_edit_request.
@@ -75,6 +84,7 @@ pub struct VaultEditApprovalPayload {
     pub id: String,
     pub entry: VaultEditRequestBodyOut,
     pub expires_at_ms: i64,
+    pub pub_key: Option<String>,
 }
 
 /// Espelho de `VaultEditRequestBody` só pra serialização (`Serialize`) — o
@@ -92,6 +102,7 @@ pub struct VaultEditRequestBodyOut {
     pub password: String,
     pub notes: String,
     pub passkey: Option<PasskeyProposal>,
+    pub pub_key: Option<String>,
 }
 
 impl From<VaultEditRequestBody> for VaultEditRequestBodyOut {
@@ -103,6 +114,7 @@ impl From<VaultEditRequestBody> for VaultEditRequestBodyOut {
             password: b.password,
             notes: b.notes,
             passkey: b.passkey,
+            pub_key: b.pub_key,
         }
     }
 }
@@ -225,16 +237,42 @@ async fn handle_incoming_with_timeout(
         );
     }
 
+    // Se o caller identifica um dispositivo (pub_key), verifica permissão
+    // de escrita (canWriteVault) contra o vault local antes de estacionar.
+    if let Some(ref pub_key) = body.pub_key {
+        let v = match vault::load() {
+            Ok(v) => v,
+            Err(e) => return VaultEditOutcome::Invalid(format!("vault permission check failed: {e}")),
+        };
+        let perm = v.device_permissions.iter().find(|p| &p.pub_key == pub_key);
+        match perm {
+            None => {
+                return VaultEditOutcome::Invalid(
+                    format!("device {pub_key} has no vault permission — ask the identity controller to grant write access"),
+                );
+            }
+            Some(p) if !p.can_write => {
+                return VaultEditOutcome::Invalid(
+                    "device does not have write permission for this vault".to_string(),
+                );
+            }
+            _ => {} // tem permissão de escrita, segue
+        }
+    }
+
     let (payload, rx) = {
         let mut guard = state.pending.lock().await;
         if guard.is_some() {
             return VaultEditOutcome::Busy;
         }
 
+        let pub_key = body.pub_key.clone();
+
         let payload = VaultEditApprovalPayload {
             id: random_id(),
             entry: body.into(),
             expires_at_ms: now_ms() + timeout.as_millis() as i64,
+            pub_key,
         };
         let (tx, rx) = oneshot::channel();
         *guard = Some(PendingVaultEdit {
@@ -302,6 +340,7 @@ mod tests {
             password: "hunter2".to_string(),
             notes: String::new(),
             passkey: None,
+            pub_key: None,
         }
     }
 

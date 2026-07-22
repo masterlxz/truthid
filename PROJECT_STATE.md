@@ -6742,10 +6742,7 @@ processo local pode injetar credenciais com aparência legítima.
 Quota de 50/dia é consumida por string `appName` fornecida pelo caller. Qualquer
 processo pode usar o nome de um app já autorizado e consumir quota silenciosamente.
 
-**45. Revogação de permissão de escrita no vault (`canWriteVault`) não é enforcement**
-(`vault.rs:63-71,180-191` + `vault_edit.rs`)
-`device_permissions.can_write` existe, persiste, tem UI pra gerenciar — mas `vault_edit::
-handle_incoming` nunca consulta. Dispositivo "revogado" continua escrevendo normalmente.
+**45. Revogação de permissão de escrita no vault (`canWriteVault`) não é enforcement -- FIXED Session 146 (junto com #51)**
 
 **46. `useSmartAccountActivity` — `scanInFlight` compartilhado entre identidades**
 (`useSmartAccountActivity.ts:110`)
@@ -6767,10 +6764,12 @@ todos.
 `Promise.all` compartilhado — se `load_published_snapshot` falhar (arquivo truncado), toda
 a lista de entradas é escondida com "sem vault ainda — tudo vazio é ok".
 
-**51. `vault_edit.rs` — `VaultEditRequestBody` sem campo `pub_key`**
-O canal de vault-edit (único caminho que dispositivo externo usa pra propor escrita) não
-identifica quem enviou — impossível fazer enforcement de permissão por dispositivo mesmo
-que a checagem existisse.
+**51. `vault_edit.rs` — `VaultEditRequestBody` sem campo `pub_key` -- FIXED Session 146**
+Canal vault-edit não identificava quem enviou a proposta — impossível fazer enforcement
+de permissão por dispositivo. Adicionado `pub_key: Option<String>` a `VaultEditRequestBody`,
+`VaultEditRequestBodyOut` e `VaultEditApprovalPayload`. `handle_incoming` agora consulta
+`vault.device_permissions` quando `pub_key` é `Some`: rejeita dispositivo sem permissão ou
+com `can_write: false`. Na rota desktop loopback (`pub_key=None`), comportamento mantido.
 
 **52. `useVaultKey.ts:36` — `setState(exists ? "ready" : "ready")` — ambos os branches idênticos -- FIXED Session 146**
 Dead code (hook não importado), mas se fosse reativado reportaria "ready" mesmo sem chave derivada. Hook removido (zero importers); constante `VAULT_KEY_MESSAGE` extraída pra `desktop/src/config/vaultKey.ts` e compartilhada entre `CreateIdentity.tsx`/`VaultManagement.tsx` (antes 3 cópias independentes, incluindo a do hook removido).
