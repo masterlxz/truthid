@@ -102,12 +102,14 @@ void main() {
       expect(find.textContaining('Invalid QR'), findsOneWidget);
     });
 
-    testWidgets('shows error when callbackUrl is missing', (tester) async {
+    testWidgets('shows challenge UI when callbackUrl is missing', (tester) async {
       await tester.pumpWidget(buildScreen({
         'challenge': {'nonce': 'n', 'origin': 'x', 'issuedAt': 0},
       }));
 
-      expect(find.byIcon(Icons.error_outline), findsOneWidget);
+      expect(find.text('Login request received'), findsOneWidget);
+      expect(find.text('Approve'), findsOneWidget);
+      expect(find.text('Reject'), findsOneWidget);
     });
 
     testWidgets('shows error when callbackUrl is http (not https)', (tester) async {
@@ -167,6 +169,34 @@ void main() {
 
       // Avança além dos 800ms do Future.delayed para que o timer não fique
       // pendente quando o framework desmontar a árvore de widgets.
+      await tester.pump(const Duration(milliseconds: 1000));
+    });
+
+    testWidgets(
+        'creates on-chain session without posting when callbackUrl is absent',
+        (tester) async {
+      final payloadWithoutCallback = {
+        'challenge': {'nonce': 'test-nonce-123', 'origin': 'example.com', 'issuedAt': DateTime(2026).millisecondsSinceEpoch},
+      };
+
+      await tester.pumpWidget(buildScreen(payloadWithoutCallback));
+      await tester.pump();
+
+      await tester.tap(find.text('Approve'));
+      await tester.pumpAndSettle();
+
+      // on-chain session foi criada
+      verify(() => mockSessionCreator.createSession(
+            identityId: any(named: 'identityId'),
+            smartAccountAddress: any(named: 'smartAccountAddress'),
+            sessionHash: any(named: 'sessionHash'),
+            devicePubKey: any(named: 'devicePubKey'),
+            sessionSignatureHex: any(named: 'sessionSignatureHex'),
+          )).called(1);
+
+      // nenhum POST foi feito (sem callbackUrl)
+      expect(capturedResponses, isEmpty);
+
       await tester.pump(const Duration(milliseconds: 1000));
     });
 

@@ -88,12 +88,14 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
     // https obrigatório: o mobile vai discar essa URL diretamente, então
     // ela precisa ser confiável — sem isso, um QR malicioso poderia apontar
     // pra um endpoint que intercepta a resposta assinada em texto claro.
-    if (challenge == null ||
-        callbackUrl == null ||
-        !callbackUrl.startsWith('https://')) {
+    if (challenge == null) {
       _status = _Status.error;
-      _statusMsg =
-          'Invalid QR: missing challenge or callbackUrl is not https://.';
+      _statusMsg = 'Invalid QR: missing challenge.';
+      return;
+    }
+    if (callbackUrl != null && !callbackUrl.startsWith('https://')) {
+      _status = _Status.error;
+      _statusMsg = 'Invalid QR: callbackUrl must use https://.';
       return;
     }
 
@@ -114,6 +116,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
   // no meio. Agora vai direto pro callbackUrl que o próprio site escolheu —
   // exatamente o endpoint /auth/verify que os exemplos do SDK já documentam.
   Future<void> _postResponse(Map<String, dynamic> response) async {
+    if (_callbackUrl == null) return;
     if (widget.postResponse != null) {
       return widget.postResponse!(response);
     }

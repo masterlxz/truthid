@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-22 (Sessão 141 — `/code-review max --path desktop/`: 9 agentes
+> Última atualização: 2026-07-22 (Sessão 142 — Callback opcional no login: `callbackUrl` deixa de ser obrigatório no QR)
 > paralelos, 8/9 completos (Invariant Auditor rodou mas não produziu resumo final), ~78k chars de
 > achados consolidados. Cobriu 12 módulos Rust + ~50 arquivos React/TS do Desktop: duplicação de
 > código, performance, segurança, pitfalls, wrappers, arquitetura, simplificação e dead code.
@@ -6791,6 +6791,34 @@ Dead code (hook não importado), mas se fosse reativado reportaria "ready" mesmo
 **Nada corrigido ainda** — registro puro, aguardando decisão do dono do projeto sobre
 priorização e ordem de ataque. O arquivo `code-review-max-results.md` na raiz contém o
 texto original de cada agente pra referência completa.
+
+---
+
+### Sessão 142 — 2026-07-22: Callback opcional no login (`truthid-auth`)
+
+**Design da Sessão 95 finalmente implementado.** O `callbackUrl` no payload do QR de login
+deixa de ser obrigatório. Quando ausente, o Mobile não faz o POST HTTPS — a sessão on-chain
+(`SessionCreator` via UserOp) é o único sinal de sucesso. O integrador faz polling gratuito
+de `isSessionRevoked(sessionHash)` para confirmar o login.
+
+**Arquivos modificados:**
+
+- **`mobile/lib/screens/approval_screen.dart`**:
+  - Validação no `initState`: `callbackUrl == null` deixa de ser erro. Só rejeita se
+    `callbackUrl` não-nulo não começa com `https://`.
+  - `_postResponse()`: early return `if (_callbackUrl == null) return;` antes de qualquer
+    outra lógica (inclusive antes do `widget.postResponse` de teste).
+
+- **`mobile/test/screens/approval_screen_test.dart`**:
+  - Teste "shows error when callbackUrl is missing" → **"shows challenge UI when callbackUrl
+    is missing"** (agora renderiza approve/reject normalmente).
+  - **Novo teste**: payload sem `callbackUrl` → approve → verifica `createSession` chamado
+    (sessão on-chain criada) + `capturedResponses` vazio (nenhum POST feito).
+
+**Segurança mantida:** `https://` continua obrigatório quando `callbackUrl` está presente.
+A ordem on-chain-primeiro-POST-depois não muda.
+
+**11/11 testes passando** no Flutter (Docker).
 
 ---
 
