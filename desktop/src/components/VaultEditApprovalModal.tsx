@@ -69,7 +69,13 @@ export function VaultEditApprovalModal({
         updated_at: 0,
       };
       await invoke<VaultEntry>("vault_upsert_entry", { entry });
-      await publishVaultViaDeviceKey(smartAccountAddress);
+      const { providersFailed } = await publishVaultViaDeviceKey(smartAccountAddress);
+
+      if (providersFailed.length > 0) {
+        console.warn(
+          `Vault published with partial pinning redundancy: ${providersFailed.join(", ")} failed.`
+        );
+      }
 
       clear();
     } catch (e) {

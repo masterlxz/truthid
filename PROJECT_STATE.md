@@ -6667,11 +6667,12 @@ relacionados (abrir form, visibilidade de senha). `useMemo([entries, filter])`.
 `getTransactionReceipt` e `getBlock` são chamados um por vez em loop — primeiro scan de
 identidade antiga paga RTT sequencial pra cada tx/bloco único.
 
-**31. `publishVaultViaDeviceKey` silencia warning de redundância parcial**
+**31. `publishVaultViaDeviceKey` silencia warning de redundância parcial -- FIXED Session 146**
 (`vaultPublishViaDeviceKey.ts:25-28`)
-Só lança se `providers_ok.length === 0`. O caminho Ledger (`useVaultPublish.ts`) mostra
-`pinWarning` pra falha parcial. O device-key path nunca avisa — publish ocorre com
-redundância degradada sem o usuário saber.
+Só lançava se `providers_ok.length === 0` — falha parcial era silenciosa. `publishVaultViaDeviceKey`
+agora retorna `providersFailed` no resultado. Caminho device-key (`useVaultPublish.ts`): seta
+`pinWarning` com a lista de providers que falharam, mesmo padrão do caminho Ledger.
+`VaultEditApprovalModal`: console.warn pro provider caído.
 
 **32. `bundler not configured` copiado por call site, já com drift de idioma -- FIXED Session 146**
 (`vaultPublishViaDeviceKey.ts:30-35` vs `SignRequestModal.tsx:93-96`)

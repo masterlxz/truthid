@@ -148,13 +148,21 @@ export function useVaultPublish(
 
   async function handleEnviarViaDeviceKey() {
     setDeviceKeyError(null);
+    setPinWarning(null);
     setDeviceKeyPublishState("publishing");
     try {
       if (!smartAccountAddress) {
         throw new Error("Nenhuma identidade carregada.");
       }
 
-      const { transactionHash } = await publishVaultViaDeviceKey(smartAccountAddress);
+      const { transactionHash, providersFailed } = await publishVaultViaDeviceKey(smartAccountAddress);
+
+      if (providersFailed.length > 0) {
+        setPinWarning(
+          `Redundância parcial: falhou em ${providersFailed.join(", ")} ` +
+          `(ok no restante). O vault foi publicado, mas sem a redundância configurada.`
+        );
+      }
 
       if (!transactionHash) {
         throw new Error(

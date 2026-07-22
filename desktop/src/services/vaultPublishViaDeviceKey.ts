@@ -16,7 +16,7 @@ import type { PinResult } from "../types";
  */
 export async function publishVaultViaDeviceKey(
   smartAccountAddress: Address
-): Promise<{ transactionHash: Hex | null }> {
+): Promise<{ transactionHash: Hex | null; providersFailed: string[] }> {
   const result = await invoke<PinResult>("vault_publish");
   if (result.providers_failed.length > 0 && result.providers_ok.length === 0) {
     throw new Error(`Todos os providers falharam: ${result.providers_failed.join(", ")}`);
@@ -36,5 +36,5 @@ export async function publishVaultViaDeviceKey(
   });
 
   if (!success) throw new Error("Failed to publish vault: on-chain transaction reverted");
-  return { transactionHash };
+  return { transactionHash, providersFailed: result.providers_failed };
 }
