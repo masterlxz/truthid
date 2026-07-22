@@ -14,6 +14,7 @@ import { respondToRequest } from "../services/respondToRequest";
 export function PinApprovalModal() {
   const { request, clear } = useIncomingPinRequest();
   const [expired, setExpired] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Failsafe local: o Rust já libera o pedido sozinho aos 5min (408 pro app
   // terceiro), isso só fecha o modal de quem ficou olhando a tela.
@@ -33,11 +34,16 @@ export function PinApprovalModal() {
 
   async function handleApprove() {
     if (!request) return;
-    await invoke("respond_to_pin_request", {
-      id: request.id,
-      decision: { outcome: "approved" },
-    }).catch(() => {});
-    clear();
+    setError(null);
+    try {
+      await invoke("respond_to_pin_request", {
+        id: request.id,
+        decision: { outcome: "approved" },
+      });
+      clear();
+    } catch (e) {
+      setError(String(e));
+    }
   }
 
   async function handleReject() {
@@ -74,6 +80,7 @@ export function PinApprovalModal() {
           )}
 
           {expired && <p className="error-text">This request has expired.</p>}
+          {error && <p className="error-text">{error}</p>}
 
           <div className="actions-row" style={{ marginTop: "0.75rem" }}>
             <button onClick={handleApprove} disabled={expired}>

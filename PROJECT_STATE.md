@@ -6698,11 +6698,12 @@ falso de "⚠ Could not verify declared function".
 ou resetado por `onPublished`. Toggle sem publish deixa o contador desatualizado até
 próxima operação pesada ou troca de tab.
 
-**37. Pin/Sign-Message approve engole erro de resolução — falso sucesso**
+**37. Pin/Sign-Message approve engole erro de resolução — falso sucesso -- FIXED Session 146**
 (`PinApprovalModal.tsx:33-40`, `SignMessageModal.tsx:32-39`)
-`respond_to_..._request` em `.catch(() => {})` + `clear()` incondicional. Se o Rust já
-expirou o slot (race de ~1s entre timer do servidor e `setInterval` do cliente), a rejeição
-é engolida e o modal fecha como se tivesse dado certo.
+`respond_to_..._request` em `.catch(() => {})` + `clear()` incondicional — se o Rust já
+expirou o slot (race de ~1s), a rejeição era engolida e o modal fechava como sucesso.
+Corrigido com `try/catch` + estado `error` + `clear()` só no happy path — mesmo padrão
+já usado em `VaultEditApprovalModal.tsx`.
 
 **38. `executeViaUserOp` dropa flag `success` do recibo ERC-4337**
 (`userOpExecutor.ts:143,39-42,147-150`)
