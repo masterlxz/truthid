@@ -6611,9 +6611,9 @@ config. Um helper `local_config_path` + `load_json_or_default`/`save_json_pretty
 serviria todos.
 
 **20. `useVaultKey.ts` é dead code — zero importers, e a lógica que ele terceiriza foi
-reimplementada (com drift) em `CreateIdentity.tsx` e `VaultManagement.tsx`**
+reimplementada (com drift) em `CreateIdentity.tsx` e `VaultManagement.tsx` -- FIXED Session 146**
 3 cópias da constante `"TruthID Vault Key v1"` — introduzir v2 quebraria silenciosamente
-derivação cross-device se aplicado só em 1 ou 2 das 3 cópias.
+derivação cross-device se aplicado só em 1 ou 2 das 3 cópias. Hook removido; constante extraída pra `desktop/src/config/vaultKey.ts` compartilhada.
 
 **21. `computeSmartAccountAddress` async (modo on-chain via multicall) nunca chamado**
 (`computeSmartAccountAddress.ts:64-99`)
@@ -6772,8 +6772,8 @@ O canal de vault-edit (único caminho que dispositivo externo usa pra propor esc
 identifica quem enviou — impossível fazer enforcement de permissão por dispositivo mesmo
 que a checagem existisse.
 
-**52. `useVaultKey.ts:36` — `setState(exists ? "ready" : "ready")` — ambos os branches idênticos**
-Dead code (hook não importado), mas se fosse reativado reportaria "ready" mesmo sem chave derivada.
+**52. `useVaultKey.ts:36` — `setState(exists ? "ready" : "ready")` — ambos os branches idênticos -- FIXED Session 146**
+Dead code (hook não importado), mas se fosse reativado reportaria "ready" mesmo sem chave derivada. Hook removido (zero importers); constante `VAULT_KEY_MESSAGE` extraída pra `desktop/src/config/vaultKey.ts` e compartilhada entre `CreateIdentity.tsx`/`VaultManagement.tsx` (antes 3 cópias independentes, incluindo a do hook removido).
 
 ---
 
@@ -6953,6 +6953,19 @@ Extraído helper `respondToRequest(cmd, requestId, clear)` em
 
 Cada `handleReject` passou de 7 linhas para 3, delegando no helper. Import de `invoke`
 mantido nos 4 arquivos (ainda usado nos respectivos `handleApprove`).
+
+**Verificação**: `npx tsc --noEmit` limpo, `npx vitest run` 93/93.
+
+---
+
+### Continuação Sessão 146 — 2026-07-22: Bug #52 (+ #20) — useVaultKey.ts dead code
+
+Hook `useVaultKey.ts` removido — zero importers no repositório inteiro. Bug do
+branch idêntico (`exists ? "ready" : "ready"`) era sintomático: quando código nunca
+é chamado, bugs passam despercebidos. Aproveitado para resolver também o achado #20
+(3 cópias independentes da constante `"TruthID Vault Key v1"`): constante extraída
+para `desktop/src/config/vaultKey.ts` (novo) e importada por `CreateIdentity.tsx` e
+`VaultManagement.tsx` — se alguém trocar pra v2, um grep acha a origem única.
 
 **Verificação**: `npx tsc --noEmit` limpo, `npx vitest run` 93/93.
 

@@ -20,8 +20,7 @@ import { createPasskey } from "../utils/webauthn";
 import { generatePassword, type PasswordGeneratorOptions } from "../utils/passwordGenerator";
 import { PasswordGeneratorModal } from "./PasswordGeneratorModal";
 import { passwordStrength, type PasswordStrengthScore } from "../utils/passwordStrength";
-
-const VAULT_KEY_MESSAGE = "TruthID Vault Key v1";
+import { VAULT_KEY_MESSAGE } from "../config/vaultKey";
 
 // ---------------------------------------------------------------------------
 // Helpers

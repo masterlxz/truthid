@@ -18,8 +18,7 @@ import {
   FACTORY_ABI,
 } from "../config/contracts";
 import { buildIdentityConsentHash } from "../utils/buildIdentityConsentHash";
-
-const VAULT_KEY_MESSAGE = "TruthID Vault Key v1";
+import { VAULT_KEY_MESSAGE } from "../config/vaultKey";
 
 const USERNAME_REGEX = /^[a-z0-9.\-]{1,64}$/;
 
