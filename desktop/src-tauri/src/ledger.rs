@@ -244,28 +244,37 @@ const NO_P2: u8 = 0x00;
 /// fatiada de novo em pacotes HID por `write_apdu`/`read_apdu_response`.
 const SIGN_CHUNK_SIZE: usize = 150;
 
-/// Monta a sequência de APDUs SIGN_TX para uma transação já serializada
-/// (RLP, com o byte de tipo na frente para EIP-1559/2930). O 1º APDU leva
-/// o caminho de derivação + o início da transação; os seguintes (P1 =
-/// "continuação") só levam o restante dos bytes.
-fn build_sign_tx_apdus(unsigned_tx: &[u8], account_index: u32) -> Vec<Vec<u8>> {
+/// Núcleo genérico de fatiamento em APDUs de assinatura (compartilhado por
+/// `build_sign_tx_apdus` e `build_sign_personal_message_apdus`). Cada APDU
+/// leva no máximo `SIGN_CHUNK_SIZE` bytes de dado; o 1º carrega o caminho de
+/// derivação + um prefixo extra específico da instrução (vazio pra
+/// transação, 4 bytes big-endian de tamanho da mensagem pra personal_sign)
+/// + o início do payload; os seguintes (`P1 = P1_FOLLOWING_CHUNK`) só levam
+/// o restante dos bytes.
+fn build_sign_apdus(
+    payload: &[u8],
+    ins_byte: u8,
+    account_index: u32,
+    extra_prefix: &[u8],
+) -> Vec<Vec<u8>> {
     let path = encode_derivation_path(account_index);
     let mut apdus = Vec::new();
     let mut offset = 0;
     let mut first = true;
 
-    while first || offset < unsigned_tx.len() {
-        let header_len = if first { path.len() } else { 0 };
-        let chunk_len = (SIGN_CHUNK_SIZE - header_len).min(unsigned_tx.len() - offset);
+    while first || offset < payload.len() {
+        let header_len = if first { path.len() + extra_prefix.len() } else { 0 };
+        let chunk_len = (SIGN_CHUNK_SIZE - header_len).min(payload.len() - offset);
 
         let mut data = Vec::with_capacity(header_len + chunk_len);
         if first {
             data.extend_from_slice(&path);
+            data.extend_from_slice(extra_prefix);
         }
-        data.extend_from_slice(&unsigned_tx[offset..offset + chunk_len]);
+        data.extend_from_slice(&payload[offset..offset + chunk_len]);
 
         let p1 = if first { P1_FIRST_CHUNK } else { P1_FOLLOWING_CHUNK };
-        let mut apdu = vec![ETH_CLA, INS_SIGN, p1, NO_P2, data.len() as u8];
+        let mut apdu = vec![ETH_CLA, ins_byte, p1, NO_P2, data.len() as u8];
         apdu.extend_from_slice(&data);
         apdus.push(apdu);
 
@@ -274,6 +283,12 @@ fn build_sign_tx_apdus(unsigned_tx: &[u8], account_index: u32) -> Vec<Vec<u8>> {
     }
 
     apdus
+}
+
+/// Monta a sequência de APDUs SIGN_TX para uma transação já serializada
+/// (RLP, com o byte de tipo na frente para EIP-1559/2930).
+fn build_sign_tx_apdus(unsigned_tx: &[u8], account_index: u32) -> Vec<Vec<u8>> {
+    build_sign_apdus(unsigned_tx, INS_SIGN, account_index, &[])
 }
 
 /// Resposta do SIGN_TX (só o último chunk importa): 1 byte de `v`
@@ -336,39 +351,16 @@ pub fn sign_ledger_transaction(unsigned_tx_hex: String, account_index: u32) -> R
 
 const INS_SIGN_PERSONAL_MESSAGE: u8 = 0x08;
 
-/// Mesmo esquema de fatiamento de `build_sign_tx_apdus`, mudando só o
-/// cabeçalho do 1º APDU: em vez de ir direto pros bytes (RLP de uma
-/// transação já é auto-descritivo), leva também 4 bytes big-endian com o
-/// tamanho total da mensagem — o app Ethereum exige isso porque uma
-/// mensagem pessoal arbitrária não tem como "saber" o próprio tamanho
-/// sozinha.
+/// O 1º APDU leva também 4 bytes big-endian com o tamanho total da
+/// mensagem — o app Ethereum exige isso porque uma mensagem pessoal
+/// arbitrária não tem como "saber" o próprio tamanho sozinha.
 fn build_sign_personal_message_apdus(message: &[u8], account_index: u32) -> Vec<Vec<u8>> {
-    let path = encode_derivation_path(account_index);
-    let mut apdus = Vec::new();
-    let mut offset = 0;
-    let mut first = true;
-
-    while first || offset < message.len() {
-        let header_len = if first { path.len() + 4 } else { 0 };
-        let chunk_len = (SIGN_CHUNK_SIZE - header_len).min(message.len() - offset);
-
-        let mut data = Vec::with_capacity(header_len + chunk_len);
-        if first {
-            data.extend_from_slice(&path);
-            data.extend_from_slice(&(message.len() as u32).to_be_bytes());
-        }
-        data.extend_from_slice(&message[offset..offset + chunk_len]);
-
-        let p1 = if first { P1_FIRST_CHUNK } else { P1_FOLLOWING_CHUNK };
-        let mut apdu = vec![ETH_CLA, INS_SIGN_PERSONAL_MESSAGE, p1, NO_P2, data.len() as u8];
-        apdu.extend_from_slice(&data);
-        apdus.push(apdu);
-
-        offset += chunk_len;
-        first = false;
-    }
-
-    apdus
+    build_sign_apdus(
+        message,
+        INS_SIGN_PERSONAL_MESSAGE,
+        account_index,
+        &(message.len() as u32).to_be_bytes(),
+    )
 }
 
 /// Assina uma mensagem pessoal (EIP-191 `personal_sign`) com a chave da

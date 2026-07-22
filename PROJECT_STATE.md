@@ -6677,7 +6677,7 @@ redundância degradada sem o usuário saber.
 (`vaultPublishViaDeviceKey.ts:30-35` vs `SignRequestModal.tsx:93-96`)
 Uma cópia em português, outra em inglês — mesmo guard. `userOpExecutor` nunca valida.
 
-**33. Ledger APDU chunking duplicado entre sign-tx e sign-personal-message**
+**33. Ledger APDU chunking duplicado entre sign-tx e sign-personal-message -- FIXED Session 146**
 (`ledger.rs:251-277,345-372`)
 Loops de chunking idênticos, diferem só no byte de instrução + prefixo de 4 bytes.
 `eth_signTypedData_v4` stubbed como `unsupported` — quando implementado, será a 3ª cópia.
