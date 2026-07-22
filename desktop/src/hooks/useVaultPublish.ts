@@ -65,7 +65,7 @@ export function useVaultPublish(
     reset: resetTx,
   } = useWriteContract();
 
-  const { isLoading: isConfirming, isSuccess: isTxSuccess } =
+  const { isLoading: isConfirming, isSuccess: isTxReceiptReady, data: txReceipt } =
     useWaitForTransactionReceipt({ hash: txHash });
 
   const { data: hasVault, refetch: refetchHasVault } = useReadContract({
@@ -108,15 +108,20 @@ export function useVaultPublish(
   }, [pendingUpdate, isConnected, smartAccountAddress]);
 
   useEffect(() => {
-    if (isTxSuccess) {
-      refetchHasVault();
-      refetchVaultRef();
-      onPublished();
-      setJustPublished(true);
-      setTimeout(() => setJustPublished(false), 3000);
+    if (!isTxReceiptReady) return;
+    if (txReceipt?.status === "reverted") {
+      setPublishError("Transaction reverted on-chain");
+      setPublishState("error");
       resetTx();
+      return;
     }
-  }, [isTxSuccess]);
+    refetchHasVault();
+    refetchVaultRef();
+    onPublished();
+    setJustPublished(true);
+    setTimeout(() => setJustPublished(false), 3000);
+    resetTx();
+  }, [isTxReceiptReady]);
 
   async function handleEnviar() {
     setPublishError(null);

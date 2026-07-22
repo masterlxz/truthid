@@ -26,7 +26,7 @@ type DecodedCall =
 function decodeIncomingCall(req: IncomingSignRequest): DecodedCall {
   try {
     const expectedSelector = toFunctionSelector(req.functionSignature);
-    const actualSelector = req.callData.slice(0, 10);
+    const actualSelector = req.callData.slice(0, 10).toLowerCase();
     if (expectedSelector !== actualSelector) {
       return { verified: false, reason: "declared function signature does not match callData" };
     }
@@ -95,7 +95,7 @@ export function SignRequestModal({ smartAccountAddress }: { smartAccountAddress:
         throw new Error("Bundler not configured — set api_key/network in ~/.truthid/bundler_config.json.");
       }
 
-      const { userOpHash, transactionHash } = await executeViaUserOp({
+      const { userOpHash, transactionHash, success } = await executeViaUserOp({
         smartAccountAddress,
         dest: request.dest,
         value: BigInt(request.value || "0"),
@@ -104,9 +104,15 @@ export function SignRequestModal({ smartAccountAddress }: { smartAccountAddress:
         bundlerNetwork: bundlerConfig.network || "base",
       });
 
+      if (!transactionHash) {
+        throw new Error(
+          "UserOperation accepted but not confirmed yet — it may still confirm later."
+        );
+      }
+
       await invoke("respond_to_sign_request", {
         id: request.id,
-        decision: { outcome: "executed", userOpHash, transactionHash },
+        decision: { outcome: success ? "executed" : "failed", userOpHash, transactionHash },
       });
       clear();
     } catch (e) {

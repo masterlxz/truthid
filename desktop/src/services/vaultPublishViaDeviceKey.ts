@@ -40,7 +40,7 @@ export async function publishVaultViaDeviceKey(
     args: [result.cid, result.content_hash as `0x${string}`],
   });
 
-  const { transactionHash } = await executeViaUserOp({
+  const { transactionHash, success } = await executeViaUserOp({
     smartAccountAddress,
     dest: VAULT_REGISTRY_ADDRESS,
     value: 0n,
@@ -49,5 +49,6 @@ export async function publishVaultViaDeviceKey(
     bundlerNetwork: bundlerConfig.network || "base",
   });
 
+  if (!success) throw new Error("Failed to publish vault: on-chain transaction reverted");
   return { transactionHash };
 }

@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-22 (Sessão 145 — SignRequestModal stale stage + vault.enc truncated panic fix)
+> Última atualização: 2026-07-22 (Sessão 145 — Bugs #5-#10: 6 correções do code review)
 > paralelos, 8/9 completos (Invariant Auditor rodou mas não produziu resumo final), ~78k chars de
 > achados consolidados. Cobriu 12 módulos Rust + ~50 arquivos React/TS do Desktop: duplicação de
 > código, performance, segurança, pitfalls, wrappers, arquitetura, simplificação e dead code.
@@ -6896,7 +6896,47 @@ em vez de `Err`. Adicionado `if blob.len() < 28 { return Err(...); }` antes da d
 da chave legada. Todos os comandos de vault (`vault_list_entries`, etc.) agora retornam
 erro limpo em vez de crashar com arquivo corrompido.
 
-**TypeScript + Rust compilando limpo.**
+**TypeScript compilando limpo.**
+
+**Bug 7 — `userOpExecutor.ts`: `success:false` ignorado (Wrapper #1, continuado)**
+`getUserOperationReceipt()` do Pimlico já devolve `success` (campo padrão do ERC-4337),
+mas `waitForReceipt` o escondia no tipo de retorno e `ExecuteViaUserOpResult` nunca o
+expunha. UserOp revertido on-chain (`success=false`) era tratado como "executado" por
+todos os callers. Adicionado `success: boolean` ao `ExecuteViaUserOpResult` e propagado
+do receipt. Callers atualizados:
+- `SignRequestModal.tsx`: `outcome: success ? "executed" : "failed"`
+- `vaultPublishViaDeviceKey.ts`: throw se `!success`, impedindo UI de mostrar "Enviado ✓"
+  quando `updateVault` reverteu on-chain.
+
+**TypeScript compilando limpo.**
+
+**Bug 8 — `useVaultPublish.ts`: Ledger path não verifica `receipt.status` (Wrapper #2, continuado)**
+`useWaitForTransactionReceipt` do wagmi resolve `isSuccess=true` tanto para `status: "success"`
+quanto para `status: "reverted"` — só significa "peguei o recibo", não que a tx foi bem-sucedida.
+O efeito de publicação tratava qualquer recibo como sucesso, mostrando "Enviado ✓" mesmo quando
+`execute()` revertia on-chain (ex: smart account perdeu status de controller). Adicionada checagem
+`txReceipt?.status === "reverted"` → seta `publishError` + `publishState="error"` em vez de
+reportar falso sucesso.
+
+**TypeScript compilando limpo.**
+
+**Bug 9 — `SignRequestModal.tsx`: "executed" mesmo com txHash null (Wrapper #3)**
+Se a UserOp é aceita pelo bundler mas não minerada em 60s (`waitForReceipt` retorna null),
+`transactionHash` ficava null. O código respondia `outcome: "failed"` (via Bug #7) mas sem
+distinguir "reverteu" de "ainda não confirmou". Agora, adicionado throw com mensagem
+informativa quando `!transactionHash` — o `catch` existente responde com erro descritivo e o
+app terceiro sabe que pode pollar o bundler com `userOpHash`. Mesmo padrão que
+`vaultPublishViaDeviceKey.ts:154-157` já usa.
+
+**TypeScript compilando limpo.**
+
+**Bug 10 — `SignRequestModal.tsx`: comparação case-sensitive do seletor (Line-by-line #7)**
+`toFunctionSelector` normaliza para minúsculo, mas `callData.slice(0, 10)` preservava o casing
+original. CallData com hex maiúsculo (ex: `0xA9059CBB`) falsamente acionava o aviso "⚠ Could
+not verify declared function" — seletor byte-identical mas rejeitado por `!==`. Adicionado
+`.toLowerCase()` no `actualSelector`.
+
+**TypeScript compilando limpo.**
 
 ---
 

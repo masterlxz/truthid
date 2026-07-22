@@ -39,6 +39,7 @@ const ZERO_SIGNATURE_65_BYTES: Hex = `0x${"00".repeat(65)}`;
 export interface ExecuteViaUserOpResult {
   userOpHash: Hex;
   transactionHash: Hex | null;
+  success: boolean;
 }
 
 /**
@@ -141,13 +142,14 @@ export async function executeViaUserOp({
   return {
     userOpHash: sentUserOpHash,
     transactionHash: receipt?.transactionHash ?? null,
+    success: receipt?.success ?? false,
   };
 }
 
 async function waitForReceipt(
   bundlerClient: PimlicoBundlerClient,
   userOpHash: Hex,
-): Promise<{ transactionHash: Hex } | null> {
+): Promise<{ transactionHash: Hex; success: boolean } | null> {
   for (let attempt = 0; attempt < RECEIPT_POLL_MAX_ATTEMPTS; attempt++) {
     const receipt = await bundlerClient.getUserOperationReceipt(userOpHash);
     if (receipt) return receipt;
