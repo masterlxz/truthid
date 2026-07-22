@@ -20,6 +20,7 @@ use sha2::Sha256;
 pub(crate) const BACKUP_MAGIC: &[u8; 8] = b"TIDVLTB1";
 // Recomendação atual da OWASP Password Storage Cheat Sheet pra PBKDF2-HMAC-SHA256.
 pub(crate) const BACKUP_KDF_ITERATIONS: u32 = 600_000;
+pub(crate) const BACKUP_MAX_KDF_ITERATIONS: u32 = 10_000_000;
 
 const SALT_LEN: usize = 16;
 const NONCE_LEN: usize = 12;
@@ -74,6 +75,11 @@ pub(crate) fn decrypt(blob: &[u8], password: &str) -> Result<Vec<u8>, String> {
     }
     let salt = &blob[8..8 + SALT_LEN];
     let iterations = u32::from_be_bytes(blob[8 + SALT_LEN..HEADER_LEN - NONCE_LEN].try_into().unwrap());
+    if iterations > BACKUP_MAX_KDF_ITERATIONS {
+        return Err(format!(
+            "backup file has excessive KDF iterations ({iterations}); max is {BACKUP_MAX_KDF_ITERATIONS}"
+        ));
+    }
     let nonce = Nonce::from_slice(&blob[HEADER_LEN - NONCE_LEN..HEADER_LEN]);
 
     let key_bytes = derive_key(password, salt, iterations);
@@ -163,5 +169,13 @@ mod tests {
             "544944564c5442310102030405060708090a0b0c0d0e0f1000000064202122232425262728292a2b\
              4aa17c8e8b6eefe955e8f4e0d999dec4058c226c174dbc07c671120e5225cd39d4910240919fe9d309a9"
         );
+    }
+
+    #[test]
+    fn excessive_iterations_rejected() {
+        let mut blob = encrypt(b"data", "hunter2").unwrap();
+        blob[8 + SALT_LEN..8 + SALT_LEN + 4]
+            .copy_from_slice(&u32::MAX.to_be_bytes());
+        assert!(decrypt(&blob, "hunter2").is_err());
     }
 }

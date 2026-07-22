@@ -80,6 +80,20 @@ void main() {
       '4aa17c8e8b6eefe955e8f4e0d999dec4058c226c174dbc07c671120e5225cd39d4910240919fe9d309a9',
     );
   });
+
+  test('rejeita iterations excessivo (DoS protection)', () async {
+    final plaintext = Uint8List.fromList(utf8.encode('data'));
+    final blob = await cipher.encrypt(plaintext, 'hunter2');
+    // Sobrescreve iterations com u32::MAX (bytes 24-27)
+    final maxIters = ByteData(4)..setUint32(0, 0xFFFFFFFF, Endian.big);
+    blob.setRange(24, 28, maxIters.buffer.asUint8List());
+    await expectLater(
+      cipher.decrypt(blob, 'hunter2'),
+      throwsA(isA<FormatException>().having(
+        (e) => e.message, 'message', contains('excessive KDF iterations'),
+      )),
+    );
+  });
 }
 
 String _hex(List<int> bytes) =>

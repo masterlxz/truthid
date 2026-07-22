@@ -16,6 +16,7 @@ import 'package:cryptography/cryptography.dart';
 // ciphertext+tag(AES-256-GCM). O iteration count viaja dentro do arquivo.
 const String backupMagic = 'TIDVLTB1';
 const int backupKdfIterations = 600000;
+const int backupMaxKdfIterations = 10000000;
 
 const int _saltLen = 16;
 const int _nonceLen = 12;
@@ -79,6 +80,11 @@ class BackupCipherService {
       8 + _saltLen,
       _headerLen - _nonceLen,
     ).getUint32(0, Endian.big);
+    if (iterations > backupMaxKdfIterations) {
+      throw const FormatException(
+        'backup file has excessive KDF iterations (DoS protection)',
+      );
+    }
     final nonce = blob.sublist(_headerLen - _nonceLen, _headerLen);
     final rest = blob.sublist(_headerLen);
     final mac = rest.sublist(rest.length - 16);

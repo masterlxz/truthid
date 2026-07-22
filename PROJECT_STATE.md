@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-22 (Sessão 142 — Callback opcional no login: `callbackUrl` deixa de ser obrigatório no QR)
+> Última atualização: 2026-07-22 (Sessão 143 — Fix DoS: sanitização do campo `iterations` no backup)
 > paralelos, 8/9 completos (Invariant Auditor rodou mas não produziu resumo final), ~78k chars de
 > achados consolidados. Cobriu 12 módulos Rust + ~50 arquivos React/TS do Desktop: duplicação de
 > código, performance, segurança, pitfalls, wrappers, arquitetura, simplificação e dead code.
@@ -6819,6 +6819,35 @@ de `isSessionRevoked(sessionHash)` para confirmar o login.
 A ordem on-chain-primeiro-POST-depois não muda.
 
 **11/11 testes passando** no Flutter (Docker).
+
+---
+
+### Sessão 143 — 2026-07-22: Fix DoS: sanitização do campo `iterations` no backup
+
+**Achado #6 do `/code-review max` corrigido.** O campo `iterations` (u32) no envelope
+`.truthid-backup` era lido do arquivo sem limite superior — um blob malicioso podia conter
+`u32::MAX` (4,3 bilhões) e travar o `decrypt()` via PBKDF2 indefinidamente.
+
+**Solução:** constante `BACKUP_MAX_KDF_ITERATIONS = 10_000_000` (10M, ~16x o default 600k).
+Se `iterations > MAX`, `decrypt()` retorna `Err` (Rust) / `throws FormatException` (Dart)
+antes de derivar a chave.
+
+**Arquivos modificados:**
+
+- **`desktop/src-tauri/src/backup.rs`**:
+  - Constante `BACKUP_MAX_KDF_ITERATIONS = 10_000_000` adicionada.
+  - Validação `if iterations > MAX` após parse, rejeitando com mensagem clara.
+  - Novo teste `excessive_iterations_rejected` (blob falso com `u32::MAX`).
+
+- **`mobile/lib/services/backup_cipher_service.dart`**:
+  - Constante `backupMaxKdfIterations = 10000000` adicionada.
+  - Validação `if iterations > max` após parse, com `FormatException` clara.
+
+- **`mobile/test/services/backup_cipher_service_test.dart`**:
+  - Novo teste `rejeita iterations excessivo (DoS protection)` — sobrescreve campo
+    iterations com `0xFFFFFFFF` e espera `FormatException` com mensagem específica.
+
+**9/9 testes Rust + 8/8 testes Dart passando.**
 
 ---
 
