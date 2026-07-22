@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Address } from "viem";
 import { useIncomingVaultEditRequest } from "../hooks/useIncomingVaultEditRequest";
 import { publishVaultViaDeviceKey } from "../services/vaultPublishViaDeviceKey";
+import { respondToRequest } from "../services/respondToRequest";
 import type { VaultEntry } from "../types";
 
 /**
@@ -79,11 +80,7 @@ export function VaultEditApprovalModal({
 
   async function handleReject() {
     if (!request) return;
-    await invoke("respond_to_vault_edit_request", {
-      id: request.id,
-      decision: { outcome: "rejected" },
-    }).catch(() => {});
-    clear();
+    respondToRequest("respond_to_vault_edit_request", request.id, clear);
   }
 
   const { entry } = request;

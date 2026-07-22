@@ -4,6 +4,7 @@ import type { Address } from "viem";
 import { decodeFunctionData, formatEther, parseAbi, toFunctionSelector } from "viem";
 import { useIncomingSignRequest, type IncomingSignRequest } from "../hooks/useIncomingSignRequest";
 import { executeViaUserOp } from "../services/userOpExecutor";
+import { respondToRequest } from "../services/respondToRequest";
 import { useWalletModal } from "../contexts/WalletModalContext";
 
 interface BundlerConfig {
@@ -128,11 +129,7 @@ export function SignRequestModal({ smartAccountAddress }: { smartAccountAddress:
 
   async function handleReject() {
     if (!request) return;
-    await invoke("respond_to_sign_request", {
-      id: request.id,
-      decision: { outcome: "rejected" },
-    }).catch(() => {});
-    clear();
+    respondToRequest("respond_to_sign_request", request.id, clear);
   }
 
   const busy = stage === "signing";

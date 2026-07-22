@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useIncomingPinRequest } from "../hooks/useIncomingPinRequest";
+import { respondToRequest } from "../services/respondToRequest";
 
 /**
  * Aprovação de /truthid/v1/pin — só aparece quando o app precisa de
@@ -41,11 +42,7 @@ export function PinApprovalModal() {
 
   async function handleReject() {
     if (!request) return;
-    await invoke("respond_to_pin_request", {
-      id: request.id,
-      decision: { outcome: "rejected" },
-    }).catch(() => {});
-    clear();
+    respondToRequest("respond_to_pin_request", request.id, clear);
   }
 
   return (

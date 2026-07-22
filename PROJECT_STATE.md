@@ -2,7 +2,7 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-22 (Sessão 145 — Bugs #5-#10: 6 correções do code review)
+> Última atualização: 2026-07-22 (Sessão 146 — Bug #47: handleReject duplicado extraído para helper compartilhado)
 > paralelos, 8/9 completos (Invariant Auditor rodou mas não produziu resumo final), ~78k chars de
 > achados consolidados. Cobriu 12 módulos Rust + ~50 arquivos React/TS do Desktop: duplicação de
 > código, performance, segurança, pitfalls, wrappers, arquitetura, simplificação e dead code.
@@ -6752,7 +6752,7 @@ handle_incoming` nunca consulta. Dispositivo "revogado" continua escrevendo norm
 Trocar de identidade durante scan → ref nunca reseta → scan da nova identidade é pulado
 → dashboard mostra dados da identidade anterior.
 
-**47. `handleReject` byte-idêntico nos 4 modais de aprovação**
+**47. `handleReject` byte-idêntico nos 4 modais de aprovação -- FIXED Session 146**
 4× o mesmo corpo `if(!request) return; await invoke(cmd, {id, decision:{outcome:"rejected"}})
 .catch(()=>{}); clear()` — só o nome do comando varia. Um helper `respondToRequest` cobriria
 todos.
@@ -6937,6 +6937,24 @@ not verify declared function" — seletor byte-identical mas rejeitado por `!==`
 `.toLowerCase()` no `actualSelector`.
 
 **TypeScript compilando limpo.**
+
+---
+
+### Sessão 146 — 2026-07-22: Bug #47 — handleReject duplicado nos 4 modais
+
+Extraído helper `respondToRequest(cmd, requestId, clear)` em
+`desktop/src/services/respondToRequest.ts` (novo). Encapsula `invoke(cmd, {id, decision})` +
+`.catch(() => {})` + `clear()` — padrão byte-idêntico que existia em 4 arquivos:
+
+- `PinApprovalModal.tsx`
+- `SignMessageModal.tsx`
+- `SignRequestModal.tsx`
+- `VaultEditApprovalModal.tsx`
+
+Cada `handleReject` passou de 7 linhas para 3, delegando no helper. Import de `invoke`
+mantido nos 4 arquivos (ainda usado nos respectivos `handleApprove`).
+
+**Verificação**: `npx tsc --noEmit` limpo, `npx vitest run` 93/93.
 
 ---
 

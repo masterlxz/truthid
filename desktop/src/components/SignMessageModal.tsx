@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useIncomingSignMessage } from "../hooks/useIncomingSignMessage";
+import { respondToRequest } from "../services/respondToRequest";
 
 /**
  * Aprovação de /truthid/v1/sign-message — mais simples que o SignRequestModal
@@ -40,11 +41,7 @@ export function SignMessageModal() {
 
   async function handleReject() {
     if (!request) return;
-    await invoke("respond_to_sign_message", {
-      id: request.id,
-      decision: { outcome: "rejected" },
-    }).catch(() => {});
-    clear();
+    respondToRequest("respond_to_sign_message", request.id, clear);
   }
 
   return (
