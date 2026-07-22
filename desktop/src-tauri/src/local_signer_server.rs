@@ -1,5 +1,6 @@
 use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::{extract::Json, extract::State, http::StatusCode, routing::get, routing::post, Router};
 use serde::{Deserialize, Serialize};
@@ -274,11 +275,23 @@ pub async fn start(
 /// Pede o graceful shutdown e espera o socket ser liberado antes de
 /// devolver — sem esse .await, um start() logo em seguida poderia tentar
 /// religar na mesma porta antes do SO soltá-la.
+///
+/// Se um request estiver estacionado aguardando aprovação (até 300s),
+/// o graceful shutdown pode demorar. Timeout de 5s: se o servidor não
+/// parar nesse período, aborta a task e libera o botão na UI.
 pub async fn stop(state: &LocalSignerServerState) -> LocalSignerStatus {
     let mut guard = state.0.lock().await;
     if let Some(running) = guard.take() {
         let _ = running.shutdown_tx.send(());
-        let _ = running.join_handle.await;
+        // Timeout de 5s no graceful shutdown: se um request estacionado
+        // (até 300s) impede a parada, o JoinHandle é dropado e a task
+        // abortada automaticamente — a UI não fica congelada.
+        if tokio::time::timeout(Duration::from_secs(5), running.join_handle)
+            .await
+            .is_err()
+        {
+            // Timeout: server task foi dropada/abortada.
+        }
     }
     LocalSignerStatus {
         running: false,

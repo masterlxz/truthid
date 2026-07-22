@@ -15,6 +15,7 @@ export interface LocalSignerStatus {
 export function useLocalSignerServer() {
   const [status, setStatus] = useState<LocalSignerStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isStopping, setIsStopping] = useState(false);
 
   const refresh = useCallback(() => {
     invoke<LocalSignerStatus>("local_signer_status")
@@ -35,10 +36,12 @@ export function useLocalSignerServer() {
 
   const stop = useCallback(() => {
     setError(null);
+    setIsStopping(true);
     invoke<LocalSignerStatus>("local_signer_stop")
       .then(setStatus)
-      .catch((e) => setError(String(e)));
+      .catch((e) => setError(String(e)))
+      .finally(() => setIsStopping(false));
   }, []);
 
-  return { status, error, start, stop, refresh };
+  return { status, error, start, stop, refresh, isStopping };
 }

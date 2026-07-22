@@ -5,7 +5,7 @@ import { useLocalSignerServer } from "../hooks/useLocalSignerServer";
  * Sem aprovação, sem decodificação de chamada — só liga/desliga o transporte.
  */
 export function LocalSignerStatus() {
-  const { status, error, start, stop } = useLocalSignerServer();
+  const { status, error, start, stop, isStopping } = useLocalSignerServer();
 
   if (!status) return null;
 
@@ -22,7 +22,9 @@ export function LocalSignerStatus() {
       {error && <p className="error-text">{error}</p>}
       <div className="actions-row" style={{ marginTop: "0.75rem" }}>
         {status.running ? (
-          <button onClick={stop}>Stop</button>
+          <button onClick={stop} disabled={isStopping}>
+            {isStopping ? "Stopping..." : "Stop"}
+          </button>
         ) : (
           <button onClick={start}>Start</button>
         )}

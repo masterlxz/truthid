@@ -6567,7 +6567,7 @@ USB permissions") — só nunca era alcançada.
 `phase` no erro — `DesktopDevice` não tem. Commit rejeitado → `phase` fica `"committing"` →
 botão "Register" fica permanentemente desabilitado até reiniciar o app.
 
-**13. Parar local signer pode travar por até 5 minutos sem feedback**
+**13. Parar local signer pode travar por até 5 minutos sem feedback -- FIXED Session 146**
 (`local_signer_server.rs:277-287` + `useLocalSignerServer.ts:36-41`)
 Se uma request estiver estacionada aguardando aprovação (até 300s), `stop()` espera
 graceful shutdown concluir — o botão "Stop" fica sem spinner/disabled parecendo congelado
