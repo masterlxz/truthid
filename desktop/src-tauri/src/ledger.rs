@@ -216,12 +216,12 @@ fn classify_error(status_word: u16) -> String {
 }
 
 /// Pede o endereço Ethereum (conta padrão) pra Ledger conectada. Erro vem
-/// como uma destas strings: "not_connected", "locked", "wrong_app", ou uma
-/// mensagem genérica pra qualquer outra falha inesperada.
+/// como uma destas strings: "not_connected", "access_denied", "locked",
+/// "wrong_app", ou uma mensagem genérica pra qualquer outra falha inesperada.
 #[tauri::command]
 pub fn get_ledger_address(account_index: u32) -> Result<String, String> {
     let api = HidApi::new().map_err(|e| e.to_string())?;
-    let device = open_ledger_device(&api).map_err(|_| "not_connected".to_string())?;
+    let device = open_ledger_device(&api)?;
 
     let apdu = build_get_address_apdu(account_index);
     let response = send_apdu(&device, &apdu, 5_000)?;
@@ -322,7 +322,7 @@ pub fn sign_ledger_transaction(unsigned_tx_hex: String, account_index: u32) -> R
         .map_err(|e| e.to_string())?;
 
     let api = HidApi::new().map_err(|e| e.to_string())?;
-    let device = open_ledger_device(&api).map_err(|_| "not_connected".to_string())?;
+    let device = open_ledger_device(&api)?;
 
     let mut last_response = Vec::new();
     for apdu in build_sign_tx_apdus(&unsigned_tx, account_index) {
@@ -375,7 +375,7 @@ pub fn sign_ledger_personal_message(message_hex: String, account_index: u32) -> 
         hex::decode(message_hex.trim_start_matches("0x")).map_err(|e| e.to_string())?;
 
     let api = HidApi::new().map_err(|e| e.to_string())?;
-    let device = open_ledger_device(&api).map_err(|_| "not_connected".to_string())?;
+    let device = open_ledger_device(&api)?;
 
     let mut last_response = Vec::new();
     for apdu in build_sign_personal_message_apdus(&message, account_index) {

@@ -6553,11 +6553,13 @@ Proposta A aprovada → `respond` libera slot → `vault_upsert`/`publish` ainda
 Proposta B chega nessa janela, estaciona no slot livre, sobrescreve `request` no React.
 Quando A termina, `clear()` zera o request atual (= B), descartando B sem o usuário ver.
 
-**11. `get_ledger_address` colapsa erro "access_denied" → "not_connected"**
+**11. `get_ledger_address` colapsa erro "access_denied" → "not_connected" -- FIXED Session 146**
 (`ledger.rs:224`)
-`open_ledger_device` classifica corretamente `access_denied` mas `get_ledger_address` joga
-tudo em `"not_connected"`. `ConnectLedger.tsx` nunca alcança o branch "Close Ledger Live" —
-usuário vê "Conecte o USB" pra sempre quando o fix é um clique (fechar Ledger Live).
+`open_ledger_device` já classificava corretamente `access_denied`, mas `get_ledger_address`,
+`sign_ledger_transaction` e `sign_ledger_personal_message` faziam `map_err(|_| "not_connected")`
+— colapsando o erro pra `"not_connected"` antes de chegar ao frontend. Fix: propagar erro
+direto sem `map_err`. Frontend já tinha UI pra `"access_denied"` ("Close Ledger Live / check
+USB permissions") — só nunca era alcançada.
 
 **12. `DesktopDevice` — stuck phase após erro de commit**
 (`DesktopDevice.tsx:55-141`)
