@@ -193,6 +193,13 @@ async fn vault_edit_handler(
 }
 
 fn router(router_state: SignRequestRouterState) -> Router {
+    // Nota de segurança (Sessão 146, bug #43):
+    // Nenhuma rota tem autenticação. O servidor binda em 127.0.0.1 —
+    // qualquer processo local pode forjar pedidos. Aceito deliberadamente
+    // porque localhost é inerentemente confiável (qualquer processo com
+    // acesso já tem controle total da máquina). Rotas sensíveis têm proteção
+    // adicional: /vault-edit valida pub_key + canWriteVault (bug #51),
+    // /pin normaliza app_name (bug #44).
     Router::new()
         .route("/truthid/v1/ping", get(ping))
         .route("/truthid/v1/handshake", post(handshake))

@@ -6737,7 +6737,7 @@ compara byte-a-byte contra `FACTORY_IMMUTABLES`. Se um redeploy futuro atualizar
 código de produção e esquecer as constantes, o teste falha.
 
 **43. Local signer router não tem autenticação — qualquer processo local pode forjar
-pedidos** (`local_signer_server.rs:42-46,189-198` + `vault_edit.rs:45-65`)
+pedidos -- FIXED Session 146** (`local_signer_server.rs:42-46,189-198` + `vault_edit.rs:45-65`)
 Rotas como `/truthid/v1/vault-edit` não validam origem. A porta é documentada pra
 integrações third-party mas o vault-edit assume ser a extensão first-party. Qualquer
 processo local pode injetar credenciais com aparência legítima.
