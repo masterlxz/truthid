@@ -6723,7 +6723,7 @@ UI mostra "Enviado ✓" mesmo quando `updateVault` nunca rodou.
 Se bundler não confirmar em ~60s, `transactionHash` é `null` — mas `outcome: "executed"`
 é enviado mesmo assim. Caller não tem como saber que a op ainda está pendente.
 
-**41. Ledger provider bypassa fallback de RPC do wagmi**
+**41. Ledger provider bypassa fallback de RPC do wagmi -- FIXED Session 146**
 (`connectors/ledger.ts:189-208`)
 `eth_getTransactionCount`/`eth_estimateGas` usam `fetch` direto contra `rpcUrls[0]` só,
 ignorando `fallback([mainnet.base.org, publicnode.com, drpc.org])` configurado em

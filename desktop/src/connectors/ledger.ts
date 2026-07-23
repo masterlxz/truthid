@@ -187,25 +187,31 @@ export const ledger = createConnector((config) => ({
         }
 
         // Encaminha eth_estimateGas, eth_getTransactionCount, eth_call, etc.
-        // diretamente ao RPC público via fetch — evita incompatibilidade de
-        // tipos entre custom provider e createPublicClient no JSC (WebKit).
+        // com fallback entre RPCs — mesmo padrão do `fallback()` do wagmi
+        // em wagmi.ts e do `_rpcCall` no mobile (blockchain_service.dart).
         const rpcUrls = chain.rpcUrls.default.http;
-        const url = rpcUrls[0];
-        if (!url) throw new Error(`Ledger: no RPC URL for chain ${chain.id}.`);
-
-        const response = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: params ?? [] }),
-        });
-        const json = await response.json() as { result?: unknown; error?: { message: string; code: number; data?: unknown } };
-        if (json.error) {
-          const err = new Error(json.error.message) as Error & { code?: number; data?: unknown };
-          err.code = json.error.code;
-          err.data = json.error.data;
-          throw err;
+        let lastError: Error | null = null;
+        for (const url of rpcUrls) {
+          try {
+            const response = await fetch(url, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params: params ?? [] }),
+            });
+            const json = await response.json() as { result?: unknown; error?: { message: string; code: number; data?: unknown } };
+            if (json.error) {
+              const err = new Error(json.error.message) as Error & { code?: number; data?: unknown };
+              err.code = json.error.code;
+              err.data = json.error.data;
+              throw err;
+            }
+            return json.result;
+          } catch (e) {
+            lastError = toError(e);
+            continue;
+          }
         }
-        return json.result;
+        throw lastError ?? new Error(`Ledger: all RPC URLs failed for chain ${chain.id}.`);
       } catch (e) {
         // Garante que o erro é sempre um objeto — JSC (WebKit) quebra se
         // viem fizer `"data" in err` com um primitivo (string do invoke Tauri).
