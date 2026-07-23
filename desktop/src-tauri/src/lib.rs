@@ -17,6 +17,7 @@ mod local_signer_server;
 mod pin;
 mod sign_message;
 mod sign_request;
+mod single_slot_channel;
 mod vault;
 mod vault_edit;
 
@@ -682,6 +683,16 @@ async fn respond_to_sign_request(
     sign_request::resolve(state.inner(), &id, decision).await
 }
 
+/// Retorna true se o pedido de assinatura ainda está pendente (não expirou).
+/// O frontend consulta isso antes de chamar executeViaUserOp, que gasta gas.
+#[tauri::command]
+async fn check_sign_request_valid(
+    id: String,
+    state: tauri::State<'_, std::sync::Arc<sign_request::SignRequestState>>,
+) -> Result<bool, String> {
+    Ok(sign_request::is_valid(state.inner(), &id).await)
+}
+
 #[tauri::command]
 async fn get_pending_sign_message(
     state: tauri::State<'_, std::sync::Arc<sign_message::SignMessageState>>,
@@ -878,6 +889,7 @@ pub fn run() {
             local_signer_status,
             get_pending_sign_request,
             respond_to_sign_request,
+            check_sign_request_valid,
             get_pending_sign_message,
             respond_to_sign_message,
             get_pending_pin_request,

@@ -1,27 +1,14 @@
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
-use tokio::sync::{oneshot, Mutex};
+
+use crate::single_slot_channel::{self, SingleSlotChannel};
 
 /// Tempo que um POST /truthid/v1/sign-message fica pendurado esperando o
 /// usuário aprovar/rejeitar antes de devolver 408. Mesma constante de
 /// `sign_request::SIGN_REQUEST_TIMEOUT`, mas própria deste módulo — cada
 /// canal do local_signer_server é auto-contido, sem depender um do outro.
 pub const SIGN_MESSAGE_TIMEOUT: Duration = Duration::from_secs(300);
-
-fn random_id() -> String {
-    let mut bytes = [0u8; 16];
-    rand::rngs::OsRng.fill_bytes(&mut bytes);
-    hex::encode(bytes)
-}
-
-fn now_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
-}
 
 /// `purpose` é um identificador curto, não texto livre — evita mensagens
 /// exibidas na tela de aprovação com quebras de linha ou caracteres que
@@ -56,6 +43,8 @@ pub struct SignMessagePayload {
     pub message: String,
     pub expires_at_ms: i64,
 }
+
+single_slot_channel::impl_payload_id!(SignMessagePayload);
 
 /// O que o frontend manda de volta via respond_to_sign_message, depois do
 /// usuário decidir. Ao contrário do sign-request, não existe variante
@@ -152,15 +141,8 @@ impl SignMessageOutcome {
     }
 }
 
-struct PendingMessage {
-    payload: SignMessagePayload,
-    responder: oneshot::Sender<SignMessageDecision>,
-}
-
-/// tokio::sync::Mutex (não std): o guard atravessa .await tanto em
-/// handle_incoming (espera o oneshot) quanto em resolve/current.
-#[derive(Default)]
-pub struct SignMessageState(Mutex<Option<PendingMessage>>);
+/// Tipo público do slot — determinado por SingleSlotChannel.
+pub type SignMessageState = SingleSlotChannel<SignMessagePayload, SignMessageDecision>;
 
 /// Núcleo do protocolo de aprovação — deliberadamente sem nenhuma dependência
 /// de tauri::AppHandle, mesmo espírito de sign_request::handle_incoming.
@@ -199,21 +181,17 @@ async fn handle_incoming_with_timeout(
     let message = format!("TruthID Message Signing: {}:{}", app_name, body.purpose);
 
     let (payload, rx) = {
-        let mut guard = state.0.lock().await;
-        if guard.is_some() {
-            return SignMessageOutcome::Busy;
-        }
-
         let payload = SignMessagePayload {
-            id: random_id(),
+            id: single_slot_channel::random_id(),
             app_name,
             purpose: body.purpose,
             message,
-            expires_at_ms: now_ms() + timeout.as_millis() as i64,
+            expires_at_ms: single_slot_channel::now_ms() + timeout.as_millis() as i64,
         };
-        let (tx, rx) = oneshot::channel();
-        *guard = Some(PendingMessage { payload: payload.clone(), responder: tx });
-        (payload, rx)
+        match state.try_park(payload).await {
+            Ok(ok) => ok,
+            Err(()) => return SignMessageOutcome::Busy,
+        }
     };
 
     notify(&payload);
@@ -228,10 +206,7 @@ async fn handle_incoming_with_timeout(
             SignMessageOutcome::Failed("frontend disconnected before responding".to_string())
         }
         Err(_) => {
-            // Já estourou o timeout — limpa o slot. Se respond_to_sign_message
-            // for chamado depois disso com o mesmo id, resolve() não vai achar
-            // o pedido e devolve erro (o frontend trata como "já expirou").
-            state.0.lock().await.take();
+            state.clear().await;
             SignMessageOutcome::TimedOut
         }
     }
@@ -241,7 +216,7 @@ async fn handle_incoming_with_timeout(
 /// foco no momento do app.emit (o frontend também consulta isso ao montar,
 /// além de escutar o evento).
 pub async fn current(state: &SignMessageState) -> Option<SignMessagePayload> {
-    state.0.lock().await.as_ref().map(|p| p.payload.clone())
+    state.current().await
 }
 
 /// Usado por respond_to_sign_message, depois do usuário aprovar/rejeitar.
@@ -253,18 +228,7 @@ pub async fn resolve(
     id: &str,
     decision: SignMessageDecision,
 ) -> Result<(), String> {
-    let mut guard = state.0.lock().await;
-    match guard.take() {
-        Some(pending) if pending.payload.id == id => {
-            let _ = pending.responder.send(decision);
-            Ok(())
-        }
-        Some(pending) => {
-            *guard = Some(pending);
-            Err("id does not match the currently pending sign-message request".to_string())
-        }
-        None => Err("no pending sign-message request (it may have already expired)".to_string()),
-    }
+    state.resolve(id, decision).await
 }
 
 #[cfg(test)]

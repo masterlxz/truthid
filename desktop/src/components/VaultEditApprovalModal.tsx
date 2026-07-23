@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { Address } from "viem";
 import { useIncomingVaultEditRequest } from "../hooks/useIncomingVaultEditRequest";
+import { useRequestExpiry } from "../hooks/useRequestExpiry";
 import { publishVaultViaDeviceKey } from "../services/vaultPublishViaDeviceKey";
 import { respondToRequest } from "../services/respondToRequest";
 import type { VaultEntry } from "../types";
@@ -19,23 +20,14 @@ export function VaultEditApprovalModal({
   smartAccountAddress?: Address | null;
 }) {
   const { request, clear } = useIncomingVaultEditRequest();
-  const [expired, setExpired] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [stage, setStage] = useState<"idle" | "publishing" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
+  const expired = useRequestExpiry(request?.expiresAtMs ?? null);
 
-  // Failsafe local: o Rust já libera o pedido sozinho aos 5min (408 pra
-  // extensão), isso só fecha o modal de quem ficou olhando a tela.
+  // Quando o pedido muda (novo ou cancelado), reseta o estado do modal.
   useEffect(() => {
-    if (!request) { setExpired(false); setShowPassword(false); setStage("idle"); setError(null); return; }
-    setExpired(Date.now() > request.expiresAtMs);
-    const timer = setInterval(() => {
-      if (Date.now() > request.expiresAtMs) {
-        setExpired(true);
-        clearInterval(timer);
-      }
-    }, 1000);
-    return () => clearInterval(timer);
+    if (!request) { setShowPassword(false); setStage("idle"); setError(null); }
   }, [request]);
 
   if (!request) return null;

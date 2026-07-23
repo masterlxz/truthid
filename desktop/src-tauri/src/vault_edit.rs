@@ -1,9 +1,8 @@
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
-use tokio::sync::{oneshot, Mutex};
 
+use crate::single_slot_channel::{self, SingleSlotChannel};
 use crate::vault;
 
 /// Tempo que um POST /truthid/v1/vault-edit fica pendurado esperando o
@@ -14,19 +13,6 @@ use crate::vault;
 /// do Mobile (`pin_approval_screen.dart`: "sem sistema de cota/autorização
 /// persistente... cada pedido cross-device pede aprovação individual").
 pub const VAULT_EDIT_REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
-
-fn random_id() -> String {
-    let mut bytes = [0u8; 16];
-    rand::rngs::OsRng.fill_bytes(&mut bytes);
-    hex::encode(bytes)
-}
-
-fn now_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
-}
 
 // ---------------------------------------------------------------------------
 // Tipos do protocolo HTTP
@@ -86,6 +72,8 @@ pub struct VaultEditApprovalPayload {
     pub expires_at_ms: i64,
     pub pub_key: Option<String>,
 }
+
+single_slot_channel::impl_payload_id!(VaultEditApprovalPayload);
 
 /// Espelho de `VaultEditRequestBody` só pra serialização (`Serialize`) — o
 /// corpo de entrada (`VaultEditRequestBody`) só precisa `Deserialize`, mas o
@@ -196,17 +184,8 @@ impl VaultEditOutcome {
 // Núcleo do protocolo
 // ---------------------------------------------------------------------------
 
-struct PendingVaultEdit {
-    payload: VaultEditApprovalPayload,
-    responder: oneshot::Sender<VaultEditDecision>,
-}
-
-/// Bem mais simples que `PinState`: sem cota, sem arquivo de autorizações —
-/// só o slot de pedido pendente (um por vez, mesma regra do `/pin`).
-#[derive(Default)]
-pub struct VaultEditState {
-    pending: Mutex<Option<PendingVaultEdit>>,
-}
+/// Tipo público do slot — determinado por SingleSlotChannel.
+pub type VaultEditState = SingleSlotChannel<VaultEditApprovalPayload, VaultEditDecision>;
 
 /// Núcleo do protocolo — sem dependência de tauri::AppHandle, mesmo espírito
 /// de pin::handle_incoming. Ao contrário do `/pin`, a resposta HTTP **não
@@ -261,25 +240,18 @@ async fn handle_incoming_with_timeout(
     }
 
     let (payload, rx) = {
-        let mut guard = state.pending.lock().await;
-        if guard.is_some() {
-            return VaultEditOutcome::Busy;
-        }
-
         let pub_key = body.pub_key.clone();
 
         let payload = VaultEditApprovalPayload {
-            id: random_id(),
+            id: single_slot_channel::random_id(),
             entry: body.into(),
-            expires_at_ms: now_ms() + timeout.as_millis() as i64,
+            expires_at_ms: single_slot_channel::now_ms() + timeout.as_millis() as i64,
             pub_key,
         };
-        let (tx, rx) = oneshot::channel();
-        *guard = Some(PendingVaultEdit {
-            payload: payload.clone(),
-            responder: tx,
-        });
-        (payload, rx)
+        match state.try_park(payload).await {
+            Ok(ok) => ok,
+            Err(()) => return VaultEditOutcome::Busy,
+        }
     };
 
     notify(&payload);
@@ -291,7 +263,7 @@ async fn handle_incoming_with_timeout(
             "frontend disconnected before responding".to_string(),
         ),
         Err(_) => {
-            state.pending.lock().await.take();
+            state.clear().await;
             VaultEditOutcome::TimedOut
         }
     }
@@ -299,12 +271,7 @@ async fn handle_incoming_with_timeout(
 
 /// Usado por get_pending_vault_edit_request.
 pub async fn current(state: &VaultEditState) -> Option<VaultEditApprovalPayload> {
-    state
-        .pending
-        .lock()
-        .await
-        .as_ref()
-        .map(|p| p.payload.clone())
+    state.current().await
 }
 
 /// Usado por respond_to_vault_edit_request, depois do usuário aprovar/rejeitar.
@@ -313,18 +280,7 @@ pub async fn resolve(
     id: &str,
     decision: VaultEditDecision,
 ) -> Result<(), String> {
-    let mut guard = state.pending.lock().await;
-    match guard.take() {
-        Some(pending) if pending.payload.id == id => {
-            let _ = pending.responder.send(decision);
-            Ok(())
-        }
-        Some(pending) => {
-            *guard = Some(pending);
-            Err("id does not match the currently pending vault edit request".to_string())
-        }
-        None => Err("no pending vault edit request (it may have already expired)".to_string()),
-    }
+    state.resolve(id, decision).await
 }
 
 #[cfg(test)]

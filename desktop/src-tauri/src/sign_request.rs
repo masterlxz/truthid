@@ -1,9 +1,9 @@
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use axum::http::StatusCode;
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
-use tokio::sync::{oneshot, Mutex};
+
+use crate::single_slot_channel::{self, SingleSlotChannel};
 
 /// Tempo que um POST /truthid/v1/sign-request fica pendurado esperando o
 /// usuário aprovar/rejeitar antes de devolver 408. Mora no Rust (não no
@@ -13,19 +13,6 @@ pub const SIGN_REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
 
 fn default_value() -> String {
     "0".to_string()
-}
-
-fn random_id() -> String {
-    let mut bytes = [0u8; 16];
-    rand::rngs::OsRng.fill_bytes(&mut bytes);
-    hex::encode(bytes)
-}
-
-fn now_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
 }
 
 #[derive(Deserialize, Clone)]
@@ -58,6 +45,8 @@ pub struct SignRequestPayload {
     pub function_signature: String,
     pub expires_at_ms: i64,
 }
+
+single_slot_channel::impl_payload_id!(SignRequestPayload);
 
 /// O que o frontend manda de volta via respond_to_sign_request, depois do
 /// usuário decidir (ou depois de tentar executar e falhar).
@@ -160,15 +149,9 @@ impl SignRequestOutcome {
     }
 }
 
-struct PendingRequest {
-    payload: SignRequestPayload,
-    responder: oneshot::Sender<SignRequestDecision>,
-}
-
-/// tokio::sync::Mutex (não std): o guard atravessa .await tanto em
-/// handle_incoming (espera o oneshot) quanto em resolve/current.
-#[derive(Default)]
-pub struct SignRequestState(Mutex<Option<PendingRequest>>);
+/// Tipo público do slot — usado por lib.rs como `State<'_, ...>` e por
+/// local_signer_server.rs como `Arc<...>`.
+pub type SignRequestState = SingleSlotChannel<SignRequestPayload, SignRequestDecision>;
 
 /// Núcleo do protocolo de aprovação — deliberadamente sem nenhuma dependência
 /// de tauri::AppHandle. `notify` é injetado como closure só pra poder testar
@@ -199,23 +182,19 @@ async fn handle_incoming_with_timeout(
     }
 
     let (payload, rx) = {
-        let mut guard = state.0.lock().await;
-        if guard.is_some() {
-            return SignRequestOutcome::Busy;
-        }
-
         let payload = SignRequestPayload {
-            id: random_id(),
+            id: single_slot_channel::random_id(),
             app_name: body.app_name,
             dest: body.dest,
             value: body.value,
             call_data: body.call_data,
             function_signature: body.function_signature,
-            expires_at_ms: now_ms() + timeout.as_millis() as i64,
+            expires_at_ms: single_slot_channel::now_ms() + timeout.as_millis() as i64,
         };
-        let (tx, rx) = oneshot::channel();
-        *guard = Some(PendingRequest { payload: payload.clone(), responder: tx });
-        (payload, rx)
+        match state.try_park(payload).await {
+            Ok(ok) => ok,
+            Err(()) => return SignRequestOutcome::Busy,
+        }
     };
 
     notify(&payload);
@@ -230,10 +209,7 @@ async fn handle_incoming_with_timeout(
             SignRequestOutcome::Failed("frontend disconnected before responding".to_string())
         }
         Err(_) => {
-            // Já estourou o timeout — limpa o slot. Se respond_to_sign_request
-            // for chamado depois disso com o mesmo id, resolve() não vai achar
-            // o pedido e devolve erro (o frontend trata como "já expirou").
-            state.0.lock().await.take();
+            state.clear().await;
             SignRequestOutcome::TimedOut
         }
     }
@@ -243,7 +219,15 @@ async fn handle_incoming_with_timeout(
 /// sem foco no momento do app.emit (o frontend também consulta isso ao
 /// montar, além de escutar o evento).
 pub async fn current(state: &SignRequestState) -> Option<SignRequestPayload> {
-    state.0.lock().await.as_ref().map(|p| p.payload.clone())
+    state.current().await
+}
+
+/// Usado pelo frontend antes de executar a UserOp (gasta gas). Retorna true
+/// se o pedido ainda está pendente (não expirou no lado Rust). Evita que
+/// uma aprovação tardia (janela minimizada, setInterval throttled) envie uma
+/// UserOperation pra Mainnet depois do caller já ter recebido 408.
+pub async fn is_valid(state: &SignRequestState, id: &str) -> bool {
+    state.is_valid(id).await
 }
 
 /// Usado por respond_to_sign_request, depois do usuário aprovar/rejeitar (ou
@@ -255,21 +239,7 @@ pub async fn resolve(
     id: &str,
     decision: SignRequestDecision,
 ) -> Result<(), String> {
-    let mut guard = state.0.lock().await;
-    match guard.take() {
-        Some(pending) if pending.payload.id == id => {
-            // Erro só acontece se handle_incoming já desistiu (timeout) e
-            // ninguém mais está do outro lado do oneshot — ignorável, o
-            // outcome já foi decidido como TimedOut de qualquer forma.
-            let _ = pending.responder.send(decision);
-            Ok(())
-        }
-        Some(pending) => {
-            *guard = Some(pending);
-            Err("id does not match the currently pending sign request".to_string())
-        }
-        None => Err("no pending sign request (it may have already expired)".to_string()),
-    }
+    state.resolve(id, decision).await
 }
 
 #[cfg(test)]

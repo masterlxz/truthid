@@ -3,7 +3,7 @@
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
 > Última atualização: 2026-07-22 (Sessão 146 — Code Review: 43 bugs corrigidos, 9 pendentes)
-> ⚠️ **REMANESCENTES (9 bugs de média complexidade + 6 contratos)**: #4 (UserOp após timeout), #15 (4 hooks factory), #16 (4 modais useRequestExpiry), #17 (4 canais Rust trait), #18 (builder pattern), #19 (helpers $HOME/.truthid), #22 (vault_edit struct merge), #26 (cache vault decrypt), #34 (PBKDF2 sem teto). Contratos: C1-C6. 43 bugs corrigidos, 9 pendentes + 6 contratos.
+> ⚠️ **REMANESCENTES (5 bugs de média complexidade + 6 contratos)**: #18 (builder pattern), #19 (helpers $HOME/.truthid), #22 (vault_edit struct merge), #26 (cache vault decrypt), #34 (PBKDF2 sem teto). Contratos: C1-C6. 47 bugs corrigidos, 5 pendentes + 6 contratos.
 
 ---
 
@@ -6970,6 +6970,33 @@ para `desktop/src/config/vaultKey.ts` (novo) e importada por `CreateIdentity.tsx
 `VaultManagement.tsx` — se alguém trocar pra v2, um grep acha a origem única.
 
 **Verificação**: `npx tsc --noEmit` limpo, `npx vitest run` 93/93.
+
+---
+
+### Sessão 147 — 2026-07-22: Bug #4 — UserOp após timeout (corrigido)
+
+**Bug #4 do `/code-review max` (Sessão 141)**: `SignRequestModal.handleApprove()` chamava
+`executeViaUserOp()` (gasta gas na Mainnet) antes de verificar se o pedido já tinha expirado
+no lado Rust. O `setInterval` de 1s é throttled quando a janela está minimizada, então o
+usuário podia clicar Approve após o timeout de 300s do Rust, enviando uma UserOp real pra
+Mainnet mesmo com o caller já tendo recebido 408 e desistido.
+
+**Correção** (3 arquivos):
+
+1. **`desktop/src-tauri/src/sign_request.rs`** — nova função `is_valid(state, id) -> bool`:
+   checa se o `PendingRequest` ainda existe no `Mutex` e se o `id` bate. Se o timeout já
+   limpou o slot, retorna `false`.
+
+2. **`desktop/src-tauri/src/lib.rs`** — novo comando `check_sign_request_valid` que chama
+   `sign_request::is_valid()`, registrado no `.invoke_handler()`.
+
+3. **`desktop/src/components/SignRequestModal.tsx`** — `handleApprove()` agora:
+   - Checa `Date.now() > request.expiresAtMs` (defesa local, não confia no state stale)
+   - Invoca `check_sign_request_valid` no Rust (fonte da verdade do timeout)
+   - Se qualquer um falhar: `setError("This request has expired. No UserOp was sent.")`,
+     `setStage("idle")`, `return` sem chamar `executeViaUserOp`
+
+**Verificação**: `cargo test sign_request` (7/7), `tsc --noEmit` limpo, `vitest` (95/95).
 
 ---
 

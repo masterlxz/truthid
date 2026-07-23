@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useIncomingPinRequest } from "../hooks/useIncomingPinRequest";
+import { useRequestExpiry } from "../hooks/useRequestExpiry";
 import { respondToRequest } from "../services/respondToRequest";
 
 /**
@@ -13,22 +14,8 @@ import { respondToRequest } from "../services/respondToRequest";
  */
 export function PinApprovalModal() {
   const { request, clear } = useIncomingPinRequest();
-  const [expired, setExpired] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Failsafe local: o Rust já libera o pedido sozinho aos 5min (408 pro app
-  // terceiro), isso só fecha o modal de quem ficou olhando a tela.
-  useEffect(() => {
-    if (!request) { setExpired(false); return; }
-    setExpired(Date.now() > request.expiresAtMs);
-    const timer = setInterval(() => {
-      if (Date.now() > request.expiresAtMs) {
-        setExpired(true);
-        clearInterval(timer);
-      }
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [request]);
+  const expired = useRequestExpiry(request?.expiresAtMs ?? null);
 
   if (!request) return null;
 

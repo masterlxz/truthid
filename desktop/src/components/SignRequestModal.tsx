@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { Address } from "viem";
 import { decodeFunctionData, formatEther, parseAbi, toFunctionSelector } from "viem";
 import { useIncomingSignRequest, type IncomingSignRequest } from "../hooks/useIncomingSignRequest";
+import { useRequestExpiry } from "../hooks/useRequestExpiry";
 import { executeViaUserOp } from "../services/userOpExecutor";
 import { respondToRequest } from "../services/respondToRequest";
 import { useWalletModal } from "../contexts/WalletModalContext";
@@ -46,21 +47,11 @@ export function SignRequestModal({ smartAccountAddress }: { smartAccountAddress:
   const { openConnectModal } = useWalletModal();
   const [stage, setStage] = useState<"idle" | "signing" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
-  const [expired, setExpired] = useState(false);
+  const expired = useRequestExpiry(request?.expiresAtMs ?? null);
 
-  // Failsafe local: o Rust já libera o pedido sozinho aos 5min (408 pro app
-  // terceiro), isso só fecha o modal de quem ficou olhando a tela — não
-  // depende disso pra segurança.
+  // Quando o pedido muda (novo ou cancelado), reseta o estado do modal.
   useEffect(() => {
-    if (!request) { setExpired(false); setStage("idle"); setError(null); return; }
-    setExpired(Date.now() > request.expiresAtMs);
-    const timer = setInterval(() => {
-      if (Date.now() > request.expiresAtMs) {
-        setExpired(true);
-        clearInterval(timer);
-      }
-    }, 1000);
-    return () => clearInterval(timer);
+    if (!request) { setStage("idle"); setError(null); }
   }, [request]);
 
   if (!request) return null;
@@ -77,12 +68,29 @@ export function SignRequestModal({ smartAccountAddress }: { smartAccountAddress:
   async function handleApprove() {
     if (!request) return;
     if (!smartAccountAddress) {
-      // Não resolve o pedido — a wallet só não está conectada ainda, o
-      // usuário pode tentar Approve de novo depois de conectar, o mesmo
-      // pedido continua pendurado no Rust esperando.
       openConnectModal();
       return;
     }
+
+    // Checa expiração local antes de gastar gas — cobre o caso do
+    // setInterval não ter disparado (janela minimizada, webview throttle).
+    if (Date.now() > request.expiresAtMs) {
+      setError("This request has expired. No UserOp was sent.");
+      setStage("idle");
+      return;
+    }
+
+    // Checa no Rust se o pedido ainda está pendente (não expirou no lado
+    // servidor). Fonte da verdade, já que o timeout de 300s é server-side.
+    const stillValid = await invoke<boolean>("check_sign_request_valid", {
+      id: request.id,
+    });
+    if (!stillValid) {
+      setError("This request has expired. No UserOp was sent.");
+      setStage("idle");
+      return;
+    }
+
     setStage("signing");
     setError(null);
     try {

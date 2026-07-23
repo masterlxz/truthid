@@ -1,9 +1,10 @@
 use std::path::PathBuf;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
-use rand::RngCore;
 use serde::{Deserialize, Serialize};
-use tokio::sync::{oneshot, Mutex};
+use tokio::sync::Mutex;
+
+use crate::single_slot_channel::{self, SingleSlotChannel};
 
 /// Tempo que um POST /truthid/v1/pin fica pendurado esperando o usuário
 /// aprovar/rejeitar antes de devolver 408 — só no caminho de aprovação (app
@@ -21,17 +22,8 @@ const DEFAULT_DAILY_LIMIT: u32 = 50;
 /// de fuso nenhum, deliberadamente, pra não depender de timezone local.
 const DAY_MS: i64 = 24 * 60 * 60 * 1000;
 
-fn random_id() -> String {
-    let mut bytes = [0u8; 16];
-    rand::rngs::OsRng.fill_bytes(&mut bytes);
-    hex::encode(bytes)
-}
-
 fn now_ms() -> i64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_millis() as i64)
-        .unwrap_or(0)
+    single_slot_channel::now_ms()
 }
 
 // ---------------------------------------------------------------------------
@@ -69,6 +61,8 @@ pub struct PinApprovalPayload {
     pub daily_limit: u32,
     pub expires_at_ms: i64,
 }
+
+single_slot_channel::impl_payload_id!(PinApprovalPayload);
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase", tag = "outcome")]
@@ -242,11 +236,6 @@ fn reset_if_new_day(auth: &mut PinAuthorization, now: i64) {
 // Núcleo do protocolo
 // ---------------------------------------------------------------------------
 
-struct PendingPin {
-    payload: PinApprovalPayload,
-    responder: oneshot::Sender<PinDecision>,
-}
-
 /// tokio::sync::Mutex (não std): os guards atravessam .await tanto em
 /// handle_incoming (espera o oneshot) quanto no caminho autorizado (grava o
 /// arquivo de autorizações). `pending` e `quota` são locks separados —
@@ -257,7 +246,7 @@ struct PendingPin {
 /// módulos deste crate (vault.rs, ipfs.rs, bundler.rs) também leem
 /// $HOME/.truthid/... durante os próprios testes.
 pub struct PinState {
-    pending: Mutex<Option<PendingPin>>,
+    pub pending: SingleSlotChannel<PinApprovalPayload, PinDecision>,
     quota: Mutex<()>,
     authorizations_path: PathBuf,
 }
@@ -265,7 +254,7 @@ pub struct PinState {
 impl Default for PinState {
     fn default() -> Self {
         Self {
-            pending: Mutex::new(None),
+            pending: SingleSlotChannel::default(),
             quota: Mutex::new(()),
             authorizations_path: default_authorizations_path(),
         }
@@ -280,7 +269,7 @@ impl PinState {
     /// abaixo, sobre por que isso não pode ser $HOME global).
     pub(crate) fn with_authorizations_path(path: PathBuf) -> Self {
         Self {
-            pending: Mutex::new(None),
+            pending: SingleSlotChannel::default(),
             quota: Mutex::new(()),
             authorizations_path: path,
         }
@@ -459,24 +448,17 @@ where
     };
 
     let (payload, rx) = {
-        let mut guard = state.pending.lock().await;
-        if guard.is_some() {
-            return PinOutcome::Busy;
-        }
-
         let payload = PinApprovalPayload {
-            id: random_id(),
+            id: single_slot_channel::random_id(),
             app_name: app_name.clone(),
             reason,
             daily_limit: DEFAULT_DAILY_LIMIT,
-            expires_at_ms: now_ms() + timeout.as_millis() as i64,
+            expires_at_ms: single_slot_channel::now_ms() + timeout.as_millis() as i64,
         };
-        let (tx, rx) = oneshot::channel();
-        *guard = Some(PendingPin {
-            payload: payload.clone(),
-            responder: tx,
-        });
-        (payload, rx)
+        match state.pending.try_park(payload).await {
+            Ok(ok) => ok,
+            Err(()) => return PinOutcome::Busy,
+        }
     };
 
     notify(&payload);
@@ -499,7 +481,7 @@ where
         Ok(Ok(PinDecision::Rejected)) => PinOutcome::Rejected,
         Ok(Err(_)) => PinOutcome::Failed("frontend disconnected before responding".to_string()),
         Err(_) => {
-            state.pending.lock().await.take();
+            state.pending.clear().await;
             PinOutcome::TimedOut
         }
     }
@@ -507,28 +489,12 @@ where
 
 /// Usado por get_pending_pin_request.
 pub async fn current(state: &PinState) -> Option<PinApprovalPayload> {
-    state
-        .pending
-        .lock()
-        .await
-        .as_ref()
-        .map(|p| p.payload.clone())
+    state.pending.current().await
 }
 
 /// Usado por respond_to_pin_request, depois do usuário aprovar/rejeitar.
 pub async fn resolve(state: &PinState, id: &str, decision: PinDecision) -> Result<(), String> {
-    let mut guard = state.pending.lock().await;
-    match guard.take() {
-        Some(pending) if pending.payload.id == id => {
-            let _ = pending.responder.send(decision);
-            Ok(())
-        }
-        Some(pending) => {
-            *guard = Some(pending);
-            Err("id does not match the currently pending pin request".to_string())
-        }
-        None => Err("no pending pin request (it may have already expired)".to_string()),
-    }
+    state.pending.resolve(id, decision).await
 }
 
 #[cfg(test)]
@@ -571,7 +537,7 @@ mod tests {
     /// entre módulos. `PinState::with_authorizations_path` (test-only) injeta
     /// esse caminho em vez de deixar o módulo resolver $HOME sozinho.
     fn temp_authorizations_path() -> PathBuf {
-        std::env::temp_dir().join(format!("truthid-pin-test-{}.json", random_id()))
+        std::env::temp_dir().join(format!("truthid-pin-test-{}.json", single_slot_channel::random_id()))
     }
 
     #[tokio::test]
