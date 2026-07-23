@@ -205,6 +205,18 @@ contract RecoveryManager {
     /// Executa a recovery. Qualquer um pode chamar após threshold atingido + 7 dias.
     /// Separar "aprovar" de "executar" é intencional: o beneficiado pode não
     /// estar online no exato momento em que o último guardian aprova.
+    ///
+    /// Defesa contra reentrância (achado C1, /code-review Sessão 140):
+    /// O controller antigo (identity.controller) é quem recebe a chamada
+    /// externa emergencyWithdraw — exatamente o endereço que, no cenário
+    /// de recovery, pode estar comprometido por um atacante. Seguimos o
+    /// padrão Checks-Effects-Interactions: (1) todas as checagens, (2)
+    /// gravamos todo o estado final ANTES de qualquer chamada externa,
+    /// (3) só então fazemos as interações — usando uma cópia `memory` do
+    /// newController honesto, não o ponteiro storage (que um reentrante
+    /// poderia tentar sobrescrever). Se o controller atacado reentrar
+    /// proposeRecovery durante o emergencyWithdraw, ele reverte com
+    /// GuardiansNotConfigured: os flags já foram limpos no passo 2.
     function executeRecovery(string calldata username) external {
         IdentityRegistry.Identity memory identity = _identityRegistry.getIdentity(username);
         uint256 identityId = identity.id;
@@ -221,7 +233,24 @@ contract RecoveryManager {
             revert TimelockNotExpired(proposal.proposedAt, executeAfter);
         }
 
+        // --- EFFECTS: todo o estado final gravado antes de qualquer external call ---
+
+        // Cópia memory do newController honesto. Daqui pra frente nunca mais
+        // lemos proposal.newController do storage — um reentrante poderia
+        // sobrescrever esse slot. Mesmo que conseguisse, o recoverController
+        // abaixo usaria este valor memory, não o storage.
+        address newController = proposal.newController;
+
         proposal.executed = true;
+
+        // Limpa os guardians ANTES da chamada externa: se o controller
+        // atacado reentrar proposeRecovery durante o emergencyWithdraw,
+        // ele reverte aqui (GuardiansNotConfigured) — sem segunda proposta
+        // fantasma pendurada por 7 dias.
+        _clearGuardianFlags(identityId, config.guardians);
+        delete _guardianConfigs[identityId];
+
+        // --- INTERACTIONS: só agora, com o estado já finalizado ---
 
         // Tenta transferir o saldo da smart account antiga (TruthIDAccount)
         // para o novo controller. identity.controller eh uma copia memory —
@@ -230,24 +259,16 @@ contract RecoveryManager {
         // TruthIDAccount), a chamada eh pulada — Solidity 0.8 insere extcodesize
         // antes de high-level calls, entao nao da pra confiar soh no try/catch.
         if (identity.controller.code.length > 0) {
-            try TruthIDAccount(payable(identity.controller)).emergencyWithdraw(proposal.newController) {
+            try TruthIDAccount(payable(identity.controller)).emergencyWithdraw(newController) {
                 // Fundos migrados da smart account antiga para o novo controller.
             } catch {
                 // Nao eh uma TruthIDAccount valida — recovery segue sem migrar fundos.
             }
         }
 
-        _identityRegistry.recoverController(username, proposal.newController);
+        _identityRegistry.recoverController(username, newController);
 
-        // Os guardians antigos não devem manter poder sobre o novo controller —
-        // sem isso, um guardian cúmplice de um golpe contra o dono anterior
-        // continuaria podendo propor recovery contra a vítima já recuperada.
-        // O novo controller precisa chamar configureGuardians() para reativar
-        // a recovery social com guardians de sua própria confiança.
-        _clearGuardianFlags(identityId, config.guardians);
-        delete _guardianConfigs[identityId];
-
-        emit RecoveryExecuted(identityId, proposal.newController);
+        emit RecoveryExecuted(identityId, newController);
     }
 
     /// Cancela a proposta ativa. Só o controller atual pode cancelar.

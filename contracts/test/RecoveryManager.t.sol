@@ -8,6 +8,36 @@ import {TruthIDAccountFactory} from "../src/TruthIDAccountFactory.sol";
 import {TruthIDAccount} from "../src/TruthIDAccount.sol";
 import {IdentityConsentHelper} from "./IdentityConsentHelper.sol";
 
+// Contrato atacante (auxiliar do teste de reentrância C1, /code-review Sessão 140):
+// finge ser uma TruthIDAccount (tem emergencyWithdraw com o mesmo seletor) e,
+// quando chamado, tenta reentrar proposeRecovery pra sobrescrever o newController
+// honesto aprovado pelos guardians. Precisa ficar fora do RecoveryManagerTest.
+contract ReentrancyAttacker {
+    RecoveryManager public rm;
+    string public username;
+    address public injected;
+
+    function arm(RecoveryManager _rm, string calldata _username, address _injected) external {
+        rm = _rm;
+        username = _username;
+        injected = _injected;
+    }
+
+    // Seletor igual ao TruthIDAccount.emergencyWithdraw(address) — o try/catch
+    // em executeRecovery enxerga este contrato como "tem código" (code.length > 0)
+    // e chama esta função. Aqui o atacante tenta o sequestro: sobrescrever a
+    // proposta com o seu próprio endereço. Antes do fix, proposal.executed já
+    // era true mas o guard em proposeRecovery era `!executed && !cancelled` —
+    // passava. Depois do fix, _guardianConfigs já foi deletado → reverte com
+    // GuardiansNotConfigured.
+    function emergencyWithdraw(address) external {
+        rm.proposeRecovery(username, injected);
+    }
+
+    // Recebe ETH caso o emergencyWithdraw legítimo tente transferir saldo.
+    receive() external payable {}
+}
+
 contract RecoveryManagerTest is Test, IdentityConsentHelper {
     IdentityRegistry public identityRegistry;
     RecoveryManager public recoveryManager;
@@ -746,5 +776,60 @@ contract RecoveryManagerTest is Test, IdentityConsentHelper {
         // Confirma que o controller mudou de fato.
         IdentityRegistry.Identity memory recovered = identityRegistry.getIdentity("alice.id");
         assertEq(recovered.controller, aliceNewWallet);
+    }
+
+    // -----------------------------------------------------------------
+    // Reentrância — achado C1 do /code-review (Sessão 140):
+    // Um controller comprometido (contrato malicioso) reentra
+    // proposeRecovery durante o emergencyWithdraw, tentando sobrescrever
+    // o newController honesto aprovado pelos guardians. Antes do fix,
+    // o sequestro funcionava porque o slot storage era lido de novo
+    // DEPOIS da chamada externa. Depois do fix (CEI + cópia memory),
+    // a reentrância reverte (guardians já deletados) e o valor honesto
+    // é usado mesmo se o slot for sobrescrito.
+    // O contrato ReentrancyAttacker está definido no topo deste arquivo
+    // (precisa ser um contract separado, não pode ser aninhado).
+    // -----------------------------------------------------------------
+
+    function test_ExecuteRecovery_BlocksReentrancy_ControllerCompromised() public {
+        // Cenário: a wallet da Alice foi comprometida e transferida pra um
+        // contrato atacante. Os guardians legítimos resgatam via recovery.
+        _configureAliceGuardians();
+
+        // Deploya o atacante e "transfere" o controle pra ele (simula o
+        // comprometimento — no mundo real seria o atacante quem chamou
+        // transferController após roubar a chave da Alice).
+        ReentrancyAttacker attacker = new ReentrancyAttacker();
+        address injected = makeAddr("attacker-injected-controller");
+        attacker.arm(recoveryManager, "alice.id", injected);
+
+        vm.prank(alice);
+        identityRegistry.transferController("alice.id", address(attacker));
+
+        // Guardians propõe recovery pro endereco honesto e aprovam 3-de-5.
+        address honestWallet = aliceNewWallet;
+        vm.prank(guardian1);
+        recoveryManager.proposeRecovery("alice.id", honestWallet);
+        _collectThreeApprovals();
+        vm.warp(block.timestamp + 7 days + 1);
+
+        // Executa. O atacante vai reentrar proposeRecovery(injected) durante
+        // o emergencyWithdraw — mas deve falhar (guardians deletados) e a
+        // recovery deve usar o honestWallet aprovado.
+        recoveryManager.executeRecovery("alice.id");
+
+        // Assert principal: controller é o honesto, não o injetado pelo atacante.
+        IdentityRegistry.Identity memory recovered = identityRegistry.getIdentity("alice.id");
+        assertEq(recovered.controller, honestWallet, "reentrancy sequestrou o controller");
+
+        // Defesa em profundidade: nenhuma "proposta fantasma" ficou pendurada.
+        // - Segunda chamada a executeRecovery reverte (já executada).
+        vm.expectRevert(RecoveryManager.ProposalAlreadyExecuted.selector);
+        recoveryManager.executeRecovery("alice.id");
+
+        // - proposeRecovery reverte (guardians não configurados — foram limpos).
+        vm.prank(guardian1);
+        vm.expectRevert(abi.encodeWithSelector(RecoveryManager.GuardiansNotConfigured.selector, 1));
+        recoveryManager.proposeRecovery("alice.id", injected);
     }
 }

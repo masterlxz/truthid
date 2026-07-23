@@ -2,8 +2,8 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-23 (Sessão 146 — Code Review: 48 bugs corrigidos, 4 pendentes)
-> ⚠️ **REMANESCENTES (1 bug de média complexidade + 6 contratos)**: #34 (PBKDF2 sem teto). Contratos: C1-C6. 51 bugs corrigidos, 1 pendente + 6 contratos.
+> Última atualização: 2026-07-23 (Sessão 150 — C1 reentrância corrigido no código; deploy pendente)
+> ⚠️ **REMANESCENTES**: **Desktop** — 52/52 bugs do `/code-review max` corrigidos (0 pendentes). **Contratos** — 9 achados da review da Sessão 140 (C1-C9): **C1 corrigido no código (deploy pendente)**; C2-C9 pendentes. **C1 e C2 são CRÍTICOS** em produção na Base Mainnet sem proxy — decisão: corrigir C1/C2 (+ provável C3-C6) e fazer **uma única cascata de redeploy** no fim.
 
 ---
 
@@ -6308,8 +6308,7 @@ replay, confiança cross-contract, DoS/gas, edge cases, gaps de teste) em vez do
 de ângulos usado nos reviews de app. Achados mais graves verificados por leitura direta do
 código (não só corroboração entre agentes) antes de entrar na lista.
 
-#### 🔴 CRÍTICO 1 — Reentrância real em `RecoveryManager.executeRecovery` permite sequestrar o
-destino da recovery, contornando aprovação de guardians (`contracts/src/RecoveryManager.sol:212-251`)
+#### 🔴 CRÍTICO 1 — Reentrância real em `RecoveryManager.executeRecovery` permite sequestrar o destino da recovery, contornando aprovação de guardians (`contracts/src/RecoveryManager.sol:212-251`) -- FIXED Session 150 (código; deploy pendente)
 
 Achado de forma independente por **dois agentes diferentes** (reentrância e controle de acesso) e
 **verificado por leitura direta do código**. `proposal` (linha 212) é um ponteiro `storage`, não
@@ -6327,10 +6326,33 @@ aprovaremos. `_identityRegistry.recoverController` entrega a identidade pro atac
 disso, deixando uma "proposta fantasma" criada durante a reentrância que fica executável por
 **qualquer um, sem nenhuma aprovação de guardian**, 7 dias depois — um segundo sequestro completo
 sem precisar de mais nada. Nenhum teste em `RecoveryManager.t.sol` exercita um controller
-adversarial reentrando; não existe `nonReentrant` em lugar nenhum do código. Fix mínimo: cachear
-`proposal.newController` numa variável `memory` antes da chamada externa (ou reordenar pra ler
-tudo que precisa antes de qualquer external call) + considerar bloquear `newController` ser um
-contrato, ou adicionar guard de reentrância.
+adversarial reentrando; não existe `nonReentrant` em lugar nenhum do código.
+
+**Resolvido — Sessão 150 (código; deploy pendente).** `executeRecovery` reescrito seguindo
+**Checks-Effects-Interactions**: (1) todas as checagens (threshold, timelock) no início;
+(2) **effects antes de qualquer external call** — `address newController = proposal.newController`
+(cópia `memory` do valor honesto), `proposal.executed = true`, `_clearGuardianFlags(...)` e
+`delete _guardianConfigs[identityId]` (movidos pra cima); (3) **interactions só depois** —
+`emergencyWithdraw(newController)` e `recoverController(username, newController)`, ambos lendo
+a cópia `memory`, não o slot storage. Defesa em profundidade: se o controller atacado reentrar
+`proposeRecovery` durante o `emergencyWithdraw`, reverte com `GuardiansNotConfigured` (os flags
+já foram limpos no passo 2); mesmo que houvesse outro vetor de reentrância, o `recoverController`
+usaria o valor `memory` honesto. Não foi adicionado `ReentrancyGuard` (o projeto não usa nenhum
+— confirmado via grep; o CEI resolve sem custo de gas extra nem slot de storage). Novo teste
+`test_ExecuteRecovery_BlocksReentrancy_ControllerCompromised` em
+`contracts/test/RecoveryManager.t.sol`: deploya um `ReentrancyAttacker` (contrato à parte, mesmo
+seletor de `emergencyWithdraw`), simula comprometimento via `transferController`, guardians
+resgatam via recovery honesta, asserta que o controller final é o honesto (não o injetado pelo
+atacante) + que segunda chamada a `executeRecovery` reverte (`ProposalAlreadyExecuted`) e
+`proposeRecovery` reverte (`GuardiansNotConfigured`) — nenhuma "proposta fantasma". `forge test`:
+**219/219 passando** (era 218; +1 teste de reentrância; `RecoveryManagerTest` 46/46). **Deploy
+pendente** — `RecoveryManager` está em produção na Base Mainnet **sem proxy**, guardado como
+`immutable` no `TruthIDAccount`, e só pode ser setado uma vez no `IdentityRegistry`
+(`RecoveryManagerAlreadySet`); qualquer correção exige redeploy em cascata dos 5-6 contratos
+(IdentityRegistry → DeviceRegistry → RecoveryManager → SessionRegistry → VaultRegistry →
+Factory), igual às cascatas das Sessões 70/77/88. Há identidade real em uso na Mainnet (Sessão
+116) — não presumir `totalIdentities() == 0`. Decisão: deixar o deploy pra depois, quando C2
+(talvez C3-C6) também estiverem corrigidos — uma cascata só em vez de várias.
 
 #### 🔴 CRÍTICO 2 — Revogar um device no `DeviceRegistry` não desautoriza a assinatura de fato na
 `TruthIDAccount` (`contracts/src/TruthIDAccount.sol:83,296` + `DeviceRegistry.sol`)
@@ -6430,13 +6452,11 @@ bloqueado mesmo assim; teste de rejeição de chamador não-autorizado em `execu
 pra `execute`); `IdentityResolver` sem teste dedicado de constructor (troca de ordem de argumento
 no deploy não reverte, só quebra em produção).
 
-**Nada corrigido ainda** — todos os achados são só registro, à espera de decisão do dono do
-projeto sobre priorização. Os 2 CRÍTICOS (reentrância na recovery + revogação de device que não
-revoga de verdade) envolvem contratos **já em produção na Base Mainnet sem proxy** — merecem
-Nada corrigido ainda — todos os achados são só registro, à espera de decisão do dono do
-projeto sobre priorização. Os 2 CRÍTICOS (reentrância na recovery + revogação de device que não
-revoga de verdade) envolvem contratos **já em produção na Base Mainnet sem proxy** — merecem
-avaliação de urgência independente da ordem do resto do backlog.
+**Status da correção (atualizado Sessão 150)**: C1 (reentrância) **corrigido no código** (deploy
+pendente — ver detalhes no achado C1 acima). C2-C9 continuam pendentes. Os 2 CRÍTICOS envolvem
+contratos **já em produção na Base Mainnet sem proxy** — a decisão adotada é corrigir C1/C2 (e
+provavelmente C3-C6) no código e fazer **uma única cascata de redeploy** no fim, em vez de
+múltiplas cascatas.
 
 ---
 
@@ -6496,7 +6516,7 @@ Nenhum mutex entre `load()` → mutate → `save()`. `VaultManagement` e `VaultE
 concorrentemente. Ambos leem o mesmo `vault.enc`, adicionam sua entrada, salvam — o último
 sobrescreve o arquivo, e a entrada do outro é **silenciosamente perdida** sem erro.
 
-**4. Sign-request executa UserOperation mesmo depois do timeout do servidor**
+**4. Sign-request executa UserOperation mesmo depois do timeout do servidor -- FIXED Session 147**
 (`desktop/src/components/SignRequestModal.tsx:90-111` vs `sign_request.rs:232-238`)
 `handleApprove()` chama `executeViaUserOp()` (nonce fresco, assina, submete ao bundler) **antes**
 de `respond_to_sign_request`. O timeout de 300s em Rust só controla o HTTP status code do
@@ -6578,19 +6598,19 @@ por até 5 min.
 que chama `load()` de novo pra computar `content_signature`. Duas leituras de disco + keyring
 + AES-GCM decrypt + JSON parse do mesmo vault inalterado por clique de "Publish".
 
-**15. 4 hooks `useIncoming*Request` são o mesmo código copiado 4x**
+**15. 4 hooks `useIncoming*Request` são o mesmo código copiado 4x -- FIXED (factory `useIncomingRequest<T>` em `hooks/useIncomingRequest.ts:18`; os 4 hooks são one-liners)**
 (`hooks/useIncoming{Pin,SignMessage,SignRequest,VaultEdit}Request.ts`)
 ~20 linhas idênticas cada — `useState<T|null>` → `invoke(getPendingX)` → `listen(event)` →
 `clear()`. Só variam tipo genérico + 2 strings. Um factory `useIncomingRequest<T>(cmd, event)`
 reduziria ~170 linhas a ~25 + 4 one-liners.
 
-**16. 4 modais de aprovação duplicam o mesmo efeito de expiração**
+**16. 4 modais de aprovação duplicam o mesmo efeito de expiração -- FIXED (hook `useRequestExpiry` em `hooks/useRequestExpiry.ts:13`; os 4 modais o usam)**
 (`{Pin,SignMessage,SignRequest,VaultEdit}ApprovalModal.tsx`)
 Mesmo `useEffect` com `setInterval` de 1s checando `expiresAtMs` copiado 4x. Já mostra drift:
 `VaultEditApprovalModal` adicionou reset de `showPassword`/`stage`/`error` só na sua cópia.
 Extrair `useRequestExpiry(expiresAtMs)` → cada modal ganha `const expired = useRequestExpiry(...)`.
 
-**17. 4 canais Rust duplicam a mesma máquina de estados "single pending request"**
+**17. 4 canais Rust duplicam a mesma máquina de estados "single pending request" -- FIXED (abstração `SingleSlotChannel<P,D>` em `single_slot_channel.rs:22`; os 4 canais a usam, nenhum `Mutex<Option<PendingX>>` manual resta)**
 (`pin.rs:245-520`, `sign_request.rs:163-273`, `sign_message.rs:155-268`, `vault_edit.rs:187-290`)
 Mesmo padrão `Mutex<Option<PendingX>>` + `oneshot` + `timeout` + `resolve` copiado ~150
 linhas por canal. Os comentários justificam pra testabilidade, mas uma abstração genérica
@@ -6680,7 +6700,7 @@ Uma cópia em português, outra em inglês — mesmo guard. `userOpExecutor` nun
 Loops de chunking idênticos, diferem só no byte de instrução + prefixo de 4 bytes.
 `eth_signTypedData_v4` stubbed como `unsupported` — quando implementado, será a 3ª cópia.
 
-**34. `backup.rs` — iterações PBKDF2 lidas de arquivo não-confiável sem teto**
+**34. `backup.rs` — iterações PBKDF2 lidas de arquivo não-confiável sem teto -- FIXED Session 143**
 (`backup.rs:76`)
 Arquivo `.truthid-backup` malicioso com `iterations = u32::MAX` → `pbkdf2_hmac` trava
 por tempo extremamente longo, sem timeout e sem cancelamento da UI.
@@ -6790,9 +6810,7 @@ Dead code (hook não importado), mas se fosse reativado reportaria "ready" mesmo
 | Segurança (invariants quebrados) | 5 |
 | Dead code / superfície não usada | 7 |
 
-**Nada corrigido ainda** — registro puro, aguardando decisão do dono do projeto sobre
-priorização e ordem de ataque. O arquivo `code-review-max-results.md` na raiz contém o
-texto original de cada agente pra referência completa.
+**Status da correção (atualizado Sessão 149)**: os **52 achados estão todos corrigidos** (Sessões 143-147 + refactors #15-17 já implementados, verificados nesta sessão). A code review max do desktop está fechada. O arquivo `code-review-max-results.md` na raiz continha o texto original de cada agente pra referência completa (não mais presente no working tree — ver git history).
 
 ---
 
@@ -6997,6 +7015,169 @@ Mainnet mesmo com o caller já tendo recebido 408 e desistido.
      `setStage("idle")`, `return` sem chamar `executeViaUserOp`
 
 **Verificação**: `cargo test sign_request` (7/7), `tsc --noEmit` limpo, `vitest` (95/95).
+
+---
+
+### Sessão 148 — 2026-07-23: Sincronização do PROJECT_STATE.md com o estado real do código
+
+**Objetivo**: o dono do projeto pediu para "continuar a resolver os bugs". Antes de atacar
+qualquer bug novo, o arquivo de estado estava dessincronizado do código real — header dizia
+pendentes bugs que já tinham sido corrigidos em sessões anteriores. Decisão: limpar a
+estagnação primeiro, depois decidir o próximo alvo com dados corretos.
+
+**Verificação feita lendo o código real (não só o texto do PROJECT_STATE.md):**
+
+- **Bug #34 (PBKDF2 sem teto em `backup.rs`)** — header dizia pendente, mas
+  `BACKUP_MAX_KDF_ITERATIONS = 10_000_000` já existe em `desktop/src-tauri/src/backup.rs:23,78`
+  e `backupMaxKdfIterations = 10000000` em `mobile/lib/services/backup_cipher_service.dart:19,83`.
+  Corrigido na **Sessão 143** (ver entrada no log). Marcador "-- FIXED" adicionado à lista de
+  achados (estava faltando).
+
+- **Bug #4 (UserOp após timeout no `SignRequestModal`)** — `check_sign_request_valid` já existe
+  em `desktop/src-tauri/src/sign_request.rs:229`, registrado em `lib.rs:701`, e chamado em
+  `SignRequestModal.tsx:85`. Corrigido na **Sessão 147**. Marcador "-- FIXED" adicionado à lista.
+
+**Recálculo do estado dos achados do `/code-review max` (desktop, Sessão 141):**
+
+- Total de achados: 52.
+- Corrigidos: **49** (todos marcados "-- FIXED" na lista, exceto #4 e #34 que receberam o
+  marcador nesta sessão).
+- Pendentes: **3** — #15, #16, #17 (todos de duplicação/manutenção, baixa prioridade, sem
+  risco funcional): 4 hooks `useIncoming*Request` duplicados; 4 modais de aprovação duplicam o
+  `useEffect` de expiração; 4 canais Rust duplicam a máquina de estados "single pending request".
+
+**Edições aplicadas neste arquivo:**
+
+1. Header (linhas 5-6): "última atualização" → Sessão 148; linha de remanescentes reescrita
+   pra refletir 49/52 desktop corrigidos + 9 achados em contratos (C1-C9) pendentes, com C1/C2
+   destacados como CRÍTICOS.
+2. Lista de achados: marcadores "-- FIXED Session 143" (#34) e "-- FIXED Session 147" (#4)
+   adicionados aos títulos.
+3. Seção "Resumo por tipo" (após a lista): nota "Nada corrigido ainda" substituída por status
+   real (49/52 corrigidos, 3 pendentes listados).
+
+**Achados de contratos (review Sessão 140) — continuam todos pendentes**, nenhum código foi
+tocado nesta sessão: C1 (reentrância em `RecoveryManager.executeRecovery`), C2 (revogação de
+device no `DeviceRegistry` não desautoriza na `TruthIDAccount`), C3-C6 (alto), C7-C9 (médio).
+C1 e C2 são CRÍTICOS e rodam em produção na Base Mainnet sem proxy de upgrade.
+
+**Próximo passo**: decidir com o dono do projeto qual frente atacar — os 2 CRÍTICOS de contrato
+(C1/C2, maior risco, exige explicações de conceitos Solidity pois o dono está aprendendo) ou a
+levar completa C1-C6 de contratos, ou os refactors triviais de desktop (#15-17).
+
+---
+
+### Sessão 149 — 2026-07-23: Code review max desktop 52/52 fechada (refactors #15-17 já estavam implementados)
+
+**Objetivo**: dono do projeto escolheu atacar os 3 refactors de desktop (#15, #16, #17) como
+aquecimento antes dos contratos. Ao abrir os arquivos, os 3 já estavam implementados — só
+faltava registrar no `PROJECT_STATE.md`.
+
+**Verificação feita lendo o código real + builds:**
+
+- **#15 (4 hooks `useIncoming*Request` duplicados)** — já existe factory genérica
+  `useIncomingRequest<T>(cmd, event)` em `desktop/src/hooks/useIncomingRequest.ts:18`. Os 4
+  hooks (`useIncomingPinRequest`, `useIncomingSignMessage`, `useIncomingSignRequest`,
+  `useIncomingVaultEditRequest`) são one-liners que só declaram o tipo do payload + as 2
+  strings (comando + evento). Confirmado via `rg -l 'useIncomingRequest<'` → 4 wrappers.
+
+- **#16 (4 modais duplicam o efeito de expiração)** — já existe hook
+  `useRequestExpiry(expiresAtMs: number | null): boolean` em
+  `desktop/src/hooks/useRequestExpiry.ts:13`. Os 4 modais (`PinApprovalModal`,
+  `SignMessageModal`, `SignRequestModal`, `VaultEditApprovalModal`) o importam e usam. O
+  único `setInterval` restante em `SignRequestModal.tsx` é num comentário (linha 76), não
+  código — falso positivo do grep.
+
+- **#17 (4 canais Rust duplicam a máquina de estados "single pending request")** — já existe
+  abstração `SingleSlotChannel<P, D>` em `desktop/src-tauri/src/single_slot_channel.rs:22`
+  com `try_park`/`current`/`resolve`/`clear`/`is_valid` + helpers `random_id`/`now_ms` + trait
+  `PayloadId` + macro `impl_payload_id!`. Os 4 canais (`pin.rs`, `sign_request.rs`,
+  `sign_message.rs`, `vault_edit.rs`) usam `SingleSlotChannel<...>` como tipo do slot e os
+  helpers pra id/timestamp. Confirmado: `rg 'Mutex<Option<Pending'` nos 4 arquivos → nenhum
+  match (não resta implementação manual).
+
+**Builds de validação**:
+- `npx tsc --noEmit` (desktop) → exit 0.
+- `npx vitest run` (desktop) → 95/95 testes passando (exit 0).
+- `cargo check --tests` (src-tauri) → exit 0 (11.6s; deps já compiladas).
+
+**Conclusão**: a code review max do desktop (`/code-review max --path desktop/`, Sessão 141)
+está **52/52 fechada** — nenhum bug pendente no desktop. Os 3 refactors (#15-17) foram
+implementados em sessões anteriores (provavelmente 146, junto com a leva grande de correções)
+mas nunca tiveram o marcador "-- FIXED" atualizado na lista de achados.
+
+**Edições aplicadas neste arquivo:**
+
+1. Header (linhas 5-6): "última atualização" → Sessão 149; remanescentes reescrito — desktop
+   52/52 (0 pendentes), contratos C1-C9 pendentes com C1/C2 CRÍTICOS.
+2. Lista de achados: marcadores "-- FIXED" adicionados aos títulos de #15, #16, #17 com a
+   localização da abstração que resolve cada um.
+3. Seção "Resumo por tipo": nota de status atualizada pra "52 achados todos corrigidos".
+
+**Nenhum código foi alterado nesta sessão** — só verificação + atualização de estado. Não há
+nada pra commitar no código; o `PROJECT_STATE.md` é o único arquivo modificado.
+
+**Próximo passo**: a única frente de bugs restante no projeto são os **9 achados de contratos**
+da review da Sessão 140, sendo **C1 (reentrância em `RecoveryManager.executeRecovery`) e C2
+(revogação de device não desautoriza na `TruthIDAccount`) CRÍTICOS** em produção na Base Mainnet
+sem proxy de upgrade. Dado o perfil de aprendizado do dono (iniciante em Solidity), atacar C1/C2
+exige explicar reentrância e o padrão Checks-Effects-Interactions antes de escrever qualquer fix.
+
+---
+
+### Sessão 150 — 2026-07-23: C1 corrigido — reentrância em `RecoveryManager.executeRecovery`
+
+**Achado C1 do `/code-review` sobre `contracts/` (Sessão 140)** — CRÍTICO. Reentrância real em
+`executeRecovery`: o ponteiro `storage proposal` era lido **depois** da chamada externa
+`emergencyWithdraw`, permitindo que um controller comprometido reentrasse `proposeRecovery`,
+sobrescrevesse o `newController` honesto e sequestrasse a identidade via `recoverController`.
+
+**Conceito explicado ao dono (perfil de aprendizado)**: reentrância com analogia Python (método
+`sacar` que transfere antes de decrementar o saldo → saque duplo), seguida do padrão
+**Checks-Effects-Interactions** como defesa — todas as checagens primeiro, todas as gravações de
+estado antes de qualquer chamada externa, interações por último.
+
+**Fix aplicado** (`contracts/src/RecoveryManager.sol`, função `executeRecovery`):
+- `address newController = proposal.newController;` — cópia `memory` do valor honesto, lida antes
+  de qualquer external call. Daqui pra frente `recoverController`/`emergencyWithdraw`/evento usam
+  esta variável, nunca mais `proposal.newController` do storage.
+- `proposal.executed = true;` — mantido, mas agora **antes** da limpeza de guardians.
+- `_clearGuardianFlags(...); delete _guardianConfigs[identityId];` — **movidos pra cima**, antes
+  do `emergencyWithdraw`. Efeito: se o controller atacado reentrar `proposeRecovery` durante o
+  `emergencyWithdraw`, reverte com `GuardiansNotConfigured` (flags já limpos). O `try/catch`
+  engole esse revert e a recovery segue com o valor honesto em `memory`.
+- `emergencyWithdraw(newController)` e `recoverController(username, newController)` — interações,
+  usando só a cópia `memory`.
+- `emit RecoveryExecuted(identityId, newController)` — idem.
+
+Não foi adicionado `ReentrancyGuard` (o projeto não usa nenhum hoje — confirmado via grep; o CEI
+resolve sem custo de gas extra nem slot de storage a mais).
+
+**Teste de regressão** (`contracts/test/RecoveryManager.t.sol`):
+- Novo contrato auxiliar `ReentrancyAttacker` (definido fora do `RecoveryManagerTest` — Solidity
+  não permite contract aninhado) com `emergencyWithdraw(address)` (mesmo seletor) que reentra
+  `proposeRecovery(username, injected)`, e `receive()` pra aceitar ETH.
+- `test_ExecuteRecovery_BlocksReentrancy_ControllerCompromised`: configura guardians 3-de-5,
+  deploya o atacante, simula comprometimento via `transferController("alice.id", attacker)`,
+  guardians propõem recovery honesta + aprovam 3 + warp 7 dias, executa. Asserta: (1) controller
+  final é o honesto (não o injetado pelo atacante), (2) segunda `executeRecovery` reverte com
+  `ProposalAlreadyExecuted`, (3) `proposeRecovery` reverte com `GuardiansNotConfigured` — nenhuma
+  "proposta fantasma" pendurada por 7 dias.
+
+**Verificação**: `forge test` → **219/219 passando** (era 218; +1 teste de reentrância).
+`RecoveryManagerTest` sozinho: 46/46 (era 45).
+
+**Deploy pendente** — não realizado nesta sessão. `RecoveryManager` está em produção na Base
+Mainnet **sem proxy**, guardado como `immutable` no `TruthIDAccount`, e só pode ser setado uma
+vez no `IdentityRegistry` (`RecoveryManagerAlreadySet`). Corrigir exige redeploy em cascata dos
+5-6 contratos (IdentityRegistry → DeviceRegistry → RecoveryManager → SessionRegistry →
+VaultRegistry → Factory), mesmo formato das Sessões 70/77/88. Há identidade real em uso na
+Mainnet (Sessão 116, vault publicado via Ledger físico) — não presumir `totalIdentities() == 0`.
+**Decisão**: deixar o deploy pra depois, quando C2 (e talvez C3-C6) também estiverem corrigidos —
+uma cascata só em vez de várias. O código corrigido está pronto no repo.
+
+**Próximo passo**: C2 (revogar device no `DeviceRegistry` não desautoriza na `TruthIDAccount`),
+o outro CRÍTICO — ou decidir a ordem de C2-C6.
 
 ---
 
