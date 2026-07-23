@@ -439,8 +439,9 @@ async fn vault_publish() -> Result<ipfs::PinResult, String> {
         return Err("nenhum provider de pinning configurado — use vault_set_providers primeiro".to_string());
     }
     let result = ipfs::pin_vault(&encrypted_blob, &providers).await?;
-    // Registra a versão atual como publicada
-    let v = vault::load()?;
+    // Decripta do blob já em memória em vez de read()+load() de novo
+    let decrypted = vault::decrypt(&encrypted_blob)?;
+    let v: vault::Vault = serde_json::from_slice(&decrypted).map_err(|e| e.to_string())?;
     vault::mark_published(v.version)?;
     Ok(result)
 }

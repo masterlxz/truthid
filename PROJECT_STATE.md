@@ -6577,7 +6577,7 @@ por até 5 min.
 
 #### 🟡 Severidade Baixa (qualidade de código, manutenção, performance)
 
-**14. `vault_publish` decripta o vault duas vezes seguidas**
+**14. `vault_publish` decripta o vault duas vezes seguidas -- FIXED Session 146**
 (`lib.rs:438-439` + `vault.rs:481-491`)
 `vault_publish` chama `load()` pra pegar `v.version`, passa só `version` pra `mark_published`,
 que chama `load()` de novo pra computar `content_signature`. Duas leituras de disco + keyring
