@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import { readFile } from "@tauri-apps/plugin-fs";
@@ -651,14 +651,20 @@ export function VaultManagement() {
   // ── Ordenação (favoritos primeiro) + filtragem ──────────────────────────────
   // Partição em vez de sort com comparador — preserva a ordem relativa dentro
   // de cada grupo sem depender de garantia de estabilidade de sort.
-  const sortedEntries = [...entries.filter((e) => e.favorite), ...entries.filter((e) => !e.favorite)];
-  const filtered = filter.trim()
-    ? sortedEntries.filter((e) =>
-        e.site.toLowerCase().includes(filter.toLowerCase()) ||
-        e.username.toLowerCase().includes(filter.toLowerCase()) ||
-        e.profiles.some((p) => p.toLowerCase().includes(filter.toLowerCase()))
-      )
-    : sortedEntries;
+  const sortedEntries = useMemo(
+    () => [...entries.filter((e) => e.favorite), ...entries.filter((e) => !e.favorite)],
+    [entries],
+  );
+  const filtered = useMemo(
+    () => filter.trim()
+      ? sortedEntries.filter((e) =>
+          e.site.toLowerCase().includes(filter.toLowerCase()) ||
+          e.username.toLowerCase().includes(filter.toLowerCase()) ||
+          e.profiles.some((p) => p.toLowerCase().includes(filter.toLowerCase()))
+        )
+      : sortedEntries,
+    [sortedEntries, filter],
+  );
 
   // ── View: settings ────────────────────────────────────────────────────────
   if (view === "settings") {
