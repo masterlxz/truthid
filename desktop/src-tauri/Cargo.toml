@@ -38,6 +38,7 @@ base64 = "0.22"
 reqwest = { version = "0.12", features = ["json", "multipart"] }
 axum = "0.8"
 tokio = { version = "1", features = ["macros", "sync", "time", "net", "rt"] }
+futures = "0.3"
 
 # Só pra registrar o handler do sinal `permission-request` do WebKitGTK e
 # aprovar getUserMedia (scan de QR via webcam) — sem isso, todo pedido de

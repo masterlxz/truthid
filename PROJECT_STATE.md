@@ -2,13 +2,8 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-22 (Sessão 146 — Bug #47: handleReject duplicado extraído para helper compartilhado)
-> paralelos, 8/9 completos (Invariant Auditor rodou mas não produziu resumo final), ~78k chars de
-> achados consolidados. Cobriu 12 módulos Rust + ~50 arquivos React/TS do Desktop: duplicação de
-> código, performance, segurança, pitfalls, wrappers, arquitetura, simplificação e dead code.
-> Nenhum achado corrigido ainda — registro puro, aguardando decisão do dono do projeto)
->
-> ⚠️ **LEMBRETE**: ao final do projeto (todas as fases concluídas), fazer uma revisão completa deste arquivo — consolidar endereços, remover seções obsoletas, e garantir que a tabela de Pendências de Deploy está zerada. Sessão 68.
+> Última atualização: 2026-07-22 (Sessão 146 — Code Review: 43 bugs corrigidos, 9 pendentes)
+> ⚠️ **REMANESCENTES (9 bugs de média complexidade + 6 contratos)**: #4 (UserOp após timeout), #15 (4 hooks factory), #16 (4 modais useRequestExpiry), #17 (4 canais Rust trait), #18 (builder pattern), #19 (helpers $HOME/.truthid), #22 (vault_edit struct merge), #26 (cache vault decrypt), #34 (PBKDF2 sem teto). Contratos: C1-C6. 43 bugs corrigidos, 9 pendentes + 6 contratos.
 
 ---
 
@@ -6479,7 +6474,7 @@ severidade estimada.
 
 #### 🔴 Severidade Alta (bugs reais, risco de dados/sessão)
 
-**1. `SignRequestModal` fica permanentemente desabilitado após 1ª aprovação com sucesso**
+**1. `SignRequestModal` fica permanentemente desabilitado após 1ª aprovação com sucesso -- FIXED Session 145**
 (`desktop/src/components/SignRequestModal.tsx:51,58-68,90-121,132,181,184`)
 `stage` (`"idle"|"signing"|"error"`) só é resetado pelo `useEffect` de expiração, que não toca em
 `stage`. Após aprovação bem-sucedida, `stage="signing"` nunca volta pra `"idle"`. Componente é
@@ -6487,7 +6482,7 @@ montado incondicionalmente (`App.tsx`), então o próximo sign-request recebido 
 `stage="signing"` e ambos Approve/Reject ficam `disabled` pra sempre até reiniciar o app.
 Mesma classe de bug já corrigida em `VaultEditApprovalModal`/`PairDevice`/`CreateIdentity` — regressão.
 
-**2. `vault.enc` truncado/corrompido causa panic (crash) em vez de erro tratável**
+**2. `vault.enc` truncado/corrompido causa panic (crash) em vez de erro tratável -- FIXED Session 145**
 (`desktop/src-tauri/src/vault.rs:243`)
 No fallback de migração de chave legada, `Nonce::from_slice(&blob[..12])` é chamado sem validar
 `blob.len() >= 12`. Se o vault for truncado (crash mid-write, disco cheio, tampering),
@@ -6533,7 +6528,7 @@ Clique em "Refresh activity" durante scan vê `scanInFlight.current === true` e 
 iniciar novo scan. O scan antigo ao terminar tem `cancelled = true` (pq o efeito foi
 re-executado) e pula `setIsScanning(false)` — `isScanning` fica `true` sem scan ativo.
 
-**8. `ActiveSessions`: "Revoke all" bem-sucedido mascara sessões futuras como revogadas**
+**8. `ActiveSessions`: "Revoke all" bem-sucedido mascara sessões futuras como revogadas -- FIXED Session 144**
 (`ActiveSessions.tsx:144`)
 `isRevokeAllSuccess` nunca reseta pra `false` após sucesso. Sessões criadas depois (ex: via
 QuickLogin, que é overlay sobre ActiveSessions) renderizam com badge "Revoked" e sem botão
@@ -6561,7 +6556,7 @@ fix do #9: `respond` só libera o slot depois do upsert+publish, então não há
 direto sem `map_err`. Frontend já tinha UI pra `"access_denied"` ("Close Ledger Live / check
 USB permissions") — só nunca era alcançada.
 
-**12. `DesktopDevice` — stuck phase após erro de commit**
+**12. `DesktopDevice` — stuck phase após erro de commit -- FIXED Session 144**
 (`DesktopDevice.tsx:55-141`)
 `PairDevice.tsx` já tem fix documentado ("mesma classe de bug do débito #44") resetando
 `phase` no erro — `DesktopDevice` não tem. Commit rejeitado → `phase` fica `"committing"` →
@@ -6628,7 +6623,7 @@ existem sem nenhum caller — superfície desnecessária pra manter.
 idênticos + `From` impl manual — ~20 linhas que o resto do codebase não precisa (ex:
 `PasskeyProposal` deriva ambos num struct só).
 
-**23. `useVaultPublish.ts` duplica "mark as published" em dois handlers**
+**23. `useVaultPublish.ts` duplica "mark as published" em dois handlers -- FIXED Session 146**
 (`useVaultPublish.ts:111-118,159-164`)
 Mesma sequência `refetchHasVault → refetchVaultRef → onPublished → setJustPublished(true) →
 setTimeout(3000)` em `isTxSuccess` e `handleEnviarViaDeviceKey`. Extrair helper local.
@@ -6650,17 +6645,17 @@ Após cada add/edit/delete, `Promise.all` sobre 4 comandos que cada um chama `va
 — e `vault_pending_changes` sozinho faz `load()` + `load_published_snapshot()`. 5 leituras
 de disco + keyring + AES-GCM decrypt + JSON parse + migration scan por clique.
 
-**27. IPFS pinning sequencial com `reqwest::Client::new()` por chamada**
+**27. IPFS pinning sequencial com `reqwest::Client::new()` por chamada -- FIXED Session 146**
 (`ipfs.rs:63-73,83-88,105,148`)
 Pinning pra N providers é soma de latências (sequencial), cada um com TCP+TLS handshake
 novo. Fix: `join_all` por fase (Kubo → PSA) + `Client` compartilhado.
 
-**28. `userOpExecutor` faz 2 chamadas de rede sequenciais independentes**
+**28. `userOpExecutor` faz 2 chamadas de rede sequenciais independentes -- FIXED Session 146**
 (`userOpExecutor.ts:82-89`)
 `getNonce` (on-chain) e `getUserOperationGasPrice` (Pimlico HTTP) não dependem um do outro
 — cada UserOperation paga +100-500ms. Fix: `Promise.all`.
 
-**29. `sortedEntries`/`filtered` em VaultManagement não são `useMemo`**
+**29. `sortedEntries`/`filtered` em VaultManagement não são `useMemo` -- FIXED Session 146**
 Recomputa sobre toda a lista de entradas em cada render — inclusive toggles de UI não
 relacionados (abrir form, visibilidade de senha). `useMemo([entries, filter])`.
 
@@ -6690,12 +6685,12 @@ Loops de chunking idênticos, diferem só no byte de instrução + prefixo de 4 
 Arquivo `.truthid-backup` malicioso com `iterations = u32::MAX` → `pbkdf2_hmac` trava
 por tempo extremamente longo, sem timeout e sem cancelamento da UI.
 
-**35. `SignRequestModal` — comparação de seletor case-sensitive**
+**35. `SignRequestModal` — comparação de seletor case-sensitive -- FIXED Session 145**
 (`SignRequestModal.tsx:29-30`)
 `callData` uppercase válido (byte-idêntico) vs seletor computado lowercase gera warning
 falso de "⚠ Could not verify declared function".
 
-**36. `handleToggleFavorite`/`handleTogglePerm` nunca atualizam contador de pending**
+**36. `handleToggleFavorite`/`handleTogglePerm` nunca atualizam contador de pending -- FIXED Session 144**
 (`VaultManagement.tsx:586-608`)
 `pendingCount` só atualiza via `loadAll()` (chamado em add/edit/delete, nunca nos toggles)
 ou resetado por `onPublished`. Toggle sem publish deixa o contador desatualizado até
@@ -6708,17 +6703,17 @@ expirou o slot (race de ~1s), a rejeição era engolida e o modal fechava como s
 Corrigido com `try/catch` + estado `error` + `clear()` só no happy path — mesmo padrão
 já usado em `VaultEditApprovalModal.tsx`.
 
-**38. `executeViaUserOp` dropa flag `success` do recibo ERC-4337**
+**38. `executeViaUserOp` dropa flag `success` do recibo ERC-4337 -- FIXED Session 145**
 (`userOpExecutor.ts:143,39-42,147-150`)
 Retorna só `{ userOpHash, transactionHash }` — `success` booleano do `UserOperationReceipt`
 é descartado. UserOp minerado mas revertido é indistinguível de sucesso pra todos os callers.
 
-**39. `useVaultPublish` — caminho Ledger nunca checa `receipt.status`**
+**39. `useVaultPublish` — caminho Ledger nunca checa `receipt.status` -- FIXED Session 145**
 (`useVaultPublish.ts:68-69,110-119`)
 `isTxSuccess` (de `useWaitForTransactionReceipt`) é `true` mesmo com `status: "reverted"`.
 UI mostra "Enviado ✓" mesmo quando `updateVault` nunca rodou.
 
-**40. Sign-request reporta "executed" com `transactionHash: null`**
+**40. Sign-request reporta "executed" com `transactionHash: null` -- FIXED Session 145**
 (`SignRequestModal.tsx:98-110`)
 Se bundler não confirmar em ~60s, `transactionHash` é `null` — mas `outcome: "executed"`
 é enviado mesmo assim. Caller não tem como saber que a op ainda está pendente.

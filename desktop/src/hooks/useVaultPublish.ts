@@ -116,11 +116,7 @@ export function useVaultPublish(
       resetTx();
       return;
     }
-    refetchHasVault();
-    refetchVaultRef();
-    onPublished();
-    setJustPublished(true);
-    setTimeout(() => setJustPublished(false), 3000);
+    markAsPublished();
     resetTx();
   }, [isTxReceiptReady]);
 
@@ -171,16 +167,20 @@ export function useVaultPublish(
         );
       }
 
-      refetchHasVault();
-      refetchVaultRef();
-      onPublished();
-      setJustPublished(true);
-      setTimeout(() => setJustPublished(false), 3000);
+      markAsPublished();
       setDeviceKeyPublishState("idle");
     } catch (e) {
       setDeviceKeyError(String(e));
       setDeviceKeyPublishState("error");
     }
+  }
+
+  function markAsPublished() {
+    refetchHasVault();
+    refetchVaultRef();
+    onPublished();
+    setJustPublished(true);
+    setTimeout(() => setJustPublished(false), 3000);
   }
 
   function buttonLabel(): string {

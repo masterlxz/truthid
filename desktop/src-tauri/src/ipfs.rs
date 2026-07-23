@@ -55,13 +55,18 @@ pub(crate) async fn pin_vault(
         );
     }
 
+    let client = reqwest::Client::new();
     let mut cid = String::new();
     let mut providers_ok = Vec::new();
     let mut providers_failed = Vec::new();
 
-    // 1. Upload de conteúdo para cada Kubo node
-    for p in &kubo {
-        match kubo_add(&p.endpoint_url, content).await {
+    // 1. Upload de conteúdo para cada Kubo node (paralelo)
+    let kubo_results: Vec<_> = futures::future::join_all(
+        kubo.iter().map(|p| kubo_add(&client, &p.endpoint_url, content)),
+    )
+    .await;
+    for (p, result) in kubo.iter().zip(kubo_results) {
+        match result {
             Ok(c) => {
                 if cid.is_empty() {
                     cid = c;
@@ -79,9 +84,14 @@ pub(crate) async fn pin_vault(
         ));
     }
 
-    // 2. Pinagem do CID em cada PSA provider
-    for p in &psa {
-        match psa_pin(&p.endpoint_url, &p.api_key, &cid).await {
+    // 2. Pinagem do CID em cada PSA provider (paralelo)
+    let psa_results: Vec<_> = futures::future::join_all(
+        psa.iter()
+            .map(|p| psa_pin(&client, &p.endpoint_url, &p.api_key, &cid)),
+    )
+    .await;
+    for (p, result) in psa.iter().zip(psa_results) {
+        match result {
             Ok(()) => providers_ok.push(p.name.clone()),
             Err(e) => providers_failed.push(format!("{}: {e}", p.name)),
         }
@@ -101,8 +111,7 @@ pub(crate) async fn pin_vault(
 
 /// POST `{endpoint}/api/v0/add` com o blob como multipart.
 /// Retorna o CID (campo `Hash` na resposta JSON do Kubo).
-async fn kubo_add(endpoint_url: &str, content: &[u8]) -> Result<String, String> {
-    let client = reqwest::Client::new();
+async fn kubo_add(client: &reqwest::Client, endpoint_url: &str, content: &[u8]) -> Result<String, String> {
     let part = reqwest::multipart::Part::bytes(content.to_vec())
         .file_name("vault.enc")
         .mime_str("application/octet-stream")
@@ -144,8 +153,7 @@ async fn kubo_add(endpoint_url: &str, content: &[u8]) -> Result<String, String> 
 
 /// POST `{endpoint}/pins` com `{ cid, name }`.
 /// 202 Accepted ou 409 Conflict (já fixado) são tratados como sucesso.
-async fn psa_pin(endpoint_url: &str, api_key: &str, cid: &str) -> Result<(), String> {
-    let client = reqwest::Client::new();
+async fn psa_pin(client: &reqwest::Client, endpoint_url: &str, api_key: &str, cid: &str) -> Result<(), String> {
     let url = format!("{}/pins", endpoint_url.trim_end_matches('/'));
     let body = serde_json::json!({ "cid": cid, "name": "truthid-vault" });
 
