@@ -6527,7 +6527,7 @@ silenciosamente enquanto a UI mostra ativa.
 
 #### 🟠 Severidade Média (bugs de UX/confiabilidade, edge cases)
 
-**7. Dashboard fica preso em "Scanning..." pra sempre após Refresh durante scan**
+**7. Dashboard fica preso em "Scanning..." pra sempre após Refresh durante scan -- FIXED Session 146**
 (`useSmartAccountActivity.ts:104-152`)
 Clique em "Refresh activity" durante scan vê `scanInFlight.current === true` e retorna sem
 iniciar novo scan. O scan antigo ao terminar tem `cancelled = true` (pq o efeito foi

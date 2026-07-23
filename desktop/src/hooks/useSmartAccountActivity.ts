@@ -148,6 +148,7 @@ export function useSmartAccountActivity(identityId: bigint | undefined): {
 
     return () => {
       cancelled = true;
+      scanInFlight.current = false;
     };
   }, [identityId, publicClient, rescanToken]);
 
