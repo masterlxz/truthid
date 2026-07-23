@@ -227,10 +227,7 @@ pub(crate) fn lock_vault() -> std::sync::MutexGuard<'static, ()> {
 }
 
 pub(crate) fn vault_path() -> Result<PathBuf, String> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let dir = std::path::Path::new(&home).join(".truthid");
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    Ok(dir.join("vault.enc"))
+    crate::config::truthid_dir().map(|d| d.join("vault.enc"))
 }
 
 // Lê o arquivo cifrado e desserializa o vault.
@@ -305,13 +302,14 @@ pub(crate) fn load() -> Result<Vault, String> {
     // Sessão 97). Best-effort: arquivo ausente ou corrompido só resulta em
     // lista vazia, não é erro fatal.
     if vault.device_permissions.is_empty() {
-        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-        let legacy_path = std::path::Path::new(&home)
-            .join(".truthid")
-            .join("vault_permissions.json");
-        if let Ok(raw) = std::fs::read_to_string(&legacy_path) {
-            if let Ok(legacy) = serde_json::from_str::<Vec<DeviceVaultPermission>>(&raw) {
-                vault.device_permissions = legacy;
+        let legacy_path = crate::config::truthid_dir()
+            .map(|d| d.join("vault_permissions.json"))
+            .unwrap_or_default();
+        if legacy_path.exists() {
+            if let Ok(raw) = std::fs::read_to_string(&legacy_path) {
+                if let Ok(legacy) = serde_json::from_str::<Vec<DeviceVaultPermission>>(&raw) {
+                    vault.device_permissions = legacy;
+                }
             }
         }
     }
@@ -365,17 +363,11 @@ pub(crate) fn decrypt(blob: &[u8]) -> Result<Vec<u8>, String> {
 // ---------------------------------------------------------------------------
 
 fn meta_path() -> Result<PathBuf, String> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let dir = std::path::Path::new(&home).join(".truthid");
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    Ok(dir.join("vault.meta.json"))
+    crate::config::truthid_dir().map(|d| d.join("vault.meta.json"))
 }
 
 fn published_snapshot_path() -> Result<PathBuf, String> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let dir = std::path::Path::new(&home).join(".truthid");
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    Ok(dir.join("vault.published.enc"))
+    crate::config::truthid_dir().map(|d| d.join("vault.published.enc"))
 }
 
 // Cópia cifrada (mesma chave do vault.enc) do conteúdo publicado pela última

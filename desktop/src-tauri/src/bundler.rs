@@ -14,26 +14,22 @@ pub(crate) struct BundlerConfig {
     pub network: String,
 }
 
-fn config_path() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    std::path::Path::new(&home)
-        .join(".truthid")
-        .join("bundler_config.json")
+fn config_path() -> Result<PathBuf, String> {
+    crate::config::truthid_dir().map(|d| d.join("bundler_config.json"))
 }
 
 pub(crate) fn load_config() -> BundlerConfig {
-    let path = config_path();
+    let path = match config_path() {
+        Ok(p) => p,
+        Err(_) => return BundlerConfig::default(),
+    };
     if !path.exists() {
         return BundlerConfig::default();
     }
-    let raw = std::fs::read_to_string(&path).unwrap_or_default();
-    serde_json::from_str(&raw).unwrap_or_default()
+    crate::config::load_json(&path)
 }
 
 pub(crate) fn save_config(config: &BundlerConfig) -> Result<(), String> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let dir = std::path::Path::new(&home).join(".truthid");
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let json = serde_json::to_string_pretty(config).map_err(|e| e.to_string())?;
-    std::fs::write(config_path(), json).map_err(|e| e.to_string())
+    let path = config_path()?;
+    crate::config::save_json(&path, config)
 }

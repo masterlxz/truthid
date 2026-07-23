@@ -40,6 +40,110 @@ struct SignRequestRouterState {
     on_vault_edit_request: VaultEditNotifier,
 }
 
+/// Configuração nomeada para o servidor local — elimina os 8 argumentos
+/// posicionais de `start()`. Construído via `ServerConfigBuilder`.
+pub struct ServerConfig {
+    pub sign_request_state: Arc<SignRequestState>,
+    pub sign_request_notifier: SignRequestNotifier,
+    pub sign_message_state: Arc<SignMessageState>,
+    pub sign_message_notifier: SignMessageNotifier,
+    pub pin_state: Arc<PinState>,
+    pub pin_notifier: PinNotifier,
+    pub vault_edit_state: Arc<VaultEditState>,
+    pub vault_edit_notifier: VaultEditNotifier,
+}
+
+/// Builder para `ServerConfig`. Cada método nomeia o canal que está sendo
+/// configurado, eliminando erros de ordem entre state/notifier de canais
+/// diferentes. `build()` valida que todos os 4 canais foram configurados
+/// antes de devolver o `ServerConfig`.
+#[derive(Default)]
+pub struct ServerConfigBuilder {
+    sign_request_state: Option<Arc<SignRequestState>>,
+    sign_request_notifier: Option<SignRequestNotifier>,
+    sign_message_state: Option<Arc<SignMessageState>>,
+    sign_message_notifier: Option<SignMessageNotifier>,
+    pin_state: Option<Arc<PinState>>,
+    pin_notifier: Option<PinNotifier>,
+    vault_edit_state: Option<Arc<VaultEditState>>,
+    vault_edit_notifier: Option<VaultEditNotifier>,
+}
+
+impl ServerConfigBuilder {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn sign_request(
+        mut self,
+        state: Arc<SignRequestState>,
+        notifier: impl Fn(&sign_request::SignRequestPayload) + Send + Sync + 'static,
+    ) -> Self {
+        self.sign_request_state = Some(state);
+        self.sign_request_notifier = Some(Arc::new(notifier));
+        self
+    }
+
+    pub fn sign_message(
+        mut self,
+        state: Arc<SignMessageState>,
+        notifier: impl Fn(&sign_message::SignMessagePayload) + Send + Sync + 'static,
+    ) -> Self {
+        self.sign_message_state = Some(state);
+        self.sign_message_notifier = Some(Arc::new(notifier));
+        self
+    }
+
+    pub fn pin(
+        mut self,
+        state: Arc<PinState>,
+        notifier: impl Fn(&pin::PinApprovalPayload) + Send + Sync + 'static,
+    ) -> Self {
+        self.pin_state = Some(state);
+        self.pin_notifier = Some(Arc::new(notifier));
+        self
+    }
+
+    pub fn vault_edit(
+        mut self,
+        state: Arc<VaultEditState>,
+        notifier: impl Fn(&vault_edit::VaultEditApprovalPayload) + Send + Sync + 'static,
+    ) -> Self {
+        self.vault_edit_state = Some(state);
+        self.vault_edit_notifier = Some(Arc::new(notifier));
+        self
+    }
+
+    pub fn build(self) -> Result<ServerConfig, String> {
+        Ok(ServerConfig {
+            sign_request_state: self
+                .sign_request_state
+                .ok_or_else(|| "sign_request_state is required".to_string())?,
+            sign_request_notifier: self
+                .sign_request_notifier
+                .ok_or_else(|| "sign_request_notifier is required".to_string())?,
+            sign_message_state: self
+                .sign_message_state
+                .ok_or_else(|| "sign_message_state is required".to_string())?,
+            sign_message_notifier: self
+                .sign_message_notifier
+                .ok_or_else(|| "sign_message_notifier is required".to_string())?,
+            pin_state: self
+                .pin_state
+                .ok_or_else(|| "pin_state is required".to_string())?,
+            pin_notifier: self
+                .pin_notifier
+                .ok_or_else(|| "pin_notifier is required".to_string())?,
+            vault_edit_state: self
+                .vault_edit_state
+                .ok_or_else(|| "vault_edit_state is required".to_string())?,
+            vault_edit_notifier: self
+                .vault_edit_notifier
+                .ok_or_else(|| "vault_edit_notifier is required".to_string())?,
+        })
+    }
+}
+
 /// Portas candidatas para o canal local Desktop<->app terceiro. Bloco próprio,
 /// distinto de 47850..47854 (LAN do Mobile/extensão, Fase 13.9) e de 1420
 /// (Vite dev server). Precisa ser espelhado manualmente do lado do app
@@ -192,7 +296,17 @@ async fn vault_edit_handler(
     (status, Json(body))
 }
 
-fn router(router_state: SignRequestRouterState) -> Router {
+fn router(config: &ServerConfig) -> Router {
+    let router_state = SignRequestRouterState {
+        sign_requests: config.sign_request_state.clone(),
+        on_sign_request: config.sign_request_notifier.clone(),
+        sign_messages: config.sign_message_state.clone(),
+        on_sign_message: config.sign_message_notifier.clone(),
+        pin_requests: config.pin_state.clone(),
+        on_pin_request: config.pin_notifier.clone(),
+        vault_edit_requests: config.vault_edit_state.clone(),
+        on_vault_edit_request: config.vault_edit_notifier.clone(),
+    };
     // Nota de segurança (Sessão 146, bug #43):
     // Nenhuma rota tem autenticação. O servidor binda em 127.0.0.1 —
     // qualquer processo local pode forjar pedidos. Aceito deliberadamente
@@ -215,23 +329,11 @@ fn router(router_state: SignRequestRouterState) -> Router {
 /// máquina, então loopback já é suficiente e é bem mais seguro). Idempotente:
 /// se já estiver rodando, devolve o status atual sem religar.
 ///
-/// `sign_requests` é o mesmo SignRequestState gerenciado pelo Tauri (pra
-/// get_pending_sign_request/respond_to_sign_request enxergarem os mesmos
-/// pedidos que chegam via HTTP); `on_sign_request` é chamado sempre que um
-/// pedido novo chega (normalmente app.emit, injetado por quem chama start()).
-/// `sign_messages`/`on_sign_message` são o equivalente pro canal
-/// /truthid/v1/sign-message; `pin_requests`/`on_pin_request`, pro /truthid/v1/pin;
-/// `vault_edit_requests`/`on_vault_edit_request`, pro /truthid/v1/vault-edit.
+/// `config` carrega os 4 pares (state + notifier) via `ServerConfigBuilder`,
+/// cada um nomeado pelo canal — sem risco de trocar a ordem entre eles.
 pub async fn start(
     state: &LocalSignerServerState,
-    sign_requests: Arc<SignRequestState>,
-    on_sign_request: impl Fn(&sign_request::SignRequestPayload) + Send + Sync + 'static,
-    sign_messages: Arc<SignMessageState>,
-    on_sign_message: impl Fn(&sign_message::SignMessagePayload) + Send + Sync + 'static,
-    pin_requests: Arc<PinState>,
-    on_pin_request: impl Fn(&pin::PinApprovalPayload) + Send + Sync + 'static,
-    vault_edit_requests: Arc<VaultEditState>,
-    on_vault_edit_request: impl Fn(&vault_edit::VaultEditApprovalPayload) + Send + Sync + 'static,
+    config: ServerConfig,
 ) -> Result<LocalSignerStatus, String> {
     let mut guard = state.0.lock().await;
     if let Some(running) = guard.as_ref() {
@@ -252,22 +354,11 @@ pub async fn start(
     let (listener, port) =
         bound.ok_or_else(|| "no candidate port available for local signer server".to_string())?;
 
-    let router_state = SignRequestRouterState {
-        sign_requests,
-        on_sign_request: Arc::new(on_sign_request),
-        sign_messages,
-        on_sign_message: Arc::new(on_sign_message),
-        pin_requests,
-        on_pin_request: Arc::new(on_pin_request),
-        vault_edit_requests,
-        on_vault_edit_request: Arc::new(on_vault_edit_request),
-    };
-
     let (shutdown_tx, shutdown_rx) = oneshot::channel();
     let state_for_spawn = Arc::clone(&state.0);
     let port_for_spawn = port;
     let join_handle = tauri::async_runtime::spawn(async move {
-        if let Err(e) = axum::serve(listener, router(router_state))
+        if let Err(e) = axum::serve(listener, router(&config))
             .with_graceful_shutdown(async {
                 let _ = shutdown_rx.await;
             })
@@ -377,18 +468,13 @@ mod tests {
     // sign_request::SignRequestState nem com notificação — esse helper
     // isola esse boilerplate.
     async fn start_for_test(state: &LocalSignerServerState) -> Result<LocalSignerStatus, String> {
-        start(
-            state,
-            Arc::new(SignRequestState::default()),
-            |_| {},
-            Arc::new(SignMessageState::default()),
-            |_| {},
-            temp_pin_state(),
-            |_| {},
-            temp_vault_edit_state(),
-            |_| {},
-        )
-        .await
+        let config = ServerConfigBuilder::new()
+            .sign_request(Arc::new(SignRequestState::default()), |_| {})
+            .sign_message(Arc::new(SignMessageState::default()), |_| {})
+            .pin(temp_pin_state(), |_| {})
+            .vault_edit(temp_vault_edit_state(), |_| {})
+            .build()?;
+        start(state, config).await
     }
 
     #[tokio::test]
@@ -500,19 +586,14 @@ mod tests {
         let _guard = PORT_TEST_LOCK.lock().await;
         let state = LocalSignerServerState::default();
         let sign_requests = Arc::new(SignRequestState::default());
-        let started = start(
-            &state,
-            sign_requests.clone(),
-            |_| {},
-            Arc::new(SignMessageState::default()),
-            |_| {},
-            temp_pin_state(),
-            |_| {},
-            temp_vault_edit_state(),
-            |_| {},
-        )
-        .await
-        .expect("start should succeed");
+        let config = ServerConfigBuilder::new()
+            .sign_request(sign_requests.clone(), |_| {})
+            .sign_message(Arc::new(SignMessageState::default()), |_| {})
+            .pin(temp_pin_state(), |_| {})
+            .vault_edit(temp_vault_edit_state(), |_| {})
+            .build()
+            .expect("config should build");
+        let started = start(&state, config).await.expect("start should succeed");
 
         let url = format!("{}/truthid/v1/sign-request", base_url(&started));
         let request = reqwest::Client::new().post(&url).json(&serde_json::json!({
@@ -554,19 +635,14 @@ mod tests {
         let _guard = PORT_TEST_LOCK.lock().await;
         let state = LocalSignerServerState::default();
         let sign_requests = Arc::new(SignRequestState::default());
-        let started = start(
-            &state,
-            sign_requests.clone(),
-            |_| {},
-            Arc::new(SignMessageState::default()),
-            |_| {},
-            temp_pin_state(),
-            |_| {},
-            temp_vault_edit_state(),
-            |_| {},
-        )
-        .await
-        .expect("start should succeed");
+        let config = ServerConfigBuilder::new()
+            .sign_request(sign_requests.clone(), |_| {})
+            .sign_message(Arc::new(SignMessageState::default()), |_| {})
+            .pin(temp_pin_state(), |_| {})
+            .vault_edit(temp_vault_edit_state(), |_| {})
+            .build()
+            .expect("config should build");
+        let started = start(&state, config).await.expect("start should succeed");
 
         let url = format!("{}/truthid/v1/sign-request", base_url(&started));
         let body = serde_json::json!({
@@ -608,19 +684,14 @@ mod tests {
         let _guard = PORT_TEST_LOCK.lock().await;
         let state = LocalSignerServerState::default();
         let sign_messages = Arc::new(SignMessageState::default());
-        let started = start(
-            &state,
-            Arc::new(SignRequestState::default()),
-            |_| {},
-            sign_messages.clone(),
-            |_| {},
-            temp_pin_state(),
-            |_| {},
-            temp_vault_edit_state(),
-            |_| {},
-        )
-        .await
-        .expect("start should succeed");
+        let config = ServerConfigBuilder::new()
+            .sign_request(Arc::new(SignRequestState::default()), |_| {})
+            .sign_message(sign_messages.clone(), |_| {})
+            .pin(temp_pin_state(), |_| {})
+            .vault_edit(temp_vault_edit_state(), |_| {})
+            .build()
+            .expect("config should build");
+        let started = start(&state, config).await.expect("start should succeed");
 
         let url = format!("{}/truthid/v1/sign-message", base_url(&started));
         let request = reqwest::Client::new().post(&url).json(&serde_json::json!({
@@ -655,19 +726,14 @@ mod tests {
         let _guard = PORT_TEST_LOCK.lock().await;
         let state = LocalSignerServerState::default();
         let sign_messages = Arc::new(SignMessageState::default());
-        let started = start(
-            &state,
-            Arc::new(SignRequestState::default()),
-            |_| {},
-            sign_messages.clone(),
-            |_| {},
-            temp_pin_state(),
-            |_| {},
-            temp_vault_edit_state(),
-            |_| {},
-        )
-        .await
-        .expect("start should succeed");
+        let config = ServerConfigBuilder::new()
+            .sign_request(Arc::new(SignRequestState::default()), |_| {})
+            .sign_message(sign_messages.clone(), |_| {})
+            .pin(temp_pin_state(), |_| {})
+            .vault_edit(temp_vault_edit_state(), |_| {})
+            .build()
+            .expect("config should build");
+        let started = start(&state, config).await.expect("start should succeed");
 
         let url = format!("{}/truthid/v1/sign-message", base_url(&started));
         let body = serde_json::json!({
@@ -709,19 +775,14 @@ mod tests {
         let _guard = PORT_TEST_LOCK.lock().await;
         let state = LocalSignerServerState::default();
         let pin_requests = temp_pin_state();
-        let started = start(
-            &state,
-            Arc::new(SignRequestState::default()),
-            |_| {},
-            Arc::new(SignMessageState::default()),
-            |_| {},
-            pin_requests.clone(),
-            |_| {},
-            temp_vault_edit_state(),
-            |_| {},
-        )
-        .await
-        .expect("start should succeed");
+        let config = ServerConfigBuilder::new()
+            .sign_request(Arc::new(SignRequestState::default()), |_| {})
+            .sign_message(Arc::new(SignMessageState::default()), |_| {})
+            .pin(pin_requests.clone(), |_| {})
+            .vault_edit(temp_vault_edit_state(), |_| {})
+            .build()
+            .expect("config should build");
+        let started = start(&state, config).await.expect("start should succeed");
 
         let url = format!("{}/truthid/v1/pin", base_url(&started));
         let request = reqwest::Client::new().post(&url).json(&serde_json::json!({
@@ -754,19 +815,14 @@ mod tests {
         let _guard = PORT_TEST_LOCK.lock().await;
         let state = LocalSignerServerState::default();
         let pin_requests = temp_pin_state();
-        let started = start(
-            &state,
-            Arc::new(SignRequestState::default()),
-            |_| {},
-            Arc::new(SignMessageState::default()),
-            |_| {},
-            pin_requests.clone(),
-            |_| {},
-            temp_vault_edit_state(),
-            |_| {},
-        )
-        .await
-        .expect("start should succeed");
+        let config = ServerConfigBuilder::new()
+            .sign_request(Arc::new(SignRequestState::default()), |_| {})
+            .sign_message(Arc::new(SignMessageState::default()), |_| {})
+            .pin(pin_requests.clone(), |_| {})
+            .vault_edit(temp_vault_edit_state(), |_| {})
+            .build()
+            .expect("config should build");
+        let started = start(&state, config).await.expect("start should succeed");
 
         let url = format!("{}/truthid/v1/pin", base_url(&started));
         let body = serde_json::json!({
@@ -806,19 +862,14 @@ mod tests {
         let _guard = PORT_TEST_LOCK.lock().await;
         let state = LocalSignerServerState::default();
         let vault_edit_requests = temp_vault_edit_state();
-        let started = start(
-            &state,
-            Arc::new(SignRequestState::default()),
-            |_| {},
-            Arc::new(SignMessageState::default()),
-            |_| {},
-            temp_pin_state(),
-            |_| {},
-            vault_edit_requests.clone(),
-            |_| {},
-        )
-        .await
-        .expect("start should succeed");
+        let config = ServerConfigBuilder::new()
+            .sign_request(Arc::new(SignRequestState::default()), |_| {})
+            .sign_message(Arc::new(SignMessageState::default()), |_| {})
+            .pin(temp_pin_state(), |_| {})
+            .vault_edit(vault_edit_requests.clone(), |_| {})
+            .build()
+            .expect("config should build");
+        let started = start(&state, config).await.expect("start should succeed");
 
         let url = format!("{}/truthid/v1/vault-edit", base_url(&started));
         let request = reqwest::Client::new().post(&url).json(&serde_json::json!({
@@ -852,19 +903,14 @@ mod tests {
         let _guard = PORT_TEST_LOCK.lock().await;
         let state = LocalSignerServerState::default();
         let vault_edit_requests = temp_vault_edit_state();
-        let started = start(
-            &state,
-            Arc::new(SignRequestState::default()),
-            |_| {},
-            Arc::new(SignMessageState::default()),
-            |_| {},
-            temp_pin_state(),
-            |_| {},
-            vault_edit_requests.clone(),
-            |_| {},
-        )
-        .await
-        .expect("start should succeed");
+        let config = ServerConfigBuilder::new()
+            .sign_request(Arc::new(SignRequestState::default()), |_| {})
+            .sign_message(Arc::new(SignMessageState::default()), |_| {})
+            .pin(temp_pin_state(), |_| {})
+            .vault_edit(vault_edit_requests.clone(), |_| {})
+            .build()
+            .expect("config should build");
+        let started = start(&state, config).await.expect("start should succeed");
 
         let url = format!("{}/truthid/v1/vault-edit", base_url(&started));
         let body = serde_json::json!({

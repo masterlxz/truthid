@@ -198,19 +198,12 @@ pub(crate) struct PinAuthorization {
     day_start_ms: i64,
 }
 
-fn default_authorizations_path() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    std::path::Path::new(&home)
-        .join(".truthid")
-        .join("pin_authorizations.json")
+fn default_authorizations_path() -> Result<std::path::PathBuf, String> {
+    crate::config::truthid_dir().map(|d| d.join("pin_authorizations.json"))
 }
 
 fn load_authorizations(path: &std::path::Path) -> Vec<PinAuthorization> {
-    if !path.exists() {
-        return Vec::new();
-    }
-    let raw = std::fs::read_to_string(path).unwrap_or_default();
-    serde_json::from_str(&raw).unwrap_or_default()
+    crate::config::load_json(path)
 }
 
 fn save_authorizations(
@@ -220,8 +213,7 @@ fn save_authorizations(
     if let Some(dir) = path.parent() {
         std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
     }
-    let json = serde_json::to_string_pretty(authorizations).map_err(|e| e.to_string())?;
-    std::fs::write(path, json).map_err(|e| e.to_string())
+    crate::config::save_json(path, authorizations)
 }
 
 /// Se já passou um dia inteiro desde o início da janela atual, zera a cota.
@@ -256,7 +248,8 @@ impl Default for PinState {
         Self {
             pending: SingleSlotChannel::default(),
             quota: Mutex::new(()),
-            authorizations_path: default_authorizations_path(),
+            authorizations_path: default_authorizations_path()
+                .unwrap_or_else(|_| std::path::PathBuf::from("/tmp/.truthid/pin_authorizations.json")),
         }
     }
 }

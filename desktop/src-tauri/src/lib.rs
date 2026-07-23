@@ -11,6 +11,7 @@ use k256::elliptic_curve::ecdh::diffie_hellman;
 
 mod backup;
 mod bundler;
+mod config;
 mod ipfs;
 mod ledger;
 mod local_signer_server;
@@ -28,10 +29,7 @@ const VAULT_KEY_ACCOUNT: &str = "vault-key";
 /// Caminho de fallback quando o keyring do SO não está disponível (ex: Docker).
 /// Usa $HOME/.truthid/device.key — montado como volume no compose para persistir.
 fn fallback_key_path() -> Result<std::path::PathBuf, String> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let dir = std::path::Path::new(&home).join(".truthid");
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    Ok(dir.join("device.key"))
+    crate::config::truthid_dir().map(|d| d.join("device.key"))
 }
 
 /// Lê a chave privada do keyring ou do arquivo de fallback.
@@ -124,10 +122,7 @@ pub(crate) fn get_vault_key() -> Result<[u8; 32], String> {
 }
 
 fn vault_key_path() -> Result<std::path::PathBuf, String> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let dir = std::path::Path::new(&home).join(".truthid");
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    Ok(dir.join("vault.key"))
+    crate::config::truthid_dir().map(|d| d.join("vault.key"))
 }
 
 fn set_vault_key(key: &[u8; 32]) -> Result<(), String> {
@@ -624,33 +619,29 @@ async fn local_signer_start(
     vault_edit_requests: tauri::State<'_, std::sync::Arc<vault_edit::VaultEditState>>,
 ) -> Result<local_signer_server::LocalSignerStatus, String> {
     use tauri::Emitter;
-    let sign_requests = sign_requests.inner().clone();
-    let sign_messages = sign_messages.inner().clone();
-    let pin_requests = pin_requests.inner().clone();
-    let vault_edit_requests = vault_edit_requests.inner().clone();
-    let app_for_message = app.clone();
-    let app_for_pin = app.clone();
-    let app_for_vault_edit = app.clone();
-    local_signer_server::start(
-        &state,
-        sign_requests,
-        move |payload| {
-            let _ = app.emit("truthid://sign-request", payload);
-        },
-        sign_messages,
-        move |payload| {
-            let _ = app_for_message.emit("truthid://sign-message", payload);
-        },
-        pin_requests,
-        move |payload| {
-            let _ = app_for_pin.emit("truthid://pin", payload);
-        },
-        vault_edit_requests,
-        move |payload| {
-            let _ = app_for_vault_edit.emit("truthid://vault-edit", payload);
-        },
-    )
-    .await
+    let sign_request_app = app.clone();
+    let sign_message_app = app.clone();
+    let pin_app = app.clone();
+    let vault_edit_app = app.clone();
+    let sign_request_state = sign_requests.inner().clone();
+    let sign_message_state = sign_messages.inner().clone();
+    let pin_state = pin_requests.inner().clone();
+    let vault_edit_state = vault_edit_requests.inner().clone();
+    let config = local_signer_server::ServerConfigBuilder::new()
+        .sign_request(sign_request_state, move |payload| {
+            let _ = sign_request_app.emit("truthid://sign-request", payload);
+        })
+        .sign_message(sign_message_state, move |payload| {
+            let _ = sign_message_app.emit("truthid://sign-message", payload);
+        })
+        .pin(pin_state, move |payload| {
+            let _ = pin_app.emit("truthid://pin", payload);
+        })
+        .vault_edit(vault_edit_state, move |payload| {
+            let _ = vault_edit_app.emit("truthid://vault-edit", payload);
+        })
+        .build()?;
+    local_signer_server::start(&state, config).await
 }
 
 #[tauri::command]
@@ -814,42 +805,38 @@ pub fn run() {
             let notify_handle_vault_edit = handle.clone();
             tauri::async_runtime::spawn(async move {
                 let state = handle.state::<local_signer_server::LocalSignerServerState>();
-                let sign_requests = handle
+                let sign_request_state = handle
                     .state::<std::sync::Arc<sign_request::SignRequestState>>()
                     .inner()
                     .clone();
-                let sign_messages = handle
+                let sign_message_state = handle
                     .state::<std::sync::Arc<sign_message::SignMessageState>>()
                     .inner()
                     .clone();
-                let pin_requests = handle
+                let pin_state = handle
                     .state::<std::sync::Arc<pin::PinState>>()
                     .inner()
                     .clone();
-                let vault_edit_requests = handle
+                let vault_edit_state = handle
                     .state::<std::sync::Arc<vault_edit::VaultEditState>>()
                     .inner()
                     .clone();
-                let result = local_signer_server::start(
-                    &state,
-                    sign_requests,
-                    move |payload| {
+                let config = local_signer_server::ServerConfigBuilder::new()
+                    .sign_request(sign_request_state, move |payload| {
                         let _ = notify_handle.emit("truthid://sign-request", payload);
-                    },
-                    sign_messages,
-                    move |payload| {
+                    })
+                    .sign_message(sign_message_state, move |payload| {
                         let _ = notify_handle_message.emit("truthid://sign-message", payload);
-                    },
-                    pin_requests,
-                    move |payload| {
+                    })
+                    .pin(pin_state, move |payload| {
                         let _ = notify_handle_pin.emit("truthid://pin", payload);
-                    },
-                    vault_edit_requests,
-                    move |payload| {
+                    })
+                    .vault_edit(vault_edit_state, move |payload| {
                         let _ = notify_handle_vault_edit.emit("truthid://vault-edit", payload);
-                    },
-                )
-                .await;
+                    })
+                    .build()
+                    .expect("ServerConfig should build");
+                let result = local_signer_server::start(&state, config).await;
                 if let Err(e) = result {
                     eprintln!("failed to start local signer server: {e}");
                 }

@@ -1,6 +1,5 @@
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Keccak256};
-use std::path::PathBuf;
 
 // ---------------------------------------------------------------------------
 // Tipos públicos
@@ -177,28 +176,24 @@ async fn psa_pin(client: &reqwest::Client, endpoint_url: &str, api_key: &str, ci
 // Persistência de providers
 // ---------------------------------------------------------------------------
 
-fn providers_path() -> PathBuf {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    std::path::Path::new(&home)
-        .join(".truthid")
-        .join("pinning_providers.json")
+fn providers_path() -> Result<std::path::PathBuf, String> {
+    crate::config::truthid_dir().map(|d| d.join("pinning_providers.json"))
 }
 
 pub(crate) fn load_providers() -> Vec<PinningProvider> {
-    let path = providers_path();
+    let path = match providers_path() {
+        Ok(p) => p,
+        Err(_) => return Vec::new(),
+    };
     if !path.exists() {
         return Vec::new();
     }
-    let raw = std::fs::read_to_string(&path).unwrap_or_default();
-    serde_json::from_str(&raw).unwrap_or_default()
+    crate::config::load_json(&path)
 }
 
 pub(crate) fn save_providers(providers: &[PinningProvider]) -> Result<(), String> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let dir = std::path::Path::new(&home).join(".truthid");
-    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let json = serde_json::to_string_pretty(providers).map_err(|e| e.to_string())?;
-    std::fs::write(providers_path(), json).map_err(|e| e.to_string())
+    let path = providers_path()?;
+    crate::config::save_json(&path, providers)
 }
 
 // ---------------------------------------------------------------------------

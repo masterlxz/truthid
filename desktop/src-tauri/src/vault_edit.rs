@@ -40,7 +40,7 @@ pub struct PasskeyProposal {
 /// desktop local ou do mobile no caminho cross-device). Opcional: na rota
 /// desktop loopback (localhost), pode vir `None` — o próprio Desktop é
 /// controller, sempre tem permissão de escrita.
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct VaultEditRequestBody {
     #[serde(default)]
@@ -68,44 +68,12 @@ pub struct VaultEditRequestBody {
 #[serde(rename_all = "camelCase")]
 pub struct VaultEditApprovalPayload {
     pub id: String,
-    pub entry: VaultEditRequestBodyOut,
+    pub entry: VaultEditRequestBody,
     pub expires_at_ms: i64,
     pub pub_key: Option<String>,
 }
 
 single_slot_channel::impl_payload_id!(VaultEditApprovalPayload);
-
-/// Espelho de `VaultEditRequestBody` só pra serialização (`Serialize`) — o
-/// corpo de entrada (`VaultEditRequestBody`) só precisa `Deserialize`, mas o
-/// payload do evento precisa ir pro frontend, então esse tipo replica os
-/// mesmos campos com `Serialize` também. Evita implementar os dois traits no
-/// mesmo tipo por clareza de intenção (um é "o que a extensão manda", o
-/// outro é "o que o Desktop mostra/expõe").
-#[derive(Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub struct VaultEditRequestBodyOut {
-    pub site: String,
-    pub url: String,
-    pub username: String,
-    pub password: String,
-    pub notes: String,
-    pub passkey: Option<PasskeyProposal>,
-    pub pub_key: Option<String>,
-}
-
-impl From<VaultEditRequestBody> for VaultEditRequestBodyOut {
-    fn from(b: VaultEditRequestBody) -> Self {
-        Self {
-            site: b.site,
-            url: b.url,
-            username: b.username,
-            password: b.password,
-            notes: b.notes,
-            passkey: b.passkey,
-            pub_key: b.pub_key,
-        }
-    }
-}
 
 #[derive(Deserialize, Debug)]
 #[serde(rename_all = "camelCase", tag = "outcome")]
@@ -244,7 +212,7 @@ async fn handle_incoming_with_timeout(
 
         let payload = VaultEditApprovalPayload {
             id: single_slot_channel::random_id(),
-            entry: body.into(),
+            entry: body,
             expires_at_ms: single_slot_channel::now_ms() + timeout.as_millis() as i64,
             pub_key,
         };
