@@ -6752,7 +6752,7 @@ deliberadamente (localhost é inerentemente confiável).
 
 **45. Revogação de permissão de escrita no vault (`canWriteVault`) não é enforcement -- FIXED Session 146 (junto com #51)**
 
-**46. `useSmartAccountActivity` — `scanInFlight` compartilhado entre identidades**
+**46. `useSmartAccountActivity` — `scanInFlight` compartilhado entre identidades -- FIXED Session 146 (junto com #7)**
 (`useSmartAccountActivity.ts:110`)
 Trocar de identidade durante scan → ref nunca reseta → scan da nova identidade é pulado
 → dashboard mostra dados da identidade anterior.
@@ -6767,7 +6767,7 @@ todos.
 **49. `useVaultBackup.ts` reimplementa `bytesToBase64` já existente em `webauthn.ts` -- FIXED Session 146**
 `bytesToBase64` (standard), `base64ToBytes` (inverse) e `base64UrlEncode` (URL-safe) extraídas para `desktop/src/utils/base64.ts` (novo). `useVaultBackup.ts`, `webauthn.ts` e `webauthn.test.ts` removem cópias private e importam do arquivo único.
 
-**50. `vault_pending_changes` pode derrubar `vault_list_entries` se snapshot corromper**
+**50. `vault_pending_changes` pode derrubar `vault_list_entries` se snapshot corromper -- FIXED Session 146**
 (`VaultManagement.tsx:505-516`)
 `Promise.all` compartilhado — se `load_published_snapshot` falhar (arquivo truncado), toda
 a lista de entradas é escondida com "sem vault ainda — tudo vazio é ok".

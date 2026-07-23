@@ -501,12 +501,14 @@ export function VaultManagement() {
   async function loadAll() {
     setLoadingEntries(true);
     try {
-      const [e, p, perms, prof] = await Promise.all([
+      const [e, perms, prof] = await Promise.all([
         invoke<VaultEntry[]>("vault_list_entries"),
-        invoke<number>("vault_pending_changes"),
         invoke<DeviceVaultPermission[]>("vault_get_device_permissions"),
         invoke<string[]>("vault_list_profiles"),
       ]);
+      // vault_pending_changes separado — se snapshot corromper, não derruba
+      // a lista de entradas (bug #50).
+      const p = await invoke<number>("vault_pending_changes").catch(() => 0);
       setEntries(e);
       setPendingCount(p);
       setPermissions(perms);
