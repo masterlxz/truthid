@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { useAccount, useReadContract, useSwitchChain, useDisconnect } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
 import { base } from "wagmi/chains";
@@ -132,6 +132,8 @@ function App() {
     );
   }
 
+  const openConnectModal = useCallback(() => setConnectModalOpen(true), []);
+
   function handleLogout() {
     clearUsername();
     disconnect();
@@ -139,7 +141,9 @@ function App() {
 
   // ── App shell ─────────────────────────────────────────────────────────────
   return (
-    <WalletModalContext.Provider value={{ openConnectModal: () => setConnectModalOpen(true) }}>
+    <WalletModalContext.Provider
+      value={useMemo(() => ({ openConnectModal }), [openConnectModal])}
+    >
       <SignRequestModal smartAccountAddress={smartAccountAddress} />
       <SignMessageModal />
       <PinApprovalModal />

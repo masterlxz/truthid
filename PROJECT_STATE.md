@@ -6638,7 +6638,7 @@ setTimeout(3000)` em `isTxSuccess` e `handleEnviarViaDeviceKey`. Extrair helper 
 `value={{ username, identityId, smartAccountAddress }}` sem `useMemo` — toda query do
 wagmi re-renderiza todos os consumidores (4 tabs inteiras). Fix: `useMemo` com dependências.
 
-**25. `WalletModalContext` aloca nova closure + objeto todo render do App**
+**25. `WalletModalContext` aloca nova closure + objeto todo render do App -- FIXED Session 146**
 (`App.tsx:142`)
 `value={{ openConnectModal: () => setConnectModalOpen(true) }}` sem `useCallback`/`useMemo`.
 `App` re-renderiza com frequência (`useAccount`, `useReadContract`, `useSwitchChain`) —
