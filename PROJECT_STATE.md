@@ -6540,18 +6540,18 @@ QuickLogin, que é overlay sobre ActiveSessions) renderizam com badge "Revoked" 
 individual de revogação — inconsistente: `activeSessions.filter(s => !s.revoked)` conta
 certinho mas a renderização mente.
 
-**9. Vault-edit approve diz "aprovado" antes de salvar; retry impossível**
+**9. Vault-edit approve diz "aprovado" antes de salvar; retry impossível -- FIXED Session 146**
 (`VaultEditApprovalModal.tsx:42-78`)
-`respond_to_vault_edit_request` (linha 52) libera HTTP 200 pro caller **antes** de
-`vault_upsert_entry` (linha 70) e `publishVaultViaDeviceKey` (linha 71). Se os últimos
-falharem, o caller já recebeu sucesso. Clicar Approve de novo reenvia o mesmo `id` — mas
-Rust já consumiu o slot, retorna `Err("no pending vault edit request...")` pra sempre.
+`respond_to_vault_edit_request` liberava HTTP 200 pro caller **antes** de `vault_upsert_entry`
+e `publishVaultViaDeviceKey`. Se os últimos falharem, o caller já recebeu sucesso e retry
+era impossível (Rust já consumiu o slot). Corrigido: `respond` movido pra depois do upsert +
+publish — se falhar, slot continua no Rust e usuário pode clicar Approve de novo.
 
-**10. Segunda proposta vault-edit pode ser descartada silenciosamente**
+**10. Segunda proposta vault-edit pode ser descartada silenciosamente -- FIXED Session 146**
 (`useIncomingVaultEditRequest.ts:36` + `VaultEditApprovalModal.tsx:42-78`)
-Proposta A aprovada → `respond` libera slot → `vault_upsert`/`publish` ainda rodam.
-Proposta B chega nessa janela, estaciona no slot livre, sobrescreve `request` no React.
-Quando A termina, `clear()` zera o request atual (= B), descartando B sem o usuário ver.
+Proposta A aprovada → `respond` liberava slot → upsert/publish ainda rodavam. Proposta B
+entrava no slot livre e era descartada quando A terminava (`clear()`). Corrigido pelo mesmo
+fix do #9: `respond` só libera o slot depois do upsert+publish, então não há janela.
 
 **11. `get_ledger_address` colapsa erro "access_denied" → "not_connected" -- FIXED Session 146**
 (`ledger.rs:224`)

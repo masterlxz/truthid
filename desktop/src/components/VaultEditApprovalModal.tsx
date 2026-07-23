@@ -50,11 +50,6 @@ export function VaultEditApprovalModal({
     setStage("publishing");
     setError(null);
     try {
-      await invoke("respond_to_vault_edit_request", {
-        id: request.id,
-        decision: { outcome: "approved" },
-      });
-
       const entry: VaultEntry = {
         id: "",
         site: request.entry.site,
@@ -70,6 +65,15 @@ export function VaultEditApprovalModal({
       };
       await invoke<VaultEntry>("vault_upsert_entry", { entry });
       const { providersFailed } = await publishVaultViaDeviceKey(smartAccountAddress);
+
+      // Só responde ao Rust depois que o vault foi salvo e publicado.
+      // Se algo falhar aqui, o slot do Rust continua pendente — o
+      // usuário pode clicar Approve de novo (#9). E nenhuma segunda
+      // proposta entra entre o respond e o upsert (#10).
+      await invoke("respond_to_vault_edit_request", {
+        id: request.id,
+        decision: { outcome: "approved" },
+      });
 
       if (providersFailed.length > 0) {
         console.warn(
