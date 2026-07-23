@@ -6664,7 +6664,7 @@ novo. Fix: `join_all` por fase (Kubo → PSA) + `Client` compartilhado.
 Recomputa sobre toda a lista de entradas em cada render — inclusive toggles de UI não
 relacionados (abrir form, visibilidade de senha). `useMemo([entries, filter])`.
 
-**30. `scanSmartAccountActivity` faz RPC calls sequenciais dentro do chunk**
+**30. `scanSmartAccountActivity` faz RPC calls sequenciais dentro do chunk -- FIXED Session 146**
 (`scanSmartAccountActivity.ts:119-139`)
 `getTransactionReceipt` e `getBlock` são chamados um por vez em loop — primeiro scan de
 identidade antiga paga RTT sequencial pra cada tx/bloco único.

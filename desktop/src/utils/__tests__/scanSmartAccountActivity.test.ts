@@ -34,7 +34,7 @@ function makeMockClient(overrides: Partial<ScanClient> = {}): ScanClient {
   return {
     request: vi.fn().mockResolvedValue([]),
     getTransactionReceipt: vi.fn().mockResolvedValue({ gasUsed: 21_000n, effectiveGasPrice: 1_000_000_000n }),
-    getBlock: vi.fn().mockResolvedValue({ timestamp: 1_700_000_000n }),
+    getBlock: vi.fn().mockResolvedValue({ number: 150n, timestamp: 1_700_000_000n }),
     ...overrides,
   } as unknown as ScanClient;
 }
@@ -99,7 +99,7 @@ describe("scanSmartAccountActivity", () => {
     const client = makeMockClient({
       request: vi.fn().mockResolvedValue([rawLog("SessionCreated", HASH_A, 500n, 2)]) as unknown as ScanClient["request"],
       getTransactionReceipt: vi.fn().mockResolvedValue({ gasUsed: 50_000n, effectiveGasPrice: 2_000_000_000n }),
-      getBlock: vi.fn().mockResolvedValue({ timestamp: 1_720_000_000n }),
+      getBlock: vi.fn().mockResolvedValue({ number: 500n, timestamp: 1_720_000_000n }),
     });
 
     const result = await scanSmartAccountActivity(client, { identityId: 1n, fromBlock: 100n, toBlock: 600n });

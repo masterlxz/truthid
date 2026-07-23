@@ -116,6 +116,40 @@ export async function scanSmartAccountActivity(
       ],
     } as Parameters<ScanClient["request"]>[0])) as unknown as RawLog[];
 
+    // Busca receipts e blocos únicos em paralelo em vez de sequencial
+    // dentro do loop — cada chunk pode ter várias transações/blocos que
+    // compartilham o mesmo receipt ou timestamp (bug #30).
+    const uniqueHashes = [...new Set(rawLogs.map((l) => l.transactionHash))];
+    const uniqueBlockNumbers = [
+      ...new Set(rawLogs.map((l) => BigInt(l.blockNumber))),
+    ];
+    const [receiptResults, blockResults] = await Promise.all([
+      Promise.all(
+        uniqueHashes
+          .filter((h) => !receiptCache.has(h))
+          .map((hash) =>
+            client
+              .getTransactionReceipt({ hash })
+              .then((r) => ({ hash, gasUsed: r.gasUsed, effectiveGasPrice: r.effectiveGasPrice })),
+          ),
+      ),
+      Promise.all(
+        uniqueBlockNumbers
+          .filter((b) => !blockTimestampCache.has(b))
+          .map((blockNumber) =>
+            client
+              .getBlock({ blockNumber })
+              .then((b) => ({ number: b.number, timestamp: b.timestamp })),
+          ),
+      ),
+    ]);
+    for (const { hash, gasUsed, effectiveGasPrice } of receiptResults) {
+      receiptCache.set(hash, { gasUsed, effectiveGasPrice });
+    }
+    for (const { number, timestamp } of blockResults) {
+      if (number !== null) blockTimestampCache.set(number, timestamp);
+    }
+
     for (const log of rawLogs) {
       const type = TYPE_BY_TOPIC0.get(log.topics[0].toLowerCase());
       if (!type) continue; // topic0 fora da lista pedida, não deveria acontecer
@@ -124,19 +158,8 @@ export async function scanSmartAccountActivity(
       const blockNumber = BigInt(log.blockNumber);
       const logIndex = Number(log.logIndex);
 
-      let receipt = receiptCache.get(hash);
-      if (!receipt) {
-        const fetched = await client.getTransactionReceipt({ hash });
-        receipt = { gasUsed: fetched.gasUsed, effectiveGasPrice: fetched.effectiveGasPrice };
-        receiptCache.set(hash, receipt);
-      }
-
-      let timestamp = blockTimestampCache.get(blockNumber);
-      if (timestamp === undefined) {
-        const block = await client.getBlock({ blockNumber });
-        timestamp = block.timestamp;
-        blockTimestampCache.set(blockNumber, timestamp);
-      }
+      const receipt = receiptCache.get(hash)!;
+      const timestamp = blockTimestampCache.get(blockNumber)!;
 
       activities.push({
         type,
