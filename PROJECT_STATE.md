@@ -2,8 +2,8 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-22 (Sessão 146 — Code Review: 43 bugs corrigidos, 9 pendentes)
-> ⚠️ **REMANESCENTES (5 bugs de média complexidade + 6 contratos)**: #18 (builder pattern), #19 (helpers $HOME/.truthid), #22 (vault_edit struct merge), #26 (cache vault decrypt), #34 (PBKDF2 sem teto). Contratos: C1-C6. 47 bugs corrigidos, 5 pendentes + 6 contratos.
+> Última atualização: 2026-07-23 (Sessão 146 — Code Review: 48 bugs corrigidos, 4 pendentes)
+> ⚠️ **REMANESCENTES (1 bug de média complexidade + 6 contratos)**: #34 (PBKDF2 sem teto). Contratos: C1-C6. 51 bugs corrigidos, 1 pendente + 6 contratos.
 
 ---
 
@@ -6596,12 +6596,12 @@ Mesmo padrão `Mutex<Option<PendingX>>` + `oneshot` + `timeout` + `resolve` copi
 linhas por canal. Os comentários justificam pra testabilidade, mas uma abstração genérica
 `SingleSlotChannel<Payload, Decision>` preservaria a mesma testabilidade.
 
-**18. `local_signer_server::start()` cresceu pra 8 parâmetros posicionais**
+**~~18. `local_signer_server::start()` cresceu pra 8 parâmetros posicionais -- FIXED (já existia `ServerConfigBuilder`)~~**
 (`local_signer_server.rs:30-40,212-222` + `lib.rs:608-644,814-833`)
 Cada canal novo adiciona um par (state, notifier). Testes precisam passar closures no-op.
 Um builder `ServerBuilder::new().channel(...).build()` eliminaria a duplicação posicional.
 
-**19. `$HOME/.truthid` + load/save duplicado ~11 vezes em 5 arquivos Rust**
+**~~19. `$HOME/.truthid` + load/save duplicado ~11 vezes em 5 arquivos Rust -- FIXED (helpers extraídos pra `config.rs`)~~**
 (`ipfs.rs`, `bundler.rs`, `pin.rs`, `vault.rs`, `lib.rs`)
 Path construction + `serde_json::from_str`/`to_string_pretty` idênticos pra cada tipo de
 config. Um helper `local_config_path` + `load_json_or_default`/`save_json_pretty` genéricos
@@ -6617,7 +6617,7 @@ derivação cross-device se aplicado só em 1 ou 2 das 3 cópias. Hook removido;
 Só `computeSmartAccountAddressSync` é usado. O union type + type guard + ABI da factory
 existem sem nenhum caller — superfície desnecessária pra manter.
 
-**22. `vault_edit.rs` divide um struct em dois só pra separar Serialize/Deserialize**
+**~~22. `vault_edit.rs` divide um struct em dois só pra separar Serialize/Deserialize -- FIXED (já unificado, `VaultEditRequestBodyOut` removido)~~**
 (`vault_edit.rs:50-65,86-108`)
 `VaultEditRequestBody` (Deserialize) + `VaultEditRequestBodyOut` (Serialize) com 6 campos
 idênticos + `From` impl manual — ~20 linhas que o resto do codebase não precisa (ex:
@@ -6639,7 +6639,7 @@ wagmi re-renderiza todos os consumidores (4 tabs inteiras). Fix: `useMemo` com d
 `App` re-renderiza com frequência (`useAccount`, `useReadContract`, `useSwitchChain`) —
 cascateia pra toda a árvore de componentes.
 
-**26. `VaultManagement.loadAll()` dispara ~5 decrypts do vault por mutação**
+**~~26. `VaultManagement.loadAll()` dispara ~5 decrypts do vault por mutação -- FIXED (comando único `vault_load_all` + `pending_changes_from`)~~**
 (`VaultManagement.tsx:502-520`)
 Após cada add/edit/delete, `Promise.all` sobre 4 comandos que cada um chama `vault::load()`
 — e `vault_pending_changes` sozinho faz `load()` + `load_published_snapshot()`. 5 leituras

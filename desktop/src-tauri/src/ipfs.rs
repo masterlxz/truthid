@@ -176,12 +176,8 @@ async fn psa_pin(client: &reqwest::Client, endpoint_url: &str, api_key: &str, ci
 // Persistência de providers
 // ---------------------------------------------------------------------------
 
-fn providers_path() -> Result<std::path::PathBuf, String> {
-    crate::config::truthid_dir().map(|d| d.join("pinning_providers.json"))
-}
-
 pub(crate) fn load_providers() -> Vec<PinningProvider> {
-    let path = match providers_path() {
+    let path = match crate::config::truthid_file_path("pinning_providers.json") {
         Ok(p) => p,
         Err(_) => return Vec::new(),
     };
@@ -192,7 +188,7 @@ pub(crate) fn load_providers() -> Vec<PinningProvider> {
 }
 
 pub(crate) fn save_providers(providers: &[PinningProvider]) -> Result<(), String> {
-    let path = providers_path()?;
+    let path = crate::config::truthid_file_path("pinning_providers.json")?;
     crate::config::save_json(&path, providers)
 }
 

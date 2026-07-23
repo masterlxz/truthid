@@ -8,6 +8,7 @@ use sha3::{Digest, Keccak256};
 use aes_gcm::{Aes256Gcm, Key};
 use aes_gcm::aead::{Aead, AeadCore, KeyInit};
 use k256::elliptic_curve::ecdh::diffie_hellman;
+use serde::Serialize;
 
 mod backup;
 mod bundler;
@@ -29,7 +30,7 @@ const VAULT_KEY_ACCOUNT: &str = "vault-key";
 /// Caminho de fallback quando o keyring do SO não está disponível (ex: Docker).
 /// Usa $HOME/.truthid/device.key — montado como volume no compose para persistir.
 fn fallback_key_path() -> Result<std::path::PathBuf, String> {
-    crate::config::truthid_dir().map(|d| d.join("device.key"))
+    crate::config::truthid_file_path("device.key")
 }
 
 /// Lê a chave privada do keyring ou do arquivo de fallback.
@@ -45,9 +46,8 @@ pub(crate) fn get_device_key_hex() -> Result<String, String> {
     // 2. Fallback: arquivo ($HOME/.truthid/device.key)
     let path = fallback_key_path()?;
     if path.exists() {
-        return std::fs::read_to_string(&path)
-            .map(|s| s.trim().to_string())
-            .map_err(|e| e.to_string());
+        return crate::config::read_text(&path)
+            .map(|s| s.trim().to_string());
     }
 
     // 3. Gera nova chave secp256k1
@@ -60,7 +60,7 @@ pub(crate) fn get_device_key_hex() -> Result<String, String> {
         .is_ok();
 
     if !saved {
-        std::fs::write(&path, &hex).map_err(|e| e.to_string())?;
+        crate::config::write_file(&path, hex.as_bytes())?;
     }
 
     Ok(hex)
@@ -105,8 +105,7 @@ pub(crate) fn get_vault_key() -> Result<[u8; 32], String> {
     // 2. Fallback: arquivo ($HOME/.truthid/vault.key)
     let path = vault_key_path()?;
     if path.exists() {
-        let hex = std::fs::read_to_string(&path)
-            .map_err(|e| e.to_string())?;
+        let hex = crate::config::read_text(&path)?;
         let bytes = hex::decode(hex.trim()).map_err(|e| e.to_string())?;
         if bytes.len() == 32 {
             let mut key = [0u8; 32];
@@ -122,7 +121,7 @@ pub(crate) fn get_vault_key() -> Result<[u8; 32], String> {
 }
 
 fn vault_key_path() -> Result<std::path::PathBuf, String> {
-    crate::config::truthid_dir().map(|d| d.join("vault.key"))
+    crate::config::truthid_file_path("vault.key")
 }
 
 fn set_vault_key(key: &[u8; 32]) -> Result<(), String> {
@@ -136,7 +135,7 @@ fn set_vault_key(key: &[u8; 32]) -> Result<(), String> {
     // Fallback: arquivo
     if !saved {
         let path = vault_key_path()?;
-        std::fs::write(&path, &hex_key).map_err(|e| e.to_string())?;
+        crate::config::write_file(&path, hex_key.as_bytes())?;
     }
 
     Ok(())
@@ -312,6 +311,28 @@ fn vault_list_profiles() -> Result<Vec<String>, String> {
     Ok(vault::load()?.profile_names)
 }
 
+/// Carrega o vault uma única vez e retorna tudo que a UI precisa
+/// (entries, permissions, profiles, pending_changes) — elimina 4
+/// decripts redundantes que `loadAll()` fazia antes (bug #26).
+#[derive(Serialize)]
+struct VaultLoadAllResult {
+    entries: Vec<vault::VaultEntry>,
+    permissions: Vec<vault::DeviceVaultPermission>,
+    profiles: Vec<String>,
+    pending_changes: u64,
+}
+
+#[tauri::command]
+fn vault_load_all() -> Result<VaultLoadAllResult, String> {
+    let vault = vault::load()?;
+    Ok(VaultLoadAllResult {
+        pending_changes: vault::pending_changes_from(&vault)?,
+        entries: vault.entries,
+        permissions: vault.device_permissions,
+        profiles: vault.profile_names,
+    })
+}
+
 /// Cria um novo perfil (nome livre). Persiste em disco.
 #[tauri::command]
 fn vault_add_profile(name: String) -> Result<(), String> {
@@ -429,7 +450,7 @@ async fn vault_publish() -> Result<ipfs::PinResult, String> {
     if !path.exists() {
         return Err("vault ainda não existe — adicione ao menos uma entrada antes de publicar".to_string());
     }
-    let encrypted_blob = std::fs::read(&path).map_err(|e| e.to_string())?;
+    let encrypted_blob = crate::config::read_file(&path)?;
     let providers = ipfs::load_providers();
     if providers.is_empty() {
         return Err("nenhum provider de pinning configurado — use vault_set_providers primeiro".to_string());
@@ -857,6 +878,7 @@ pub fn run() {
             vault_upsert_entry,
             vault_delete_entry,
             vault_list_profiles,
+            vault_load_all,
             vault_add_profile,
             vault_rename_profile,
             vault_delete_profile,

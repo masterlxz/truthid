@@ -227,7 +227,7 @@ pub(crate) fn lock_vault() -> std::sync::MutexGuard<'static, ()> {
 }
 
 pub(crate) fn vault_path() -> Result<PathBuf, String> {
-    crate::config::truthid_dir().map(|d| d.join("vault.enc"))
+    crate::config::truthid_file_path("vault.enc")
 }
 
 // Lê o arquivo cifrado e desserializa o vault.
@@ -241,7 +241,7 @@ pub(crate) fn load() -> Result<Vault, String> {
     if !path.exists() {
         return Ok(Vault::default());
     }
-    let blob = std::fs::read(&path).map_err(|e| e.to_string())?;
+    let blob = crate::config::read_file(&path)?;
 
     // Tenta decifrar com a chave nova (wallet-derived)
     let json = match decrypt(&blob) {
@@ -270,7 +270,7 @@ pub(crate) fn load() -> Result<Vault, String> {
             let mut new_blob = Vec::with_capacity(12 + new_ciphertext.len());
             new_blob.extend_from_slice(&new_nonce);
             new_blob.extend_from_slice(&new_ciphertext);
-            std::fs::write(&path, &new_blob).map_err(|e| e.to_string())?;
+            crate::config::write_file(&path, &new_blob)?;
 
             legacy_json
         }
@@ -302,11 +302,10 @@ pub(crate) fn load() -> Result<Vault, String> {
     // Sessão 97). Best-effort: arquivo ausente ou corrompido só resulta em
     // lista vazia, não é erro fatal.
     if vault.device_permissions.is_empty() {
-        let legacy_path = crate::config::truthid_dir()
-            .map(|d| d.join("vault_permissions.json"))
+        let legacy_path = crate::config::truthid_file_path("vault_permissions.json")
             .unwrap_or_default();
         if legacy_path.exists() {
-            if let Ok(raw) = std::fs::read_to_string(&legacy_path) {
+            if let Ok(raw) = crate::config::read_text(&legacy_path) {
                 if let Ok(legacy) = serde_json::from_str::<Vec<DeviceVaultPermission>>(&raw) {
                     vault.device_permissions = legacy;
                 }
@@ -321,7 +320,7 @@ pub(crate) fn save(vault: &Vault) -> Result<(), String> {
     let json = serde_json::to_vec(vault).map_err(|e| e.to_string())?;
     let blob = encrypt(&json)?;
     let path = vault_path()?;
-    std::fs::write(&path, blob).map_err(|e| e.to_string())
+    crate::config::write_file(&path, &blob)
 }
 
 // ---------------------------------------------------------------------------
@@ -363,11 +362,11 @@ pub(crate) fn decrypt(blob: &[u8]) -> Result<Vec<u8>, String> {
 // ---------------------------------------------------------------------------
 
 fn meta_path() -> Result<PathBuf, String> {
-    crate::config::truthid_dir().map(|d| d.join("vault.meta.json"))
+    crate::config::truthid_file_path("vault.meta.json")
 }
 
 fn published_snapshot_path() -> Result<PathBuf, String> {
-    crate::config::truthid_dir().map(|d| d.join("vault.published.enc"))
+    crate::config::truthid_file_path("vault.published.enc")
 }
 
 // Cópia cifrada (mesma chave do vault.enc) do conteúdo publicado pela última
@@ -379,7 +378,7 @@ fn load_published_snapshot() -> Result<Option<Vault>, String> {
     if !path.exists() {
         return Ok(None);
     }
-    let blob = std::fs::read(&path).map_err(|e| e.to_string())?;
+    let blob = crate::config::read_file(&path)?;
     let json = decrypt(&blob)?;
     let vault: Vault = serde_json::from_slice(&json).map_err(|e| e.to_string())?;
     Ok(Some(vault))
@@ -389,7 +388,7 @@ fn save_published_snapshot(vault: &Vault) -> Result<(), String> {
     let json = serde_json::to_vec(vault).map_err(|e| e.to_string())?;
     let blob = encrypt(&json)?;
     let path = published_snapshot_path()?;
-    std::fs::write(&path, blob).map_err(|e| e.to_string())
+    crate::config::write_file(&path, &blob)
 }
 
 /// Conta mudanças reais de conteúdo entre o vault atual e o último snapshot
@@ -494,17 +493,22 @@ pub(crate) fn mark_published(version: u64) -> Result<(), String> {
         "last_published_version": version,
         "last_published_content_hash": content_signature(&vault),
     });
-    std::fs::write(&path, serde_json::to_string(&meta).map_err(|e| e.to_string())?)
-        .map_err(|e| e.to_string())?;
+    crate::config::write_text(&path, &serde_json::to_string(&meta).map_err(|e| e.to_string())?)?;
     save_published_snapshot(&vault)
 }
 
 /// Retorna quantas mudanças de conteúdo o vault local tem em relação ao
 /// último publicado no IPFS. 0 = nada pendente.
 pub(crate) fn pending_changes() -> Result<u64, String> {
-    let vault = load()?;
+    pending_changes_from(&load()?)
+}
+
+/// Mesmo que `pending_changes()`, mas recebe o vault já carregado —
+/// evita um reload+decrypt redundante quando o caller já tem o vault
+/// em memória (ex: `vault_load_all`).
+pub(crate) fn pending_changes_from(vault: &Vault) -> Result<u64, String> {
     if let Some(snapshot) = load_published_snapshot()? {
-        return Ok(diff_count(&vault, &snapshot));
+        return Ok(diff_count(vault, &snapshot));
     }
     // Fallback pra vaults publicados antes da Sessão 139 (sem snapshot local
     // ainda) — mesmo comportamento de antes, até a próxima publicação gravar
@@ -513,9 +517,9 @@ pub(crate) fn pending_changes() -> Result<u64, String> {
     if !path.exists() {
         return Ok(vault.version);
     }
-    let raw = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    let raw = crate::config::read_text(&path)?;
     let val: serde_json::Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
-    if val["last_published_content_hash"].as_str() == Some(content_signature(&vault).as_str()) {
+    if val["last_published_content_hash"].as_str() == Some(content_signature(vault).as_str()) {
         return Ok(0);
     }
     let last = val["last_published_version"].as_u64().unwrap_or(0);

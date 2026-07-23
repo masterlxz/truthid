@@ -22,6 +22,13 @@ import { PasswordGeneratorModal } from "./PasswordGeneratorModal";
 import { passwordStrength, type PasswordStrengthScore } from "../utils/passwordStrength";
 import { VAULT_KEY_MESSAGE } from "../config/vaultKey";
 
+interface VaultLoadAllResult {
+  entries: VaultEntry[];
+  permissions: DeviceVaultPermission[];
+  profiles: string[];
+  pending_changes: number;
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -501,18 +508,11 @@ export function VaultManagement() {
   async function loadAll() {
     setLoadingEntries(true);
     try {
-      const [e, perms, prof] = await Promise.all([
-        invoke<VaultEntry[]>("vault_list_entries"),
-        invoke<DeviceVaultPermission[]>("vault_get_device_permissions"),
-        invoke<string[]>("vault_list_profiles"),
-      ]);
-      // vault_pending_changes separado — se snapshot corromper, não derruba
-      // a lista de entradas (bug #50).
-      const p = await invoke<number>("vault_pending_changes").catch(() => 0);
-      setEntries(e);
-      setPendingCount(p);
-      setPermissions(perms);
-      setProfiles(prof);
+      const result = await invoke<VaultLoadAllResult>("vault_load_all");
+      setEntries(result.entries);
+      setPendingCount(result.pending_changes);
+      setPermissions(result.permissions);
+      setProfiles(result.profiles);
     } catch {
       // sem vault ainda — tudo vazio é ok
     } finally {

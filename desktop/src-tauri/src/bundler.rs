@@ -1,5 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 
 /// Config do bundler Pimlico usado pra montar/enviar UserOperations ERC-4337
 /// pela device key (sem Ledger) — mirror de `BundlerConfigService` no Mobile
@@ -14,12 +13,8 @@ pub(crate) struct BundlerConfig {
     pub network: String,
 }
 
-fn config_path() -> Result<PathBuf, String> {
-    crate::config::truthid_dir().map(|d| d.join("bundler_config.json"))
-}
-
 pub(crate) fn load_config() -> BundlerConfig {
-    let path = match config_path() {
+    let path = match crate::config::truthid_file_path("bundler_config.json") {
         Ok(p) => p,
         Err(_) => return BundlerConfig::default(),
     };
@@ -30,6 +25,6 @@ pub(crate) fn load_config() -> BundlerConfig {
 }
 
 pub(crate) fn save_config(config: &BundlerConfig) -> Result<(), String> {
-    let path = config_path()?;
+    let path = crate::config::truthid_file_path("bundler_config.json")?;
     crate::config::save_json(&path, config)
 }

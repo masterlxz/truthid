@@ -199,7 +199,7 @@ pub(crate) struct PinAuthorization {
 }
 
 fn default_authorizations_path() -> Result<std::path::PathBuf, String> {
-    crate::config::truthid_dir().map(|d| d.join("pin_authorizations.json"))
+    crate::config::truthid_file_path("pin_authorizations.json")
 }
 
 fn load_authorizations(path: &std::path::Path) -> Vec<PinAuthorization> {
@@ -210,9 +210,6 @@ fn save_authorizations(
     path: &std::path::Path,
     authorizations: &[PinAuthorization],
 ) -> Result<(), String> {
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
-    }
     crate::config::save_json(path, authorizations)
 }
 
