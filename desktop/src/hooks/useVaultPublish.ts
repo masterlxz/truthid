@@ -27,6 +27,7 @@ export function useVaultPublish(
   buttonLabel: string;
   buttonDisabled: boolean;
   handleEnviar: () => Promise<void>;
+  deviceKeyDisabled: boolean;
   deviceKeyPublishState: "idle" | "publishing" | "error";
   deviceKeyError: string | null;
   handleEnviarViaDeviceKey: () => Promise<void>;
@@ -198,8 +199,11 @@ export function useVaultPublish(
     pinWarning,
     txErrorMessage: isTxError && txError ? txError.message?.split("\n")[0] ?? null : null,
     buttonLabel: buttonLabel(),
-    buttonDisabled: publishState === "publishing" || isTxPending || isConfirming || justPublished,
+    buttonDisabled: publishState === "publishing" || isTxPending || isConfirming || justPublished
+      || deviceKeyPublishState === "publishing",
     handleEnviar,
+    deviceKeyDisabled: deviceKeyPublishState === "publishing"
+      || publishState === "publishing" || isTxPending || isConfirming || justPublished,
     deviceKeyPublishState,
     deviceKeyError,
     handleEnviarViaDeviceKey,

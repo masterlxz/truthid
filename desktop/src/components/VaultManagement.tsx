@@ -532,6 +532,7 @@ export function VaultManagement() {
     handleEnviar,
     deviceKeyPublishState,
     deviceKeyError,
+    deviceKeyDisabled,
     handleEnviarViaDeviceKey,
   } = useVaultPublish(pendingCount, () => setPendingCount(0));
 
@@ -779,7 +780,7 @@ export function VaultManagement() {
                 (ver PROJECT_STATE.md, "Desktop ganha assinatura via device key"). */}
             <button
               onClick={handleEnviarViaDeviceKey}
-              disabled={deviceKeyPublishState === "publishing"}
+              disabled={deviceKeyDisabled}
               title="Publica o vault assinando com a device key local, sem toque na Ledger — requer ~/.truthid/bundler_config.json configurado"
             >
               {deviceKeyPublishState === "publishing"

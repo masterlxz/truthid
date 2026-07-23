@@ -6509,7 +6509,7 @@ caller original — se o usuário aprovar com a janela minimizada (webview throt
 uma UserOperation real é enviada pra Base Mainnet mesmo com o caller já tendo recebido 408 e
 desistido. Nenhum gate server-side — só timer client-side.
 
-**5. "Enviar" (Ledger) e "Publicar via device key" são independentemente clicáveis**
+**5. "Enviar" (Ledger) e "Publicar via device key" são independentemente clicáveis -- FIXED Session 146**
 (`desktop/src/components/VaultManagement.tsx:770,778-779` + `useVaultPublish.ts:188`)
 Os dois botões controlam estados separados (`publishState`/`isTxPending`/`isConfirming` vs
 `deviceKeyPublishState`). Podem disparar simultaneamente dois `vault_publish` IPFS paralelos +
