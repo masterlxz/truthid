@@ -86,14 +86,15 @@ export async function executeViaUserOp({
     args: [dest, value, callData],
   });
 
-  const nonce = await readContract(config, {
-    address: ENTRY_POINT_V07,
-    abi: ENTRY_POINT_ABI,
-    functionName: "getNonce",
-    args: [smartAccountAddress, 0n],
-  });
-
-  const gasPrice = await bundlerClient.getUserOperationGasPrice();
+  const [nonce, gasPrice] = await Promise.all([
+    readContract(config, {
+      address: ENTRY_POINT_V07,
+      abi: ENTRY_POINT_ABI,
+      functionName: "getNonce",
+      args: [smartAccountAddress, 0n],
+    }),
+    bundlerClient.getUserOperationGasPrice(),
+  ]);
 
   let userOp: UserOperationV07 = {
     sender: smartAccountAddress,
