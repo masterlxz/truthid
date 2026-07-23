@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from "react";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { useReadContract } from "wagmi";
 import type { Address } from "viem";
 import { IDENTITY_REGISTRY_ADDRESS, IDENTITY_REGISTRY_ABI } from "../config/contracts";
@@ -28,7 +28,7 @@ export function IdentityProvider({
   });
 
   return (
-    <IdentityContext.Provider value={{ username, identityId: identity?.id, smartAccountAddress }}>
+    <IdentityContext.Provider value={useMemo(() => ({ username, identityId: identity?.id, smartAccountAddress }), [username, identity?.id, smartAccountAddress])}>
       {children}
     </IdentityContext.Provider>
   );

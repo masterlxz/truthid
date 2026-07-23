@@ -6633,7 +6633,7 @@ idênticos + `From` impl manual — ~20 linhas que o resto do codebase não prec
 Mesma sequência `refetchHasVault → refetchVaultRef → onPublished → setJustPublished(true) →
 setTimeout(3000)` em `isTxSuccess` e `handleEnviarViaDeviceKey`. Extrair helper local.
 
-**24. `IdentityContext.tsx` recria objeto em todo render**
+**24. `IdentityContext.tsx` recria objeto em todo render -- FIXED Session 146**
 (`contexts/IdentityContext.tsx:31`)
 `value={{ username, identityId, smartAccountAddress }}` sem `useMemo` — toda query do
 wagmi re-renderiza todos os consumidores (4 tabs inteiras). Fix: `useMemo` com dependências.
