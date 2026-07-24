@@ -257,6 +257,19 @@ contract RecoveryManagerTest is Test, IdentityConsentHelper {
         assertEq(stored.length, 20);
     }
 
+    function test_Revert_ConfigureGuardians_DuplicateGuardian() public {
+        address[] memory guardians = new address[](3);
+        guardians[0] = guardian1;
+        guardians[1] = guardian1; // duplicata
+        guardians[2] = guardian2;
+
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(RecoveryManager.DuplicateGuardian.selector, guardian1)
+        );
+        recoveryManager.configureGuardians("alice.id", guardians, 3);
+    }
+
     function test_Revert_ConfigureGuardians_EmptyGuardians() public {
         address[] memory guardians = new address[](0);
 

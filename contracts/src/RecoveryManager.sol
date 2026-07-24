@@ -107,6 +107,7 @@ contract RecoveryManager {
     error ActiveProposalExists();
     error InvalidNewController();
     error TooManyGuardians(uint256 count, uint256 max);
+    error DuplicateGuardian(address guardian);
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -135,6 +136,17 @@ contract RecoveryManager {
         }
         if (guardians.length > MAX_GUARDIANS) {
             revert TooManyGuardians(guardians.length, MAX_GUARDIANS);
+        }
+
+        // C7: impede duplicatas no array de guardians — sem isso,
+        // [A, A, B] com threshold 3 trava o recovery permanentemente
+        // (A só pode aprovar uma vez, threshold nunca é atingido).
+        for (uint256 i = 0; i < guardians.length; i++) {
+            for (uint256 j = i + 1; j < guardians.length; j++) {
+                if (guardians[i] == guardians[j]) {
+                    revert DuplicateGuardian(guardians[i]);
+                }
+            }
         }
 
         // Bloqueia reconfiguração com proposta em andamento — evita invalidar votos já coletados
