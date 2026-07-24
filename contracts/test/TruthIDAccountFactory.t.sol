@@ -253,4 +253,62 @@ contract TruthIDAccountFactoryTest is Test, IdentityConsentHelper {
         assertGt(address(account0).code.length, 0);
         assertGt(address(account1).code.length, 0);
     }
+
+    // -------------------------------------------------------------------------
+    // C8 — updateRegistries (registries mutáveis)
+    // -------------------------------------------------------------------------
+
+    function test_UpdateRegistries_ByOwner_EmitsEvent() public {
+        address newDR = makeAddr("newDeviceRegistry");
+        address newIR = makeAddr("newIdentityRegistry");
+        address newRM = makeAddr("newRecoveryManager");
+
+        vm.expectEmit(true, true, true, false);
+        emit TruthIDAccountFactory.FactoryRegistriesUpdated(newDR, newIR, newRM);
+
+        factory.updateRegistries(newDR, newIR, newRM);
+
+        assertEq(factory.deviceRegistry(), newDR);
+        assertEq(factory.identityRegistry(), newIR);
+        assertEq(factory.recoveryManager(), newRM);
+    }
+
+    function test_Revert_UpdateRegistries_NotOwner() public {
+        vm.prank(makeAddr("random"));
+        vm.expectRevert(TruthIDAccountFactory.NotOwner.selector);
+        factory.updateRegistries(makeAddr("d"), makeAddr("i"), makeAddr("r"));
+    }
+
+    function test_Revert_UpdateRegistries_ZeroAddress() public {
+        vm.expectRevert(TruthIDAccountFactory.InvalidRegistryAddress.selector);
+        factory.updateRegistries(address(0), makeAddr("i"), makeAddr("r"));
+    }
+
+    function test_UpdateRegistries_NewAccountsUseNewAddresses() public {
+        address newDR = makeAddr("newDeviceRegistry");
+        address newIR = makeAddr("newIdentityRegistry");
+        address newRM = makeAddr("newRecoveryManager");
+
+        factory.updateRegistries(newDR, newIR, newRM);
+
+        TruthIDAccount account = _predictAndCreate(owner, 0);
+
+        assertEq(account.deviceRegistry(), newDR);
+        assertEq(account.identityRegistry(), newIR);
+        assertEq(account.recoveryManager(), newRM);
+    }
+
+    function test_UpdateRegistries_GetAddressChanges() public {
+        address predictedBefore = factory.getAddress(owner, 0);
+
+        factory.updateRegistries(
+            makeAddr("newDR"), makeAddr("newIR"), makeAddr("newRM")
+        );
+
+        address predictedAfter = factory.getAddress(owner, 0);
+
+        // init code mudou (argumentos do constructor diferentes) →
+        // endereço previsto é diferente
+        assertTrue(predictedBefore != predictedAfter);
+    }
 }

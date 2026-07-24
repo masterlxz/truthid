@@ -794,6 +794,105 @@ contract TruthIDAccountTest is Test {
     }
 
     // -------------------------------------------------------------------------
+    // C8 — updateRegistries (registries mutáveis)
+    // -------------------------------------------------------------------------
+
+    function test_UpdateRegistries_ByOwner_EmitsEvent() public {
+        address newDR = makeAddr("newDeviceRegistry");
+        address newIR = makeAddr("newIdentityRegistry");
+        address newRM = makeAddr("newRecoveryManager");
+
+        vm.expectEmit(true, true, true, false);
+        emit TruthIDAccount.RegistriesUpdated(newDR, newIR, newRM);
+
+        vm.prank(owner);
+        account.updateRegistries(newDR, newIR, newRM);
+
+        assertEq(account.deviceRegistry(), newDR);
+        assertEq(account.identityRegistry(), newIR);
+        assertEq(account.recoveryManager(), newRM);
+    }
+
+    function test_UpdateRegistries_BlocksNewAddresses() public {
+        address newDR = makeAddr("newDeviceRegistry");
+        address newIR = makeAddr("newIdentityRegistry");
+        address newRM = makeAddr("newRecoveryManager");
+
+        vm.prank(owner);
+        account.updateRegistries(newDR, newIR, newRM);
+
+        assertTrue(account.blockedForDevices(newDR));
+        assertTrue(account.blockedForDevices(newIR));
+        assertTrue(account.blockedForDevices(newRM));
+    }
+
+    function test_UpdateRegistries_UnblocksOldAddresses() public {
+        address oldDR = account.deviceRegistry();
+        address oldIR = account.identityRegistry();
+        address oldRM = account.recoveryManager();
+
+        assertTrue(account.blockedForDevices(oldDR));
+        assertTrue(account.blockedForDevices(oldIR));
+        assertTrue(account.blockedForDevices(oldRM));
+
+        vm.prank(owner);
+        account.updateRegistries(makeAddr("newDR"), makeAddr("newIR"), makeAddr("newRM"));
+
+        assertFalse(account.blockedForDevices(oldDR));
+        assertFalse(account.blockedForDevices(oldIR));
+        assertFalse(account.blockedForDevices(oldRM));
+    }
+
+    function test_Revert_UpdateRegistries_NotAuthorized() public {
+        vm.prank(makeAddr("random"));
+        vm.expectRevert(TruthIDAccount.NotAuthorized.selector);
+        account.updateRegistries(makeAddr("d"), makeAddr("i"), makeAddr("r"));
+    }
+
+    function test_Revert_UpdateRegistries_ZeroAddress() public {
+        vm.prank(owner);
+        vm.expectRevert(TruthIDAccount.InvalidRegistryAddress.selector);
+        account.updateRegistries(address(0), makeAddr("i"), makeAddr("r"));
+    }
+
+    // Após updateRegistries, emergencyWithdraw usa o novo RecoveryManager
+    function test_UpdateRegistries_EmergencyWithdrawWorksWithNewRM() public {
+        address newRM = makeAddr("newRecoveryManager");
+        address currentDR = account.deviceRegistry();
+        address currentIR = account.identityRegistry();
+
+        vm.prank(owner);
+        account.updateRegistries(currentDR, currentIR, newRM);
+
+        vm.deal(address(account), 1 ether);
+        vm.prank(newRM);
+        account.emergencyWithdraw(owner);
+
+        assertEq(address(account).balance, 0);
+    }
+
+    // Após updateRegistries, device validation consulta o novo DeviceRegistry
+    function test_UpdateRegistries_DeviceValidationUsesNewDR() public {
+        MockDeviceRegistry newMock = new MockDeviceRegistry();
+        newMock.setActive(device, true);
+        address currentIR = account.identityRegistry();
+        address currentRM = account.recoveryManager();
+
+        vm.prank(owner);
+        account.updateRegistries(address(newMock), currentIR, currentRM);
+
+        address allowedDest = makeAddr("allowedDest");
+        bytes memory callData = abi.encodeCall(TruthIDAccount.execute, (allowedDest, 0, ""));
+        bytes32 userOpHash = keccak256("c8-new-dr");
+        PackedUserOperation memory userOp = _buildUserOp(callData);
+        userOp.signature = _sign(deviceKey, userOpHash);
+
+        vm.prank(entryPoint);
+        uint256 validationData = account.validateUserOp(userOp, userOpHash, 0);
+        assertEq(validationData, SIG_VALIDATION_SUCCESS);
+    }
+
+    // -------------------------------------------------------------------------
     // B8 — receive()
     // -------------------------------------------------------------------------
 

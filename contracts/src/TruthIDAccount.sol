@@ -87,9 +87,16 @@ contract TruthIDAccount {
 
     address public immutable entryPoint;
     address public immutable owner; // a chave Ledger — acesso total
-    address public immutable deviceRegistry; // referência; comparação real via blockedForDevices
-    address public immutable identityRegistry; // idem
-    address public immutable recoveryManager; // idem
+
+    // Endereços dos registries — NÃO são immutable (C8 do /code-review):
+    // se algum destes contratos precisar ser redeployado (ex: correção de
+    // bugs), o owner pode chamar `updateRegistries` para apontar a conta
+    // para as novas instâncias, sem precisar criar uma smart account nova.
+    // O mapping `blockedForDevices` também é atualizado automaticamente:
+    // os endereços antigos são desbloqueados e os novos são bloqueados.
+    address private _deviceRegistry;
+    address private _identityRegistry;
+    address private _recoveryManager;
 
     // device (endereço derivado da chave pública) → autorizado?
     mapping(address => bool) public authorizedDevices;
@@ -108,6 +115,9 @@ contract TruthIDAccount {
     event DestinationBlockedForDevices(address indexed dest);
     event DestinationUnblockedForDevices(address indexed dest);
     event EmergencyWithdraw(address indexed recipient, uint256 amount);
+    event RegistriesUpdated(
+        address indexed deviceRegistry, address indexed identityRegistry, address indexed recoveryManager
+    );
 
     // -------------------------------------------------------------------------
     // Erros customizados
@@ -123,6 +133,7 @@ contract TruthIDAccount {
     error InvalidSignatureLength();
     error NotRecoveryManager();
     error InvalidRecipient();
+    error InvalidRegistryAddress();
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -143,9 +154,9 @@ contract TruthIDAccount {
             revert InvalidConstructorArgs();
         }
         entryPoint = entryPoint_;
-        deviceRegistry = deviceRegistry_;
-        identityRegistry = identityRegistry_;
-        recoveryManager = recoveryManager_;
+        _deviceRegistry = deviceRegistry_;
+        _identityRegistry = identityRegistry_;
+        _recoveryManager = recoveryManager_;
         owner = owner_;
 
         blockedForDevices[deviceRegistry_] = true;
@@ -250,6 +261,63 @@ contract TruthIDAccount {
         emit DestinationUnblockedForDevices(dest);
     }
 
+    /// Retorna o endereço atual do DeviceRegistry (C8: mutável).
+    function deviceRegistry() external view returns (address) {
+        return _deviceRegistry;
+    }
+
+    /// Retorna o endereço atual do IdentityRegistry (C8: mutável).
+    function identityRegistry() external view returns (address) {
+        return _identityRegistry;
+    }
+
+    /// Retorna o endereço atual do RecoveryManager (C8: mutável).
+    function recoveryManager() external view returns (address) {
+        return _recoveryManager;
+    }
+
+    /// Atualiza os endereços dos três registries de uma só vez (C8 do
+    /// /code-review). Permite que uma TruthIDAccount existente seja
+    /// redirecionada para novas instâncias dos contratos após um redeploy
+    /// (ex: correção de bugs críticos). O mapping `blockedForDevices` é
+    /// atualizado automaticamente: os endereços antigos são desbloqueados
+    /// e os novos são bloqueados, garantindo que devices não consigam
+    /// chamar os novos registries diretamente.
+    ///
+    /// Só pode ser chamado pelo owner (via execute ou chamada direta),
+    /// pelo EntryPoint (via UserOp) ou pela própria conta (auto-chamada).
+    /// Nenhum dos endereços pode ser zero.
+    function updateRegistries(
+        address deviceRegistry_,
+        address identityRegistry_,
+        address recoveryManager_
+    ) external {
+        _requireAuthorized();
+        if (
+            deviceRegistry_ == address(0) || identityRegistry_ == address(0)
+                || recoveryManager_ == address(0)
+        ) {
+            revert InvalidRegistryAddress();
+        }
+
+        // Desbloqueia endereços antigos
+        blockedForDevices[_deviceRegistry] = false;
+        blockedForDevices[_identityRegistry] = false;
+        blockedForDevices[_recoveryManager] = false;
+
+        // Atualiza as referências
+        _deviceRegistry = deviceRegistry_;
+        _identityRegistry = identityRegistry_;
+        _recoveryManager = recoveryManager_;
+
+        // Bloqueia os novos endereços
+        blockedForDevices[deviceRegistry_] = true;
+        blockedForDevices[identityRegistry_] = true;
+        blockedForDevices[recoveryManager_] = true;
+
+        emit RegistriesUpdated(deviceRegistry_, identityRegistry_, recoveryManager_);
+    }
+
     /// Resgate de emergência: transfere todo o saldo da conta pra
     /// `recipient` — pensado pro RecoveryManager mover fundos "encalhados"
     /// pra uma smart account nova durante um recovery social (ver Fase 14,
@@ -258,7 +326,7 @@ contract TruthIDAccount {
     /// pro caso em que o owner já perdeu acesso — é o próprio motivo do
     /// recovery, então a autorização não pode depender dele.
     function emergencyWithdraw(address recipient) external {
-        if (msg.sender != recoveryManager) revert NotRecoveryManager();
+        if (msg.sender != _recoveryManager) revert NotRecoveryManager();
         if (recipient == address(0)) revert InvalidRecipient();
         uint256 amount = address(this).balance;
         _call(recipient, amount, "");
@@ -306,7 +374,7 @@ contract TruthIDAccount {
             // revogação). Um device revogado via DeviceRegistry.revokeDevice
             // não pode mais assinar UserOps mesmo que ainda conste em
             // authorizedDevices.
-            if (!IDeviceRegistry(deviceRegistry).isDeviceActive(signer)) {
+            if (!IDeviceRegistry(_deviceRegistry).isDeviceActive(signer)) {
                 return SIG_VALIDATION_FAILED;
             }
             return SIG_VALIDATION_SUCCESS;

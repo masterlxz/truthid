@@ -18,13 +18,27 @@ import {TruthIDAccount} from "./TruthIDAccount.sol";
 //   - getAddress(owner_, index) pode ser chamado off-chain para prever o
 //     endereco antes de deployar.
 //   - Debito #25: adiciona suporte a multiplas contas por owner via indice.
+//
+// C8: os endereços dos registries são mutáveis (não immutable) — se um
+// destes contratos precisar ser redeployado, o deployer pode chamar
+// `updateRegistries` para que novas contas já apontem para as novas
+// instâncias. Contas já existentes continuam apontando para as instâncias
+// antigas até que o owner de cada uma chame `updateRegistries` na própria
+// TruthIDAccount. O getter `getAddress` retorna endereços diferentes após
+// uma atualização — mesma ressalva do IdentityRegistry._factory (que é
+// mutável pelo mesmo motivo, ver comentário em IdentityRegistry.sol).
 contract TruthIDAccountFactory {
     // Enderecos dos contratos privilegiados injetados no constructor da
     // factory. Toda conta criada herda esses mesmos enderecos.
+    // NÃO são immutable (C8): podem ser atualizados pelo deployer.
     address public immutable entryPoint;
-    address public immutable deviceRegistry;
-    address public immutable identityRegistry;
-    address public immutable recoveryManager;
+    address private _deviceRegistry;
+    address private _identityRegistry;
+    address private _recoveryManager;
+
+    // Quem fez o deploy deste contrato. Único endereço autorizado a
+    // chamar updateRegistries.
+    address public immutable owner;
 
     // Registro das contas ja deployadas por (owner, index). Curto-circuita
     // o caminho idempotente de createAccount/getAddress sem precisar
@@ -32,8 +46,13 @@ contract TruthIDAccountFactory {
     mapping(address => mapping(uint256 => address)) public accounts;
 
     event AccountCreated(address indexed account, address indexed owner, uint256 indexed index);
+    event FactoryRegistriesUpdated(
+        address indexed deviceRegistry, address indexed identityRegistry, address indexed recoveryManager
+    );
 
     error InvalidConstructorArgs();
+    error NotOwner();
+    error InvalidRegistryAddress();
 
     constructor(
         address entryPoint_,
@@ -49,13 +68,16 @@ contract TruthIDAccountFactory {
         }
 
         entryPoint = entryPoint_;
-        deviceRegistry = deviceRegistry_;
-        identityRegistry = identityRegistry_;
-        recoveryManager = recoveryManager_;
+        _deviceRegistry = deviceRegistry_;
+        _identityRegistry = identityRegistry_;
+        _recoveryManager = recoveryManager_;
+        owner = msg.sender;
     }
 
     /// Cria uma TruthIDAccount para o owner + indice fornecidos. Se ja
     /// existir uma conta nesse endereco, retorna-a sem tentar recriar.
+    /// C8: usa os valores CORRENTES de _deviceRegistry/_identityRegistry/
+    /// _recoveryManager (que podem ter sido atualizados via updateRegistries).
     function createAccount(address owner_, uint256 index) external returns (TruthIDAccount ret) {
         address existing = accounts[owner_][index];
         if (existing != address(0)) {
@@ -66,7 +88,7 @@ contract TruthIDAccountFactory {
         address predicted = _computeAddress(salt, owner_);
 
         ret = new TruthIDAccount{salt: salt}(
-            entryPoint, deviceRegistry, identityRegistry, recoveryManager, owner_
+            entryPoint, _deviceRegistry, _identityRegistry, _recoveryManager, owner_
         );
 
         // Sanity check: CREATE2 deve nos dar exatamente o endereco previsto.
@@ -90,9 +112,11 @@ contract TruthIDAccountFactory {
     function _computeAddress(bytes32 salt, address owner_) internal view returns (address) {
         // init code = creationCode do contrato concatenado com os argumentos
         // do constructor ABI-encoded. Esse e o hash usado pelo CREATE2.
+        // C8: usa os valores CORRENTES dos registries (que podem ter
+        // sido atualizados via updateRegistries).
         bytes memory initCode = abi.encodePacked(
             type(TruthIDAccount).creationCode,
-            abi.encode(entryPoint, deviceRegistry, identityRegistry, recoveryManager, owner_)
+            abi.encode(entryPoint, _deviceRegistry, _identityRegistry, _recoveryManager, owner_)
         );
 
         bytes32 initCodeHash = keccak256(initCode);
@@ -108,5 +132,53 @@ contract TruthIDAccountFactory {
 
     function _salt(address owner_, uint256 index) internal pure returns (bytes32) {
         return keccak256(abi.encodePacked(owner_, index));
+    }
+
+    // -------------------------------------------------------------------------
+    // Getters (C8: retornam valores mutáveis)
+    // -------------------------------------------------------------------------
+
+    function deviceRegistry() external view returns (address) {
+        return _deviceRegistry;
+    }
+
+    function identityRegistry() external view returns (address) {
+        return _identityRegistry;
+    }
+
+    function recoveryManager() external view returns (address) {
+        return _recoveryManager;
+    }
+
+    // -------------------------------------------------------------------------
+    // Atualização de registries (C8)
+    // -------------------------------------------------------------------------
+
+    /// Atualiza os endereços dos três registries para novas instâncias
+    /// (ex: após um redeploy para correção de bugs). Só o deployer (owner)
+    /// pode chamar. Nenhum endereço pode ser zero.
+    ///
+    /// ATENÇÃO: após a atualização, `getAddress` retorna endereços
+    /// DIFERENTES para o mesmo par (owner, index) — o init code do CREATE2
+    /// muda porque os argumentos do constructor mudaram. Contas já criadas
+    /// antes da atualização não são afetadas (continuam com os endereços
+    /// antigos). O owner de cada conta existente deve chamar
+    /// `updateRegistries` na própria TruthIDAccount para redirecioná-la.
+    function updateRegistries(
+        address deviceRegistry_,
+        address identityRegistry_,
+        address recoveryManager_
+    ) external {
+        if (msg.sender != owner) revert NotOwner();
+        if (
+            deviceRegistry_ == address(0) || identityRegistry_ == address(0)
+                || recoveryManager_ == address(0)
+        ) {
+            revert InvalidRegistryAddress();
+        }
+        _deviceRegistry = deviceRegistry_;
+        _identityRegistry = identityRegistry_;
+        _recoveryManager = recoveryManager_;
+        emit FactoryRegistriesUpdated(deviceRegistry_, identityRegistry_, recoveryManager_);
     }
 }
