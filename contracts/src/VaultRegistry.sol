@@ -9,6 +9,15 @@ import {DeviceRegistry} from "./DeviceRegistry.sol";
 // decriptação é derivada localmente (HKDF) e nunca sai do device.
 contract VaultRegistry is IdentityResolver {
     // -------------------------------------------------------------------------
+    // Constantes
+    // -------------------------------------------------------------------------
+
+    // Limite máximo de versões do vault no histórico. Evita DoS de gas nos
+    // getters (C6 do /code-review). Cada atualização do vault cria uma
+    // entrada — 1000 é folgado para anos de uso frequente.
+    uint256 public constant MAX_HISTORY = 1000;
+
+    // -------------------------------------------------------------------------
     // Tipos de dados
     // -------------------------------------------------------------------------
 
@@ -50,6 +59,7 @@ contract VaultRegistry is IdentityResolver {
     error VaultNotFound(uint256 identityId);
     error EmptyCid();
     error EmptyContentHash();
+    error MaxHistoryExceeded(uint256 identityId);
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -86,6 +96,9 @@ contract VaultRegistry is IdentityResolver {
             exists: true
         });
 
+        if (_vaultHistory[identityId].length >= MAX_HISTORY) {
+            revert MaxHistoryExceeded(identityId);
+        }
         _vaultHistory[identityId].push(cid);
 
         emit VaultUpdated(identityId, cid, contentHash, newVersion);

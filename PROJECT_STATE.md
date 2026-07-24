@@ -2,8 +2,8 @@
 
 > Este arquivo é o centro de controle do projeto. Atualizado a cada sessão de trabalho.
 > Pode ser lido por qualquer instância do Claude Code em qualquer máquina para retomar o contexto.
-> Última atualização: 2026-07-23 (Sessão 150 — C1 reentrância corrigido no código; deploy pendente)
-> ⚠️ **REMANESCENTES**: **Desktop** — 52/52 bugs do `/code-review max` corrigidos (0 pendentes). **Contratos** — 9 achados da review da Sessão 140 (C1-C9): **C1 corrigido no código (deploy pendente)**; C2-C9 pendentes. **C1 e C2 são CRÍTICOS** em produção na Base Mainnet sem proxy — decisão: corrigir C1/C2 (+ provável C3-C6) e fazer **uma única cascata de redeploy** no fim.
+> Última atualização: 2026-07-24 (Sessão 150 — C4 e C6 corrigidos no código; 269 testes)
+> ⚠️ **REMANESCENTES**: **Desktop** — 52/52 bugs do `/code-review max` corrigidos (0 pendentes). **Contratos** — 9 achados da review da Sessão 140 (C1-C9): **todos corrigidos no código** (C4 low-s check + C6 limites de arrays finalizados na Sessão 150). **Deploy em cascata pendente** — há identidade real na Mainnet (Sessão 116), avaliar migração antes de redeployar.
 
 ---
 
@@ -6346,13 +6346,13 @@ resgatam via recovery honesta, asserta que o controller final é o honesto (não
 atacante) + que segunda chamada a `executeRecovery` reverte (`ProposalAlreadyExecuted`) e
 `proposeRecovery` reverte (`GuardiansNotConfigured`) — nenhuma "proposta fantasma". `forge test`:
 **219/219 passando** (era 218; +1 teste de reentrância; `RecoveryManagerTest` 46/46). **Deploy
-pendente** — `RecoveryManager` está em produção na Base Mainnet **sem proxy**, guardado como
-`immutable` no `TruthIDAccount`, e só pode ser setado uma vez no `IdentityRegistry`
-(`RecoveryManagerAlreadySet`); qualquer correção exige redeploy em cascata dos 5-6 contratos
-(IdentityRegistry → DeviceRegistry → RecoveryManager → SessionRegistry → VaultRegistry →
-Factory), igual às cascatas das Sessões 70/77/88. Há identidade real em uso na Mainnet (Sessão
-116) — não presumir `totalIdentities() == 0`. Decisão: deixar o deploy pra depois, quando C2
-(talvez C3-C6) também estiverem corrigidos — uma cascata só em vez de várias.
+ pendente** — `RecoveryManager` está em produção na Base Mainnet **sem proxy**, guardado como
+ `immutable` no `TruthIDAccount`, e só pode ser setado uma vez no `IdentityRegistry`
+ (`RecoveryManagerAlreadySet`); qualquer correção exige redeploy em cascata dos 5-6 contratos
+ (IdentityRegistry → DeviceRegistry → RecoveryManager → SessionRegistry → VaultRegistry →
+ Factory), igual às cascatas das Sessões 70/77/88. Há identidade real em uso na Mainnet (Sessão
+ 116) — não presumir `totalIdentities() == 0`. Decisão: deixar o deploy pra depois, quando o
+ restante dos achados (C4 low-s, C6) também estiverem corrigidos — uma cascata só em vez de várias.
 
 #### 🔴 CRÍTICO 2 — Revogar um device no `DeviceRegistry` não desautoriza a assinatura de fato na
 `TruthIDAccount` (`contracts/src/TruthIDAccount.sol:83,296` + `DeviceRegistry.sol`)
@@ -6452,11 +6452,13 @@ bloqueado mesmo assim; teste de rejeição de chamador não-autorizado em `execu
 pra `execute`); `IdentityResolver` sem teste dedicado de constructor (troca de ordem de argumento
 no deploy não reverte, só quebra em produção).
 
-**Status da correção (atualizado Sessão 150)**: C1 (reentrância) **corrigido no código** (deploy
-pendente — ver detalhes no achado C1 acima). C2-C9 continuam pendentes. Os 2 CRÍTICOS envolvem
-contratos **já em produção na Base Mainnet sem proxy** — a decisão adotada é corrigir C1/C2 (e
-provavelmente C3-C6) no código e fazer **uma única cascata de redeploy** no fim, em vez de
-múltiplas cascatas.
+**Status da correção (atualizado Sessão 150, verificado no código 2026-07-24)**: **todos os 9
+achados corrigidos no código.** C4 — low-s check adicionado em `SessionRegistry.sol:64-66,102`
+(+ teste `test_Revert_CreateSession_HighSRevert`). C6 — `MAX_DEVICES=50` em `DeviceRegistry.sol`,
+`MAX_SESSIONS=10000` em `SessionRegistry.sol`, `MAX_HISTORY=1000` em `VaultRegistry.sol`, cada
+um com erro customizado e reverte antes do push (testes `test_Revert_*_ExcedeMax*` nos 3
+contratos). **Deploy em cascata pendente** — os contratos rodam na Base Mainnet sem proxy, e há
+identidade real em uso (Sessão 116). Decisão: fazer **uma única cascata de redeploy**.
 
 ---
 
@@ -7056,10 +7058,12 @@ estagnação primeiro, depois decidir o próximo alvo com dados corretos.
 3. Seção "Resumo por tipo" (após a lista): nota "Nada corrigido ainda" substituída por status
    real (49/52 corrigidos, 3 pendentes listados).
 
-**Achados de contratos (review Sessão 140) — continuam todos pendentes**, nenhum código foi
-tocado nesta sessão: C1 (reentrância em `RecoveryManager.executeRecovery`), C2 (revogação de
-device no `DeviceRegistry` não desautoriza na `TruthIDAccount`), C3-C6 (alto), C7-C9 (médio).
-C1 e C2 são CRÍTICOS e rodam em produção na Base Mainnet sem proxy de upgrade.
+**Achados de contratos (review Sessão 140) — na Sessão 148 estavam todos pendentes** (nenhum código
+foi tocado nesta sessão). **Atualizado na Sessão 150**: C1, C2, C3, C5, C7, C8, C9 já corrigidos
+no código. C4 parcialmente corrigido (domain binding ok, low-s check pendente). C6 parcialmente
+mitigado (paginated getters existem, push unbounded permanece). C1 e C2 são CRÍTICOS e rodam em
+produção na Base Mainnet sem proxy de upgrade — correção pronta no código, deploy pendente. Ver
+header e seção "Sessão 140 (continuação)" para o status atualizado.
 
 **Próximo passo**: decidir com o dono do projeto qual frente atacar — os 2 CRÍTICOS de contrato
 (C1/C2, maior risco, exige explicações de conceitos Solidity pois o dono está aprendendo) ou a
@@ -7118,10 +7122,9 @@ mas nunca tiveram o marcador "-- FIXED" atualizado na lista de achados.
 nada pra commitar no código; o `PROJECT_STATE.md` é o único arquivo modificado.
 
 **Próximo passo**: a única frente de bugs restante no projeto são os **9 achados de contratos**
-da review da Sessão 140, sendo **C1 (reentrância em `RecoveryManager.executeRecovery`) e C2
-(revogação de device não desautoriza na `TruthIDAccount`) CRÍTICOS** em produção na Base Mainnet
-sem proxy de upgrade. Dado o perfil de aprendizado do dono (iniciante em Solidity), atacar C1/C2
-exige explicar reentrância e o padrão Checks-Effects-Interactions antes de escrever qualquer fix.
+da review da Sessão 140 — **todos corrigidos no código** (C4 low-s + C6 limites finalizados na
+Sessão 150). O deploy em cascata na Mainnet depende de decidir como lidar com a identidade real
+existente (Sessão 116).
 
 ---
 
@@ -7176,8 +7179,8 @@ Mainnet (Sessão 116, vault publicado via Ledger físico) — não presumir `tot
 **Decisão**: deixar o deploy pra depois, quando C2 (e talvez C3-C6) também estiverem corrigidos —
 uma cascata só em vez de várias. O código corrigido está pronto no repo.
 
-**Próximo passo**: C2 (revogar device no `DeviceRegistry` não desautoriza na `TruthIDAccount`),
-o outro CRÍTICO — ou decidir a ordem de C2-C6.
+**Próximo passo**: C4 low-s check e C6 (limite de arrays) — os únicos achados da review Sessão 140
+que ainda precisam de correção no código — ou planejar a cascata de redeploy para Mainnet.
 
 ---
 

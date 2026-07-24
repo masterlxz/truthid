@@ -418,4 +418,42 @@ contract SessionRegistryTest is Test, IdentityConsentHelper {
 
         assertEq(sessionRegistry.getRevokedBefore(1), antes);
     }
+
+    // -------------------------------------------------------------------------
+    // C4 — Low-s (EIP-2) — rejeitar assinaturas com s > n/2
+    // -------------------------------------------------------------------------
+
+    function test_Revert_CreateSession_HighSRevert() public {
+        bytes32 domainHash = keccak256(abi.encode(block.chainid, address(sessionRegistry), sessionA));
+        bytes32 ethSignedHash =
+            keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", domainHash));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(aliceDeviceKey, ethSignedHash);
+
+        // Converte s para high-s (n - s) — a assinatura ainda é válida
+        // criptograficamente, mas o contrato deve rejeitá-la.
+        bytes32 HIGH_S = bytes32(
+            0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+            - uint256(s)
+        );
+
+        vm.expectRevert(SessionRegistry.InvalidSessionSignature.selector);
+        sessionRegistry.createSession(sessionA, 1, aliceDevice, r, HIGH_S, v);
+    }
+
+    // -------------------------------------------------------------------------
+    // C6 — Limite de sessões por identidade
+    // -------------------------------------------------------------------------
+
+    function test_Revert_CreateSession_ExcedeMaxSessoes() public {
+        // Usa vm.store para simular o array cheio sem criar 10000 sessões
+        // Slot 1 = _sessionsByIdentity mapping. Para identityId = 1:
+        // keccak256(abi.encode(1, uint256(1))) guarda o length do array.
+        bytes32 slot = keccak256(abi.encode(uint256(1), uint256(1)));
+        vm.store(address(sessionRegistry), slot, bytes32(uint256(sessionRegistry.MAX_SESSIONS())));
+
+        vm.expectRevert(
+            abi.encodeWithSelector(SessionRegistry.MaxSessionsExceeded.selector, uint256(1))
+        );
+        _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
+    }
 }

@@ -67,9 +67,19 @@ contract DeviceRegistry is IdentityResolver {
     event RecoveryManagerSet(address indexed recoveryManager);
 
     // -------------------------------------------------------------------------
+    // Constantes
+    // -------------------------------------------------------------------------
+
+    // Limite máximo de devices por identidade. Evita DoS de gas nos getters
+    // (C6 do /code-review). Um usuário real dificilmente terá mais que 5-10
+    // devices — 50 é folgado o suficiente para cenários extremos.
+    uint256 public constant MAX_DEVICES = 50;
+
+    // -------------------------------------------------------------------------
     // Erros customizados
     // -------------------------------------------------------------------------
 
+    error MaxDevicesExceeded(uint256 identityId);
     error DeviceAlreadyRegistered(address pubKey);
     error DeviceNotFound(address pubKey);
     error DeviceAlreadyRevoked(address pubKey);
@@ -152,6 +162,9 @@ contract DeviceRegistry is IdentityResolver {
             exists: true
         });
 
+        if (_devicesByIdentity[identityId].length >= MAX_DEVICES) {
+            revert MaxDevicesExceeded(identityId);
+        }
         _devicesByIdentity[identityId].push(devicePubKey);
 
         if (encryptedVaultKey.length > 0) {

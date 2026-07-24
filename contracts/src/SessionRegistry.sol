@@ -6,6 +6,21 @@ import {DeviceRegistry} from "./DeviceRegistry.sol";
 
 contract SessionRegistry is IdentityResolver {
     // -------------------------------------------------------------------------
+    // Constantes
+    // -------------------------------------------------------------------------
+
+    // Metade superior da ordem da curva secp256k1. Usada para rejeitar
+    // assinaturas não-canônicas (EIP-2, low-s), consistente com o padrão
+    // já usado em TruthIDAccount (C4 do /code-review).
+    uint256 internal constant _SECP256K1N_DIV_2 =
+        0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0;
+
+    // Limite máximo de sessões por identidade. Evita DoS de gas nos getters
+    // (C6 do /code-review). Cada login pode criar uma sessão — 10000 é
+    // folgado para anos de uso sem atingir o limite.
+    uint256 public constant MAX_SESSIONS = 10000;
+
+    // -------------------------------------------------------------------------
     // Tipos de dados
     // -------------------------------------------------------------------------
 
@@ -50,6 +65,7 @@ contract SessionRegistry is IdentityResolver {
     error SessionAlreadyRevoked(bytes32 hash);
     error InvalidSessionSignature();
     error DeviceNotOwnedByIdentity();
+    error MaxSessionsExceeded(uint256 identityId);
 
     // -------------------------------------------------------------------------
     // Constructor
@@ -94,6 +110,9 @@ contract SessionRegistry is IdentityResolver {
         // chainId e o endereço deste contrato (C4 do /code-review) para
         // impedir replay cross-chain: uma assinatura feita na Base Sepolia
         // não pode ser reutilizada na Base Mainnet.
+        // Rejeita assinaturas com s > n/2 (EIP-2, low-s) para evitar
+        // malleability — mesma proteção já aplicada em TruthIDAccount.
+        if (uint256(s) > _SECP256K1N_DIV_2) revert InvalidSessionSignature();
         bytes32 domainHash = keccak256(abi.encode(block.chainid, address(this), hash));
         bytes32 ethSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", domainHash));
         if (ecrecover(ethSignedHash, v, r, s) != devicePubKey) revert InvalidSessionSignature();
@@ -113,6 +132,9 @@ contract SessionRegistry is IdentityResolver {
             exists: true
         });
 
+        if (_sessionsByIdentity[identityId].length >= MAX_SESSIONS) {
+            revert MaxSessionsExceeded(identityId);
+        }
         _sessionsByIdentity[identityId].push(hash);
 
         emit SessionCreated(identityId, hash, devicePubKey);

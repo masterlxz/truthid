@@ -656,4 +656,30 @@ contract DeviceRegistryTest is Test, IdentityConsentHelper {
         vm.prank(controller);
         deviceRegistry.registerDevice(devicePubKey, label, SALT, encryptedVaultKey);
     }
+
+    // -------------------------------------------------------------------------
+    // C6 — Limite de devices por identidade
+    // -------------------------------------------------------------------------
+
+    function test_Revert_RegisterDevice_ExcedeMaxDevices() public {
+        // Registra MAX_DEVICES devices para a alice
+        uint256 max = deviceRegistry.MAX_DEVICES();
+        for (uint256 i = 0; i < max; i++) {
+            address device = address(uint160(uint256(keccak256(abi.encode("device", i)))));
+            _registerDevice(alice, device, string(abi.encode(i)));
+        }
+
+        // O próximo deve reverter
+        address extraDevice = address(uint160(uint256(keccak256(abi.encode("device", max)))));
+        bytes32 commitment = keccak256(abi.encodePacked(extraDevice, SALT, alice));
+        vm.prank(alice);
+        deviceRegistry.commitDevice(commitment);
+        vm.roll(block.number + 1);
+
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(DeviceRegistry.MaxDevicesExceeded.selector, uint256(1))
+        );
+        deviceRegistry.registerDevice(extraDevice, "extra", SALT, "");
+    }
 }

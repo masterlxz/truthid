@@ -246,4 +246,22 @@ contract VaultRegistryTest is Test, IdentityConsentHelper {
         assertEq(aliceRef.version, 1);
         assertEq(bobRef.version, 1);
     }
+
+    // -------------------------------------------------------------------------
+    // C6 — Limite do histórico do vault
+    // -------------------------------------------------------------------------
+
+    function test_Revert_UpdateVault_ExcedeMaxHistory() public {
+        // Usa vm.store para simular o histórico cheio
+        // Slot 1 = _vaultHistory mapping. Para identityId = 1:
+        // keccak256(abi.encode(uint256(1), uint256(1))) guarda o length.
+        bytes32 slot = keccak256(abi.encode(uint256(1), uint256(1)));
+        vm.store(address(vaultRegistry), slot, bytes32(uint256(vaultRegistry.MAX_HISTORY())));
+
+        vm.prank(alice);
+        vm.expectRevert(
+            abi.encodeWithSelector(VaultRegistry.MaxHistoryExceeded.selector, uint256(1))
+        );
+        vaultRegistry.updateVault(CID_V1, HASH_V1);
+    }
 }
