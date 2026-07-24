@@ -1,6 +1,13 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+// Interface mínima do DeviceRegistry para validação cruzada de
+// revogação de devices (C2 do /code-review). Definida aqui em vez de
+// importada para manter o contrato livre de dependências externas.
+interface IDeviceRegistry {
+    function isDeviceActive(address devicePubKey) external view returns (bool);
+}
+
 // Layout exigido pelo EntryPoint v0.7 (ERC-4337). Declarada aqui — não
 // importada de um pacote externo — porque este contrato não tem nenhuma
 // dependência além do EntryPoint já deployado na chain (decisão travada
@@ -294,6 +301,14 @@ contract TruthIDAccount {
         }
 
         if (authorizedDevices[signer] && _isDeviceCallAllowed(userOp.callData)) {
+            // C2: mesmo que o device esteja no mapping local, verifica se
+            // não foi revogado no DeviceRegistry (a fonte da verdade para
+            // revogação). Um device revogado via DeviceRegistry.revokeDevice
+            // não pode mais assinar UserOps mesmo que ainda conste em
+            // authorizedDevices.
+            if (!IDeviceRegistry(deviceRegistry).isDeviceActive(signer)) {
+                return SIG_VALIDATION_FAILED;
+            }
             return SIG_VALIDATION_SUCCESS;
         }
 

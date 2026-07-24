@@ -2,7 +2,24 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
-import {TruthIDAccount, PackedUserOperation} from "../src/TruthIDAccount.sol";
+import {TruthIDAccount, PackedUserOperation, IDeviceRegistry} from "../src/TruthIDAccount.sol";
+
+// Mock mínimo do DeviceRegistry para os testes do C2 — expõe
+// `isDeviceActive` com um mapping controlado pelo teste, sem precisar
+// deployar a cadeia completa (IdentityRegistry → DeviceRegistry) que o
+// contrato real exigiria. O TruthIDAccount consulta este mock via
+// STATICCALL durante a validação da UserOp.
+contract MockDeviceRegistry is IDeviceRegistry {
+    mapping(address => bool) public active;
+
+    function setActive(address device, bool status) external {
+        active[device] = status;
+    }
+
+    function isDeviceActive(address devicePubKey) external view returns (bool) {
+        return active[devicePubKey];
+    }
+}
 
 // Contrato-alvo mínimo para os testes de `execute`/`executeBatch` — só
 // registra que foi chamado (e com qual calldata) e aceita ETH, para não
@@ -48,6 +65,7 @@ contract TruthIDAccountTest is Test {
     uint256 internal constant SIG_VALIDATION_FAILED = 1;
 
     TruthIDAccount public account;
+    MockDeviceRegistry public mockDeviceRegistry;
 
     // owner agora precisa de chave privada (makeAddrAndKey) — os testes de
     // validateUserOp no tier owner (B4) assinam UserOps como o Ledger faria.
@@ -55,7 +73,6 @@ contract TruthIDAccountTest is Test {
     uint256 public ownerKey;
 
     address public entryPoint = makeAddr("entryPoint");
-    address public deviceRegistry = makeAddr("deviceRegistry");
     address public identityRegistry = makeAddr("identityRegistry");
     address public recoveryManager = makeAddr("recoveryManager");
 
@@ -69,11 +86,14 @@ contract TruthIDAccountTest is Test {
     function setUp() public {
         (owner, ownerKey) = makeAddrAndKey("owner");
 
+        mockDeviceRegistry = new MockDeviceRegistry();
+
         account = new TruthIDAccount(
-            entryPoint, deviceRegistry, identityRegistry, recoveryManager, owner
+            entryPoint, address(mockDeviceRegistry), identityRegistry, recoveryManager, owner
         );
 
         (device, deviceKey) = makeAddrAndKey("device");
+        mockDeviceRegistry.setActive(device, true);
         vm.prank(owner);
         account.addDevice(device);
 
@@ -147,7 +167,7 @@ contract TruthIDAccountTest is Test {
 
     function test_Revert_Constructor_ZeroAddress_EntryPoint() public {
         vm.expectRevert(TruthIDAccount.InvalidConstructorArgs.selector);
-        new TruthIDAccount(address(0), deviceRegistry, identityRegistry, recoveryManager, owner);
+        new TruthIDAccount(address(0), address(mockDeviceRegistry), identityRegistry, recoveryManager, owner);
     }
 
     function test_Revert_Constructor_ZeroAddress_DeviceRegistry() public {
@@ -157,18 +177,18 @@ contract TruthIDAccountTest is Test {
 
     function test_Revert_Constructor_ZeroAddress_IdentityRegistry() public {
         vm.expectRevert(TruthIDAccount.InvalidConstructorArgs.selector);
-        new TruthIDAccount(entryPoint, deviceRegistry, address(0), recoveryManager, owner);
+        new TruthIDAccount(entryPoint, address(mockDeviceRegistry), address(0), recoveryManager, owner);
     }
 
     function test_Revert_Constructor_ZeroAddress_RecoveryManager() public {
         vm.expectRevert(TruthIDAccount.InvalidConstructorArgs.selector);
-        new TruthIDAccount(entryPoint, deviceRegistry, identityRegistry, address(0), owner);
+        new TruthIDAccount(entryPoint, address(mockDeviceRegistry), identityRegistry, address(0), owner);
     }
 
     function test_Revert_Constructor_ZeroAddress_Owner() public {
         vm.expectRevert(TruthIDAccount.InvalidConstructorArgs.selector);
         new TruthIDAccount(
-            entryPoint, deviceRegistry, identityRegistry, recoveryManager, address(0)
+            entryPoint, address(mockDeviceRegistry), identityRegistry, recoveryManager, address(0)
         );
     }
 
@@ -176,7 +196,7 @@ contract TruthIDAccountTest is Test {
     // signers de tier device — trava a correção de segurança da Sessão 53
     // (achado #1 do /code-review: device sequestrando identidade).
     function test_Constructor_SeedsBlockedForDevices() public {
-        assertTrue(account.blockedForDevices(deviceRegistry));
+        assertTrue(account.blockedForDevices(address(mockDeviceRegistry)));
         assertTrue(account.blockedForDevices(identityRegistry));
         assertTrue(account.blockedForDevices(recoveryManager));
         // Um endereço qualquer, não semeado, começa desbloqueado.
@@ -383,7 +403,7 @@ contract TruthIDAccountTest is Test {
 
     // Os 3 destinos bloqueados por padrão desde o constructor.
     function test_ValidateUserOp_Device_Execute_BlockedDest_DeviceRegistry_Failed() public {
-        _assertDeviceExecuteBlocked(deviceRegistry);
+        _assertDeviceExecuteBlocked(address(mockDeviceRegistry));
     }
 
     function test_ValidateUserOp_Device_Execute_BlockedDest_IdentityRegistry_Failed() public {
@@ -552,6 +572,83 @@ contract TruthIDAccountTest is Test {
     }
 
     // -------------------------------------------------------------------------
+    // C2 — DeviceRegistry.revokeDevice bloqueia assinatura no TruthIDAccount
+    // -------------------------------------------------------------------------
+
+    // Device ativo (no mock): assinatura funciona normalmente.
+    function test_ValidateUserOp_Device_ActiveOnDeviceRegistry_Success() public {
+        address allowedDest = makeAddr("allowedDest");
+        bytes memory callData = abi.encodeCall(TruthIDAccount.execute, (allowedDest, 0, ""));
+        bytes32 userOpHash = keccak256("c2-active");
+        PackedUserOperation memory userOp = _buildUserOp(callData);
+        userOp.signature = _sign(deviceKey, userOpHash);
+
+        vm.prank(entryPoint);
+        uint256 validationData = account.validateUserOp(userOp, userOpHash, 0);
+
+        assertEq(validationData, SIG_VALIDATION_SUCCESS);
+    }
+
+    // Device revogado no DeviceRegistry (mock): assinatura falha mesmo
+    // estando em authorizedDevices — este é o cerne do C2.
+    function test_ValidateUserOp_Device_RevokedOnDeviceRegistry_Failed() public {
+        mockDeviceRegistry.setActive(device, false);
+
+        address allowedDest = makeAddr("allowedDest");
+        bytes memory callData = abi.encodeCall(TruthIDAccount.execute, (allowedDest, 0, ""));
+        bytes32 userOpHash = keccak256("c2-revoked");
+        PackedUserOperation memory userOp = _buildUserOp(callData);
+        userOp.signature = _sign(deviceKey, userOpHash);
+
+        vm.prank(entryPoint);
+        uint256 validationData = account.validateUserOp(userOp, userOpHash, 0);
+
+        assertEq(validationData, SIG_VALIDATION_FAILED);
+    }
+
+    // Device nunca registrado no DeviceRegistry (inexistente no mock):
+    // assinatura falha — não basta estar em authorizedDevices.
+    function test_ValidateUserOp_Device_NotFoundOnDeviceRegistry_Failed() public {
+        (, uint256 unregisteredKey) = makeAddrAndKey("unregisteredDevice");
+        address unregistered = vm.addr(unregisteredKey);
+
+        // Adiciona no authorizedDevices mas não no mock — simulando
+        // um device que nunca passou pelo commit-reveal do DeviceRegistry.
+        vm.prank(owner);
+        account.addDevice(unregistered);
+
+        address allowedDest = makeAddr("allowedDest");
+        bytes memory callData = abi.encodeCall(TruthIDAccount.execute, (allowedDest, 0, ""));
+        bytes32 userOpHash = keccak256("c2-notfound");
+        PackedUserOperation memory userOp = _buildUserOp(callData);
+        userOp.signature = _sign(unregisteredKey, userOpHash);
+
+        vm.prank(entryPoint);
+        uint256 validationData = account.validateUserOp(userOp, userOpHash, 0);
+
+        assertEq(validationData, SIG_VALIDATION_FAILED);
+    }
+
+    // Device removido do authorizedDevices (removeDevice) ainda falha
+    // mesmo que esteja ativo no DeviceRegistry — regressão: o mapping
+    // local continua sendo a primeira barreira.
+    function test_ValidateUserOp_Device_RemovedFromAccount_StillFails() public {
+        vm.prank(owner);
+        account.removeDevice(device);
+
+        address allowedDest = makeAddr("allowedDest");
+        bytes memory callData = abi.encodeCall(TruthIDAccount.execute, (allowedDest, 0, ""));
+        bytes32 userOpHash = keccak256("c2-removed");
+        PackedUserOperation memory userOp = _buildUserOp(callData);
+        userOp.signature = _sign(deviceKey, userOpHash);
+
+        vm.prank(entryPoint);
+        uint256 validationData = account.validateUserOp(userOp, userOpHash, 0);
+
+        assertEq(validationData, SIG_VALIDATION_FAILED);
+    }
+
+    // -------------------------------------------------------------------------
     // B9 — vetor conhecido, cruzado com o pipeline mobile (etapa 14.9.4)
     // -------------------------------------------------------------------------
 
@@ -578,6 +675,10 @@ contract TruthIDAccountTest is Test {
 
         vm.prank(owner);
         account.addDevice(knownAddress);
+
+        // C2: o device conhecido também precisa estar ativo no
+        // DeviceRegistry mock para a validação cruzar.
+        mockDeviceRegistry.setActive(knownAddress, true);
 
         address allowedDest = makeAddr("allowedDest");
         bytes memory callData = abi.encodeCall(TruthIDAccount.execute, (allowedDest, 0, ""));
