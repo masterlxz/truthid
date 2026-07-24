@@ -4,6 +4,13 @@ pragma solidity ^0.8.24;
 import {IdentityRegistry} from "./IdentityRegistry.sol";
 import {TruthIDAccount} from "./TruthIDAccount.sol";
 
+// Interface mínima do DeviceRegistry para a chamada revokeAllDevices
+// durante a recovery social (C3 do /code-review). Definida aqui em vez
+// de importada para evitar dependência circular.
+interface IDeviceRegistry {
+    function revokeAllDevices(uint256 identityId) external;
+}
+
 // Como funciona o recovery social?
 // ------------------------------------------------------------------
 // O usuário define "guardians" — pessoas de confiança (endereços).
@@ -58,6 +65,7 @@ contract RecoveryManager {
     // -------------------------------------------------------------------------
 
     IdentityRegistry private immutable _identityRegistry;
+    address private immutable _deviceRegistry;
 
     // identityId → configuração de guardians
     mapping(uint256 => GuardianConfig) private _guardianConfigs;
@@ -104,8 +112,9 @@ contract RecoveryManager {
     // Constructor
     // -------------------------------------------------------------------------
 
-    constructor(address identityRegistry) {
+    constructor(address identityRegistry, address deviceRegistry_) {
         _identityRegistry = IdentityRegistry(identityRegistry);
+        _deviceRegistry = deviceRegistry_;
     }
 
     // -------------------------------------------------------------------------
@@ -265,6 +274,11 @@ contract RecoveryManager {
                 // Nao eh uma TruthIDAccount valida — recovery segue sem migrar fundos.
             }
         }
+
+        // C3: revoga todos os devices associados a esta identidade no
+        // DeviceRegistry. Sem isso, devices do controller antigo continuam
+        // ativos e podem criar sessoes/autenticar mesmo apos a recovery.
+        IDeviceRegistry(_deviceRegistry).revokeAllDevices(identityId);
 
         _identityRegistry.recoverController(username, newController);
 

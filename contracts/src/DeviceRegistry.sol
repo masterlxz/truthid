@@ -48,12 +48,23 @@ contract DeviceRegistry is IdentityResolver {
     // Vazio se nenhuma chave de vault foi compartilhada durante o pareamento.
     mapping(address => bytes) public deviceVaultKeys;
 
+    // Endereço do RecoveryManager — único contrato autorizado a chamar
+    // revokeAllDevices (C3 do /code-review). Definido uma única vez após
+    // o deploy, via setRecoveryManager (mesmo padrão do IdentityRegistry).
+    address private _recoveryManager;
+
+    // Quem fez o deploy deste contrato. Único endereço autorizado a chamar
+    // setRecoveryManager — sem isso, qualquer um poderia chamá-la primeiro
+    // na janela entre o deploy e a configuração oficial (front-running).
+    address public immutable owner;
+
     // -------------------------------------------------------------------------
     // Eventos
     // -------------------------------------------------------------------------
 
     event DeviceRegistered(uint256 indexed identityId, address indexed pubKey, string label, bytes encryptedVaultKey);
     event DeviceRevoked(uint256 indexed identityId, address indexed pubKey);
+    event RecoveryManagerSet(address indexed recoveryManager);
 
     // -------------------------------------------------------------------------
     // Erros customizados
@@ -66,12 +77,16 @@ contract DeviceRegistry is IdentityResolver {
     error InvalidPubKey();
     error NoCommitmentFound();
     error RevealTooEarly();
+    error NotRecoveryManager();
+    error RecoveryManagerAlreadySet();
 
     // -------------------------------------------------------------------------
     // Constructor
     // -------------------------------------------------------------------------
 
-    constructor(address identityRegistry) IdentityResolver(identityRegistry) {}
+    constructor(address identityRegistry) IdentityResolver(identityRegistry) {
+        owner = msg.sender;
+    }
 
     // -------------------------------------------------------------------------
     // Funções de escrita
@@ -159,6 +174,37 @@ contract DeviceRegistry is IdentityResolver {
         _devices[devicePubKey].revoked = true;
 
         emit DeviceRevoked(callerIdentityId, devicePubKey);
+    }
+
+    /// Define o endereço do RecoveryManager. Só pode ser chamado uma vez
+    /// pelo deployer (owner). Ordem de deploy: (1) IdentityRegistry,
+    /// (2) DeviceRegistry, (3) RecoveryManager, (4) esta função.
+    function setRecoveryManager(address rm) external {
+        if (msg.sender != owner) revert NotIdentityController();
+        if (_recoveryManager != address(0)) revert RecoveryManagerAlreadySet();
+        _recoveryManager = rm;
+        emit RecoveryManagerSet(rm);
+    }
+
+    /// Revoga todos os devices de uma identidade. Só o RecoveryManager
+    /// pode chamar — executado durante uma recovery social (C3 do
+    /// /code-review), para que devices do controller antigo não continuem
+    /// ativos após a troca de controller.
+    ///
+    /// Iteração O(n) sobre o array de devices da identidade. Recovery é
+    /// uma operação rara e o número de devices por identidade é tipicamente
+    /// pequeno (1-10), então o custo extra é aceitável.
+    function revokeAllDevices(uint256 identityId) external {
+        if (msg.sender != _recoveryManager) revert NotRecoveryManager();
+
+        address[] storage deviceList = _devicesByIdentity[identityId];
+        for (uint256 i = 0; i < deviceList.length; i++) {
+            address devicePubKey = deviceList[i];
+            if (!_devices[devicePubKey].revoked) {
+                _devices[devicePubKey].revoked = true;
+                emit DeviceRevoked(identityId, devicePubKey);
+            }
+        }
     }
 
     // -------------------------------------------------------------------------

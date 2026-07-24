@@ -16,9 +16,13 @@ contract Deploy is Script {
 
         DeviceRegistry deviceRegistry = new DeviceRegistry(address(identityRegistry));
 
-        RecoveryManager recoveryManager = new RecoveryManager(address(identityRegistry));
+        RecoveryManager recoveryManager = new RecoveryManager(address(identityRegistry), address(deviceRegistry));
 
         identityRegistry.setRecoveryManager(address(recoveryManager));
+
+        // C3: registra o RecoveryManager no DeviceRegistry para que
+        // executeRecovery possa revogar todos os devices da identidade.
+        deviceRegistry.setRecoveryManager(address(recoveryManager));
 
         TruthIDAccountFactory factory = new TruthIDAccountFactory(
             ENTRY_POINT_V07,

@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Test} from "forge-std/Test.sol";
 import {IdentityRegistry} from "../src/IdentityRegistry.sol";
 import {RecoveryManager} from "../src/RecoveryManager.sol";
+import {DeviceRegistry} from "../src/DeviceRegistry.sol";
 import {TruthIDAccountFactory} from "../src/TruthIDAccountFactory.sol";
 import {TruthIDAccount} from "../src/TruthIDAccount.sol";
 import {IdentityConsentHelper} from "./IdentityConsentHelper.sol";
@@ -41,6 +42,7 @@ contract ReentrancyAttacker {
 contract RecoveryManagerTest is Test, IdentityConsentHelper {
     IdentityRegistry public identityRegistry;
     RecoveryManager public recoveryManager;
+    DeviceRegistry public deviceRegistry;
 
     // Donos de identidades
     address public alice;
@@ -81,10 +83,19 @@ contract RecoveryManagerTest is Test, IdentityConsentHelper {
         (charlie, charlieKey) = makeAddrAndKey("charlie");
 
         identityRegistry = new IdentityRegistry();
-        recoveryManager = new RecoveryManager(address(identityRegistry));
+
+        // C3: DeviceRegistry necessário para validação de revogação de
+        // devices pós-recovery. O RecoveryManager recebe seu endereço no
+        // construtor para poder chamar revokeAllDevices durante executeRecovery.
+        deviceRegistry = new DeviceRegistry(address(identityRegistry));
+
+        recoveryManager = new RecoveryManager(address(identityRegistry), address(deviceRegistry));
 
         // Liga os dois contratos (só pode ser feito uma vez)
         identityRegistry.setRecoveryManager(address(recoveryManager));
+
+        // C3: registra o RecoveryManager no DeviceRegistry
+        deviceRegistry.setRecoveryManager(address(recoveryManager));
 
         vm.prank(alice);
         _createIdentity(identityRegistry, aliceKey, "alice.id"); // identityId = 1
@@ -831,5 +842,117 @@ contract RecoveryManagerTest is Test, IdentityConsentHelper {
         vm.prank(guardian1);
         vm.expectRevert(abi.encodeWithSelector(RecoveryManager.GuardiansNotConfigured.selector, 1));
         recoveryManager.proposeRecovery("alice.id", injected);
+    }
+
+    // -----------------------------------------------------------------
+    // C3 — Recovery revoga devices no DeviceRegistry
+    // -----------------------------------------------------------------
+
+    // Helper: commita e registra um device para um controller no DeviceRegistry.
+    function _registerDeviceForRecovery(
+        address controller,
+        address devicePubKey,
+        string memory label
+    ) internal {
+        bytes32 salt = keccak256(abi.encodePacked(devicePubKey, "c3-test"));
+        bytes32 commitment = keccak256(abi.encodePacked(devicePubKey, salt, controller));
+
+        vm.prank(controller);
+        deviceRegistry.commitDevice(commitment);
+        vm.roll(block.number + 1);
+
+        vm.prank(controller);
+        deviceRegistry.registerDevice(devicePubKey, label, salt, "");
+    }
+
+    // Após recovery bem-sucedida, os devices do controller antigo são
+    // revogados — não podem mais autenticar.
+    function test_ExecuteRecovery_RevokesOldDevices() public {
+        // Alice configura guardians e registra um device
+        _configureAliceGuardians();
+
+        address aliceDevice = makeAddr("alice-device");
+        _registerDeviceForRecovery(alice, aliceDevice, "iPhone 15 Pro");
+
+        assertTrue(deviceRegistry.isDeviceActive(aliceDevice));
+
+        // Guardians propõem e aprovam recovery
+        _propose();
+        _collectThreeApprovals();
+        vm.warp(block.timestamp + 7 days + 1);
+
+        recoveryManager.executeRecovery("alice.id");
+
+        // Device da Alice foi revogado pelo executeRecovery (C3)
+        assertFalse(deviceRegistry.isDeviceActive(aliceDevice));
+    }
+
+    // Recovery não afeta devices de outras identidades.
+    function test_ExecuteRecovery_DoesNotAffectOtherIdentitiesDevices() public {
+        _configureAliceGuardians();
+
+        address aliceDevice = makeAddr("alice-device");
+        _registerDeviceForRecovery(alice, aliceDevice, "Alice's phone");
+
+        address bobDevice = makeAddr("bob-device");
+        _registerDeviceForRecovery(bob, bobDevice, "Bob's phone");
+
+        // Recovery da Alice
+        _propose();
+        _collectThreeApprovals();
+        vm.warp(block.timestamp + 7 days + 1);
+        recoveryManager.executeRecovery("alice.id");
+
+        // Device da Alice foi revogado, device do Bob continua ativo
+        assertFalse(deviceRegistry.isDeviceActive(aliceDevice));
+        assertTrue(deviceRegistry.isDeviceActive(bobDevice));
+    }
+
+    // Múltiplos devices são todos revogados na recovery.
+    function test_ExecuteRecovery_RevokesMultipleDevices() public {
+        _configureAliceGuardians();
+
+        address aliceDevice1 = makeAddr("alice-device-1");
+        address aliceDevice2 = makeAddr("alice-device-2");
+        _registerDeviceForRecovery(alice, aliceDevice1, "iPhone");
+        _registerDeviceForRecovery(alice, aliceDevice2, "MacBook");
+
+        assertTrue(deviceRegistry.isDeviceActive(aliceDevice1));
+        assertTrue(deviceRegistry.isDeviceActive(aliceDevice2));
+
+        _propose();
+        _collectThreeApprovals();
+        vm.warp(block.timestamp + 7 days + 1);
+        recoveryManager.executeRecovery("alice.id");
+
+        assertFalse(deviceRegistry.isDeviceActive(aliceDevice1));
+        assertFalse(deviceRegistry.isDeviceActive(aliceDevice2));
+    }
+
+    // Após recovery, o novo controller pode re-registrar devices.
+    function test_ExecuteRecovery_NewControllerCanReregisterDevices() public {
+        _configureAliceGuardians();
+
+        address aliceDevice = makeAddr("alice-device");
+        _registerDeviceForRecovery(alice, aliceDevice, "iPhone 15 Pro");
+
+        _propose();
+        _collectThreeApprovals();
+        vm.warp(block.timestamp + 7 days + 1);
+        recoveryManager.executeRecovery("alice.id");
+
+        assertFalse(deviceRegistry.isDeviceActive(aliceDevice));
+
+        // Novo controller (aliceNewWallet) re-registra o mesmo device
+        bytes32 salt = keccak256(abi.encodePacked(aliceDevice, "reregister"));
+        bytes32 commitment = keccak256(abi.encodePacked(aliceDevice, salt, aliceNewWallet));
+        vm.prank(aliceNewWallet);
+        deviceRegistry.commitDevice(commitment);
+        vm.roll(block.number + 1);
+
+        vm.prank(aliceNewWallet);
+        deviceRegistry.registerDevice(aliceDevice, "iPhone (pos-recovery)", salt, "");
+
+        assertTrue(deviceRegistry.isDeviceActive(aliceDevice));
     }
 }

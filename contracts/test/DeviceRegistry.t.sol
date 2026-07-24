@@ -336,6 +336,108 @@ contract DeviceRegistryTest is Test, IdentityConsentHelper {
     }
 
     // -----------------------------------------------------------------
+    // revokeAllDevices — C3: recovery revoga todos os devices
+    // -----------------------------------------------------------------
+
+    function test_RevokeAllDevices_Success() public {
+        _registerDevice(alice, aliceDevice1, "iPhone 15 Pro");
+        _registerDevice(alice, aliceDevice2, "MacBook Pro");
+
+        address recoveryManager = makeAddr("recoveryManager");
+        vm.prank(address(this));
+        deviceRegistry.setRecoveryManager(recoveryManager);
+
+        vm.prank(recoveryManager);
+        deviceRegistry.revokeAllDevices(1);
+
+        assertFalse(deviceRegistry.isDeviceActive(aliceDevice1));
+        assertFalse(deviceRegistry.isDeviceActive(aliceDevice2));
+    }
+
+    function test_RevokeAllDevices_DoesNotAffectOtherIdentities() public {
+        _registerDevice(alice, aliceDevice1, "Alice's phone");
+        _registerDevice(bob, bobDevice1, "Bob's phone");
+
+        address recoveryManager = makeAddr("recoveryManager");
+        vm.prank(address(this));
+        deviceRegistry.setRecoveryManager(recoveryManager);
+
+        vm.prank(recoveryManager);
+        deviceRegistry.revokeAllDevices(1); // só alice
+
+        assertFalse(deviceRegistry.isDeviceActive(aliceDevice1));
+        assertTrue(deviceRegistry.isDeviceActive(bobDevice1));
+    }
+
+    function test_RevokeAllDevices_Idempotent() public {
+        _registerDevice(alice, aliceDevice1, "iPhone 15 Pro");
+
+        address recoveryManager = makeAddr("recoveryManager");
+        vm.prank(address(this));
+        deviceRegistry.setRecoveryManager(recoveryManager);
+
+        vm.prank(recoveryManager);
+        deviceRegistry.revokeAllDevices(1);
+
+        // Segunda chamada não reverte — já revogados são ignorados
+        vm.prank(recoveryManager);
+        deviceRegistry.revokeAllDevices(1);
+
+        assertFalse(deviceRegistry.isDeviceActive(aliceDevice1));
+    }
+
+    function test_Revert_RevokeAllDevices_NotRecoveryManager() public {
+        _registerDevice(alice, aliceDevice1, "iPhone 15 Pro");
+
+        vm.prank(bob);
+        vm.expectRevert(DeviceRegistry.NotRecoveryManager.selector);
+        deviceRegistry.revokeAllDevices(1);
+    }
+
+    function test_Revert_RevokeAllDevices_RecoveryManagerNotSet() public {
+        _registerDevice(alice, aliceDevice1, "iPhone 15 Pro");
+
+        // _recoveryManager ainda é address(0) — ninguém pode chamar
+        vm.prank(makeAddr("anyone"));
+        vm.expectRevert(DeviceRegistry.NotRecoveryManager.selector);
+        deviceRegistry.revokeAllDevices(1);
+    }
+
+    // -----------------------------------------------------------------
+    // setRecoveryManager
+    // -----------------------------------------------------------------
+
+    function test_SetRecoveryManager_Success() public {
+        address recoveryManager = makeAddr("recoveryManager");
+
+        vm.expectEmit(true, false, false, false);
+        emit DeviceRegistry.RecoveryManagerSet(recoveryManager);
+
+        vm.prank(address(this));
+        deviceRegistry.setRecoveryManager(recoveryManager);
+
+        // Confirmação indireta: revokeAllDevices agora funciona
+        vm.prank(recoveryManager);
+        deviceRegistry.revokeAllDevices(1); // não reverte
+    }
+
+    function test_Revert_SetRecoveryManager_NotOwner() public {
+        vm.prank(bob);
+        vm.expectRevert(IdentityResolver.NotIdentityController.selector);
+        deviceRegistry.setRecoveryManager(makeAddr("recoveryManager"));
+    }
+
+    function test_Revert_SetRecoveryManager_AlreadySet() public {
+        address recoveryManager = makeAddr("recoveryManager");
+        vm.prank(address(this));
+        deviceRegistry.setRecoveryManager(recoveryManager);
+
+        vm.prank(address(this));
+        vm.expectRevert(DeviceRegistry.RecoveryManagerAlreadySet.selector);
+        deviceRegistry.setRecoveryManager(makeAddr("anotherRM"));
+    }
+
+    // -----------------------------------------------------------------
     // isDeviceActive
     // -----------------------------------------------------------------
 
