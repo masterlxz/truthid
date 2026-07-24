@@ -88,6 +88,7 @@ contract RecoveryManager {
     event RecoveryApproved(uint256 indexed identityId, address indexed guardian, uint256 approvalCount);
     event RecoveryExecuted(uint256 indexed identityId, address indexed newController);
     event RecoveryCancelled(uint256 indexed identityId);
+    event RecoveryFundsMigrationFailed(uint256 indexed identityId, address indexed oldAccount, address indexed newController, uint256 amount);
 
     // -------------------------------------------------------------------------
     // Erros customizados
@@ -283,7 +284,12 @@ contract RecoveryManager {
             try TruthIDAccount(payable(identity.controller)).emergencyWithdraw(newController) {
                 // Fundos migrados da smart account antiga para o novo controller.
             } catch {
-                // Nao eh uma TruthIDAccount valida — recovery segue sem migrar fundos.
+                // C9: nao eh uma TruthIDAccount valida, ou o emergencyWithdraw
+                // falhou (ex: newController rejeita ETH). Fundos ficam presos
+                // na conta antiga — emite evento para visibilidade on-chain.
+                emit RecoveryFundsMigrationFailed(
+                    identityId, identity.controller, newController, identity.controller.balance
+                );
             }
         }
 

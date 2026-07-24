@@ -39,6 +39,15 @@ contract ReentrancyAttacker {
     receive() external payable {}
 }
 
+// Contrato que rejeita ETH deliberadamente (sem receive()/fallback) — usado
+// no teste C9 para simular um newController que causa falha no
+// emergencyWithdraw, forçando o catch a emitir RecoveryFundsMigrationFailed.
+contract EthRejector {
+    // Tem emergencyWithdraw para passar no `code.length > 0` do
+    // RecoveryManager, mas nao recebe ETH — o _call interno reverte.
+    function emergencyWithdraw(address) external pure {}
+}
+
 contract RecoveryManagerTest is Test, IdentityConsentHelper {
     IdentityRegistry public identityRegistry;
     RecoveryManager public recoveryManager;
@@ -967,5 +976,40 @@ contract RecoveryManagerTest is Test, IdentityConsentHelper {
         deviceRegistry.registerDevice(aliceDevice, "iPhone (pos-recovery)", salt, "");
 
         assertTrue(deviceRegistry.isDeviceActive(aliceDevice));
+    }
+
+    // -------------------------------------------------------------------------
+    // C9 — emergencyWithdraw falha emite RecoveryFundsMigrationFailed
+    // -------------------------------------------------------------------------
+
+    // Quando o newController rejeita ETH, o emergencyWithdraw reverte
+    // internamente, o try/catch captura a falha, e o evento
+    // RecoveryFundsMigrationFailed deve ser emitido.
+    function test_ExecuteRecovery_FundsMigrationFailed_EmitsEvent() public {
+        _setupCharlieWithTA();
+
+        EthRejector rejector = new EthRejector();
+        uint256 taBalanceBefore = charlieTA.balance;
+        assertGt(taBalanceBefore, 0);
+
+        vm.prank(charlieG1);
+        recoveryManager.proposeRecovery("charlie.id", address(rejector));
+
+        vm.prank(charlieG1);
+        recoveryManager.approveRecovery("charlie.id");
+        vm.prank(charlieG2);
+        recoveryManager.approveRecovery("charlie.id");
+
+        vm.warp(block.timestamp + 7 days + 1);
+
+        vm.expectEmit(true, true, true, false);
+        emit RecoveryManager.RecoveryFundsMigrationFailed(
+            3, charlieTA, address(rejector), taBalanceBefore
+        );
+
+        recoveryManager.executeRecovery("charlie.id");
+
+        // Fundos permanecem na conta antiga (nao foram migrados)
+        assertEq(charlieTA.balance, taBalanceBefore);
     }
 }
