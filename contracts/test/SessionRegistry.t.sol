@@ -357,6 +357,52 @@ contract SessionRegistryTest is Test, IdentityConsentHelper {
     }
 
     // -------------------------------------------------------------------------
+    // getSessionsByIdentityPaginated — C6: paginação contra DoS via gas
+    // -------------------------------------------------------------------------
+
+    function test_GetSessionsByIdentityPaginated_PrimeiraPagina() public {
+        _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
+        _createSession(aliceDeviceKey, sessionB, 1, aliceDevice);
+        bytes32 sessionC2 = keccak256(abi.encodePacked("alice", "site3.com", uint256(3)));
+        _createSession(aliceDeviceKey, sessionC2, 1, aliceDevice);
+
+        bytes32[] memory page = sessionRegistry.getSessionsByIdentityPaginated(1, 0, 2);
+        assertEq(page.length, 2);
+        assertEq(page[0], sessionA);
+        assertEq(page[1], sessionB);
+    }
+
+    function test_GetSessionsByIdentityPaginated_SegundaPagina() public {
+        _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
+        _createSession(aliceDeviceKey, sessionB, 1, aliceDevice);
+        bytes32 sessionC2 = keccak256(abi.encodePacked("alice", "site3.com", uint256(3)));
+        _createSession(aliceDeviceKey, sessionC2, 1, aliceDevice);
+
+        bytes32[] memory page = sessionRegistry.getSessionsByIdentityPaginated(1, 2, 2);
+        assertEq(page.length, 1);
+        assertEq(page[0], sessionC2);
+    }
+
+    function test_GetSessionsByIdentityPaginated_OffsetAlemDoFim() public {
+        _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
+
+        bytes32[] memory page = sessionRegistry.getSessionsByIdentityPaginated(1, 10, 5);
+        assertEq(page.length, 0);
+    }
+
+    function test_GetSessionsByIdentityPaginated_LimitZero() public {
+        _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
+
+        bytes32[] memory page = sessionRegistry.getSessionsByIdentityPaginated(1, 0, 0);
+        assertEq(page.length, 0);
+    }
+
+    function test_GetSessionsByIdentityPaginated_IdentidadeSemSessoes() public view {
+        bytes32[] memory page = sessionRegistry.getSessionsByIdentityPaginated(99, 0, 10);
+        assertEq(page.length, 0);
+    }
+
+    // -------------------------------------------------------------------------
     // getRevokedBefore
     // -------------------------------------------------------------------------
 

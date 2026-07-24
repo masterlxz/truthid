@@ -158,8 +158,29 @@ contract SessionRegistry is IdentityResolver {
     }
 
     /// Retorna todos os hashes de sessão de uma identidade (incluindo revogadas).
+    /// C6: pode reverter se a lista for muito grande. Use
+    /// `getSessionsByIdentityPaginated` para arrays grandes.
     function getSessionsByIdentity(uint256 identityId) external view returns (bytes32[] memory) {
         return _sessionsByIdentity[identityId];
+    }
+
+    /// Retorna uma página das sessões de uma identidade. `offset` é a posição
+    /// inicial (0-indexed), `limit` é o número máximo de entries. Se
+    /// `offset >= length`, retorna array vazio. Se `offset + limit > length`,
+    /// trunca ao final. C6: previne estouro de gas.
+    function getSessionsByIdentityPaginated(uint256 identityId, uint256 offset, uint256 limit)
+        external view returns (bytes32[] memory hashes)
+    {
+        bytes32[] storage sessionList = _sessionsByIdentity[identityId];
+        uint256 length = sessionList.length;
+        if (offset >= length) return new bytes32[](0);
+        uint256 end = offset + limit;
+        if (end > length) end = length;
+        uint256 resultLen = end - offset;
+        hashes = new bytes32[](resultLen);
+        for (uint256 i = 0; i < resultLen; i++) {
+            hashes[i] = sessionList[offset + i];
+        }
     }
 
     /// Retorna o timestamp de revogação em massa (0 se revokeAllSessions nunca foi chamado).

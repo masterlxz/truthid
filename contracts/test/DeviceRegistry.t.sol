@@ -513,6 +513,52 @@ contract DeviceRegistryTest is Test, IdentityConsentHelper {
     }
 
     // -----------------------------------------------------------------
+    // getDevicesByIdentityPaginated — C6: paginação contra DoS via gas
+    // -----------------------------------------------------------------
+
+    function test_GetDevicesByIdentityPaginated_PrimeiraPagina() public {
+        _registerDevice(alice, aliceDevice1, "Device 1");
+        _registerDevice(alice, aliceDevice2, "Device 2");
+        address device3 = makeAddr("device-3");
+        _registerDevice(alice, device3, "Device 3");
+
+        address[] memory page = deviceRegistry.getDevicesByIdentityPaginated(1, 0, 2);
+        assertEq(page.length, 2);
+        assertEq(page[0], aliceDevice1);
+        assertEq(page[1], aliceDevice2);
+    }
+
+    function test_GetDevicesByIdentityPaginated_SegundaPagina() public {
+        _registerDevice(alice, aliceDevice1, "Device 1");
+        _registerDevice(alice, aliceDevice2, "Device 2");
+        address device3 = makeAddr("device-3");
+        _registerDevice(alice, device3, "Device 3");
+
+        address[] memory page = deviceRegistry.getDevicesByIdentityPaginated(1, 2, 2);
+        assertEq(page.length, 1);
+        assertEq(page[0], device3);
+    }
+
+    function test_GetDevicesByIdentityPaginated_OffsetAlemDoFim() public {
+        _registerDevice(alice, aliceDevice1, "Device 1");
+
+        address[] memory page = deviceRegistry.getDevicesByIdentityPaginated(1, 10, 5);
+        assertEq(page.length, 0);
+    }
+
+    function test_GetDevicesByIdentityPaginated_LimitZero() public {
+        _registerDevice(alice, aliceDevice1, "Device 1");
+
+        address[] memory page = deviceRegistry.getDevicesByIdentityPaginated(1, 0, 0);
+        assertEq(page.length, 0);
+    }
+
+    function test_GetDevicesByIdentityPaginated_IdentidadeSemDevices() public view {
+        address[] memory page = deviceRegistry.getDevicesByIdentityPaginated(99, 0, 10);
+        assertEq(page.length, 0);
+    }
+
+    // -----------------------------------------------------------------
     // deviceCount
     // -----------------------------------------------------------------
 

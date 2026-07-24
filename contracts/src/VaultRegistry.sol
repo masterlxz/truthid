@@ -102,8 +102,29 @@ contract VaultRegistry is IdentityResolver {
     }
 
     /// Retorna o histórico completo de CIDs (da versão mais antiga à mais recente).
+    /// C6: pode reverter se o histórico for muito grande (estouro de gas em
+    /// eth_call). Use `getVaultHistoryPaginated` para arrays grandes.
     function getVaultHistory(uint256 identityId) external view returns (string[] memory) {
         return _vaultHistory[identityId];
+    }
+
+    /// Retorna uma página do histórico de CIDs. `offset` é a posição inicial
+    /// (0-indexed), `limit` é o número máximo de entries. Se `offset >= length`,
+    /// retorna array vazio. Se `offset + limit > length`, trunca ao final.
+    /// C6: previne estouro de gas ao limitar o número de entries retornadas.
+    function getVaultHistoryPaginated(uint256 identityId, uint256 offset, uint256 limit)
+        external view returns (string[] memory cids)
+    {
+        string[] storage history = _vaultHistory[identityId];
+        uint256 length = history.length;
+        if (offset >= length) return new string[](0);
+        uint256 end = offset + limit;
+        if (end > length) end = length;
+        uint256 resultLen = end - offset;
+        cids = new string[](resultLen);
+        for (uint256 i = 0; i < resultLen; i++) {
+            cids[i] = history[offset + i];
+        }
     }
 
     /// Retorna true se a identidade já tem um vault registrado.

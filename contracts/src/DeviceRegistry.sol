@@ -226,8 +226,29 @@ contract DeviceRegistry is IdentityResolver {
 
     /// Retorna todas as pubKeys de devices de uma identidade (incluindo revogados).
     /// Use `isDeviceActive` para filtrar os ativos.
+    /// C6: pode reverter se a lista for muito grande. Use
+    /// `getDevicesByIdentityPaginated` para arrays grandes.
     function getDevicesByIdentity(uint256 identityId) external view returns (address[] memory) {
         return _devicesByIdentity[identityId];
+    }
+
+    /// Retorna uma página da lista de devices de uma identidade. `offset` é a
+    /// posição inicial (0-indexed), `limit` é o número máximo de entries.
+    /// Se `offset >= length`, retorna array vazio. Se `offset + limit > length`,
+    /// trunca ao final. C6: previne estouro de gas.
+    function getDevicesByIdentityPaginated(uint256 identityId, uint256 offset, uint256 limit)
+        external view returns (address[] memory devices)
+    {
+        address[] storage deviceList = _devicesByIdentity[identityId];
+        uint256 length = deviceList.length;
+        if (offset >= length) return new address[](0);
+        uint256 end = offset + limit;
+        if (end > length) end = length;
+        uint256 resultLen = end - offset;
+        devices = new address[](resultLen);
+        for (uint256 i = 0; i < resultLen; i++) {
+            devices[i] = deviceList[offset + i];
+        }
     }
 
     /// Retorna quantos devices uma identidade tem (incluindo revogados).

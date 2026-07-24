@@ -142,6 +142,77 @@ contract VaultRegistryTest is Test, IdentityConsentHelper {
     }
 
     // -------------------------------------------------------------------------
+    // getVaultHistoryPaginated — C6: paginação contra DoS via gas
+    // -------------------------------------------------------------------------
+
+    function test_GetVaultHistoryPaginated_PrimeiraPagina() public {
+        _populateVaultHistory(5);
+
+        string[] memory page = vaultRegistry.getVaultHistoryPaginated(1, 0, 3);
+        assertEq(page.length, 3);
+        assertEq(page[0], _cid(1));
+        assertEq(page[1], _cid(2));
+        assertEq(page[2], _cid(3));
+    }
+
+    function test_GetVaultHistoryPaginated_SegundaPagina() public {
+        _populateVaultHistory(5);
+
+        string[] memory page = vaultRegistry.getVaultHistoryPaginated(1, 3, 3);
+        assertEq(page.length, 2);
+        assertEq(page[0], _cid(4));
+        assertEq(page[1], _cid(5));
+    }
+
+    function test_GetVaultHistoryPaginated_OffsetAlemDoFim() public {
+        _populateVaultHistory(3);
+
+        string[] memory page = vaultRegistry.getVaultHistoryPaginated(1, 10, 5);
+        assertEq(page.length, 0);
+    }
+
+    function test_GetVaultHistoryPaginated_LimitZero() public {
+        _populateVaultHistory(3);
+
+        string[] memory page = vaultRegistry.getVaultHistoryPaginated(1, 0, 0);
+        assertEq(page.length, 0);
+    }
+
+    function test_GetVaultHistoryPaginated_IdentidadeSemHistorico() public view {
+        string[] memory page = vaultRegistry.getVaultHistoryPaginated(99, 0, 10);
+        assertEq(page.length, 0);
+    }
+
+    function _populateVaultHistory(uint256 count) internal {
+        vm.startPrank(alice);
+        for (uint256 i = 0; i < count; i++) {
+            vaultRegistry.updateVault(_cid(i + 1), keccak256(abi.encode(i)));
+        }
+        vm.stopPrank();
+    }
+
+    function _cid(uint256 n) internal pure returns (string memory) {
+        return string(abi.encodePacked("cid-", _toString(n)));
+    }
+
+    function _toString(uint256 n) internal pure returns (string memory) {
+        if (n == 0) return "0";
+        uint256 temp = n;
+        uint256 digits;
+        while (temp != 0) {
+            digits++;
+            temp /= 10;
+        }
+        bytes memory buffer = new bytes(digits);
+        while (n != 0) {
+            digits--;
+            buffer[digits] = bytes1(uint8(48 + n % 10));
+            n /= 10;
+        }
+        return string(buffer);
+    }
+
+    // -------------------------------------------------------------------------
     // hasVault
     // -------------------------------------------------------------------------
 
