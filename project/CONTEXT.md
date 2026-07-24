@@ -373,7 +373,7 @@ Recommended timelock:
 
 The following are explicitly out of scope:
 
-* ~~Password manager~~ — **scope expanded**: TruthID Vault (optional password manager module) was added in Phase 13. It is built on top of the existing `DeviceRegistry` and does not change the core auth protocol. See `project/PHASE_13_VAULT.md` for full design.
+* ~~Password manager~~ — **scope expanded**: TruthID Vault (optional password manager module) was added in Phase 13. It is built on top of the existing `DeviceRegistry` and does not change the core auth protocol. See `project/PHASE.md` (Fase 13) for full design.
 * Token creation
 * Governance token
 * NFT marketplace

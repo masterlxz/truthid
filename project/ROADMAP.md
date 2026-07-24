@@ -465,7 +465,7 @@ principal de financiamento no estágio atual — não depende de tração de usu
 qualidade técnica e visão; doações diretas, mantidas como complemento de baixo custo.
 
 **Decisões em aberto (nada decidido ainda)**:
-- Formato final: virar uma Fase nova em `project/PHASE_15_IDENTITY_VAULT.md`, ou ficar como documento separado
+- Formato final: virar uma Fase nova em `project/PHASE.md` (Fase 15), ou ficar como documento separado
   referenciado por ele? (Registrado aqui, dentro do Roadmap, por ora — pode virar Fase própria
   quando/se sair do brainstorm pra implementação real.)
 - Opção (a) ou (b) de precificação ETH/BRL pra começar.
