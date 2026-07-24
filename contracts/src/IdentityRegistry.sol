@@ -187,6 +187,7 @@ contract IdentityRegistry {
     /// Ordem de deploy: (1) IdentityRegistry, (2) RecoveryManager, (3) esta função.
     function setRecoveryManager(address rm) external {
         if (msg.sender != owner) revert NotOwner();
+        if (rm == address(0)) revert InvalidNewController();
         if (_recoveryManager != address(0)) revert RecoveryManagerAlreadySet();
         _recoveryManager = rm;
         emit RecoveryManagerSet(rm);

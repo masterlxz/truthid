@@ -349,6 +349,11 @@ contract IdentityRegistryTest is Test, IdentityConsentHelper {
         registry.setRecoveryManager(bob);
     }
 
+    function test_Revert_SetRecoveryManager_ZeroAddress() public {
+        vm.expectRevert(IdentityRegistry.InvalidNewController.selector);
+        registry.setRecoveryManager(address(0));
+    }
+
     function test_Owner_IsDeployer() public view {
         assertEq(registry.owner(), address(this));
     }
