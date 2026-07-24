@@ -90,8 +90,12 @@ contract SessionRegistry is IdentityResolver {
         if (_sessions[hash].exists) revert SessionAlreadyExists(hash);
 
         // Prova de posse: só quem tem a chave privada de devicePubKey
-        // consegue produzir essa assinatura sobre o hash exato da sessão.
-        bytes32 ethSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", hash));
+        // consegue produzir essa assinatura. O hash assinado inclui o
+        // chainId e o endereço deste contrato (C4 do /code-review) para
+        // impedir replay cross-chain: uma assinatura feita na Base Sepolia
+        // não pode ser reutilizada na Base Mainnet.
+        bytes32 domainHash = keccak256(abi.encode(block.chainid, address(this), hash));
+        bytes32 ethSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", domainHash));
         if (ecrecover(ethSignedHash, v, r, s) != devicePubKey) revert InvalidSessionSignature();
 
         // Confirma que esse device de fato pertence à identidade alegada

@@ -69,8 +69,8 @@ contract SessionRegistryTest is Test, IdentityConsentHelper {
         deviceRegistry.registerDevice(devicePubKey, label, SALT, "");
     }
 
-    // Atalho: assina `hash` com a chave do device (mesmo formato que o
-    // contrato espera — prefixo "\x19Ethereum Signed Message:\n32") e chama
+    // Atalho: assina o domainHash (hash + chainId + address(this)) com a
+    // chave do device (C4 — cross-chain replay protection) e chama
     // createSession. Quem efetivamente SUBMETE a transação é quem estiver
     // sob `vm.prank` no momento da chamada — fica a critério de cada teste.
     function _createSession(
@@ -79,8 +79,9 @@ contract SessionRegistryTest is Test, IdentityConsentHelper {
         uint256 identityId,
         address devicePubKey
     ) internal {
+        bytes32 domainHash = keccak256(abi.encode(block.chainid, address(sessionRegistry), hash));
         bytes32 ethSignedHash = keccak256(
-            abi.encodePacked("\x19Ethereum Signed Message:\n32", hash)
+            abi.encodePacked("\x19Ethereum Signed Message:\n32", domainHash)
         );
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(devicePrivateKey, ethSignedHash);
         sessionRegistry.createSession(hash, identityId, devicePubKey, r, s, v);
@@ -134,8 +135,10 @@ contract SessionRegistryTest is Test, IdentityConsentHelper {
     function test_Revert_CreateSession_InvalidSignature() public {
         // Assinado pela chave do BOB, mas alegando ser o device da alice —
         // sem a chave privada certa, ecrecover nunca devolve aliceDevice.
+        // O domainHash segue o mesmo formato que o contrato usa (C4).
+        bytes32 domainHash = keccak256(abi.encode(block.chainid, address(sessionRegistry), sessionA));
         bytes32 ethSignedHash =
-            keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", sessionA));
+            keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", domainHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(bobDeviceKey, ethSignedHash);
 
         vm.expectRevert(SessionRegistry.InvalidSessionSignature.selector);
