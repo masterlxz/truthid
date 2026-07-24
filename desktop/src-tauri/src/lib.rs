@@ -803,7 +803,7 @@ pub fn run() {
             // um prompt. Escopado só pra UserMediaPermissionRequest (câmera/
             // microfone) — qualquer outro tipo (geolocalização, notificação,
             // etc.) devolve `false` e cai no comportamento padrão (negar),
-            // sem abrir a porta pra tudo. Ver PROJECT_STATE.md, "QR no TOTP".
+            // sem abrir a porta pra tudo. Ver project/INDEX.md, "QR no TOTP".
             #[cfg(target_os = "linux")]
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.with_webview(|webview| {

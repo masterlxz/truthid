@@ -197,7 +197,7 @@ class VaultEntry {
 /// Normalmente concedida pelo Desktop/controller, mas o Mobile também pode
 /// gerenciar (ver `VaultRepository.setDevicePermission`) — trava de UX
 /// (mesma que já protege as outras telas de escrita do Vault, `canWrite`),
-/// não é imposta pelo contrato (ver PROJECT_STATE.md, Sessão 97).
+/// não é imposta pelo contrato (ver project/INDEX.md, Sessão 97).
 class VaultDevicePermission {
   final String pubKey;
   final bool canWrite;
@@ -221,7 +221,7 @@ class _VaultData {
   final int version;
   final List<VaultEntry> entries;
   /// Nomes de perfis criados pelo usuário (ex: ["Trabalho", "Banco"]) — geridos
-  /// só pelo Desktop (Mobile é somente-leitura pro Vault), ver PROJECT_STATE.md
+  /// só pelo Desktop (Mobile é somente-leitura pro Vault), ver project/INDEX.md
   /// Sessão 97.
   final List<String> profileNames;
   /// Permissões de escrita por device (ver VaultDevicePermission).
@@ -610,7 +610,7 @@ class VaultRepository {
 
   // Serializa o vault local inteiro e cifra com uma senha de export (PBKDF2 +
   // AES-256-GCM via BackupCipherService), independente da vault key derivada
-  // da wallet/pareamento — ver PROJECT_STATE.md, roadmap item 4.
+  // da wallet/pareamento — ver project/INDEX.md, roadmap item 4.
   Future<Uint8List> exportBackup(String password) async {
     final data = await _load();
     return _backupCipherService.encrypt(_serializeVaultData(data), password);

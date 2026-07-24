@@ -9,7 +9,7 @@ import 'package:truthid_mobile/utils/user_operation.dart';
 // Vetores gerados com `viem/account-abstraction` (getUserOperationHash,
 // entryPointVersion "0.7") — mesmo pacote já usado no lado desktop (viem) —
 // pra garantir que a implementação Dart bate byte a byte com a fórmula que o
-// EntryPoint on-chain usa. Ver Sessão de Fase 14.9.2 no PROJECT_STATE.md pro
+// EntryPoint on-chain usa. Ver Sessão de Fase 14.9.2 no project/INDEX.md pro
 // script usado pra gerar estes hashes.
 const _entryPoint = entryPointV07Address;
 

@@ -76,7 +76,7 @@ class VaultRef {
 
 class BlockchainService {
   // Endereços atualizados no redeploy de 2026-07-04 (corrige bug do
-  // getAddress de 1 argumento no IdentityRegistry — ver PROJECT_STATE.md).
+  // getAddress de 1 argumento no IdentityRegistry — ver project/INDEX.md).
   //
   // RPCs públicos de Base Mainnet, na ordem em que são tentados — mesma lista
   // já usada no fallback do Desktop (ver desktop/src/config/wagmi.ts). Antes

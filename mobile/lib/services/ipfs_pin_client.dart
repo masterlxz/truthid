@@ -9,7 +9,7 @@ import 'ipns_key_service.dart';
 // Configuração de um provider de pinning IPFS — mesma spec do Desktop
 // (`desktop/src-tauri/src/ipfs.rs::PinningProvider`), configurado
 // separadamente no Mobile (não há canal pra sincronizar API keys entre
-// devices, ver PROJECT_STATE.md, Sessão 97).
+// devices, ver project/INDEX.md, Sessão 97).
 //
 // `kind` aceita dois valores:
 //  - `"kubo"` — node Kubo (local ou remoto); usa `/api/v0/add` para upload
@@ -120,7 +120,7 @@ class IpfsPinClient {
   // Publica `content` (já cifrado) num nome IPNS derivado deterministicamente
   // de `sessionIdHex` — dead-drop da 13.9, fatia 2a. Só funciona com
   // providers `kind == 'kubo'` (PSA não tem garantia de suportar publish de
-  // IPNS, ver PROJECT_STATE.md Sessão 97); usa só o primeiro configurado, sem
+  // IPNS, ver project/INDEX.md Sessão 97); usa só o primeiro configurado, sem
   // redundância multi-provider nesta fatia. Devolve `null` sem lançar se não
   // houver nenhum provider Kubo — o dead-drop é best-effort, uma falha aqui
   // não pode derrubar o transporte LAN que roda em paralelo (ver

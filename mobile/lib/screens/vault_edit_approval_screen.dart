@@ -21,7 +21,7 @@ import '../theme.dart';
 
 // Diferente do irmão `PinApprovalScreen`, aqui não há fase 2 de entrega de
 // resultado — a extensão não roda servidor, não tem como receber um "sent"
-// de volta (ver PROJECT_STATE.md, "fora de escopo"). No approve, o celular
+// de volta (ver project/INDEX.md, "fora de escopo"). No approve, o celular
 // persiste a entrada e publica sozinho; `publishing` cobre as duas etapas
 // (pin no IPFS + assinatura de UserOperation).
 enum _Status {

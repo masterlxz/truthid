@@ -10,7 +10,7 @@ enum _HealthStatus { idle, checking, ok, error }
 
 // Config de provedores de pin do Mobile — mirror de
 // `desktop/src/components/VaultSettings.tsx`, mas independente da config do
-// Desktop (cada device guarda a própria, ver PROJECT_STATE.md, Sessão 97).
+// Desktop (cada device guarda a própria, ver project/INDEX.md, Sessão 97).
 class PinningProvidersScreen extends StatefulWidget {
   final PinningProviderService? providerService;
 

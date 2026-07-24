@@ -44,7 +44,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
         // Aguarda o username resolver antes de considerar "pareado" — sem
         // isso, quem navegasse rápido pra aprovar um login veria
         // "device not paired" mesmo com o identityId já salvo (a
-        // ApprovalScreen exige os dois, ver Sessão 70 no PROJECT_STATE.md).
+        // ApprovalScreen exige os dois, ver Sessão 70 no project/INDEX.md).
         identityId = device.identityId.toString();
         await _storage.savePairedIdentity(identityId);
         final resolvedUsername =

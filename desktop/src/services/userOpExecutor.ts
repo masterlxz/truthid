@@ -55,7 +55,7 @@ export interface ExecuteViaUserOpResult {
  * (mobile/lib/services/session_creator.dart) — mesmo núcleo que o Mobile já
  * usa em produção pra createSession/revokeSession/withdraw/updateVault.
  *
- * A smart account paga o próprio gas (sem paymaster — ver PROJECT_STATE.md,
+ * A smart account paga o próprio gas (sem paymaster — ver project/INDEX.md,
  * Sessão 52); precisa ter ETH depositado. `dest` genérico de propósito: já
  * pronto pra, numa fatia futura, apontar pra qualquer contrato de terceiro,
  * não só o VaultRegistry.

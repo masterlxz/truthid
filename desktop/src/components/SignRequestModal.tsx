@@ -18,7 +18,7 @@ type DecodedCall =
  * via viem) e confere que bate com o callData recebido antes de decodificar.
  * Se não bater (ou a assinatura for inválida), a UI mostra os bytes crus +
  * um aviso em vez de bloquear — a aprovação humana é o ponto de confiança
- * final, não uma checagem no Rust (ver PROJECT_STATE.md, fatia 2b).
+ * final, não uma checagem no Rust (ver project/INDEX.md, fatia 2b).
  */
 function decodeIncomingCall(req: IncomingSignRequest): DecodedCall {
   try {

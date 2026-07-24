@@ -6,7 +6,7 @@ import 'ipfs_pin_client.dart';
 
 // Config própria do Mobile pros provedores de pin — independente da do
 // Desktop (não existe canal pra sincronizar API keys entre devices, ver
-// PROJECT_STATE.md, Sessão 97). Mesmo padrão de storage de
+// project/INDEX.md, Sessão 97). Mesmo padrão de storage de
 // `local_storage_service.dart`/`vault_key_service.dart`.
 class PinningProviderService {
   static const _storage = FlutterSecureStorage();

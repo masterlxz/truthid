@@ -25,7 +25,7 @@ export interface MobileDeliverySession {
  * Orquestra o caminho "celular via QR" (Sessão 134): gera sessionId +
  * keypair efêmero (o `ephemeralPubKey` entra no QR pra manter o mesmo
  * schema de 5 campos do `/truthid/v1/pin`, mas nenhuma fase de retorno usa
- * a chave privada nesta rodada — ver PROJECT_STATE.md, "fora de escopo"),
+ * a chave privada nesta rodada — ver project/INDEX.md, "fora de escopo"),
  * monta o payload do QR, e devolve um `send()` que cifra a proposta
  * (`cipher.ts`, chave derivada do `sessionId`) e varre a LAN
  * (`lanDelivery.ts`) até algum device aceitar.

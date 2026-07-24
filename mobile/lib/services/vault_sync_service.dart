@@ -16,7 +16,7 @@ enum VaultSyncStatus {
 class VaultSyncOutcome {
   final VaultSyncStatus status;
   final List<VaultEntry> entries;
-  /// Nomes de perfis criados pelo usuário no Desktop (ver PROJECT_STATE.md,
+  /// Nomes de perfis criados pelo usuário no Desktop (ver project/INDEX.md,
   /// Sessão 97) — vazio quando o sync não chegou a ler o vault (ex: sem chave,
   /// sem vault publicado, falha sem cache).
   final List<String> profileNames;

@@ -64,7 +64,7 @@ pub(crate) struct Passkey {
 /// Permissão de escrita no vault por device (`pub_key` = endereço do device).
 /// Concedida só pelo controller (Desktop/Ledger) — devices nunca concedem a
 /// si mesmos nem a outros. Trava de UX, não é imposta pelo contrato (não há
-/// terceiros desconfiados — ver VaultRegistry.sol e PROJECT_STATE.md, 13.7).
+/// terceiros desconfiados — ver VaultRegistry.sol e project/INDEX.md, 13.7).
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub(crate) struct DeviceVaultPermission {
     pub pub_key: String,
@@ -76,7 +76,7 @@ pub(crate) struct Vault {
     pub version: u64,
     pub entries: Vec<VaultEntry>,
     /// Nomes de perfis criados pelo usuário (ex: ["Trabalho", "Banco"]). Livre,
-    /// não é mais uma lista fixa — ver PROJECT_STATE.md, Sessão 97.
+    /// não é mais uma lista fixa — ver project/INDEX.md, Sessão 97.
     #[serde(default)]
     pub profile_names: Vec<String>,
     /// Permissões de escrita por device — movido do arquivo local
@@ -284,7 +284,7 @@ pub(crate) fn load() -> Result<Vault, String> {
         }
     }
     // Migração: vaults antigos não tinham profile_names — backfill a partir da
-    // união das tags já em uso nas entradas (ver PROJECT_STATE.md, Sessão 97).
+    // união das tags já em uso nas entradas (ver project/INDEX.md, Sessão 97).
     if vault.profile_names.is_empty() {
         let mut seen = Vec::new();
         for entry in &vault.entries {
@@ -298,7 +298,7 @@ pub(crate) fn load() -> Result<Vault, String> {
     }
     // Migração: canWriteVault morava num arquivo local separado
     // (~/.truthid/vault_permissions.json) — backfill único de lá pro campo
-    // embutido no vault, pra o Mobile conseguir ler (ver PROJECT_STATE.md,
+    // embutido no vault, pra o Mobile conseguir ler (ver project/INDEX.md,
     // Sessão 97). Best-effort: arquivo ausente ou corrompido só resulta em
     // lista vazia, não é erro fatal.
     if vault.device_permissions.is_empty() {

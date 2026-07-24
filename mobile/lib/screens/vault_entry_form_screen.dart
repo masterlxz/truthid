@@ -16,7 +16,7 @@ import 'scan_screen.dart';
 // Tela compartilhada de criar/editar uma entrada do vault — mirror do
 // `EntryForm` do Desktop (`VaultManagement.tsx`). `entry` null = criar.
 // Só alcançável quando o device tem canWriteVault (checado por quem navega
-// pra cá, ver vault_screen.dart), ver PROJECT_STATE.md, Sessão 97.
+// pra cá, ver vault_screen.dart), ver project/INDEX.md, Sessão 97.
 class VaultEntryFormScreen extends StatefulWidget {
   final VaultEntry? entry;
   final VaultRepository? repository;

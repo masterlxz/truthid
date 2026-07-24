@@ -98,7 +98,7 @@ npx tsx e2e.ts
 
 ## Security
 
-- The four contracts went through a manual security review (no automated tooling) covering access control, reentrancy, front-running, timestamp dependence, DoS, and input validation. All findings were fixed before the mainnet deploy — see the audit table in [`PROJECT_STATE.md`](PROJECT_STATE.md), section "Fase 6".
+- The four contracts went through a manual security review (no automated tooling) covering access control, reentrancy, front-running, timestamp dependence, DoS, and input validation. All findings were fixed before the mainnet deploy — see the audit table in [`project/ARCHITECTURE.md`](project/ARCHITECTURE.md).
 - Device private keys never leave the device and never touch any server.
 - This project has **not** undergone a third-party professional audit. Treat it as early-stage software.
 

@@ -65,7 +65,7 @@ function emptyForm(): FormState {
 /** Extrai um hostname pra usar como RP ID — tenta a URL, cai pro nome do site
  * (sanitizado) se a URL estiver vazia/inválida. Sem redução pra domínio
  * registrável (eTLD+1) nesta fase — não há relying party real validando isso
- * ainda (ver PROJECT_STATE.md, escopo da fundação de Passkeys). */
+ * ainda (ver project/INDEX.md, escopo da fundação de Passkeys). */
 function hostnameOf(url: string, site: string): string {
   try {
     return new URL(url).hostname;
@@ -785,7 +785,7 @@ export function VaultManagement() {
             {/* Segundo caminho, via device key (sem Ledger) — prova de que o
                 pipeline UserOp+bundler funciona no Desktop. Sem UI polida de
                 propósito, é validação, não feature acabada pra usuário final
-                (ver PROJECT_STATE.md, "Desktop ganha assinatura via device key"). */}
+                (ver project/INDEX.md, "Desktop ganha assinatura via device key"). */}
             <button
               onClick={handleEnviarViaDeviceKey}
               disabled={deviceKeyDisabled}

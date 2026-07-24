@@ -13,7 +13,7 @@ import '../widgets/info_row.dart';
 import 'vault_entry_form_screen.dart';
 
 // Detalhe de uma entrada do Vault. Editar/apagar só aparece quando o device
-// tem canWriteVault (ver PROJECT_STATE.md, Sessão 97) — quem navega pra cá
+// tem canWriteVault (ver project/INDEX.md, Sessão 97) — quem navega pra cá
 // já checou isso (vault_screen.dart). Senha escondida por padrão.
 class VaultEntryDetailScreen extends StatefulWidget {
   final VaultEntry entry;

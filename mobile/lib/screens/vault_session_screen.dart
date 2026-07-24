@@ -147,13 +147,13 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
 
   // Sincroniza o vault (uma vez) pra saber a lista real de perfis do usuário
   // antes de mostrar o picker — os perfis fixos hardcoded foram removidos
-  // (ver PROJECT_STATE.md, Sessão 97). A escolha do perfil em si (abaixo) só
+  // (ver project/INDEX.md, Sessão 97). A escolha do perfil em si (abaixo) só
   // filtra o resultado já sincronizado, sem precisar sincronizar de novo.
   //
   // Também dispara aqui (não só na hora de enviar) uma leitura das interfaces
   // de rede — no iOS isso é o que aciona o diálogo do sistema de Local
   // Network Privacy; disparar cedo evita que ele apareça competindo com o
-  // timeout do TTL bem no meio do envio (ver PROJECT_STATE.md, 13.9).
+  // timeout do TTL bem no meio do envio (ver project/INDEX.md, 13.9).
   Future<void> _loadProfiles() async {
     setState(() => _status = _Status.loadingMatches);
 

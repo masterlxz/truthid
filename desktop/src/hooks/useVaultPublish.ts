@@ -47,7 +47,7 @@ export function useVaultPublish(
 
   // Segundo caminho de publicação, ao lado do já existente (Ledger via
   // writeContract acima): assina via device key, sem toque físico, usando o
-  // motor novo `executeViaUserOp` (13.9-irmã — ver PROJECT_STATE.md, "Desktop
+  // motor novo `executeViaUserOp` (13.9-irmã — ver project/INDEX.md, "Desktop
   // ganha assinatura via device key"). Prova real de que o pipeline
   // UserOp+bundler funciona no Desktop, reaproveitando a mesma ação
   // (updateVault) que o caminho Ledger já usa — não substitui o caminho

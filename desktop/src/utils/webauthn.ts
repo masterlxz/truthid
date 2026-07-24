@@ -12,7 +12,7 @@ import { base64UrlEncode } from "./base64";
  *
  * Escopo desta fase: só a cerimônia criptográfica em si. Não há interceptação
  * de `navigator.credentials` num site real — isso depende de um content
- * script na extensão que ainda não existe (ver PROJECT_STATE.md, roadmap).
+ * script na extensão que ainda não existe (ver project/INDEX.md, roadmap).
  */
 
 const AAGUID = new Uint8Array(16); // zeros — sem attestation de hardware real nesta fase.

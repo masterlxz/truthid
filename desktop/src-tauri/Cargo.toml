@@ -46,7 +46,7 @@ futures = "0.3"
 # permissão embutida ainda). Versão travada em "=2.0.2" pra bater exatamente
 # com a que o wry 0.55 já usa internamente (mesmo tipo `webkit2gtk::WebView`
 # retornado por `PlatformWebview::inner()` — uma versão diferente não
-# compilaria). Ver PROJECT_STATE.md, item "QR no TOTP" do backlog.
+# compilaria). Ver project/INDEX.md, item "QR no TOTP" do backlog.
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = "=2.0.2"
 

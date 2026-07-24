@@ -164,7 +164,7 @@ class SessionCreator {
   // DeviceRegistry/IdentityRegistry/RecoveryManager estão), e o próprio
   // Desktop já roteia updateVault do mesmo jeito (via TruthIDAccount.execute,
   // desktop/src/hooks/useVaultPublish.ts) — aqui só quem assina muda (device
-  // key em vez da Ledger). Ver PROJECT_STATE.md, Sessão 97.
+  // key em vez da Ledger). Ver project/INDEX.md, Sessão 97.
   Future<SessionCreationResult> updateVault({
     required EthereumAddress smartAccountAddress,
     required String cid,

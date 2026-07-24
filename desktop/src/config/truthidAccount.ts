@@ -10,7 +10,7 @@ export const ENTRY_POINT_V07: Address =
   "0x0000000071727De22E5E9d8BAf0edAc6f37da032";
 
 // Immutables da factory — devem bater com os endereços injetados no deploy.
-// Mainnet (redeploy de 2026-07-06, débito #42 — ver PROJECT_STATE.md).
+// Mainnet (redeploy de 2026-07-06, débito #42 — ver project/INDEX.md).
 // Sepolia (para devs testarem):
 //   factory: 0x490A82AD72705fA92e0BBc0Dc5A894883fE90a9E
 //   deviceRegistry: 0x867EA636FDF324B0Cc4a631C70421580e2Bbe91c

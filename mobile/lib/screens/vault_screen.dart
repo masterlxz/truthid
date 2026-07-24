@@ -22,7 +22,7 @@ import 'vault_profiles_screen.dart';
 
 // Leitura + escrita do Vault no mobile — 13.8 trouxe a leitura, a Sessão 97
 // trouxe criar/editar/apagar senha e publicar, condicionado a canWriteVault
-// (concedido só pelo Desktop, ver PROJECT_STATE.md). O conteúdo real vem do
+// (concedido só pelo Desktop, ver project/INDEX.md). O conteúdo real vem do
 // VaultSyncService (on-chain → IPFS → verificação de hash → decifra).
 class VaultScreen extends StatefulWidget {
   final BlockchainService? blockchainService;

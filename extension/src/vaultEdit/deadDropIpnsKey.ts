@@ -9,7 +9,7 @@ import { hexToBytes } from '../util/bytes';
 
 /**
  * Deriva a chave IPNS pra dead-drop cross-network do vault-edit (item 6 do
- * backlog, `PROJECT_STATE.md`) — mirror de `session/ipnsKey.ts`, mas com
+ * backlog, `project/INDEX.md`) — mirror de `session/ipnsKey.ts`, mas com
  * papel invertido: lá a extensão só recomputa o nome público (quem publica
  * é o Mobile, no pareamento de leitura). Aqui é a extensão quem publica
  * (tem o conteúdo pronto assim que a proposta é enfileirada), então precisa

@@ -7,7 +7,7 @@ import 'package:web3dart/crypto.dart' show hexToBytes;
 import 'hkdf_util.dart';
 
 /// Deriva o nome IPNS onde a extensão publica o dead-drop cross-network do
-/// vault-edit (item 6 do backlog, `PROJECT_STATE.md`) — mirror parcial de
+/// vault-edit (item 6 do backlog, `project/INDEX.md`) — mirror parcial de
 /// `IpnsKeyService`, papel invertido: lá o Mobile publica e a extensão só
 /// recomputa o nome público; aqui a **extensão** publica
 /// (`extension/src/vaultEdit/deadDropIpnsKey.ts`) e o celular só precisa da

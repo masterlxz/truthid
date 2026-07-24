@@ -6,7 +6,7 @@ import '../theme.dart';
 // Gerenciar perfis nomeados pelo usuário — mirror da seção "Gerenciar
 // perfis" do Desktop (VaultManagement.tsx). Só alcançável quando o device
 // tem canWriteVault (checado em vault_screen.dart antes de navegar pra cá).
-// Ver PROJECT_STATE.md, Sessão 97.
+// Ver project/INDEX.md, Sessão 97.
 class VaultProfilesScreen extends StatefulWidget {
   final VaultRepository? repository;
 

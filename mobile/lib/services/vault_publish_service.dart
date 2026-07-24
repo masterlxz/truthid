@@ -26,7 +26,7 @@ class VaultPublishResult {
 // on-chain via UserOperation (SessionCreator.updateVault) → marca a versão
 // como publicada. Mirror do par `useVaultPublish.ts` (Desktop) + comando
 // Tauri `vault_publish`, só que numa função só — o Mobile não tem a mesma
-// separação Tauri/JS. Ver PROJECT_STATE.md, Sessão 97.
+// separação Tauri/JS. Ver project/INDEX.md, Sessão 97.
 class VaultPublishService {
   final VaultRepository _repository;
   final IpfsPinClient _pinClient;
