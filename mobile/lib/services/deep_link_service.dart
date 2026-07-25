@@ -29,16 +29,18 @@ class DeepLinkService {
 
   Future<void> init(GlobalKey<NavigatorState> navigatorKey) async {
     final initial = await _appLinks.getInitialLink();
-    if (initial != null) _handle(navigatorKey, initial);
+    if (initial != null) unawaited(_handle(navigatorKey, initial));
 
-    _sub = _appLinks.uriLinkStream.listen((uri) => _handle(navigatorKey, uri));
+    _sub = _appLinks.uriLinkStream.listen(
+      (uri) => unawaited(_handle(navigatorKey, uri)),
+    );
   }
 
   void dispose() {
     _sub?.cancel();
   }
 
-  void _handle(GlobalKey<NavigatorState> navigatorKey, Uri uri) {
+  Future<void> _handle(GlobalKey<NavigatorState> navigatorKey, Uri uri) async {
     if (uri.scheme != 'truthid') return;
 
     final sessionId = uri.queryParameters['sessionId'];
@@ -68,6 +70,6 @@ class DeepLinkService {
       'v': int.tryParse(uri.queryParameters['v'] ?? ''),
       'expiresAt': int.tryParse(uri.queryParameters['expiresAt'] ?? ''),
     };
-    DeepLinkRouter.handlePayload(context, payload);
+    await DeepLinkRouter.handlePayload(context, payload);
   }
 }

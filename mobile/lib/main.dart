@@ -59,6 +59,10 @@ class AppLockGate extends StatefulWidget {
 
 class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
   late final AppLockService _lockService;
+  // Referência fixa (não um tear-off novo a cada acesso) — precisa ser a
+  // MESMA closure em `initState`/`dispose` pro `identical()` abaixo garantir
+  // que só limpamos o hook se ele ainda for o nosso.
+  late final VoidCallback _authenticateCallback;
   // Cobre a tela até a 1a checagem de isEnabled() resolver — evita qualquer
   // flash de conteúdo antes de saber se o bloqueio está ligado.
   bool _checking = true;
@@ -69,14 +73,31 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     _lockService = widget.lockService ?? AppLockService();
+    _authenticateCallback = _authenticate;
     WidgetsBinding.instance.addObserver(this);
+    AppLockService.requestAuthentication = _authenticateCallback;
     _init();
   }
 
   @override
   void dispose() {
+    if (identical(AppLockService.requestAuthentication, _authenticateCallback)) {
+      AppLockService.requestAuthentication = null;
+    }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  // Único ponto que escreve `_locked` — também mantém
+  // `AppLockService.isLockedNotifier` sincronizado, pra ser a fonte de
+  // verdade que `DeepLinkRouter.handlePayload` consulta antes de navegar.
+  void _setLocked(bool value) {
+    if (mounted) {
+      setState(() => _locked = value);
+    } else {
+      _locked = value;
+    }
+    AppLockService.isLockedNotifier.value = value;
   }
 
   Future<void> _init() async {
@@ -90,10 +111,8 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
       enabled = false;
     }
     if (!mounted) return;
-    setState(() {
-      _checking = false;
-      _locked = enabled;
-    });
+    setState(() => _checking = false);
+    _setLocked(enabled);
     if (enabled) _authenticate();
   }
 
@@ -113,7 +132,7 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
     } catch (_) {
       enabled = false;
     }
-    if (enabled && mounted) setState(() => _locked = true);
+    if (enabled) _setLocked(true);
   }
 
   Future<void> _authenticate() async {
@@ -127,7 +146,7 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
     }
     _authenticating = false;
     if (!mounted) return;
-    if (success) setState(() => _locked = false);
+    if (success) _setLocked(false);
   }
 
   @override
@@ -291,7 +310,7 @@ class _RootScreenState extends State<RootScreen> {
       ),
     );
     if (payload == null || !mounted) return;
-    DeepLinkRouter.handlePayload(context, payload);
+    await DeepLinkRouter.handlePayload(context, payload);
   }
 
   @override

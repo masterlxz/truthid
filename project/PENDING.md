@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-07-25 (Sessão 151)
+> Última atualização: 2026-07-25 (Sessão 152 — M1 corrigido)
 
 ---
 
@@ -42,7 +42,6 @@
 
 | ID | Item | Onde se originou | Prioridade |
 |---|---|---|---|
-| M1 | **Deep link bypassa `AppLockService`** — `deep_link_service.dart:51` empurra tela de aprovação/vault-session no Navigator raiz sem checar bloqueio; `AppLockGate` é só overlay visual, não trava o Navigator. | `SESSIONS.md` (Sessão 151) | 🔴 Alta |
 | M2 | **Login sem checagem de `expiresAt`** — `approval_screen.dart:91` é o único dos 5 fluxos de aprovação que não valida expiração do challenge; QR de login vazado pode ser aprovado depois. | `SESSIONS.md` (Sessão 151) | 🔴 Alta |
 | M3 | **TOCTOU em `markPublished`** — `vault_repository.dart:577` recarrega estado ao vivo em vez de snapshot do publicado; edição durante a janela de publish (~60s) é marcada como publicada sem ir on-chain. | `SESSIONS.md` (Sessão 151) | 🟠 Média |
 | M4 | **Future rejeitada cacheada pra sempre** — `device_key_service.dart:26`, falha transiente na 1ª leitura da secure storage quebra toda assinatura até reiniciar o app. | `SESSIONS.md` (Sessão 151) | 🟠 Média |
@@ -161,6 +160,12 @@
 | ~~C7~~ | ~~`configureGuardians` aceita guardians duplicados~~ | **Sessão 140** |
 | ~~C8~~ | ~~Cascata de endereços imutáveis não documentada~~ | **Sessão 140** |
 | ~~C9~~ | ~~`try/catch` do `emergencyWithdraw` engole revert~~ | **Sessão 140** |
+
+### Correções de Mobile (Review Sessão 151 — M1 a M10)
+
+| ID | Achado | Resolvida em |
+|---|---|---|
+| ~~M1~~ | ~~Deep link/QR bypassava `AppLockService` — telas de aprovação empurradas por cima do bloqueio~~ | **Sessão 152** |
 
 ### Bugs do `/code-review max` (Desktop) — 52/52
 

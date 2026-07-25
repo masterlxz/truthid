@@ -1,7 +1,7 @@
 # TruthID — Estado do Projeto
 
-> Última atualização: 2026-07-25 (Sessão 151 — `/code-review high` sobre `mobile/`, 10 achados)
-> ⚠️ **REMANESCENTES**: **Desktop** — 52/52 bugs do `/code-review max` corrigidos (0 pendentes). **Contratos** — 9 achados da review da Sessão 140 (C1-C9): **todos corrigidos no código** (C4 low-s check + C6 limites de arrays finalizados na Sessão 150). **Deploy em cascata pendente** — há identidade real na Mainnet (Sessão 116), avaliar migração antes de redeployar. **Mobile** — 10 achados do `/code-review high` (Sessão 151, M1-M10), **nenhum corrigido ainda**; M1 e M2 são de segurança (deep link bypassa app-lock; login sem checagem de expiração). Ver `PENDING.md` para lista completa de pendências.
+> Última atualização: 2026-07-25 (Sessão 152 — M1 corrigido: deep link/QR não bypassa mais o app-lock)
+> ⚠️ **REMANESCENTES**: **Desktop** — 52/52 bugs do `/code-review max` corrigidos (0 pendentes). **Contratos** — 9 achados da review da Sessão 140 (C1-C9): **todos corrigidos no código** (C4 low-s check + C6 limites de arrays finalizados na Sessão 150). **Deploy em cascata pendente** — há identidade real na Mainnet (Sessão 116), avaliar migração antes de redeployar. **Mobile** — 10 achados do `/code-review high` (Sessão 151, M1-M10): **M1 corrigido (Sessão 152)**, 9 restantes; M2 é o outro achado de segurança (login sem checagem de expiração). Ver `PENDING.md` para lista completa de pendências.
 
 ---
 

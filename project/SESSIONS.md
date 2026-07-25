@@ -5618,3 +5618,50 @@ mobile (code review completo antes de docs + publicação do app).
 **Próximo passo**: corrigir M1 e M2 (segurança) antes de considerar o item 5 do backlog mobile
 encerrado; depois os demais achados de correção/eficiência; depois docs + publicação do app.
 
+---
+
+### Sessão 152 — 2026-07-25: M1 corrigido — deep link/QR não bypassa mais o `AppLockGate`
+
+**Achado M1 (Sessão 151)**: `DeepLinkRouter.handlePayload` — dispatcher compartilhado por deep
+link (`DeepLinkService._handle`) e QR scan (`RootScreen._openScanner`) — empurrava telas de
+aprovação sensíveis no Navigator raiz sem checar se o app estava bloqueado. `AppLockGate` era só
+um overlay visual (`Positioned.fill` por cima da `RootScreen`), nunca travava o Navigator em si.
+
+**Fix aplicado**, sem reescrever a UI do `AppLockGate`:
+- `AppLockService` ganhou dois membros estáticos novos: `isLockedNotifier`
+  (`ValueNotifier<bool>`, default `true` fail-safe) e `requestAuthentication`
+  (`VoidCallback?`, hook pra disparar biometria proativamente).
+- `_AppLockGateState` (`main.dart`) centralizou toda escrita de `_locked` num helper
+  `_setLocked(value)` que também atualiza `isLockedNotifier` — único escritor. `initState` liga
+  `AppLockService.requestAuthentication = _authenticateCallback` (referência fixa num campo, não
+  um tear-off novo a cada acesso — necessário pro `identical()` do `dispose()` funcionar de
+  verdade, achado real ao escrever o teste de widget: dois tear-offs do mesmo método não são
+  `identical()` garantidamente).
+- `DeepLinkRouter.handlePayload` virou o ponto único de enforcement (cobre os dois entry points
+  automaticamente): se `isLockedNotifier.value` for `true`, dispara `requestAuthentication?.call()`
+  e espera (`_waitForUnlock`, via listener + `Completer`) antes de despachar. Virou `Future<void>`;
+  os dois chamadores de produção (`_openScanner` e `DeepLinkService._handle`) foram atualizados
+  pra `await`/`unawaited` conforme o contexto (síncrono vs assíncrono).
+- Edge cases decididos (sem construir fila nova): múltiplos payloads enfileirados disparam FIFO
+  ao desbloquear (`ValueNotifier` dispara listeners em ordem de registro); cada tela de aprovação
+  já valida `expiresAt` por conta própria, rede de segurança suficiente pra um payload que ficou
+  esperando; `security_screen.dart` não precisou de mudança (só alcançável já desbloqueado, atrás
+  do overlay opaco).
+
+**Testes novos**:
+- `mobile/test/widgets/app_lock_gate_test.dart` (novo arquivo, nada testava `AppLockGate` antes):
+  3 testes — bloqueio habilitado mantém `isLockedNotifier=true` e overlay visível até autenticar;
+  bloqueio desabilitado já nasce com `isLockedNotifier=false`; `initState`/`dispose` ligam/limpam
+  o hook `requestAuthentication` (achou o bug do `identical()` acima).
+- `mobile/test/services/deep_link_router_test.dart`: `setUp`/`tearDown` resetando o notifier
+  (senão os testes existentes travariam no default fail-safe) + 2 testes novos — bloqueado não
+  navega até desbloquear; bloqueado dispara `requestAuthentication` proativamente.
+
+**Verificação**: `flutter analyze` limpo (14 infos/warnings pré-existentes, nenhum novo).
+`flutter test` — 382/382 passando (5 novos desta sessão: 3 em `app_lock_gate_test.dart` + 2 em
+`deep_link_router_test.dart`). Não validado em hardware físico (é lógica pura de estado + testes
+de widget); fica como follow-up opcional, não bloqueante.
+
+**Próximo passo**: M2 (login sem checagem de `expiresAt`) é o outro achado de segurança da
+Sessão 151, ainda em aberto — depois os 7 achados de correção/eficiência restantes (M3-M10).
+

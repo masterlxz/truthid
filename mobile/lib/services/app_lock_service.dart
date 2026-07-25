@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:local_auth/local_auth.dart';
 
@@ -8,6 +9,18 @@ import 'package:local_auth/local_auth.dart';
 /// configurada).
 class AppLockService {
   static const _keyEnabled = 'app_lock_enabled';
+
+  /// Sinal síncrono, autoritativo, de "o app está bloqueado agora". Default
+  /// `true` (fail-safe) até a 1a checagem de `isEnabled()` do `AppLockGate`
+  /// resolver. `AppLockGate` é o único escritor — usado por
+  /// `DeepLinkRouter.handlePayload` pra não empurrar telas de aprovação por
+  /// cima do bloqueio (débito M1, code review Sessão 151).
+  static final ValueNotifier<bool> isLockedNotifier = ValueNotifier<bool>(true);
+
+  /// Setado pelo `AppLockGate.initState` / limpo no `dispose`. Permite que a
+  /// chegada de um deep link/QR bloqueado dispare o prompt biométrico
+  /// proativamente, em vez de só esperar o usuário tocar em "Unlock".
+  static VoidCallback? requestAuthentication;
 
   final FlutterSecureStorage _storage;
   final LocalAuthentication _auth;
