@@ -5569,3 +5569,52 @@ uma cascata só em vez de várias. O código corrigido está pronto no repo.
 **Próximo passo**: C4 low-s check e C6 (limite de arrays) — os únicos achados da review Sessão 140
 que ainda precisam de correção no código — ou planejar a cascata de redeploy para Mainnet.
 
+---
+
+### Sessão 151 — 2026-07-25: `/code-review high` sobre `mobile/` — 10 achados, nada corrigido ainda
+
+**Escopo**: `mobile/` inteiro (não um diff), nível de esforço `high`. Gatilho: item 5 do backlog
+mobile (code review completo antes de docs + publicação do app).
+
+**10 achados confirmados, registrados como M1-M10 em `PENDING.md`. Nenhum corrigido nesta sessão
+(só levantamento)**:
+
+**Segurança (2)**:
+- **M1** — `deep_link_service.dart:51`: deep link empurra a tela de aprovação/vault-session no
+  Navigator raiz sem checar `AppLockService`. `AppLockGate` é um overlay visual desenhado por cima
+  da `RootScreen`, não trava o Navigator — um link chegando com o app bloqueado (cold start via
+  link, ou recebido em background) abre a tela de aprovação por cima do bloqueio.
+- **M2** — `approval_screen.dart:91`: o fluxo de aprovação de login é o único dos 5 fluxos de
+  aprovação que não valida `expiresAt` do challenge. QR de login vazado/capturado pode ser
+  aprovado a qualquer momento depois.
+
+**Correção (7)**:
+- **M3** — `vault_repository.dart:577`: `markPublished(version)` recarrega o estado ao vivo do
+  vault em vez de usar um snapshot do que foi de fato publicado — corrida TOCTOU. Editar uma
+  entrada durante a janela de publish (~60s aguardando o UserOp) faz essa edição nova ser marcada
+  como "publicada" sem nunca ter ido on-chain.
+- **M4** — `device_key_service.dart:26`: `_keyFuture ??= _loadOrCreateKey()` cacheia
+  permanentemente uma `Future` rejeitada se a primeira leitura da secure storage falhar — quebra
+  toda assinatura do app (pareamento, vault, UserOps ERC-4337) até o processo ser reiniciado.
+- **M5** — `sign_request_approval_screen.dart:339`: sem guarda síncrona de reentrância antes do
+  `await` — duplo toque pode submeter duas `UserOperations`.
+- **M6** — `pin_approval_screen.dart:206`: mesma classe de bug do M5, sem nenhuma guarda — duplo
+  toque dispara dois fluxos concorrentes de pin/entrega.
+- **M7** — `vault_edit_approval_screen.dart:326`: guarda `_entryPersisted` checada só depois de um
+  `await` — duplo toque pode criar entrada de vault duplicada.
+- **M8** — `devices_screen.dart:42`: reimplementa inline a resolução de username em vez de usar
+  `resolvePairedUsername()`, reintroduzindo um bug já corrigido nas outras 5 telas (username nunca
+  persiste se a primeira leitura falhar).
+- **M9** — `deep_link_delivery_channel.dart:29`: ignora o parâmetro `expiresAt` que recebe,
+  violando o contrato de `ResultDeliveryChannel` (hoje mascarado porque os chamadores rechecham
+  antes de invocar).
+
+**Eficiência (1)**:
+- **M10** — `main.dart:328`: `IndexedStack` constrói as 4 abas de uma vez no cold start —
+  Devices/Sessions/Wallet cada uma chama `getDevice(address)` on-chain pro mesmo endereço, 3
+  round-trips redundantes contra o RPC público que já causou rate-limit antes (ver bug do saldo
+  sumido, Sessão 135).
+
+**Próximo passo**: corrigir M1 e M2 (segurança) antes de considerar o item 5 do backlog mobile
+encerrado; depois os demais achados de correção/eficiência; depois docs + publicação do app.
+

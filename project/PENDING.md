@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-07-24 (Sessão 150)
+> Última atualização: 2026-07-25 (Sessão 151)
 
 ---
 
@@ -37,6 +37,21 @@
 | P11 | **`/truthid/v1/pin`** — endpoint para apps terceiros usarem os providers de pin do TruthID. Modelo de consentimento em aberto. | `ROADMAP.md` (Sessão 106, item 2) | 🟡 Baixa |
 | P12 | **Dead-drop IPFS/IPNS (fatia 2) do cross-device** — transporte para quando LAN não funciona. /sign-message e /sign-request via dead-drop. | `ROADMAP.md` (Sessão 106, item 3) | 🟡 Baixa |
 | P13 | **Callback opcional no login** — tornar `callbackUrl` opcional no QR, permitindo polling on-chain como alternativa. Design fechado, não implementado. | `ROADMAP.md` (Callback opcional) | 🟡 Baixa |
+
+### Achados do `/code-review high` (Mobile — Sessão 151, `mobile/` inteiro)
+
+| ID | Item | Onde se originou | Prioridade |
+|---|---|---|---|
+| M1 | **Deep link bypassa `AppLockService`** — `deep_link_service.dart:51` empurra tela de aprovação/vault-session no Navigator raiz sem checar bloqueio; `AppLockGate` é só overlay visual, não trava o Navigator. | `SESSIONS.md` (Sessão 151) | 🔴 Alta |
+| M2 | **Login sem checagem de `expiresAt`** — `approval_screen.dart:91` é o único dos 5 fluxos de aprovação que não valida expiração do challenge; QR de login vazado pode ser aprovado depois. | `SESSIONS.md` (Sessão 151) | 🔴 Alta |
+| M3 | **TOCTOU em `markPublished`** — `vault_repository.dart:577` recarrega estado ao vivo em vez de snapshot do publicado; edição durante a janela de publish (~60s) é marcada como publicada sem ir on-chain. | `SESSIONS.md` (Sessão 151) | 🟠 Média |
+| M4 | **Future rejeitada cacheada pra sempre** — `device_key_service.dart:26`, falha transiente na 1ª leitura da secure storage quebra toda assinatura até reiniciar o app. | `SESSIONS.md` (Sessão 151) | 🟠 Média |
+| M5 | **Sem guarda de reentrância — sign_request** — `sign_request_approval_screen.dart:339`, duplo toque pode submeter 2 UserOperations. | `SESSIONS.md` (Sessão 151) | 🟠 Média |
+| M6 | **Sem guarda de reentrância — pin** — `pin_approval_screen.dart:206`, duplo toque dispara 2 fluxos concorrentes de pin/entrega. | `SESSIONS.md` (Sessão 151) | 🟠 Média |
+| M7 | **Sem guarda de reentrância — vault edit** — `vault_edit_approval_screen.dart:326`, guarda checada só após `await`, duplo toque cria entrada duplicada. | `SESSIONS.md` (Sessão 151) | 🟠 Média |
+| M8 | **Bug de username reintroduzido** — `devices_screen.dart:42` reimplementa inline em vez de usar `resolvePairedUsername()`. | `SESSIONS.md` (Sessão 151) | 🟡 Baixa |
+| M9 | **`expiresAt` ignorado no canal de deep link** — `deep_link_delivery_channel.dart:29`, hoje mascarado pelos chamadores. | `SESSIONS.md` (Sessão 151) | 🟡 Baixa |
+| M10 | **`IndexedStack` triplica chamada RPC** — `main.dart:328`, Devices/Sessions/Wallet buscam `getDevice` redundante no cold start. | `SESSIONS.md` (Sessão 151) | 🟡 Baixa |
 
 ### Pendências de Arquitetura / Decisões em Aberto
 

@@ -324,8 +324,12 @@ depois, um de cada vez, em sessão própria (provavelmente com `/plan`).
    cobertura fica pelos 2 testes automatizados que reproduzem exatamente esse caminho com mocks.
 
 5. **Depois de tudo isso**: code review completo do app inteiro, atualizar documentação, e publicar
-   o app — registrado como sequência pedida pro fim desta leva de trabalho, sem detalhe adicional
-   ainda (nenhum escopo de code review ou plano de publicação definido nesta sessão).
+   o app — registrado como sequência pedida pro fim desta leva de trabalho. **`/code-review high`
+   rodado sobre `mobile/` inteiro na Sessão 151** (2026-07-25): 10 achados (M1-M10 em
+   `PENDING.md`), incluindo 2 de segurança (deep link bypassando `AppLockService`; login sem
+   checagem de expiração de challenge) — **nada corrigido ainda**, ver `SESSIONS.md` Sessão 151
+   pro detalhe completo. Documentação e publicação seguem pendentes até esses achados serem
+   tratados.
 
 6. **Fase 2: criação de credencial nova (senha e/ou passkey) direto na extensão + aprovação via
    Device** — registrado ao fechar a Sessão 133 (item 2 acima, Fase 1/login de passkey, fechou).
