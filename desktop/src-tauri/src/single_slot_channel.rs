@@ -35,10 +35,7 @@ where
     /// `Err(())` (o chamador mapeia pra "Busy"). Se ok, devolve o payload
     /// (clone) + o receiver do oneshot — o chamador usa `tokio::time::timeout`
     /// pra esperar a decisão.
-    pub async fn try_park(
-        &self,
-        payload: P,
-    ) -> Result<(P, oneshot::Receiver<D>), ()> {
+    pub async fn try_park(&self, payload: P) -> Result<(P, oneshot::Receiver<D>), ()> {
         let mut guard = self.0.lock().await;
         if guard.is_some() {
             return Err(());
@@ -53,11 +50,7 @@ where
 
     /// Retorna o payload do pedido pendente, se houver.
     pub async fn current(&self) -> Option<P> {
-        self.0
-            .lock()
-            .await
-            .as_ref()
-            .map(|s| s.payload.clone())
+        self.0.lock().await.as_ref().map(|s| s.payload.clone())
     }
 
     /// Limpa o slot (usado no timeout, quando o tokio::time::timeout estoura).

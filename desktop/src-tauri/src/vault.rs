@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use crate::{get_vault_key, derive_vault_key_legacy};
+use crate::{derive_vault_key_legacy, get_vault_key};
 
 // ---------------------------------------------------------------------------
 // Tipos de dados
@@ -180,7 +180,11 @@ impl Vault {
 
     // Concede/revoga permissão de escrita a um device (find-or-insert).
     pub(crate) fn set_device_permission(&mut self, pub_key: &str, can_write: bool) {
-        if let Some(p) = self.device_permissions.iter_mut().find(|p| p.pub_key == pub_key) {
+        if let Some(p) = self
+            .device_permissions
+            .iter_mut()
+            .find(|p| p.pub_key == pub_key)
+        {
             p.can_write = can_write;
         } else {
             self.device_permissions.push(DeviceVaultPermission {
@@ -223,7 +227,9 @@ static VAULT_MUTEX: Mutex<()> = Mutex::new(());
 /// garantir exclusão mútua entre load→mutate→save. Comandos de leitura podem
 /// pular (race de leitura não perde dados).
 pub(crate) fn lock_vault() -> std::sync::MutexGuard<'static, ()> {
-    VAULT_MUTEX.lock().unwrap_or_else(|poisoned| poisoned.into_inner())
+    VAULT_MUTEX
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
 }
 
 pub(crate) fn vault_path() -> Result<PathBuf, String> {
@@ -302,8 +308,8 @@ pub(crate) fn load() -> Result<Vault, String> {
     // Sessão 97). Best-effort: arquivo ausente ou corrompido só resulta em
     // lista vazia, não é erro fatal.
     if vault.device_permissions.is_empty() {
-        let legacy_path = crate::config::truthid_file_path("vault_permissions.json")
-            .unwrap_or_default();
+        let legacy_path =
+            crate::config::truthid_file_path("vault_permissions.json").unwrap_or_default();
         if legacy_path.exists() {
             if let Ok(raw) = crate::config::read_text(&legacy_path) {
                 if let Ok(legacy) = serde_json::from_str::<Vec<DeviceVaultPermission>>(&raw) {
@@ -404,8 +410,11 @@ fn diff_count(current: &Vault, published: &Vault) -> u64 {
 
     let mut count = 0u64;
 
-    let published_by_id: HashMap<&str, &VaultEntry> =
-        published.entries.iter().map(|e| (e.id.as_str(), e)).collect();
+    let published_by_id: HashMap<&str, &VaultEntry> = published
+        .entries
+        .iter()
+        .map(|e| (e.id.as_str(), e))
+        .collect();
     let current_by_id: HashMap<&str, &VaultEntry> =
         current.entries.iter().map(|e| (e.id.as_str(), e)).collect();
 
@@ -499,7 +508,10 @@ pub(crate) fn mark_published(version: u64, published_vault: &Vault) -> Result<()
         "last_published_version": version,
         "last_published_content_hash": content_signature(published_vault),
     });
-    crate::config::write_text(&path, &serde_json::to_string(&meta).map_err(|e| e.to_string())?)?;
+    crate::config::write_text(
+        &path,
+        &serde_json::to_string(&meta).map_err(|e| e.to_string())?,
+    )?;
     save_published_snapshot(published_vault)
 }
 
@@ -625,8 +637,14 @@ mod tests {
         let saved = vault.upsert(updated);
 
         assert_eq!(saved.id, first.id);
-        assert_eq!(saved.created_at, created_at, "created_at deve ser preservado");
-        assert!(saved.updated_at > created_at, "updated_at deve ser renovado");
+        assert_eq!(
+            saved.created_at, created_at,
+            "created_at deve ser preservado"
+        );
+        assert!(
+            saved.updated_at > created_at,
+            "updated_at deve ser renovado"
+        );
         assert_eq!(saved.site, "gitlab.com");
         assert_eq!(vault.entries.len(), 1);
         assert_eq!(vault.version, 2);
@@ -692,7 +710,10 @@ mod tests {
         vault.add_profile("Trabalho");
         vault.add_profile("Trabalho");
         assert_eq!(vault.profile_names, vec!["Trabalho"]);
-        assert_eq!(vault.version, 1, "segunda chamada não deve incrementar version");
+        assert_eq!(
+            vault.version, 1,
+            "segunda chamada não deve incrementar version"
+        );
     }
 
     #[test]
@@ -707,7 +728,10 @@ mod tests {
 
         assert!(ok);
         assert_eq!(vault.profile_names, vec!["Banco"]);
-        assert_eq!(vault.entries[0].profiles, vec!["Banco".to_string(), "Pessoal".to_string()]);
+        assert_eq!(
+            vault.entries[0].profiles,
+            vec!["Banco".to_string(), "Pessoal".to_string()]
+        );
     }
 
     #[test]
@@ -764,7 +788,10 @@ mod tests {
             reparsed.profile_names = seen;
         }
 
-        assert_eq!(reparsed.profile_names, vec!["Trabalho".to_string(), "Casa".to_string()]);
+        assert_eq!(
+            reparsed.profile_names,
+            vec!["Trabalho".to_string(), "Casa".to_string()]
+        );
     }
 
     // --- testes de favoritos ---
@@ -801,7 +828,10 @@ mod tests {
 
         vault.set_favorite("id1", true);
 
-        assert_eq!(vault.entries[0].updated_at, 12345, "updated_at não deve mudar só por favoritar");
+        assert_eq!(
+            vault.entries[0].updated_at, 12345,
+            "updated_at não deve mudar só por favoritar"
+        );
         assert_eq!(vault.entries[0].site, "github.com");
     }
 
@@ -967,17 +997,24 @@ mod tests {
         vault.set_device_permission("0xbbb", false);
 
         assert_eq!(vault.device_permissions.len(), 2);
-        assert!(vault.device_permissions.iter().any(|p| p.pub_key == "0xaaa" && p.can_write));
-        assert!(vault.device_permissions.iter().any(|p| p.pub_key == "0xbbb" && !p.can_write));
+        assert!(vault
+            .device_permissions
+            .iter()
+            .any(|p| p.pub_key == "0xaaa" && p.can_write));
+        assert!(vault
+            .device_permissions
+            .iter()
+            .any(|p| p.pub_key == "0xbbb" && !p.can_write));
     }
 
     #[test]
     fn load_backfills_device_permissions_from_legacy_file() {
         // Simula o arquivo legado ~/.truthid/vault_permissions.json existindo
         // com permissões de uma versão anterior à Sessão 97.
-        let legacy = vec![
-            DeviceVaultPermission { pub_key: "0xaaa".to_string(), can_write: true },
-        ];
+        let legacy = vec![DeviceVaultPermission {
+            pub_key: "0xaaa".to_string(),
+            can_write: true,
+        }];
         let json = serde_json::to_string(&legacy).unwrap();
         let mut vault = Vault::default();
         assert!(vault.device_permissions.is_empty());

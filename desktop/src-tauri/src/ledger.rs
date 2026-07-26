@@ -263,7 +263,11 @@ fn build_sign_apdus(
     let mut first = true;
 
     while first || offset < payload.len() {
-        let header_len = if first { path.len() + extra_prefix.len() } else { 0 };
+        let header_len = if first {
+            path.len() + extra_prefix.len()
+        } else {
+            0
+        };
         let chunk_len = (SIGN_CHUNK_SIZE - header_len).min(payload.len() - offset);
 
         let mut data = Vec::with_capacity(header_len + chunk_len);
@@ -273,7 +277,11 @@ fn build_sign_apdus(
         }
         data.extend_from_slice(&payload[offset..offset + chunk_len]);
 
-        let p1 = if first { P1_FIRST_CHUNK } else { P1_FOLLOWING_CHUNK };
+        let p1 = if first {
+            P1_FIRST_CHUNK
+        } else {
+            P1_FOLLOWING_CHUNK
+        };
         let mut apdu = vec![ETH_CLA, ins_byte, p1, NO_P2, data.len() as u8];
         apdu.extend_from_slice(&data);
         apdus.push(apdu);
@@ -317,9 +325,12 @@ fn parse_sign_tx_response(data: &[u8]) -> Result<String, String> {
 /// "0x" — aqui só tratamos como bytes opacos, não decodificamos o RLP.
 /// Erro vem nos mesmos rótulos do `get_ledger_address`.
 #[tauri::command]
-pub fn sign_ledger_transaction(unsigned_tx_hex: String, account_index: u32) -> Result<String, String> {
-    let unsigned_tx = hex::decode(unsigned_tx_hex.trim_start_matches("0x"))
-        .map_err(|e| e.to_string())?;
+pub fn sign_ledger_transaction(
+    unsigned_tx_hex: String,
+    account_index: u32,
+) -> Result<String, String> {
+    let unsigned_tx =
+        hex::decode(unsigned_tx_hex.trim_start_matches("0x")).map_err(|e| e.to_string())?;
 
     let api = HidApi::new().map_err(|e| e.to_string())?;
     let device = open_ledger_device(&api)?;
@@ -370,9 +381,11 @@ fn build_sign_personal_message_apdus(message: &[u8], account_index: u32) -> Vec<
 /// ou sem prefixo "0x". Resposta e rótulos de erro no mesmo formato de
 /// `sign_ledger_transaction`.
 #[tauri::command]
-pub fn sign_ledger_personal_message(message_hex: String, account_index: u32) -> Result<String, String> {
-    let message =
-        hex::decode(message_hex.trim_start_matches("0x")).map_err(|e| e.to_string())?;
+pub fn sign_ledger_personal_message(
+    message_hex: String,
+    account_index: u32,
+) -> Result<String, String> {
+    let message = hex::decode(message_hex.trim_start_matches("0x")).map_err(|e| e.to_string())?;
 
     let api = HidApi::new().map_err(|e| e.to_string())?;
     let device = open_ledger_device(&api)?;

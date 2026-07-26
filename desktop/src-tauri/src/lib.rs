@@ -1,14 +1,14 @@
+use aes_gcm::aead::{Aead, AeadCore, KeyInit};
+use aes_gcm::{Aes256Gcm, Key};
 use hkdf::Hkdf;
 use k256::ecdsa::SigningKey;
+use k256::elliptic_curve::ecdh::diffie_hellman;
 use k256::PublicKey;
 use keyring::Entry;
 use rand::rngs::OsRng;
+use serde::Serialize;
 use sha2::Sha256;
 use sha3::{Digest, Keccak256};
-use aes_gcm::{Aes256Gcm, Key};
-use aes_gcm::aead::{Aead, AeadCore, KeyInit};
-use k256::elliptic_curve::ecdh::diffie_hellman;
-use serde::Serialize;
 
 mod backup;
 mod bundler;
@@ -46,8 +46,7 @@ pub(crate) fn get_device_key_hex() -> Result<String, String> {
     // 2. Fallback: arquivo ($HOME/.truthid/device.key)
     let path = fallback_key_path()?;
     if path.exists() {
-        return crate::config::read_text(&path)
-            .map(|s| s.trim().to_string());
+        return crate::config::read_text(&path).map(|s| s.trim().to_string());
     }
 
     // 3. Gera nova chave secp256k1
@@ -200,8 +199,8 @@ fn get_or_create_device_key() -> Result<String, String> {
     let priv_hex = get_device_key_hex()?;
 
     let priv_bytes = hex::decode(&priv_hex).map_err(|e| e.to_string())?;
-    let signing_key = SigningKey::from_bytes(priv_bytes.as_slice().into())
-        .map_err(|e| e.to_string())?;
+    let signing_key =
+        SigningKey::from_bytes(priv_bytes.as_slice().into()).map_err(|e| e.to_string())?;
 
     // Chave pública não-comprimida: 0x04 + X (32 bytes) + Y (32 bytes) = 65 bytes
     let pub_point = signing_key.verifying_key().to_encoded_point(false);
@@ -247,8 +246,8 @@ fn sign_eip191_hash_raw(
 /// Returns (r, s, v) as separate values so the caller can pass them as distinct ABI arguments.
 #[tauri::command]
 fn sign_session_hash(hash: String) -> Result<(String, String, u8), String> {
-    let hash_bytes = hex::decode(hash.trim_start_matches("0x"))
-        .map_err(|e| format!("invalid hash hex: {e}"))?;
+    let hash_bytes =
+        hex::decode(hash.trim_start_matches("0x")).map_err(|e| format!("invalid hash hex: {e}"))?;
     let priv_hex = get_device_key_hex()?;
     let priv_bytes = hex::decode(&priv_hex).map_err(|e| e.to_string())?;
     let (signature, recovery_id) = sign_eip191_hash_raw(&priv_bytes, &hash_bytes)?;
@@ -269,8 +268,8 @@ fn sign_session_hash(hash: String) -> Result<(String, String, u8), String> {
 /// que o campo `signature` da UserOp espera direto, sem re-split do lado TS.
 #[tauri::command]
 fn sign_user_op_hash(hash: String) -> Result<String, String> {
-    let hash_bytes = hex::decode(hash.trim_start_matches("0x"))
-        .map_err(|e| format!("invalid hash hex: {e}"))?;
+    let hash_bytes =
+        hex::decode(hash.trim_start_matches("0x")).map_err(|e| format!("invalid hash hex: {e}"))?;
     let priv_hex = get_device_key_hex()?;
     let priv_bytes = hex::decode(&priv_hex).map_err(|e| e.to_string())?;
     let (signature, recovery_id) = sign_eip191_hash_raw(&priv_bytes, &hash_bytes)?;
@@ -385,12 +384,14 @@ fn encrypt_bytes_for_device(vault_key: &[u8], device_pubkey_hex: &str) -> Result
     let pubkey_bytes = hex::decode(pubkey_hex).map_err(|e| e.to_string())?;
 
     if pubkey_bytes.len() != 33 && pubkey_bytes.len() != 65 {
-        return Err("device_pubkey must be 33-byte (compressed) or 65-byte (uncompressed) secp256k1 key".to_string());
+        return Err(
+            "device_pubkey must be 33-byte (compressed) or 65-byte (uncompressed) secp256k1 key"
+                .to_string(),
+        );
     }
 
     // Converte os bytes para uma chave pública k256
-    let point = k256::EncodedPoint::from_bytes(&pubkey_bytes)
-        .map_err(|e| e.to_string())?;
+    let point = k256::EncodedPoint::from_bytes(&pubkey_bytes).map_err(|e| e.to_string())?;
     let device_pub = PublicKey::from_encoded_point(&point)
         .into_option()
         .ok_or_else(|| "invalid public key".to_string())?;
@@ -400,10 +401,7 @@ fn encrypt_bytes_for_device(vault_key: &[u8], device_pubkey_hex: &str) -> Result
     let ephemeral_pub = ephemeral_priv.verifying_key();
 
     // ECDH: shared_secret = ephemeral_priv * device_pub
-    let shared = diffie_hellman(
-        ephemeral_priv.as_nonzero_scalar(),
-        device_pub.as_affine(),
-    );
+    let shared = diffie_hellman(ephemeral_priv.as_nonzero_scalar(), device_pub.as_affine());
     let shared_bytes = shared.raw_secret_bytes();
 
     // Deriva chave AES do shared secret via SHA-256 — sem isso, a chave AES
@@ -448,12 +446,16 @@ fn vault_encrypt(plaintext_b64: String) -> Result<String, String> {
 async fn vault_publish() -> Result<ipfs::PinResult, String> {
     let path = vault::vault_path()?;
     if !path.exists() {
-        return Err("vault ainda não existe — adicione ao menos uma entrada antes de publicar".to_string());
+        return Err(
+            "vault ainda não existe — adicione ao menos uma entrada antes de publicar".to_string(),
+        );
     }
     let encrypted_blob = crate::config::read_file(&path)?;
     let providers = ipfs::load_providers();
     if providers.is_empty() {
-        return Err("nenhum provider de pinning configurado — use vault_set_providers primeiro".to_string());
+        return Err(
+            "nenhum provider de pinning configurado — use vault_set_providers primeiro".to_string(),
+        );
     }
     let result = ipfs::pin_vault(&encrypted_blob, &providers).await?;
     // Decripta do blob já em memória em vez de read()+load() de novo
@@ -787,8 +789,12 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .manage(local_signer_server::LocalSignerServerState::default())
-        .manage(std::sync::Arc::new(sign_request::SignRequestState::default()))
-        .manage(std::sync::Arc::new(sign_message::SignMessageState::default()))
+        .manage(std::sync::Arc::new(
+            sign_request::SignRequestState::default(),
+        ))
+        .manage(std::sync::Arc::new(
+            sign_message::SignMessageState::default(),
+        ))
         .manage(std::sync::Arc::new(pin::PinState::default()))
         .manage(std::sync::Arc::new(vault_edit::VaultEditState::default()))
         .setup(|app| {
@@ -807,7 +813,10 @@ pub fn run() {
             #[cfg(target_os = "linux")]
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.with_webview(|webview| {
-                    use webkit2gtk::{glib::ObjectExt, PermissionRequestExt, UserMediaPermissionRequest, WebViewExt};
+                    use webkit2gtk::{
+                        glib::ObjectExt, PermissionRequestExt, UserMediaPermissionRequest,
+                        WebViewExt,
+                    };
                     webview.inner().connect_permission_request(|_, request| {
                         if request.is::<UserMediaPermissionRequest>() {
                             request.allow();
@@ -991,11 +1000,9 @@ mod tests {
     // decrypt em Rust puro, sem nunca chamar o código Dart de verdade.
     #[test]
     fn dart_produced_blob_decrypts_correctly() {
-        let recipient_priv_hex =
-            "ebea44b99557c83965e6152a1393a5c6d74fe114f0a626f51bb2349e815136b2";
+        let recipient_priv_hex = "ebea44b99557c83965e6152a1393a5c6d74fe114f0a626f51bb2349e815136b2";
         let blob_b64 = "AqQAXxG3rw53DVihUXbTzqHcENoLZGbHFsnNHPFvZduk0FF00QwiZMLWLCs8q19CzAj4kYiWXr1jUTn0tUxh1ibNVbwPQiCSBZAJdH1eqE86qT1Na5ytsA==";
-        let expected_plaintext_hex =
-            "747275746869642d7661756c742d656e7472792d66697874757265";
+        let expected_plaintext_hex = "747275746869642d7661756c742d656e7472792d66697874757265";
 
         use base64::{engine::general_purpose::STANDARD, Engine as _};
         let recipient_priv_bytes = hex::decode(recipient_priv_hex).expect("valid hex");
@@ -1039,8 +1046,8 @@ mod tests {
                 .expect("valid hex");
         let hash_bytes = Keccak256::digest(b"truthid-14.9.4-known-signature-vector");
 
-        let (signature, recovery_id) = sign_eip191_hash_raw(&priv_bytes, &hash_bytes)
-            .expect("signing should succeed");
+        let (signature, recovery_id) =
+            sign_eip191_hash_raw(&priv_bytes, &hash_bytes).expect("signing should succeed");
         let v = recovery_id.to_byte() + 27u8;
         let sig_hex = format!("0x{}{:02x}", hex::encode(signature.to_bytes()), v);
 

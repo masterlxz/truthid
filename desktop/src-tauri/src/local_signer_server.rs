@@ -212,9 +212,7 @@ async fn ping() -> Json<PingResponse> {
 // app_version não é usado na resposta (ainda não há nada pra decidir com base
 // nela nesta fatia) — só validamos appName, que é o único campo que a 2b vai
 // precisar pra exibir "App X quer se conectar" numa futura tela de aprovação.
-async fn handshake(
-    Json(payload): Json<HandshakeRequest>,
-) -> (StatusCode, Json<HandshakeResponse>) {
+async fn handshake(Json(payload): Json<HandshakeRequest>) -> (StatusCode, Json<HandshakeResponse>) {
     let _ = &payload.app_version;
     if payload.app_name.trim().is_empty() {
         return (
@@ -441,7 +439,10 @@ mod tests {
     static PORT_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
     fn base_url(status: &LocalSignerStatus) -> String {
-        format!("http://127.0.0.1:{}", status.port.expect("port set while running"))
+        format!(
+            "http://127.0.0.1:{}",
+            status.port.expect("port set while running")
+        )
     }
 
     // Caminho de arquivo único por teste (não $HOME global) pro estado do
@@ -567,10 +568,14 @@ mod tests {
         let _guard = PORT_TEST_LOCK.lock().await;
         let state = LocalSignerServerState::default();
 
-        let first = start_for_test(&state).await.expect("first start should succeed");
+        let first = start_for_test(&state)
+            .await
+            .expect("first start should succeed");
         stop(&state).await;
 
-        let second = start_for_test(&state).await.expect("second start should succeed");
+        let second = start_for_test(&state)
+            .await
+            .expect("second start should succeed");
         assert_eq!(first.port, second.port);
 
         let resp = reqwest::get(format!("{}/truthid/v1/ping", base_url(&second)))
@@ -706,17 +711,26 @@ mod tests {
                 }
                 tokio::task::yield_now().await;
             };
-            sign_message::resolve(&sign_messages, &id, sign_message::SignMessageDecision::Approved)
-                .await
-                .expect("resolve should succeed");
+            sign_message::resolve(
+                &sign_messages,
+                &id,
+                sign_message::SignMessageDecision::Approved,
+            )
+            .await
+            .expect("resolve should succeed");
         });
 
         let resp = resp.expect("request should succeed");
         assert_eq!(resp.status(), 200);
         let body: serde_json::Value = resp.json().await.expect("valid json");
         assert_eq!(body["status"], "signed");
-        assert_eq!(body["message"], "TruthID Message Signing: Practice Valuation:vault-sync-key");
-        assert!(body["signature"].as_str().is_some_and(|s| s.starts_with("0x")));
+        assert_eq!(
+            body["message"],
+            "TruthID Message Signing: Practice Valuation:vault-sync-key"
+        );
+        assert!(body["signature"]
+            .as_str()
+            .is_some_and(|s| s.starts_with("0x")));
 
         stop(&state).await;
     }
@@ -750,9 +764,13 @@ mod tests {
                 tokio::task::yield_now().await;
             };
             let resp = reqwest::Client::new().post(&url).json(&body).send().await;
-            sign_message::resolve(&sign_messages, &id, sign_message::SignMessageDecision::Rejected)
-                .await
-                .expect("resolve should succeed");
+            sign_message::resolve(
+                &sign_messages,
+                &id,
+                sign_message::SignMessageDecision::Rejected,
+            )
+            .await
+            .expect("resolve should succeed");
             resp
         };
 
@@ -885,9 +903,13 @@ mod tests {
                 }
                 tokio::task::yield_now().await;
             };
-            vault_edit::resolve(&vault_edit_requests, &id, vault_edit::VaultEditDecision::Rejected)
-                .await
-                .expect("resolve should succeed");
+            vault_edit::resolve(
+                &vault_edit_requests,
+                &id,
+                vault_edit::VaultEditDecision::Rejected,
+            )
+            .await
+            .expect("resolve should succeed");
         });
 
         let resp = resp.expect("request should succeed");
@@ -926,9 +948,13 @@ mod tests {
                 tokio::task::yield_now().await;
             };
             let len = payload.entries.len();
-            vault_edit::resolve(&vault_edit_requests, &payload.id, vault_edit::VaultEditDecision::Rejected)
-                .await
-                .expect("resolve should succeed");
+            vault_edit::resolve(
+                &vault_edit_requests,
+                &payload.id,
+                vault_edit::VaultEditDecision::Rejected,
+            )
+            .await
+            .expect("resolve should succeed");
             len
         });
 
@@ -968,9 +994,13 @@ mod tests {
                 tokio::task::yield_now().await;
             };
             let resp = reqwest::Client::new().post(&url).json(&body).send().await;
-            vault_edit::resolve(&vault_edit_requests, &id, vault_edit::VaultEditDecision::Rejected)
-                .await
-                .expect("resolve should succeed");
+            vault_edit::resolve(
+                &vault_edit_requests,
+                &id,
+                vault_edit::VaultEditDecision::Rejected,
+            )
+            .await
+            .expect("resolve should succeed");
             resp
         };
 

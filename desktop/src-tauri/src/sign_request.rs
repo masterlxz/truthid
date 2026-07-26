@@ -60,7 +60,9 @@ pub enum SignRequestDecision {
     },
     Rejected,
     #[serde(rename_all = "camelCase")]
-    Failed { error: String },
+    Failed {
+        error: String,
+    },
 }
 
 /// O que handle_incoming devolve pro handler HTTP mapear pra status code.
@@ -91,7 +93,10 @@ pub struct SignRequestResponse {
 impl SignRequestOutcome {
     pub fn into_response(self) -> (StatusCode, SignRequestResponse) {
         match self {
-            SignRequestOutcome::Executed { user_op_hash, transaction_hash } => (
+            SignRequestOutcome::Executed {
+                user_op_hash,
+                transaction_hash,
+            } => (
                 StatusCode::OK,
                 SignRequestResponse {
                     status: "executed",
@@ -200,9 +205,13 @@ async fn handle_incoming_with_timeout(
     notify(&payload);
 
     match tokio::time::timeout(timeout, rx).await {
-        Ok(Ok(SignRequestDecision::Executed { user_op_hash, transaction_hash })) => {
-            SignRequestOutcome::Executed { user_op_hash, transaction_hash }
-        }
+        Ok(Ok(SignRequestDecision::Executed {
+            user_op_hash,
+            transaction_hash,
+        })) => SignRequestOutcome::Executed {
+            user_op_hash,
+            transaction_hash,
+        },
         Ok(Ok(SignRequestDecision::Rejected)) => SignRequestOutcome::Rejected,
         Ok(Ok(SignRequestDecision::Failed { error })) => SignRequestOutcome::Failed(error),
         Ok(Err(_)) => {
@@ -270,9 +279,8 @@ mod tests {
     async fn handle_incoming_waits_for_resolve() {
         let state = Arc::new(SignRequestState::default());
         let state_bg = state.clone();
-        let handle = tokio::spawn(async move {
-            handle_incoming(&state_bg, valid_body(), |_| {}).await
-        });
+        let handle =
+            tokio::spawn(async move { handle_incoming(&state_bg, valid_body(), |_| {}).await });
 
         let payload = wait_for_pending(&state).await;
         resolve(&state, &payload.id, SignRequestDecision::Rejected)
@@ -287,9 +295,8 @@ mod tests {
     async fn concurrent_second_request_is_busy() {
         let state = Arc::new(SignRequestState::default());
         let state_bg = state.clone();
-        let handle = tokio::spawn(async move {
-            handle_incoming(&state_bg, valid_body(), |_| {}).await
-        });
+        let handle =
+            tokio::spawn(async move { handle_incoming(&state_bg, valid_body(), |_| {}).await });
 
         let payload = wait_for_pending(&state).await;
 
@@ -306,15 +313,17 @@ mod tests {
     async fn resolve_with_wrong_id_does_not_consume_pending_request() {
         let state = Arc::new(SignRequestState::default());
         let state_bg = state.clone();
-        let handle = tokio::spawn(async move {
-            handle_incoming(&state_bg, valid_body(), |_| {}).await
-        });
+        let handle =
+            tokio::spawn(async move { handle_incoming(&state_bg, valid_body(), |_| {}).await });
 
         let payload = wait_for_pending(&state).await;
 
         let err = resolve(&state, "not-the-real-id", SignRequestDecision::Rejected).await;
         assert!(err.is_err());
-        assert!(current(&state).await.is_some(), "pending request should survive a mismatched id");
+        assert!(
+            current(&state).await.is_some(),
+            "pending request should survive a mismatched id"
+        );
 
         resolve(&state, &payload.id, SignRequestDecision::Rejected)
             .await

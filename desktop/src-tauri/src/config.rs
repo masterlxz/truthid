@@ -47,7 +47,10 @@ pub(crate) fn load_json<T: serde::de::DeserializeOwned + Default>(path: &Path) -
 }
 
 /// Serializa um valor como JSON pretty-printed e salva no arquivo.
-pub(crate) fn save_json<T: serde::Serialize + ?Sized>(path: &Path, value: &T) -> Result<(), String> {
+pub(crate) fn save_json<T: serde::Serialize + ?Sized>(
+    path: &Path,
+    value: &T,
+) -> Result<(), String> {
     let json = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
     write_file(path, json.as_bytes())
 }

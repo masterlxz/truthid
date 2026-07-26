@@ -182,7 +182,9 @@ async fn handle_incoming_with_timeout(
     timeout: Duration,
 ) -> VaultEditOutcome {
     if body.is_empty() {
-        return VaultEditOutcome::Invalid("at least one credential proposal is required".to_string());
+        return VaultEditOutcome::Invalid(
+            "at least one credential proposal is required".to_string(),
+        );
     }
     for entry in &body {
         if entry.site.trim().is_empty() {
@@ -204,7 +206,9 @@ async fn handle_incoming_with_timeout(
         if let Some(ref pub_key) = entry.pub_key {
             let v = match vault::load() {
                 Ok(v) => v,
-                Err(e) => return VaultEditOutcome::Invalid(format!("vault permission check failed: {e}")),
+                Err(e) => {
+                    return VaultEditOutcome::Invalid(format!("vault permission check failed: {e}"))
+                }
             };
             let perm = v.device_permissions.iter().find(|p| &p.pub_key == pub_key);
             match perm {
@@ -243,9 +247,9 @@ async fn handle_incoming_with_timeout(
     match tokio::time::timeout(timeout, rx).await {
         Ok(Ok(VaultEditDecision::Approved)) => VaultEditOutcome::Approved { id: payload.id },
         Ok(Ok(VaultEditDecision::Rejected)) => VaultEditOutcome::Rejected,
-        Ok(Err(_)) => VaultEditOutcome::Invalid(
-            "frontend disconnected before responding".to_string(),
-        ),
+        Ok(Err(_)) => {
+            VaultEditOutcome::Invalid("frontend disconnected before responding".to_string())
+        }
         Err(_) => {
             state.clear().await;
             VaultEditOutcome::TimedOut
@@ -332,7 +336,11 @@ mod tests {
         let payload = wait_for_pending(&state).await;
         assert_eq!(payload.entries.len(), 3);
         assert_eq!(
-            payload.entries.iter().map(|e| e.site.as_str()).collect::<Vec<_>>(),
+            payload
+                .entries
+                .iter()
+                .map(|e| e.site.as_str())
+                .collect::<Vec<_>>(),
             vec!["one.com", "two.com", "three.com"],
         );
 
@@ -363,9 +371,10 @@ mod tests {
     async fn concurrent_second_pending_request_is_busy() {
         let state = Arc::new(VaultEditState::default());
         let state_bg = state.clone();
-        let handle = tokio::spawn(async move {
-            handle_incoming(&state_bg, vec![body("one.com")], |_| {}).await
-        });
+        let handle =
+            tokio::spawn(
+                async move { handle_incoming(&state_bg, vec![body("one.com")], |_| {}).await },
+            );
 
         let payload = wait_for_pending(&state).await;
 
@@ -440,8 +449,7 @@ mod tests {
         });
 
         let state_bg = state.clone();
-        let handle =
-            tokio::spawn(async move { handle_incoming(&state_bg, vec![b], |_| {}).await });
+        let handle = tokio::spawn(async move { handle_incoming(&state_bg, vec![b], |_| {}).await });
 
         let payload = wait_for_pending(&state).await;
         assert!(payload.entries[0].passkey.is_some());

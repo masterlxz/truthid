@@ -61,7 +61,8 @@ pub(crate) async fn pin_vault(
 
     // 1. Upload de conteúdo para cada Kubo node (paralelo)
     let kubo_results: Vec<_> = futures::future::join_all(
-        kubo.iter().map(|p| kubo_add(&client, &p.endpoint_url, content)),
+        kubo.iter()
+            .map(|p| kubo_add(&client, &p.endpoint_url, content)),
     )
     .await;
     for (p, result) in kubo.iter().zip(kubo_results) {
@@ -110,7 +111,11 @@ pub(crate) async fn pin_vault(
 
 /// POST `{endpoint}/api/v0/add` com o blob como multipart.
 /// Retorna o CID (campo `Hash` na resposta JSON do Kubo).
-async fn kubo_add(client: &reqwest::Client, endpoint_url: &str, content: &[u8]) -> Result<String, String> {
+async fn kubo_add(
+    client: &reqwest::Client,
+    endpoint_url: &str,
+    content: &[u8],
+) -> Result<String, String> {
     let part = reqwest::multipart::Part::bytes(content.to_vec())
         .file_name("vault.enc")
         .mime_str("application/octet-stream")
@@ -151,7 +156,12 @@ async fn kubo_add(client: &reqwest::Client, endpoint_url: &str, content: &[u8]) 
 
 /// POST `{endpoint}/pins` com `{ cid, name }`.
 /// 202 Accepted ou 409 Conflict (já fixado) são tratados como sucesso.
-async fn psa_pin(client: &reqwest::Client, endpoint_url: &str, api_key: &str, cid: &str) -> Result<(), String> {
+async fn psa_pin(
+    client: &reqwest::Client,
+    endpoint_url: &str,
+    api_key: &str,
+    cid: &str,
+) -> Result<(), String> {
     let url = format!("{}/pins", endpoint_url.trim_end_matches('/'));
     let body = serde_json::json!({ "cid": cid, "name": "truthid-vault" });
 
@@ -205,7 +215,7 @@ mod tests {
         let expected = format!("0x{}", hex::encode(Keccak256::digest(data)));
         assert!(expected.starts_with("0x"));
         assert_eq!(expected.len(), 2 + 64); // "0x" + 32 bytes hex
-        // Determinístico
+                                            // Determinístico
         let expected2 = format!("0x{}", hex::encode(Keccak256::digest(data)));
         assert_eq!(expected, expected2);
     }

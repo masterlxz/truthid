@@ -198,7 +198,10 @@ async fn handle_incoming_with_timeout(
 
     match tokio::time::timeout(timeout, rx).await {
         Ok(Ok(SignMessageDecision::Approved)) => match sign(&payload.message) {
-            Ok(signature) => SignMessageOutcome::Signed { message: payload.message, signature },
+            Ok(signature) => SignMessageOutcome::Signed {
+                message: payload.message,
+                signature,
+            },
             Err(error) => SignMessageOutcome::Failed(error),
         },
         Ok(Ok(SignMessageDecision::Rejected)) => SignMessageOutcome::Rejected,
@@ -265,7 +268,10 @@ mod tests {
         });
 
         let payload = wait_for_pending(&state).await;
-        assert_eq!(payload.message, "TruthID Message Signing: Practice Valuation:vault-sync-key");
+        assert_eq!(
+            payload.message,
+            "TruthID Message Signing: Practice Valuation:vault-sync-key"
+        );
 
         resolve(&state, &payload.id, SignMessageDecision::Approved)
             .await
@@ -286,9 +292,12 @@ mod tests {
         let state = Arc::new(SignMessageState::default());
         let state_bg = state.clone();
         let handle = tokio::spawn(async move {
-            handle_incoming(&state_bg, valid_body(), |_| {}, |_| {
-                panic!("sign should never be called on rejection")
-            })
+            handle_incoming(
+                &state_bg,
+                valid_body(),
+                |_| {},
+                |_| panic!("sign should never be called on rejection"),
+            )
             .await
         });
 
@@ -332,7 +341,10 @@ mod tests {
 
         let err = resolve(&state, "not-the-real-id", SignMessageDecision::Rejected).await;
         assert!(err.is_err());
-        assert!(current(&state).await.is_some(), "pending request should survive a mismatched id");
+        assert!(
+            current(&state).await.is_some(),
+            "pending request should survive a mismatched id"
+        );
 
         resolve(&state, &payload.id, SignMessageDecision::Rejected)
             .await

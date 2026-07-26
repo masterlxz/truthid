@@ -63,7 +63,13 @@ pub(crate) fn encrypt(plaintext: &[u8], password: &str) -> Result<Vec<u8>, Strin
     let mut salt = [0u8; SALT_LEN];
     rand::rngs::OsRng.fill_bytes(&mut salt);
     let nonce_bytes: [u8; NONCE_LEN] = Aes256Gcm::generate_nonce(&mut OsRng).into();
-    encrypt_with(plaintext, password, salt, BACKUP_KDF_ITERATIONS, nonce_bytes)
+    encrypt_with(
+        plaintext,
+        password,
+        salt,
+        BACKUP_KDF_ITERATIONS,
+        nonce_bytes,
+    )
 }
 
 pub(crate) fn decrypt(blob: &[u8], password: &str) -> Result<Vec<u8>, String> {
@@ -74,7 +80,11 @@ pub(crate) fn decrypt(blob: &[u8], password: &str) -> Result<Vec<u8>, String> {
         return Err("not a TruthID backup file (bad magic)".to_string());
     }
     let salt = &blob[8..8 + SALT_LEN];
-    let iterations = u32::from_be_bytes(blob[8 + SALT_LEN..HEADER_LEN - NONCE_LEN].try_into().unwrap());
+    let iterations = u32::from_be_bytes(
+        blob[8 + SALT_LEN..HEADER_LEN - NONCE_LEN]
+            .try_into()
+            .unwrap(),
+    );
     if iterations > BACKUP_MAX_KDF_ITERATIONS {
         return Err(format!(
             "backup file has excessive KDF iterations ({iterations}); max is {BACKUP_MAX_KDF_ITERATIONS}"
@@ -159,7 +169,9 @@ mod tests {
             0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
             0x0f, 0x10,
         ];
-        let nonce: [u8; NONCE_LEN] = [0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b];
+        let nonce: [u8; NONCE_LEN] = [
+            0x20, 0x21, 0x22, 0x23, 0x24, 0x25, 0x26, 0x27, 0x28, 0x29, 0x2a, 0x2b,
+        ];
         let iterations = 100u32;
         let plaintext = b"{\"version\":1,\"entries\":[]}";
 
@@ -174,8 +186,7 @@ mod tests {
     #[test]
     fn excessive_iterations_rejected() {
         let mut blob = encrypt(b"data", "hunter2").unwrap();
-        blob[8 + SALT_LEN..8 + SALT_LEN + 4]
-            .copy_from_slice(&u32::MAX.to_be_bytes());
+        blob[8 + SALT_LEN..8 + SALT_LEN + 4].copy_from_slice(&u32::MAX.to_be_bytes());
         assert!(decrypt(&blob, "hunter2").is_err());
     }
 }

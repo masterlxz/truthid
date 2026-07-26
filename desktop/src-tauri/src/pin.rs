@@ -245,8 +245,9 @@ impl Default for PinState {
         Self {
             pending: SingleSlotChannel::default(),
             quota: Mutex::new(()),
-            authorizations_path: default_authorizations_path()
-                .unwrap_or_else(|_| std::path::PathBuf::from("/tmp/.truthid/pin_authorizations.json")),
+            authorizations_path: default_authorizations_path().unwrap_or_else(|_| {
+                std::path::PathBuf::from("/tmp/.truthid/pin_authorizations.json")
+            }),
         }
     }
 }
@@ -529,7 +530,10 @@ mod tests {
     /// entre módulos. `PinState::with_authorizations_path` (test-only) injeta
     /// esse caminho em vez de deixar o módulo resolver $HOME sozinho.
     fn temp_authorizations_path() -> PathBuf {
-        std::env::temp_dir().join(format!("truthid-pin-test-{}.json", single_slot_channel::random_id()))
+        std::env::temp_dir().join(format!(
+            "truthid-pin-test-{}.json",
+            single_slot_channel::random_id()
+        ))
     }
 
     #[tokio::test]
