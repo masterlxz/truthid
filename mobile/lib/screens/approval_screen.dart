@@ -14,6 +14,7 @@ import '../services/local_storage_service.dart';
 import '../services/pimlico_bundler_client.dart';
 import '../services/session_creator.dart';
 import '../theme.dart';
+import '../utils/session_domain_hash.dart';
 import '../widgets/info_row.dart';
 
 // Estados possíveis da tela — do início ao fim do fluxo de login
@@ -178,10 +179,21 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
     final deviceAddress = await _keyService.getDeviceAddress();
 
     // 2. Assina o session hash — prova de posse exigida por SessionRegistry.createSession
-    // sessionHash = keccak256(utf8_bytes_do_nonce), igual ao que o servidor calcula
+    // sessionHash = keccak256(utf8_bytes_do_nonce), igual ao que o servidor calcula.
+    // sessionHash em si continua sendo o valor de calldata enviado ao contrato
+    // (a sessão é indexada por ele) — só o que é assinado muda quando a flag
+    // de domain separation (P26) estiver ligada.
     final nonceBytes = Uint8List.fromList(utf8.encode(nonce));
     final sessionHash = keccak256(nonceBytes);
-    final sessionSignature = await _keyService.signHash(sessionHash);
+    final hashToSign = BlockchainService.sessionDomainSeparationEnabled
+        ? buildSessionDomainHash(
+            chainId: BlockchainService.chainId,
+            sessionRegistryAddress:
+                EthereumAddress.fromHex(BlockchainService.sessionRegistryAddress),
+            sessionHash: sessionHash,
+          )
+        : sessionHash;
+    final sessionSignature = await _keyService.signHash(hashToSign);
 
     // O device precisa estar pareado com uma identidade — sem isso não há
     // smart account nem identityId pra registrar a sessão.

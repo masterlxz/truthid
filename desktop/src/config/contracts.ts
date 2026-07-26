@@ -151,6 +151,13 @@ export const DEVICE_REGISTRY_ABI = [
 export const SESSION_REGISTRY_ADDRESS =
   "0x66F10F8c38b3F35551e90ACa3c675F5E3432C6Df" as const;
 
+// Desligada por padrão — o fix C4 (domain separation, replay cross-chain) já
+// existe no código-fonte do SessionRegistry mas ainda não foi redeployado
+// (P1/P2 em project/PENDING.md). Ligar esta flag antes do redeploy acontecer
+// quebra a criação de sessão contra o contrato antigo, que ainda espera a
+// assinatura sem domain separation. Ver P26 em project/PENDING.md.
+export const SESSION_DOMAIN_SEPARATION_ENABLED = false as const;
+
 // Bloco de deploy na Base Mainnet (Sessão 88 — redeploy completo, débito #42).
 // Fonte: contracts/broadcast/DeploySessionRegistry.s.sol/8453/run-latest.json
 export const SESSION_REGISTRY_DEPLOY_BLOCK = 48_294_090n;

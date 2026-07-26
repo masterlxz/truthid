@@ -135,6 +135,13 @@ class BlockchainService {
   // isso um único chainId fixo, em vez de um mapa rede→chainId que nada usaria.
   static final chainId = BigInt.from(8453);
 
+  // Desligada por padrão — o fix C4 (domain separation, replay cross-chain)
+  // já existe no código-fonte do SessionRegistry mas ainda não foi
+  // redeployado (P1/P2 em PENDING.md). Ligar esta flag antes do redeploy
+  // acontecer quebra a criação de sessão contra o contrato antigo, que
+  // ainda espera a assinatura sem domain separation. Ver P26 em PENDING.md.
+  static const sessionDomainSeparationEnabled = false;
+
   static final _sessionContract = DeployedContract(
     ContractAbi.fromJson(sessionRegistryAbi, 'SessionRegistry'),
     EthereumAddress.fromHex(_sessionRegistryAddress),

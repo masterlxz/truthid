@@ -132,13 +132,15 @@ Uint8List _uintToBytes(BigInt value, int byteLength) {
   return bytes;
 }
 
-Uint8List _addressWord(EthereumAddress address) {
+// Público — reutilizado por session_domain_hash.dart pra montar o mesmo
+// tipo de palavra ABI estática de 32 bytes fora do contexto de UserOperation.
+Uint8List addressWord(EthereumAddress address) {
   final word = Uint8List(32);
   word.setRange(12, 32, address.addressBytes);
   return word;
 }
 
-Uint8List _uintWord(BigInt value) => _uintToBytes(value, 32);
+Uint8List uint256Word(BigInt value) => _uintToBytes(value, 32);
 
 Uint8List _packUint128Pair(BigInt hi, BigInt lo) => Uint8List.fromList([
       ..._uintToBytes(hi, 16),
@@ -194,12 +196,12 @@ Uint8List computeUserOperationHash({
   final packed = toPackedUserOperation(userOperation);
 
   final innerEncoded = Uint8List.fromList([
-    ..._addressWord(packed.sender),
-    ..._uintWord(packed.nonce),
+    ...addressWord(packed.sender),
+    ...uint256Word(packed.nonce),
     ...keccak256(packed.initCode),
     ...keccak256(packed.callData),
     ...packed.accountGasLimits,
-    ..._uintWord(packed.preVerificationGas),
+    ...uint256Word(packed.preVerificationGas),
     ...packed.gasFees,
     ...keccak256(packed.paymasterAndData),
   ]);
@@ -207,8 +209,8 @@ Uint8List computeUserOperationHash({
 
   final outerEncoded = Uint8List.fromList([
     ...innerHash,
-    ..._addressWord(entryPoint),
-    ..._uintWord(chainId),
+    ...addressWord(entryPoint),
+    ...uint256Word(chainId),
   ]);
   return keccak256(outerEncoded);
 }

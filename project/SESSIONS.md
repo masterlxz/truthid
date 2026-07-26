@@ -6140,3 +6140,51 @@ sessão 154 rodou o módulo inteiro e travou nos 3 hangs antes de chegar nessa a
 
 P25 fechado — era bug de teste (semente não-normalizada), não bug do protocolo de pin em si.
 
+### Sessão 163 — 2026-07-26: P26 implementado (domain separation na assinatura de sessão) — mobile + desktop, atrás de flag
+
+Retomada do P26 (achado na Sessão 160, durante a atualização dos SDKs): `SessionRegistry.createSession`
+já exige, no código-fonte, que a assinatura de posse do device cubra um hash com domain separation
+— `keccak256(abi.encode(block.chainid, address(this), hash))` — fechando um replay cross-chain (fix
+C4, Sessão 150). Esse contrato corrigido ainda não foi redeployado (P1/P2, bloqueado pela decisão de
+migrar a identidade real em uso na Mainnet desde a Sessão 116).
+
+**Achado real no caminho**: o P26 original só documentava o mobile, mas o Desktop
+(`QuickLogin.tsx` + comando Tauri `sign_session_hash`) tinha exatamente o mesmo bug — nunca
+descoberto porque o achado original veio do trabalho nos SDKs, que não tocam o Desktop. Escopo
+ampliado pra cobrir os dois lados nesta sessão, por decisão do dono do projeto.
+
+**Risco de sequenciamento**: corrigir a assinatura agora, sem mais nada, quebraria a criação de
+sessão contra o contrato que está no ar hoje (ainda sem o fix C4) — ele não reconhece a assinatura
+com domain separation. Fix implementado atrás de uma flag local desligada por padrão em cada lado
+(`BlockchainService.sessionDomainSeparationEnabled` no mobile, `SESSION_DOMAIN_SEPARATION_ENABLED`
+em `desktop/src/config/contracts.ts`) — fica pronto pra ligar exatamente no dia do redeploy em
+cascata (P1/P2), sem depender de coordenar timing manualmente.
+
+**Implementação**: novo `mobile/lib/utils/session_domain_hash.dart` (`buildSessionDomainHash`) e
+`desktop/src/utils/buildSessionDomainHash.ts`, ambos espelhando
+`keccak256(abi.encode(chainId, address(this), hash))` — o segundo segue o mesmo formato já usado
+por `buildIdentityConsentHash.ts` (débito #17, `IdentityRegistry.createIdentity`), que é a
+referência original desse padrão no codebase. `signHash` (mobile) e `sign_session_hash`/
+`sign_eip191_hash_raw` (desktop, Rust) continuam genéricos — compartilhados com a assinatura de
+UserOperation ERC-4337 — nenhum dos dois foi alterado; só o call site em `approval_screen.dart`
+(`_approve()`) e `QuickLogin.tsx` (`handleCreateSession()`) decide, condicionado à flag, o que
+passar pra assinatura. O `hash`/`sessionHash` enviado como calldata pro `createSession` não muda
+em nenhum dos dois casos — só a assinatura muda quando a flag está ligada. No mobile, os helpers
+privados `_addressWord`/`_uintWord` de `user_operation.dart` foram promovidos a públicos
+(`addressWord`/`uint256Word`) pra reaproveitar a lógica de empacotamento de palavras ABI estáticas
+em vez de duplicá-la.
+
+**Testes**: `mobile/test/utils/session_domain_hash_test.dart` (novo) — 3 vetores conhecidos
+gerados com `viem` (`encodeAbiParameters`/`keccak256`, rodado via `node -e` contra o
+`node_modules` do desktop) provando paridade cross-linguagem Dart↔TS, mais testes de
+determinismo/sensibilidade a cada campo. `desktop/src/utils/__tests__/buildSessionDomainHash.test.ts`
+(novo), mesmo padrão de `buildIdentityConsentHash.test.ts`.
+
+**Documentação**: entrada P26 em `PENDING.md` atualizada — de "não implementado" pra "implementado,
+aguardando ativação em lockstep com o redeploy (P1/P2)"; a pendência não fecha, só muda de estado.
+
+**Verificação**: `flutter test` 403/403 (suite completa do mobile), `flutter analyze` limpo (14
+achados pré-existentes, nenhum novo). `npx vitest run` 101/101 (suite completa do desktop),
+`tsc --noEmit` limpo. Não dá pra validar em hardware real contra o contrato com C4 — ele não está
+deployado; fica pra quando a ativação da flag acontecer junto do redeploy.
+

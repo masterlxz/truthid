@@ -2,7 +2,13 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { keccak256, toHex } from "viem";
-import { SESSION_REGISTRY_ADDRESS, SESSION_REGISTRY_ABI } from "../config/contracts";
+import { base } from "viem/chains";
+import {
+  SESSION_REGISTRY_ADDRESS,
+  SESSION_REGISTRY_ABI,
+  SESSION_DOMAIN_SEPARATION_ENABLED,
+} from "../config/contracts";
+import { buildSessionDomainHash } from "../utils/buildSessionDomainHash";
 
 type LoginStatus = "idle" | "loading" | "success" | "error";
 type SessionStatus = "idle" | "signing" | "pending" | "confirmed" | "error";
@@ -91,7 +97,19 @@ export function QuickLogin() {
       const hash = keccak256(toHex(loginResult.nonce)) as `0x${string}`;
       setSessionHash(hash);
 
-      const [r, s, v] = await invoke<[string, string, number]>("sign_session_hash", { hash });
+      // `hash` continua sendo o valor de calldata enviado ao contrato (a
+      // sessão é indexada por ele) — só o que é assinado muda quando a flag
+      // de domain separation (P26) estiver ligada.
+      const hashToSign = SESSION_DOMAIN_SEPARATION_ENABLED
+        ? buildSessionDomainHash({
+            chainId: base.id,
+            sessionRegistryAddress: SESSION_REGISTRY_ADDRESS,
+            hash,
+          })
+        : hash;
+      const [r, s, v] = await invoke<[string, string, number]>("sign_session_hash", {
+        hash: hashToSign,
+      });
 
       setSessionStatus("pending");
       writeContract({
