@@ -5750,3 +5750,38 @@ Registrado como P25 em `PENDING.md`, não bloqueia o fechamento do M3.
 backlog do mobile. P25 (hang em `pin.rs`) fica como pendência separada, investigar quando surgir
 oportunidade.
 
+---
+
+### Sessão 155 — 2026-07-25: M4 corrigido — Future rejeitada não fica mais presa pra sempre
+
+**Achado M4 (Sessão 151)**: `DeviceKeyService._getOrCreateKey()` (`device_key_service.dart:25`)
+cacheia a `Future<EthPrivateKey>` num campo estático (`_keyFuture`) de propósito — evita que duas
+telas gerem/gravem chaves diferentes numa corrida no primeiro boot. Problema: `_keyFuture ??=
+_loadOrCreateKey();` só atribui quando o campo é `null`, mas um `Future` que vai rejeitar não é
+`null` — se a 1ª leitura do secure storage falhasse de forma transiente (canal nativo ainda não
+pronto, hiccup do plugin), esse `Future` rejeitado ficava cacheado pra sempre. Toda chamada
+seguinte (usada pelos 5 fluxos de aprovação) recebia o mesmo erro, quebrando toda assinatura do
+app até reiniciar o processo — sem nenhuma recuperação.
+
+**Fix**: `_getOrCreateKey()` passou a chamar `_loadOrCreateKeySafely()`, que envolve
+`_loadOrCreateKey()` num try/catch — reseta `_keyFuture` pra `null` antes de rethrow em caso de
+falha, permitindo que a próxima chamada tente de novo do zero. Caminho de sucesso não muda (mesma
+memoização de sempre).
+
+**Teste novo**: `mobile/test/services/device_key_service_test.dart` (arquivo novo — não existia
+teste pro `DeviceKeyService` real antes; o único teste relacionado,
+`device_key_signature_vector_test.dart`, testa a primitiva criptográfica do web3dart isolada, de
+propósito, porque a chave real não é injetável). Como `_keyFuture` é estático sem hook de reset, o
+teste mocka o canal do `flutter_secure_storage` com um contador: 1ª chamada de `read` lança
+`PlatformException` (simula a falha transiente), as seguintes retornam `null` normal. Um teste só,
+2 asserts em sequência: 1ª chamada a `getDeviceAddress()` lança; 2ª chamada, logo depois, tem
+sucesso e devolve um endereço válido — esse teste falha com o código antigo (trava esperando o
+mesmo erro pra sempre).
+
+**Verificação**: `flutter test` 386/386 (suite completa, 1 novo), `flutter analyze` limpo (14
+infos/warnings pré-existentes, nenhum novo).
+
+**Próximo passo**: M5-M10 (6 achados restantes) antes de fechar o item 5 do backlog do mobile. M5,
+M6 e M7 são os 3 achados de "sem guarda de reentrância" (sign_request/pin/vault_edit) — mesmo
+padrão de bug nas 3 telas, provavelmente resolvíveis com um fix espelhado numa sessão só.
+

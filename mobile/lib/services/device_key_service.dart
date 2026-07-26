@@ -23,7 +23,20 @@ class DeviceKeyService {
   static Future<EthPrivateKey>? _keyFuture;
 
   Future<EthPrivateKey> _getOrCreateKey() {
-    return _keyFuture ??= _loadOrCreateKey();
+    return _keyFuture ??= _loadOrCreateKeySafely();
+  }
+
+  // Reseta o cache em caso de falha — sem isso, uma falha transiente na
+  // primeira leitura do secure storage (ex: canal nativo ainda não pronto)
+  // ficava presa pra sempre no Future rejeitado, quebrando toda assinatura
+  // do app até reiniciar o processo (achado do /code-review high, M4).
+  Future<EthPrivateKey> _loadOrCreateKeySafely() async {
+    try {
+      return await _loadOrCreateKey();
+    } catch (_) {
+      _keyFuture = null;
+      rethrow;
+    }
   }
 
   Future<EthPrivateKey> _loadOrCreateKey() async {

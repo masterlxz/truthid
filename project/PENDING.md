@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-07-25 (Sessão 153 — M2 corrigido)
+> Última atualização: 2026-07-25 (Sessão 155 — M4 corrigido)
 
 ---
 
@@ -42,7 +42,6 @@
 
 | ID | Item | Onde se originou | Prioridade |
 |---|---|---|---|
-| M4 | **Future rejeitada cacheada pra sempre** — `device_key_service.dart:26`, falha transiente na 1ª leitura da secure storage quebra toda assinatura até reiniciar o app. | `SESSIONS.md` (Sessão 151) | 🟠 Média |
 | M5 | **Sem guarda de reentrância — sign_request** — `sign_request_approval_screen.dart:339`, duplo toque pode submeter 2 UserOperations. | `SESSIONS.md` (Sessão 151) | 🟠 Média |
 | M6 | **Sem guarda de reentrância — pin** — `pin_approval_screen.dart:206`, duplo toque dispara 2 fluxos concorrentes de pin/entrega. | `SESSIONS.md` (Sessão 151) | 🟠 Média |
 | M7 | **Sem guarda de reentrância — vault edit** — `vault_edit_approval_screen.dart:326`, guarda checada só após `await`, duplo toque cria entrada duplicada. | `SESSIONS.md` (Sessão 151) | 🟠 Média |
@@ -172,6 +171,7 @@
 | ~~M1~~ | ~~Deep link/QR bypassava `AppLockService` — telas de aprovação empurradas por cima do bloqueio~~ | **Sessão 152** |
 | ~~M2~~ | ~~Login sem checagem de `expiresAt` — `approval_screen.dart` não validava expiração do challenge~~ | **Sessão 153** |
 | ~~M3~~ | ~~TOCTOU em `markPublished` — recarregava o vault atual do disco em vez do conteúdo de fato publicado; corrigido em Mobile e Desktop (mesmo padrão nos dois)~~ | **Sessão 154** |
+| ~~M4~~ | ~~Future rejeitada cacheada pra sempre em `DeviceKeyService._getOrCreateKey` — falha transiente na 1ª leitura da secure storage quebrava toda assinatura até reiniciar o app~~ | **Sessão 155** |
 
 ### Bugs do `/code-review max` (Desktop) — 52/52
 
