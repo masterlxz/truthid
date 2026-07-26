@@ -258,6 +258,44 @@ void main() {
     });
 
     testWidgets(
+        'duplo toque em Approve executa a UserOp só uma vez (M5, achado do '
+        '/code-review high: setState não remove o botão sincronamente, '
+        'então um 2º toque antes do 1º frame renderizar chamava _approve() '
+        'de novo)', (tester) async {
+      when(() => mockSessionCreator.executeArbitraryCall(
+            smartAccountAddress: any(named: 'smartAccountAddress'),
+            dest: any(named: 'dest'),
+            value: any(named: 'value'),
+            innerCallData: any(named: 'innerCallData'),
+          )).thenAnswer((_) async => const SessionCreationResult(
+            userOpHash: '0xUserOpHashXYZ',
+            transactionHash: '0xTxHash',
+          ));
+      when(() => mockLanServer.serveOnce(
+            encryptedBlob: any(named: 'encryptedBlob'),
+            sessionId: any(named: 'sessionId'),
+            expiresAt: any(named: 'expiresAt'),
+          )).thenAnswer((_) async => true);
+
+      await tester.pumpWidget(buildScreen(validPayload()));
+      await tester.pumpAndSettle();
+
+      // Dois taps em sequência, sem pump() entre eles — simula os dois
+      // toques chegando antes do primeiro frame refletir a mudança de
+      // status (que removeria o botão).
+      await tester.tap(find.text('Approve'));
+      await tester.tap(find.text('Approve'));
+      await tester.pumpAndSettle();
+
+      verify(() => mockSessionCreator.executeArbitraryCall(
+            smartAccountAddress: any(named: 'smartAccountAddress'),
+            dest: any(named: 'dest'),
+            value: any(named: 'value'),
+            innerCallData: any(named: 'innerCallData'),
+          )).called(1);
+    });
+
+    testWidgets(
         'falha na execução ainda assim entrega {status: failed} e mostra em "Sent"',
         (tester) async {
       when(() => mockSessionCreator.executeArbitraryCall(

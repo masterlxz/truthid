@@ -137,6 +137,7 @@ class _SignRequestApprovalScreenState
   String? _executionOutcome; // 'executed' | 'rejected' | 'failed'
   String? _userOpHash;
   String? _executionError;
+  bool _responded = false; // impede duplo toque de submeter 2 UserOperations
 
   late final String _transport;
   late final BlockchainService _blockchain;
@@ -337,6 +338,8 @@ class _SignRequestApprovalScreenState
   }
 
   Future<void> _approve() async {
+    if (_responded) return;
+    _responded = true;
     setState(() => _status = _Status.executing);
 
     try {
@@ -362,6 +365,8 @@ class _SignRequestApprovalScreenState
   }
 
   Future<void> _reject() async {
+    if (_responded) return;
+    _responded = true;
     _executionOutcome = 'rejected';
     await _deliver({'status': 'rejected'});
   }

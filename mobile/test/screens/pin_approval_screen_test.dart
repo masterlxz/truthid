@@ -249,6 +249,44 @@ void main() {
       expect(find.text('Sent'), findsOneWidget);
     });
 
+    testWidgets(
+        'duplo toque em Approve pina só uma vez (M6, achado do '
+        '/code-review high: sem guarda síncrona, um 2º toque antes do 1º '
+        'frame renderizar disparava um 2º fluxo de pin concorrente)',
+        (tester) async {
+      final providers = [
+        const PinningProvider(
+          name: 'local-kubo',
+          kind: 'kubo',
+          endpointUrl: 'http://127.0.0.1:5001',
+        ),
+      ];
+      when(() => mockPinningProviderService.load())
+          .thenAnswer((_) async => providers);
+      when(() => mockIpfsPinClient.pinVault(any(), providers)).thenAnswer(
+        (_) async => const PinResult(
+          cid: 'bafy123',
+          contentHash: '0xhash',
+          providersOk: ['local-kubo'],
+          providersFailed: [],
+        ),
+      );
+      when(() => mockDelivery.deliver(
+            result: any(named: 'result'),
+            sessionId: any(named: 'sessionId'),
+            expiresAt: any(named: 'expiresAt'),
+          )).thenAnswer(
+        (_) async => const DeliveryResult(outcome: DeliveryOutcome.sent),
+      );
+
+      await pumpToApproval(tester);
+      await tester.tap(find.text('Approve'));
+      await tester.tap(find.text('Approve'));
+      await tester.pumpAndSettle();
+
+      verify(() => mockIpfsPinClient.pinVault(any(), providers)).called(1);
+    });
+
     testWidgets('sem provider configurado entrega {status: failed}',
         (tester) async {
       when(() => mockPinningProviderService.load()).thenAnswer((_) async => []);

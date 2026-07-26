@@ -88,6 +88,7 @@ class _PinApprovalScreenState extends State<PinApprovalScreen> {
   List<String> _localIps = [];
   String? _deadDropIpnsName;
   String? _deadDropError;
+  bool _responded = false; // impede duplo toque de disparar 2 fluxos de pin
 
   late final EciesService _ecies;
   late final RemoteSignerLanServer _lanServer;
@@ -204,6 +205,8 @@ class _PinApprovalScreenState extends State<PinApprovalScreen> {
   }
 
   Future<void> _approve() async {
+    if (_responded) return;
+    _responded = true;
     try {
       final providers = await _pinningProviderService.load();
       if (providers.isEmpty) {
@@ -228,6 +231,8 @@ class _PinApprovalScreenState extends State<PinApprovalScreen> {
   }
 
   Future<void> _reject() async {
+    if (_responded) return;
+    _responded = true;
     await _deliver({'status': 'rejected'});
   }
 

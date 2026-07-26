@@ -5785,3 +5785,38 @@ infos/warnings pré-existentes, nenhum novo).
 M6 e M7 são os 3 achados de "sem guarda de reentrância" (sign_request/pin/vault_edit) — mesmo
 padrão de bug nas 3 telas, provavelmente resolvíveis com um fix espelhado numa sessão só.
 
+---
+
+### Sessão 156 — 2026-07-25: M5, M6 e M7 corrigidos — guarda de reentrância nas 3 telas
+
+**Achados (Sessão 151)**: as 3 telas (`sign_request_approval_screen.dart`, `pin_approval_screen.dart`,
+`vault_edit_approval_screen.dart`) chamam `setState(() => _status = ...)` como primeira linha de
+`_approve()`/`_reject()`, mas isso só agenda um rebuild pro próximo frame — não remove os botões
+sincronamente. Um duplo toque rápido (ou 2 taps antes do 1º frame renderizar) chamava o handler 2
+vezes: 2 `UserOperation`s submetidas (M5), 2 fluxos concorrentes de pin/entrega (M6), ou entrada
+duplicada no vault (M7 — o `_entryPersisted` já existente só é checado *depois* de um `await`,
+então não protegia contra chamadas concorrentes, só contra retry sequencial depois de falha).
+
+**Fix**: mesmo padrão já usado por `approval_screen.dart` (login, auditado no M1/M2) — uma guarda
+síncrona checada e setada como a primeiríssima linha, antes de qualquer `await`:
+- **M5/M6**: campo `bool _responded = false` (permanente — a tela nunca volta pro estado pendente
+  depois de responder), guarda em `_approve()` **e** `_reject()` nos dois arquivos.
+- **M7**: campo novo `bool _approving = false` (transiente — resetado num `finally` ao fim de cada
+  tentativa), guarda só em `_approve()` (a `_reject()` daqui é síncrona, `Navigator.pop()`, fora do
+  escopo do achado). Precisou ser transiente e não permanente pra não quebrar o "Try again"
+  legítimo que já existia (retry sequencial depois de falha, já coberto por teste anterior) —
+  `_entryPersisted` continua intocado, resolvendo o problema diferente que já resolvia.
+
+**Testes**: 1 teste novo por tela, mesma técnica nas 3 — `tester.tap()` duas vezes em sequência sem
+`pump()` entre elas (simula o duplo toque antes do 1º frame refletir a mudança de estado), depois
+`pumpAndSettle()`, `verify(...).called(1)` na chamada que causa o efeito colateral
+(`executeArbitraryCall`/`pinVault`/`addEntry`). Teste de retry sequencial pré-existente em
+`vault_edit_approval_screen_test.dart` ("Try again... retenta sem duplicar a entrada") continuou
+passando sem alteração, confirmando que a guarda transiente não quebrou esse fluxo.
+
+**Verificação**: `flutter test` 389/389 (suite completa, 3 novos), `flutter analyze` limpo (14
+infos/warnings pré-existentes, nenhum novo).
+
+**Próximo passo**: M8, M9 e M10 (3 achados de baixa prioridade) fecham o item 5 do backlog do
+mobile por completo.
+

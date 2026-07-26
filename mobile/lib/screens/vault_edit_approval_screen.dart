@@ -97,6 +97,11 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
   // anterior e só publish() falhou depois, retentar não deve chamar
   // addEntry de novo (criaria uma 2ª entrada duplicada pro mesmo site).
   bool _entryPersisted = false;
+  // Guarda transiente contra reentrância (duplo toque) — diferente de
+  // _entryPersisted, que só protege contra duplicar a entrada num retry
+  // SEQUENCIAL depois de falha. Essa aqui é resetada a cada tentativa
+  // (finally), pra não quebrar o "Try again" legítimo.
+  bool _approving = false;
 
   late final RemoteSignerLanServer _lanServer;
   late final VaultRepository _repository;
@@ -317,6 +322,8 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
   }
 
   Future<void> _approve() async {
+    if (_approving) return;
+    _approving = true;
     setState(() => _status = _Status.publishing);
 
     try {
@@ -348,6 +355,8 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
         _status = _Status.error;
         _errorMsg = 'Failed to save and publish the new credential: $e';
       });
+    } finally {
+      _approving = false;
     }
   }
 

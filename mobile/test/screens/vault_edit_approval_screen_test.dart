@@ -343,6 +343,28 @@ void main() {
       expect(find.text('Saved'), findsOneWidget);
     });
 
+    testWidgets(
+        'duplo toque em Approve persiste a entrada só uma vez (M7, achado '
+        'do /code-review high: _entryPersisted só era checado depois de um '
+        'await, então 2 chamadas concorrentes passavam pela checagem antes '
+        'da 1ª terminar de setá-lo)', (tester) async {
+      await pumpToApproval(tester);
+
+      await tester.tap(find.text('Approve'));
+      await tester.tap(find.text('Approve'));
+      await tester.pumpAndSettle();
+
+      verify(() => mockRepository.addEntry(
+            site: 'example.com',
+            url: '',
+            username: 'alice',
+            password: 'hunter2',
+            notes: '',
+            passkey: null,
+          )).called(1);
+      expect(find.text('Saved'), findsOneWidget);
+    });
+
     testWidgets('celular não pareado mostra erro e não persiste nada',
         (tester) async {
       when(() => mockStorage.getPairedIdentityId())

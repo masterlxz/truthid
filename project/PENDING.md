@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-07-25 (Sessão 155 — M4 corrigido)
+> Última atualização: 2026-07-25 (Sessão 156 — M5, M6, M7 corrigidos)
 
 ---
 
@@ -42,9 +42,6 @@
 
 | ID | Item | Onde se originou | Prioridade |
 |---|---|---|---|
-| M5 | **Sem guarda de reentrância — sign_request** — `sign_request_approval_screen.dart:339`, duplo toque pode submeter 2 UserOperations. | `SESSIONS.md` (Sessão 151) | 🟠 Média |
-| M6 | **Sem guarda de reentrância — pin** — `pin_approval_screen.dart:206`, duplo toque dispara 2 fluxos concorrentes de pin/entrega. | `SESSIONS.md` (Sessão 151) | 🟠 Média |
-| M7 | **Sem guarda de reentrância — vault edit** — `vault_edit_approval_screen.dart:326`, guarda checada só após `await`, duplo toque cria entrada duplicada. | `SESSIONS.md` (Sessão 151) | 🟠 Média |
 | M8 | **Bug de username reintroduzido** — `devices_screen.dart:42` reimplementa inline em vez de usar `resolvePairedUsername()`. | `SESSIONS.md` (Sessão 151) | 🟡 Baixa |
 | M9 | **`expiresAt` ignorado no canal de deep link** — `deep_link_delivery_channel.dart:29`, hoje mascarado pelos chamadores. | `SESSIONS.md` (Sessão 151) | 🟡 Baixa |
 | M10 | **`IndexedStack` triplica chamada RPC** — `main.dart:328`, Devices/Sessions/Wallet buscam `getDevice` redundante no cold start. | `SESSIONS.md` (Sessão 151) | 🟡 Baixa |
@@ -172,6 +169,9 @@
 | ~~M2~~ | ~~Login sem checagem de `expiresAt` — `approval_screen.dart` não validava expiração do challenge~~ | **Sessão 153** |
 | ~~M3~~ | ~~TOCTOU em `markPublished` — recarregava o vault atual do disco em vez do conteúdo de fato publicado; corrigido em Mobile e Desktop (mesmo padrão nos dois)~~ | **Sessão 154** |
 | ~~M4~~ | ~~Future rejeitada cacheada pra sempre em `DeviceKeyService._getOrCreateKey` — falha transiente na 1ª leitura da secure storage quebrava toda assinatura até reiniciar o app~~ | **Sessão 155** |
+| ~~M5~~ | ~~Sem guarda de reentrância — sign_request — duplo toque podia submeter 2 UserOperations~~ | **Sessão 156** |
+| ~~M6~~ | ~~Sem guarda de reentrância — pin — duplo toque disparava 2 fluxos concorrentes de pin/entrega~~ | **Sessão 156** |
+| ~~M7~~ | ~~Sem guarda de reentrância — vault edit — guarda `_entryPersisted` checada só após `await`, duplo toque podia criar entrada duplicada~~ | **Sessão 156** |
 
 ### Bugs do `/code-review max` (Desktop) — 52/52
 
