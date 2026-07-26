@@ -5820,3 +5820,36 @@ infos/warnings pré-existentes, nenhum novo).
 **Próximo passo**: M8, M9 e M10 (3 achados de baixa prioridade) fecham o item 5 do backlog do
 mobile por completo.
 
+---
+
+### Sessão 157 — 2026-07-25: M8 corrigido — `DevicesScreen` volta a usar `resolvePairedUsername`
+
+**Achado (Sessão 151)**: `devices_screen.dart:42` reimplementava inline a resolução de
+`@username`, mas só dentro do bloco de auto-descoberta (`identityId == null`, device visto
+on-chain mas ainda não salvo localmente). Se `identityId` já estava persistido de uma sessão
+anterior e o `@username` nunca resolveu (falha transiente de `getUsernameForIdentity`, um scan de
+log on-chain), a tela nunca tentava de novo — reintroduzindo exatamente o bug que
+`resolvePairedUsername()` (`paired_username_resolver.dart`, Sessão 135) foi criado pra fechar.
+Bônus: a chamada direta a `getUsernameForIdentity` no bloco de auto-descoberta não tinha o
+try/catch que o helper tem, então uma falha transiente ali vazava como exceção não tratada de
+`_reload()`.
+
+**Fix**: `_reload()` reescrito pra sempre chamar `resolvePairedUsername` quando há um `identityId`
+final (persistido ou recém-descoberto), em vez de só dentro do bloco de auto-descoberta —
+`resolvePairedUsername` já cobre cache + retry + try/catch sozinho, então a lógica ficou mais
+simples, não mais complexa.
+
+**Achado no caminho**: `DevicesScreen` não tinha teste nenhum (arquivo nem existia) e, diferente
+de toda outra tela do projeto, não aceitava serviços injetados via construtor — precisou ganhar os
+3 campos opcionais (`deviceKeyService`/`localStorageService`/`blockchainService`, mesmo padrão de
+`SessionsScreen`/`WalletScreen`) só pra dar pra escrever o teste de regressão.
+
+**Testes**: `mobile/test/screens/devices_screen_test.dart` (arquivo novo), 4 casos — cache
+completo (nunca chama `getUsernameForIdentity`), a regressão do M8 (identityId cacheado, username
+nunca resolvido, tenta de novo e persiste), auto-descoberta (comportamento antigo, agora via
+helper), device revogado (limpa storage, "Not registered"). `flutter test` 393/393 (suite
+completa, 4 novos), `flutter analyze` limpo (14 infos/warnings pré-existentes, nenhum novo).
+
+**Próximo passo**: M9 (`expiresAt` ignorado no `deep_link_delivery_channel.dart`) e M10
+(`IndexedStack` triplica RPC no `main.dart`) fecham o item 5 do backlog do mobile por completo.
+

@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-07-25 (Sessão 156 — M5, M6, M7 corrigidos)
+> Última atualização: 2026-07-25 (Sessão 157 — M8 corrigido)
 
 ---
 
@@ -42,7 +42,6 @@
 
 | ID | Item | Onde se originou | Prioridade |
 |---|---|---|---|
-| M8 | **Bug de username reintroduzido** — `devices_screen.dart:42` reimplementa inline em vez de usar `resolvePairedUsername()`. | `SESSIONS.md` (Sessão 151) | 🟡 Baixa |
 | M9 | **`expiresAt` ignorado no canal de deep link** — `deep_link_delivery_channel.dart:29`, hoje mascarado pelos chamadores. | `SESSIONS.md` (Sessão 151) | 🟡 Baixa |
 | M10 | **`IndexedStack` triplica chamada RPC** — `main.dart:328`, Devices/Sessions/Wallet buscam `getDevice` redundante no cold start. | `SESSIONS.md` (Sessão 151) | 🟡 Baixa |
 
@@ -172,6 +171,7 @@
 | ~~M5~~ | ~~Sem guarda de reentrância — sign_request — duplo toque podia submeter 2 UserOperations~~ | **Sessão 156** |
 | ~~M6~~ | ~~Sem guarda de reentrância — pin — duplo toque disparava 2 fluxos concorrentes de pin/entrega~~ | **Sessão 156** |
 | ~~M7~~ | ~~Sem guarda de reentrância — vault edit — guarda `_entryPersisted` checada só após `await`, duplo toque podia criar entrada duplicada~~ | **Sessão 156** |
+| ~~M8~~ | ~~Bug de username reintroduzido — `devices_screen.dart` reimplementava inline em vez de usar `resolvePairedUsername()`, só resolvia na auto-descoberta~~ | **Sessão 157** |
 
 ### Bugs do `/code-review max` (Desktop) — 52/52
 

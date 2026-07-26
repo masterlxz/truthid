@@ -3,20 +3,31 @@ import 'package:flutter/services.dart';
 import '../services/blockchain_service.dart';
 import '../services/device_key_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/paired_username_resolver.dart';
 import '../theme.dart';
 import 'show_device_qr_screen.dart';
 
 class DevicesScreen extends StatefulWidget {
-  const DevicesScreen({super.key});
+  // Injetáveis para testes — em produção usa os defaults.
+  final DeviceKeyService? deviceKeyService;
+  final LocalStorageService? localStorageService;
+  final BlockchainService? blockchainService;
+
+  const DevicesScreen({
+    super.key,
+    this.deviceKeyService,
+    this.localStorageService,
+    this.blockchainService,
+  });
 
   @override
   State<DevicesScreen> createState() => _DevicesScreenState();
 }
 
 class _DevicesScreenState extends State<DevicesScreen> {
-  final _keyService = DeviceKeyService();
-  final _storage = LocalStorageService();
-  final _blockchain = BlockchainService();
+  late final DeviceKeyService _keyService;
+  late final LocalStorageService _storage;
+  late final BlockchainService _blockchain;
 
   String? _deviceAddress;
   String? _pairedIdentityId;
@@ -26,6 +37,9 @@ class _DevicesScreenState extends State<DevicesScreen> {
   @override
   void initState() {
     super.initState();
+    _keyService = widget.deviceKeyService ?? DeviceKeyService();
+    _storage = widget.localStorageService ?? LocalStorageService();
+    _blockchain = widget.blockchainService ?? BlockchainService();
     _reload();
   }
 
@@ -34,31 +48,35 @@ class _DevicesScreenState extends State<DevicesScreen> {
 
     final address = await _keyService.getDeviceAddress();
     var identityId = await _storage.getPairedIdentityId();
-    var username = await _storage.getPairedUsername();
 
     final device = await _blockchain.getDevice(address);
 
     if (device != null && !device.revoked) {
       if (identityId == null) {
         // Auto-descoberta: device registrado on-chain mas não salvo localmente.
-        // Aguarda o username resolver antes de considerar "pareado" — sem
-        // isso, quem navegasse rápido pra aprovar um login veria
-        // "device not paired" mesmo com o identityId já salvo (a
-        // ApprovalScreen exige os dois, ver Sessão 70 no project/INDEX.md).
         identityId = device.identityId.toString();
         await _storage.savePairedIdentity(identityId);
-        final resolvedUsername =
-            await _blockchain.getUsernameForIdentity(device.identityId);
-        if (resolvedUsername != null) {
-          await _storage.savePairedUsername(resolvedUsername);
-          username = resolvedUsername;
-        }
       }
     } else if (identityId != null) {
       // Device revogado ou removido — limpar storage
       await _storage.clearPairedIdentity();
       identityId = null;
-      username = null;
+    }
+
+    // Sempre passa pelo helper compartilhado, não só na auto-descoberta —
+    // achado do /code-review high (M8): a versão inline anterior só
+    // resolvia o username quando identityId tinha acabado de ser
+    // descoberto, então um identityId já persistido de uma sessão anterior
+    // cujo username nunca resolveu (falha transiente de
+    // getUsernameForIdentity) nunca era tentado de novo. resolvePairedUsername
+    // já cobre cache + retry + try/catch (ver Sessão 135).
+    String? username;
+    if (identityId != null) {
+      username = await resolvePairedUsername(
+        storage: _storage,
+        blockchain: _blockchain,
+        identityId: identityId,
+      );
     }
 
     if (!mounted) return;
