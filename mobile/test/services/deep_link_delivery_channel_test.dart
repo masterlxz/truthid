@@ -82,4 +82,27 @@ void main() {
       throwsA(isA<StateError>()),
     );
   });
+
+  test(
+      'expiresAt já vencido retorna timeout sem tentar lançar a callback '
+      '(M9, achado do /code-review high: expiresAt era ignorado no corpo '
+      'de deliver())', () async {
+    var launchCalled = false;
+    final channel = DeepLinkDeliveryChannel(
+      callbackBaseUri: callbackBase,
+      launch: (url, {LaunchMode? mode}) async {
+        launchCalled = true;
+        return true;
+      },
+    );
+
+    final result = await channel.deliver(
+      result: const {'status': 'rejected'},
+      sessionId: 'session-4',
+      expiresAt: DateTime.now().subtract(const Duration(minutes: 1)),
+    );
+
+    expect(result.outcome, DeliveryOutcome.timeout);
+    expect(launchCalled, isFalse);
+  });
 }

@@ -5853,3 +5853,32 @@ completa, 4 novos), `flutter analyze` limpo (14 infos/warnings pré-existentes, 
 **Próximo passo**: M9 (`expiresAt` ignorado no `deep_link_delivery_channel.dart`) e M10
 (`IndexedStack` triplica RPC no `main.dart`) fecham o item 5 do backlog do mobile por completo.
 
+---
+
+### Sessão 158 — 2026-07-25: M9 corrigido — `DeepLinkDeliveryChannel` agora respeita `expiresAt`
+
+**Achado (Sessão 151)**: `deep_link_delivery_channel.dart:29` recebe `expiresAt` como parâmetro
+obrigatório de `deliver()` (parte do contrato de `ResultDeliveryChannel`) mas nunca o lia no corpo
+do método — lançava a callback via `url_launcher` sem checar expiração. Mascarado hoje por dois
+fatores: os chamadores já checam `expiresAt` antes de invocar `deliver()`, e o corpo deste canal é
+um único `await` rápido (abrir outro app, sem espera de rede) — diferente do
+`CrossDeviceDeliveryChannel`, que usa `expiresAt` de verdade porque `_lanServer.serveOnce()` pode
+ficar esperando um peer de rede por tempo real. Ainda assim, contrato quebrado: uma mudança futura
+no corpo do canal (ou um caller novo que confie só na interface) ficaria sem essa proteção.
+
+**Fix**: mesma checagem que os chamadores já fazem, agora também no início de `deliver()` —
+`if (expiresAt.isBefore(DateTime.now())) return const DeliveryResult(outcome:
+DeliveryOutcome.timeout);`, antes de montar/lançar a URI. Retorna `timeout` (não lança), mesmo
+contrato de retorno que `CrossDeviceDeliveryChannel` já usa pro caso de expiração — nenhuma
+mudança necessária nos chamadores.
+
+**Teste novo**: `deep_link_delivery_channel_test.dart` — `expiresAt` já vencido retorna
+`DeliveryOutcome.timeout` sem chamar `launch` (flag booleana provando que o early-return acontece
+antes de qualquer tentativa de abrir a URI).
+
+**Verificação**: `flutter test` 394/394 (suite completa, 1 novo), `flutter analyze` limpo (14
+infos/warnings pré-existentes, nenhum novo).
+
+**Próximo passo**: M10 (`IndexedStack` triplica chamada RPC no `main.dart`) é o último achado do
+`/code-review high` — fecha o item 5 do backlog do mobile por completo.
+

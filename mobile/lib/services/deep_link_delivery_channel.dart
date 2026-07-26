@@ -31,6 +31,15 @@ class DeepLinkDeliveryChannel implements ResultDeliveryChannel {
     required String sessionId,
     required DateTime expiresAt,
   }) async {
+    // Defesa em profundidade: os chamadores já checam expiração antes de
+    // invocar deliver(), mas a interface ResultDeliveryChannel promete essa
+    // checagem em todo implementador — sem isso aqui, uma mudança futura no
+    // corpo deste canal (ou um novo caller que confie só no contrato)
+    // ficaria sem essa proteção (achado do /code-review high, M9).
+    if (expiresAt.isBefore(DateTime.now())) {
+      return const DeliveryResult(outcome: DeliveryOutcome.timeout);
+    }
+
     final callbackUri = callbackBaseUri.replace(
       queryParameters: {
         ...callbackBaseUri.queryParameters,
