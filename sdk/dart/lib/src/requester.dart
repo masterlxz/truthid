@@ -5,8 +5,10 @@ import 'dart:typed_data';
 
 import 'internal/dead_drop_poll_client.dart';
 import 'internal/ecies.dart';
+import 'internal/kubo_publish_client.dart';
 import 'internal/lan_sweep_client.dart';
 import 'internal/pin_content_cipher.dart';
+import 'internal/vault_edit_content_cipher.dart';
 
 const _defaultTimeout = Duration(minutes: 3);
 const _lanRetryInterval = Duration(seconds: 2);
@@ -20,6 +22,17 @@ typedef LanSweepForResult = Future<Uint8List?> Function(String sessionId);
 /// Sweeps the LAN pushing [body] via `PUT` to a phone — see
 /// [sweepLanToPush] for the real implementation.
 typedef LanSweepToPush = Future<bool> Function(String sessionId, Uint8List body);
+
+/// Publishes a `vault-edit` proposal's encrypted content to a Kubo pinning
+/// node for cross-network delivery — see [publishVaultEditDeadDrop] for the
+/// real implementation. Best-effort, never throws (matches
+/// [publishVaultEditDeadDrop]'s own contract) — injectable so tests can
+/// substitute a fake without touching real HTTP.
+typedef KuboPublish = Future<void> Function(
+  String sessionId,
+  Uint8List content,
+  String endpointUrl,
+);
 
 /// Outcome of a cross-device request: either the phone answered before
 /// [PendingRequest.expiresAt], or it didn't.
@@ -87,31 +100,83 @@ class PinResult {
   });
 }
 
+/// A WebAuthn passkey to attach to a `vault-edit` proposal — same shape as
+/// the Vault's own `Passkey` record (`mobile/lib/services/vault_repository.dart`),
+/// field names snake_case to match the wire format every side of the
+/// protocol already agrees on.
+class VaultEditPasskey {
+  final String rpId;
+  final String credentialIdB64;
+  final String userHandleB64;
+  final String privateKeyHex;
+  final int signCount;
+  final int createdAt;
+
+  const VaultEditPasskey({
+    required this.rpId,
+    required this.credentialIdB64,
+    required this.userHandleB64,
+    required this.privateKeyHex,
+    required this.signCount,
+    required this.createdAt,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'rp_id': rpId,
+        'credential_id_b64': credentialIdB64,
+        'user_handle_b64': userHandleB64,
+        'private_key_hex': privateKeyHex,
+        'sign_count': signCount,
+        'created_at': createdAt,
+      };
+}
+
+/// A `vault-edit` proposal already in flight — the QR payload is ready to
+/// display immediately. Unlike [PendingRequest], there is no response phase
+/// at all: approval happens entirely on the Device, out of band. [delivered]
+/// only reports whether the encrypted proposal was successfully handed off
+/// over LAN before [expiresAt] — it says nothing about whether the Device
+/// went on to approve or reject it.
+class VaultEditPendingRequest {
+  final String qrPayload;
+  final String sessionId;
+  final DateTime expiresAt;
+  final Future<bool> delivered;
+
+  const VaultEditPendingRequest({
+    required this.qrPayload,
+    required this.sessionId,
+    required this.expiresAt,
+    required this.delivered,
+  });
+}
+
 /// The requester role — the opposite side of what the mobile app's 5
 /// cross-device approval screens do: build the QR payload for a
-/// `sign-message`/`sign-request`/`pin` request, sweep the LAN and/or poll a
-/// public IPFS gateway for the phone's encrypted response, decrypt it. No
-/// TruthID-operated server involved — same transport the mobile app itself
-/// uses (`RemoteSignerLanServer` + IPFS/IPNS dead-drop).
+/// `sign-message`/`sign-request`/`pin`/`vault-edit` request, sweep the LAN
+/// and/or poll a public IPFS gateway for the phone's encrypted response,
+/// decrypt it. No TruthID-operated server involved — same transport the
+/// mobile app itself uses (`RemoteSignerLanServer` + IPFS/IPNS dead-drop).
 ///
 /// Deep-link transport (same-device, no QR) is out of scope: it would
 /// require the host app to register its own URI scheme, which is
 /// platform-specific and outside what a pure-Dart package can automate.
-/// `vault-edit` (Vault credential proposals) is also out of scope for now —
-/// see the SDK docs.
 class TruthIDRequester {
   TruthIDRequester({
     DeadDropPollClient? deadDropClient,
     LanSweepForResult? lanSweepForResult,
     LanSweepToPush? lanSweepToPush,
+    KuboPublish? kuboPublish,
   })  : _deadDropClient = deadDropClient ?? DeadDropPollClient(),
         _lanSweepForResult = lanSweepForResult ?? sweepLanForResult,
-        _lanSweepToPush = lanSweepToPush ?? sweepLanToPush;
+        _lanSweepToPush = lanSweepToPush ?? sweepLanToPush,
+        _kuboPublish = kuboPublish ?? publishVaultEditDeadDrop;
 
   final EciesService _ecies = EciesService();
   final DeadDropPollClient _deadDropClient;
   final LanSweepForResult _lanSweepForResult;
   final LanSweepToPush _lanSweepToPush;
+  final KuboPublish _kuboPublish;
   final _rng = Random.secure();
 
   PendingRequest<SignMessageResult> signMessage({
@@ -238,6 +303,87 @@ class TruthIDRequester {
       sessionId: session.sessionId,
       expiresAt: session.expiresAt,
       result: resultFuture,
+    );
+  }
+
+  /// Proposes a new Vault credential (password and/or passkey) for the
+  /// Device to review and, if approved, persist and publish on-chain — the
+  /// requester-side counterpart of what the browser extension does when it
+  /// intercepts a signup form or `navigator.credentials.create()` (P10/P27).
+  ///
+  /// Structurally different from [signMessage]/[signRequest]/[pin]: there is
+  /// no response phase at all (see [VaultEditPendingRequest]) — approval
+  /// happens entirely on the Device, out of band. The encrypted proposal is
+  /// pushed over LAN (retried until some Device accepts it or [timeout]
+  /// passes) and, if [pinningEndpointUrl] is given, published in parallel to
+  /// a Kubo node for cross-network delivery (best-effort — a missing/
+  /// unreachable endpoint never fails the LAN push).
+  VaultEditPendingRequest vaultEdit({
+    required String appName,
+    required String site,
+    String url = '',
+    required String username,
+    String password = '',
+    String notes = '',
+    VaultEditPasskey? passkey,
+    String? pinningEndpointUrl,
+    Duration timeout = _defaultTimeout,
+  }) {
+    if (password.isEmpty && passkey == null) {
+      throw ArgumentError('at least one of password or passkey is required');
+    }
+
+    final session = _newSession(timeout);
+    final payload = {
+      'action': 'truthid-vault-edit',
+      'v': 1,
+      'sessionId': session.sessionId,
+      'ephemeralPubKey': session.publicKeyHex,
+      'expiresAt': session.expiresAtMs,
+      'appName': appName,
+    };
+
+    final proposal = {
+      'site': site,
+      'url': url,
+      'username': username,
+      'password': password,
+      'notes': notes,
+      if (passkey != null) 'passkey': passkey.toJson(),
+    };
+
+    final deliveredFuture = () async {
+      final contentKey = deriveVaultEditContentKey(session.sessionId);
+      final encryptedContent = await encryptVaultEditContent(
+        Uint8List.fromList(utf8.encode(jsonEncode(proposal))),
+        contentKey,
+      );
+
+      // Cross-network leg: fire-and-forget, in parallel with the QR/LAN
+      // push below — never gates `delivered` on it (it has no ack of its
+      // own, see publishVaultEditDeadDrop's doc comment).
+      if (pinningEndpointUrl != null) {
+        unawaited(
+          _kuboPublish(session.sessionId, encryptedContent, pinningEndpointUrl)
+              .catchError((_) {}),
+        );
+      }
+
+      // The Device only starts listening after it scans the QR, which can
+      // happen any time before expiresAt, so this has to keep retrying
+      // rather than sweep once — same reasoning as `pin`'s phase 1.
+      return _repeatUntilTrue(
+        () => _lanSweepToPush(session.sessionId, encryptedContent),
+        session.expiresAt,
+        _lanRetryInterval,
+      );
+    }();
+
+    return VaultEditPendingRequest(
+      qrPayload: jsonEncode(payload),
+      sessionId: session.sessionId,
+      expiresAt: session.expiresAt,
+      delivered: deliveredFuture,
     );
   }
 

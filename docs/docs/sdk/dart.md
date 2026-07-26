@@ -144,8 +144,8 @@ Request a signature, a transaction execution, or a file pin from the user's phon
 
 Each method returns a [`PendingRequest`](#pendingrequestt) **immediately** — the QR payload is ready to render right away; `result` is a `Future` that resolves once the phone answers or the request expires.
 
-:::info[Cross-device only, 3 flows]
-Deep-link transport (same device, no QR) is out of scope — it would require your app to register its own URI scheme, which is platform-specific and outside what a pure-Dart package can automate. `vault-edit` (proposing a new credential to the user's Vault) is also out of scope for now — see [What's not covered yet](#whats-not-covered-yet).
+:::info[Cross-device only, 4 flows]
+Deep-link transport (same device, no QR) is out of scope — it would require your app to register its own URI scheme, which is platform-specific and outside what a pure-Dart package can automate. See [What's not covered yet](#whats-not-covered-yet).
 :::
 
 ### `signMessage({appName, purpose, timeout})`
@@ -226,10 +226,47 @@ if (result.delivered && result.data!.status == 'pinned') {
 }
 ```
 
+### `vaultEdit({appName, site, url, username, password, notes, passkey, pinningEndpointUrl, timeout})`
+
+Proposes a new Vault credential (a password, a passkey, or both) for the user's Device to review and, if approved, persist and publish on-chain — the requester-side counterpart of what the TruthID browser extension does when it sees a signup form or a new `navigator.credentials.create()`. Use this for password-manager-style integrations: your app captured or generated a credential and wants the user's Vault to remember it.
+
+Structurally different from the other three flows: there is **no response phase** at all — approval happens entirely on the Device, out of band. [`VaultEditPendingRequest.delivered`](#vaulteditpendingrequest) only reports whether the encrypted proposal made it to a Device before `timeout` — it says nothing about whether the Device went on to approve or reject it.
+
+The encrypted proposal is pushed over the LAN (retried until some Device accepts it or `timeout` passes, the same way `pin`'s content push works) and, if `pinningEndpointUrl` is given, published in parallel to a [Kubo](https://docs.ipfs.tech/install/ipfs-desktop/) node for cross-network delivery — best-effort, a missing or unreachable endpoint never fails the LAN push.
+
+| Name | Type | Required | Description |
+|------|------|----------|--------------|
+| `appName` | `String` | Yes | Shown to the user on the approval screen |
+| `site` | `String` | Yes | Hostname/site the credential belongs to |
+| `url` | `String` | No — default `''` | Full origin URL |
+| `username` | `String` | Yes | |
+| `password` | `String` | No — default `''` | At least one of `password`/`passkey` is required |
+| `notes` | `String` | No — default `''` | |
+| `passkey` | [`VaultEditPasskey?`](#vaulteditpasskey) | No | At least one of `password`/`passkey` is required |
+| `pinningEndpointUrl` | `String?` | No | A Kubo node's base URL (e.g. `http://127.0.0.1:5001`) — enables the cross-network dead-drop leg. Without it, delivery is LAN-only |
+| `timeout` | `Duration` | No — default 3 minutes | |
+
+**Returns** [`VaultEditPendingRequest`](#vaulteditpendingrequest)
+
+```dart
+final pending = requester.vaultEdit(
+  appName: 'My App',
+  site: 'example.com',
+  url: 'https://example.com',
+  username: 'alice',
+  password: generatedPassword,
+);
+showQrCode(pending.qrPayload);
+
+final delivered = await pending.delivered;
+if (delivered) {
+  print('Proposal handed off — waiting on the user to approve on their Device');
+}
+```
+
 ### What's not covered yet
 
-- **Deep-link (same-device) transport** — requires the host app to register its own URI scheme.
-- **`vault-edit`** (proposing a new Vault credential) — more specialized (password-manager-style integrations) and has no response phase at all. May be added in a future release.
+- **Deep-link (same-device) transport** — requires the host app to register its own URI scheme, platform-specific and outside what a pure-Dart package can automate.
 
 ## Types
 
@@ -354,6 +391,30 @@ class PinResult {
   final List<String>? providersOk;
   final List<String>? providersFailed;
   final String? error;
+}
+```
+
+#### `VaultEditPasskey`
+
+```dart
+class VaultEditPasskey {
+  final String rpId;
+  final String credentialIdB64;
+  final String userHandleB64;
+  final String privateKeyHex;
+  final int signCount;
+  final int createdAt;
+}
+```
+
+#### `VaultEditPendingRequest`
+
+```dart
+class VaultEditPendingRequest {
+  final String qrPayload;   // JSON, ready to render as a QR code
+  final String sessionId;
+  final DateTime expiresAt;
+  final Future<bool> delivered; // no response phase — see vaultEdit() above
 }
 ```
 

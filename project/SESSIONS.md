@@ -6246,3 +6246,53 @@ Fase 2 do passkey também teve até ganhar sessão própria (Sessões 135-136).
 (baixa prioridade, sem prazo). `ROADMAP.md` — seção do item 6 do backlog corrigida pra refletir o
 fechamento real da fatia Mobile (Sessões 135-136) e registrar a senha nova via extensão.
 
+### Sessão 165 — 2026-07-26: P27 fechado — `vault-edit` no SDK Dart (LAN + dead-drop completo)
+
+Retomada do P27/P28 (deixados de fora na Sessão 161 por decisão explícita). Escopo decidido com o
+dono do projeto via `AskUserQuestion`: P27 com paridade completa (LAN + dead-drop, não só LAN-only)
+mesmo custando um cliente Kubo novo do zero; P28 (deep link) pulado — exploração confirmou que hoje
+nem o Mobile aceita deep link pra `pin`/`vault-edit` (só `sign-message`/`sign-request` têm tela pra
+isso) e um pacote Dart puro não consegue automatizar o registro de URI scheme do app hospedeiro,
+mesma decisão já tomada na Sessão 161.
+
+**Achado estrutural na exploração**: `vaultEdit` não é uma variante de `pin` — `pin` tem 2 fases
+(push do conteúdo, depois espera resposta assinada), `vault-edit` só tem a primeira (aprovação
+acontece inteiramente no Device, fora de banda, sem nenhum retorno pro requisitante). Por isso o
+retorno é um tipo novo, `VaultEditPendingRequest` (`delivered: Future<bool>`), não
+`PendingRequest<T>`.
+
+**Implementação**:
+- `sdk/dart/lib/src/internal/vault_edit_content_cipher.dart` (novo) — mirror de
+  `pin_content_cipher.dart`, salt `'TruthID Vault Edit Content'` (domain-separado do `/pin`).
+- `sdk/dart/lib/src/internal/vault_edit_dead_drop_key.dart` (novo) — deriva o par Ed25519
+  **completo** (não só o nome IPNS público que `ipns_key.dart` já calculava) a partir do
+  `sessionId`, salt `'TruthID Vault Edit IPNS'` — papel invertido do namespace de leitura: aqui é o
+  requisitante quem publica (tem o conteúdo pronto assim que o QR existe), não o Mobile.
+  `marshalKeyProtobuf`/`computeIpnsName` de `ipns_key.dart` promovidos de privados a públicos e
+  reaproveitados, em vez de duplicar a lógica de protobuf/CID/base36. Vetor cross-language (mesmo
+  `sessionIdHex` de `extension/src/vaultEdit/deadDropIpnsKey.test.ts`) bateu byte a byte de
+  primeira.
+- `sdk/dart/lib/src/internal/kubo_publish_client.dart` (novo) — primeiro cliente Kubo do SDK Dart,
+  via `dart:io HttpClient` puro (sem nova dependência): `add` (multipart manual — o projeto não usa
+  `package:http`), `key/import`, `name/publish`, `key/rm` em `finally`, mirror de
+  `extension/src/vaultEdit/deadDropPublish.ts`. Função `publishVaultEditDeadDrop` nunca lança
+  (best-effort) — mesma garantia que `sweepLanToPush`/`DeadDropPollClient.tryFetch` já davam.
+- `requester.dart` — novo `TruthIDRequester.vaultEdit({appName, site, url, username, password,
+  notes, passkey, pinningEndpointUrl, timeout})`, `VaultEditPasskey`, `VaultEditPendingRequest`,
+  typedef `KuboPublish` injetável no construtor (mesmo padrão de `LanSweepForResult`/
+  `LanSweepToPush`). Valida `ArgumentError` se nem senha nem passkey forem passados (mesma regra já
+  aplicada em `desktop/src-tauri/src/vault_edit.rs`). O publish no Kubo roda em paralelo
+  (fire-and-forget) com o push por LAN — uma falha ali nunca afeta `delivered`.
+
+**Testes**: `vault_edit_content_cipher_test.dart` (determinismo, domain separation vs `/pin`,
+round-trip AES-GCM manual), `vault_edit_dead_drop_key_test.dart` (vetor cross-language, mesmo
+padrão de `ipns_key_test.dart`), `requester/vault_edit_test.dart` (push por LAN com conteúdo
+decifrável, `delivered=false` sem sucesso de LAN, publish no Kubo chamado só quando
+`pinningEndpointUrl` é passado, falha do Kubo não afeta `delivered`, proposta só-passkey aceita,
+`ArgumentError` sem senha nem passkey). `dart test` 69/69 (17 novos), `dart analyze` limpo.
+
+**Documentação**: nova seção `vaultEdit(...)` em `docs/docs/sdk/dart.md` (parâmetros, exemplo,
+tipos `VaultEditPasskey`/`VaultEditPendingRequest`), removida a menção a `vault-edit` como "fora de
+escopo". Build do Docusaurus validado. `PENDING.md`: P27 movido pra "Resolvidas"; P28 mantido, nota
+de reavaliação adicionada.
+

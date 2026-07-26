@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-07-26 (Sessão 164 — P10 fechado: senha nova via extensão implementada, doc da fatia Mobile corrigida; batch sync separado como P29)
+> Última atualização: 2026-07-26 (Sessão 165 — P27 fechado: `vaultEdit` no SDK Dart, LAN + dead-drop completo; P28 reavaliado e mantido de fora)
 
 ---
 
@@ -38,8 +38,7 @@
 | P11 | **`/truthid/v1/pin`** — endpoint para apps terceiros usarem os providers de pin do TruthID. Modelo de consentimento em aberto. | `ROADMAP.md` (Sessão 106, item 2) | 🟡 Baixa |
 | P12 | **Dead-drop IPFS/IPNS (fatia 2) do cross-device** — transporte para quando LAN não funciona. /sign-message e /sign-request via dead-drop. | `ROADMAP.md` (Sessão 106, item 3) | 🟡 Baixa |
 | P13 | **Callback opcional no login** — tornar `callbackUrl` opcional no QR, permitindo polling on-chain como alternativa. Design fechado, não implementado. | `ROADMAP.md` (Callback opcional) | 🟡 Baixa |
-| P27 | **SDK Dart: `vault-edit` no `TruthIDRequester`** — os 3 fluxos genéricos (`sign-message`/`sign-request`/`pin`) foram implementados na Sessão 161; `vault-edit` (propor credencial nova pro Vault) ficou de fora por decisão explícita — mais nichado, sem fase de resposta, referência completa já existe do lado requisitante em TypeScript (`extension/src/vaultEdit/*`) pra portar quando houver caso de uso concreto pedindo. | `SESSIONS.md` (Sessão 161) | 🟡 Baixa |
-| P28 | **SDK Dart: transporte deep link no `TruthIDRequester`** — só cross-device (QR) implementado. Deep link (mesmo aparelho) exigiria o app host registrar seu próprio esquema de URI, específico de plataforma — decidido deixar de fora de um pacote Dart puro por ora. | `SESSIONS.md` (Sessão 161) | 🟡 Baixa |
+| P28 | **SDK Dart: transporte deep link no `TruthIDRequester`** — só cross-device (QR) implementado. Deep link (mesmo aparelho) exigiria o app host registrar seu próprio esquema de URI, específico de plataforma — decidido deixar de fora de um pacote Dart puro por ora. Reavaliado na Sessão 165: hoje nem o Mobile aceita deep link pra `pin`/`vault-edit` (só `sign-message`/`sign-request`), e um pacote Dart puro não consegue automatizar o registro de URI scheme do app hospedeiro nem depende de `url_launcher` — decisão confirmada, segue de fora. | `SESSIONS.md` (Sessão 161, reavaliado 165) | 🟡 Baixa |
 
 ### Pendências de Arquitetura / Decisões em Aberto
 
@@ -198,6 +197,12 @@
 | ID | Item | Resolvida em |
 |---|---|---|
 | ~~P10~~ | ~~Documentação corrigida: a fatia Mobile já tinha fechado 100% em hardware real nas Sessões 135-136 (`PENDING.md`/`ROADMAP.md` nunca foram atualizados depois disso). **Escopo real que faltava — senha nova via extensão — implementado nesta sessão**: novo `extension/src/autofill/newCredentialCapture.ts` detecta submit de formulário com usuário+senha e propõe a credencial pro Device aprovar (mesma heurística do "Salvar senha?" nativo dos navegadores — propõe quando não há entrada existente com esse username exato pro hostname, evita distinguir estruturalmente cadastro de login). Toda a infra downstream (`pendingEdits.ts`, `cipher.ts`, `mobileDelivery.ts`/`desktopDelivery.ts`, `vault_edit_approval_screen.dart`/`VaultEditApprovalModal.tsx`, `vault_edit.rs`) já era genérica — zero mudança fora da extensão. Batch sync (sub-item 2.1 do roadmap) segue de fora, ver P29~~ | **Sessão 164** |
+
+### P27 — `vault-edit` no SDK Dart (Sessão 165)
+
+| ID | Item | Resolvida em |
+|---|---|---|
+| ~~P27~~ | ~~Novo método `TruthIDRequester.vaultEdit(...)` — LAN + dead-drop cross-network completo, paridade com o requisitante de referência em TypeScript (`extension/src/vaultEdit/*`). Sem fase de resposta (estrutura diferente de `signMessage`/`signRequest`/`pin`), retorna `VaultEditPendingRequest` (`delivered: Future<bool>`) em vez de `PendingRequest<T>`. Novo `internal/vault_edit_content_cipher.dart` (cifra AES-GCM/HKDF, salt domain-separado), `internal/vault_edit_dead_drop_key.dart` (deriva o par Ed25519 completo, não só o nome IPNS público — vetor cross-language TS↔Dart validado byte a byte), `internal/kubo_publish_client.dart` (cliente HTTP Kubo novo via `dart:io`, add/key-import/name-publish/key-rm, best-effort — primeiro cliente Kubo do SDK Dart). `marshalKeyProtobuf`/`computeIpnsName` de `ipns_key.dart` promovidos a públicos e reaproveitados. `dart test` 69/69 (17 novos), `dart analyze` limpo, build do Docusaurus validado~~ | **Sessão 165** |
 
 ### Bugs do `/code-review max` (Desktop) — 52/52
 

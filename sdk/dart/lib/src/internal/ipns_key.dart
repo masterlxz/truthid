@@ -33,15 +33,19 @@ Future<String> deriveDeadDropIpnsName(String sessionIdHex) async {
 
   final keyPair = await crypt.Ed25519().newKeyPairFromSeed(seed);
   final publicKey = await keyPair.extractPublicKey();
-  final publicKeyProtobuf = _marshalKeyProtobuf(Uint8List.fromList(publicKey.bytes));
-  return _computeIpnsName(publicKeyProtobuf);
+  final publicKeyProtobuf = marshalKeyProtobuf(Uint8List.fromList(publicKey.bytes));
+  return computeIpnsName(publicKeyProtobuf);
 }
 
 // Two-field protobuf message (`Type` varint, `Data` bytes) — same as the
 // libp2p `crypto.proto` PublicKey message. Not a general protobuf encoder:
 // only covers this concrete case (Type=Ed25519, Data always < 128 bytes, so
 // tag and length each fit in a single varint byte).
-Uint8List _marshalKeyProtobuf(Uint8List data) {
+// Public — reused by vault_edit_dead_drop_key.dart, which needs the same
+// protobuf framing for both the public key (to compute the IPNS name) and
+// the private key (to hand to Kubo's key/import, a need this file never had
+// since the requester only ever computes the *public* dead-drop name here).
+Uint8List marshalKeyProtobuf(Uint8List data) {
   if (data.length >= 128) {
     throw ArgumentError('data too long for single-byte varint length');
   }
@@ -57,7 +61,9 @@ Uint8List _marshalKeyProtobuf(Uint8List data) {
 // fits the 42-byte libp2p peer-id limit) → CIDv1 with the `libp2p-key` codec
 // (0x72) → base36-lower multibase (`k` prefix) — the format Kubo uses today
 // by default for IPNS names.
-String _computeIpnsName(Uint8List publicKeyProtobuf) {
+// Public — reused by vault_edit_dead_drop_key.dart (same CID/base36 encoding,
+// only the HKDF salt/info that produces the underlying keypair differs).
+String computeIpnsName(Uint8List publicKeyProtobuf) {
   if (publicKeyProtobuf.length > 42) {
     throw ArgumentError(
       'public key protobuf too long for identity multihash '
