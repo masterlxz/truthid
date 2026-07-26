@@ -55,10 +55,20 @@ class ApprovalScreen extends StatefulWidget {
 }
 
 class _ApprovalScreenState extends State<ApprovalScreen> {
+  // Mesmo default de `ttlMs` usado por `verifyAuthResponse` no SDK
+  // (`sdk/typescript/src/client.ts`, `sdk/python/truthid/client.py`). O
+  // challenge não carrega seu próprio `expiresAt` (diferente dos outros 4
+  // fluxos de aprovação) — só `issuedAt` — porque quem decide o TTL de
+  // verdade é o backend do site na hora de verificar. Aplicamos o mesmo
+  // default aqui como defesa em profundidade: sem isso, um QR de login
+  // vazado podia ser aprovado a qualquer momento sem nenhum aviso local.
+  static const _challengeTtl = Duration(seconds: 30);
+
   late _Status _status;
   String _statusMsg = '';
   Map<String, dynamic>? _challenge;
   String? _callbackUrl;
+  DateTime? _issuedAt;
   bool _responded = false; // impede enviar duas respostas
   String? _identityId;
   String? _username;
@@ -99,8 +109,23 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
       return;
     }
 
+    final issuedAtMs = challenge['issuedAt'];
+    if (issuedAtMs is! int) {
+      _status = _Status.error;
+      _statusMsg = 'Invalid QR: missing issuedAt.';
+      return;
+    }
+    final issuedAt = DateTime.fromMillisecondsSinceEpoch(issuedAtMs);
+    if (DateTime.now().difference(issuedAt) > _challengeTtl) {
+      _status = _Status.error;
+      _statusMsg =
+          'This QR code has expired — ask the site for a new login QR code.';
+      return;
+    }
+
     _challenge = challenge;
     _callbackUrl = callbackUrl;
+    _issuedAt = issuedAt;
     _status = _Status.challenge;
 
     _localStorageService.getPairedIdentityId().then((id) {
@@ -135,6 +160,14 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
 
   Future<void> _approve() async {
     if (_challenge == null || _responded) return;
+    // Re-checa a expiração aqui também — pode ter passado tempo entre o scan
+    // do QR (initState) e o usuário efetivamente tocar em "Approve".
+    if (DateTime.now().difference(_issuedAt!) > _challengeTtl) {
+      _setError(
+        'This QR code has expired — go back to the app and scan a fresh one.',
+      );
+      return;
+    }
     _responded = true;
 
     final nonce = _challenge!['nonce'] as String;

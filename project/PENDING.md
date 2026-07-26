@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-07-25 (Sessão 152 — M1 corrigido)
+> Última atualização: 2026-07-25 (Sessão 153 — M2 corrigido)
 
 ---
 
@@ -42,7 +42,6 @@
 
 | ID | Item | Onde se originou | Prioridade |
 |---|---|---|---|
-| M2 | **Login sem checagem de `expiresAt`** — `approval_screen.dart:91` é o único dos 5 fluxos de aprovação que não valida expiração do challenge; QR de login vazado pode ser aprovado depois. | `SESSIONS.md` (Sessão 151) | 🔴 Alta |
 | M3 | **TOCTOU em `markPublished`** — `vault_repository.dart:577` recarrega estado ao vivo em vez de snapshot do publicado; edição durante a janela de publish (~60s) é marcada como publicada sem ir on-chain. | `SESSIONS.md` (Sessão 151) | 🟠 Média |
 | M4 | **Future rejeitada cacheada pra sempre** — `device_key_service.dart:26`, falha transiente na 1ª leitura da secure storage quebra toda assinatura até reiniciar o app. | `SESSIONS.md` (Sessão 151) | 🟠 Média |
 | M5 | **Sem guarda de reentrância — sign_request** — `sign_request_approval_screen.dart:339`, duplo toque pode submeter 2 UserOperations. | `SESSIONS.md` (Sessão 151) | 🟠 Média |
@@ -166,6 +165,7 @@
 | ID | Achado | Resolvida em |
 |---|---|---|
 | ~~M1~~ | ~~Deep link/QR bypassava `AppLockService` — telas de aprovação empurradas por cima do bloqueio~~ | **Sessão 152** |
+| ~~M2~~ | ~~Login sem checagem de `expiresAt` — `approval_screen.dart` não validava expiração do challenge~~ | **Sessão 153** |
 
 ### Bugs do `/code-review max` (Desktop) — 52/52
 

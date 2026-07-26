@@ -5665,3 +5665,40 @@ de widget); fica como follow-up opcional, não bloqueante.
 **Próximo passo**: M2 (login sem checagem de `expiresAt`) é o outro achado de segurança da
 Sessão 151, ainda em aberto — depois os 7 achados de correção/eficiência restantes (M3-M10).
 
+---
+
+### Sessão 153 — 2026-07-25: M2 corrigido — login agora valida expiração do challenge
+
+**Achado M2 (Sessão 151)**: `ApprovalScreen` (fluxo de login) era o único dos 5 fluxos de
+aprovação que não validava expiração do challenge antes de deixar o usuário aprovar — QR de
+login vazado (screenshot, shoulder-surfing) podia ser aprovado a qualquer momento depois de
+gerado, sem nenhum aviso local no device.
+
+**Contexto que diferencia este caso dos outros 4 fluxos**: `AuthChallenge` (criado pelo SDK do
+lado do site, `sdk/typescript/src/types.ts`/`sdk/python/truthid/types.py`) só carrega
+`issuedAt`, nunca um `expiresAt` explícito — o TTL de verdade (`ttlMs`, default **30_000ms**)
+só existe no lado do site, na hora de chamar `verifyAuthResponse` (`sdk/typescript/src/client.ts`,
+espelhado em Python). Ou seja, já existia uma proteção contra replay, mas só server-side e
+opcional (depende do site chamar `verifyAuthResponse` com o `ttlMs` certo) — o mobile nunca
+validava nada por conta própria.
+
+**Fix**: `approval_screen.dart` ganhou o mesmo default de 30s como TTL client-side (defesa em
+profundidade, não uma fonte de verdade nova):
+- `initState` agora lê `challenge['issuedAt']` e rejeita (`'Invalid QR: missing issuedAt.'`) se
+  ausente, ou (`'This QR code has expired...'`) se mais velho que 30s — mesmo padrão de
+  validação já usado pelas outras 4 telas (`sign_request_approval_screen.dart`,
+  `pin_approval_screen.dart`, `vault_edit_approval_screen.dart`).
+- `_approve()` re-checa a expiração de novo antes de assinar — cobre a janela entre o scan do
+  QR e o usuário efetivamente tocar em "Approve", mesmo padrão de
+  `sign_request_approval_screen.dart`.
+
+**Testes**: `approval_screen_test.dart` — payloads fixos que usavam datas hardcoded no passado
+(`DateTime(2026, 6, 28, 12)`, `DateTime(2026)`, `issuedAt: 0`) foram atualizados pra
+`DateTime.now()`, já que a validação nova os teria rejeitado por engano. 2 testes novos:
+`issuedAt` ausente → erro; challenge com 31s de idade → erro contendo "expired". `flutter test`
+13/13 no arquivo (11 originais + 2 novos), `flutter analyze` limpo (14 infos/warnings
+pré-existentes, nenhum novo).
+
+**Próximo passo**: M2 fecha o segundo e último achado de segurança da Sessão 151. Restam os 7
+achados de correção/eficiência (M3-M10) antes de fechar o item 5 do backlog do mobile.
+

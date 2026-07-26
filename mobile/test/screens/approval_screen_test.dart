@@ -89,7 +89,7 @@ void main() {
     'challenge': {
       'nonce': 'test-nonce-123',
       'origin': 'example.com',
-      'issuedAt': DateTime(2026, 6, 28, 12).millisecondsSinceEpoch,
+      'issuedAt': DateTime.now().millisecondsSinceEpoch,
     },
     'callbackUrl': 'https://example.com/auth/verify',
   };
@@ -104,7 +104,11 @@ void main() {
 
     testWidgets('shows challenge UI when callbackUrl is missing', (tester) async {
       await tester.pumpWidget(buildScreen({
-        'challenge': {'nonce': 'n', 'origin': 'x', 'issuedAt': 0},
+        'challenge': {
+          'nonce': 'n',
+          'origin': 'x',
+          'issuedAt': DateTime.now().millisecondsSinceEpoch,
+        },
       }));
 
       expect(find.text('Login request received'), findsOneWidget);
@@ -120,6 +124,30 @@ void main() {
 
       expect(find.byIcon(Icons.error_outline), findsOneWidget);
       expect(find.textContaining('https'), findsOneWidget);
+    });
+
+    testWidgets('shows error when issuedAt is missing', (tester) async {
+      await tester.pumpWidget(buildScreen({
+        'challenge': {'nonce': 'n', 'origin': 'x'},
+      }));
+
+      expect(find.byIcon(Icons.error_outline), findsOneWidget);
+      expect(find.textContaining('Invalid QR'), findsOneWidget);
+    });
+
+    testWidgets('shows error when the challenge has expired', (tester) async {
+      await tester.pumpWidget(buildScreen({
+        'challenge': {
+          'nonce': 'n',
+          'origin': 'x',
+          'issuedAt': DateTime.now()
+              .subtract(const Duration(seconds: 31))
+              .millisecondsSinceEpoch,
+        },
+      }));
+
+      expect(find.byIcon(Icons.error_outline), findsOneWidget);
+      expect(find.textContaining('expired'), findsOneWidget);
     });
   });
 
@@ -176,7 +204,11 @@ void main() {
         'creates on-chain session without posting when callbackUrl is absent',
         (tester) async {
       final payloadWithoutCallback = {
-        'challenge': {'nonce': 'test-nonce-123', 'origin': 'example.com', 'issuedAt': DateTime(2026).millisecondsSinceEpoch},
+        'challenge': {
+          'nonce': 'test-nonce-123',
+          'origin': 'example.com',
+          'issuedAt': DateTime.now().millisecondsSinceEpoch,
+        },
       };
 
       await tester.pumpWidget(buildScreen(payloadWithoutCallback));
