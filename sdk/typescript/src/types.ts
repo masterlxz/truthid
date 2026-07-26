@@ -19,6 +19,10 @@ export interface AuthResponse {
   nonce: string;
   signature: string;     // secp256k1 signature in hex ("0x...")
   deviceAddress: string; // Ethereum address derived from the device key
+  // personal_sign over keccak256(nonce) — the mobile always sends this alongside
+  // the login signature. Optional here only because a hand-built AuthResponse
+  // (e.g. in tests) might omit it; the real mobile client never does.
+  sessionSignature?: string;
 }
 
 export interface VerifyAuthParams {
@@ -48,20 +52,4 @@ export interface DeviceStatus {
   label?: string;
   identityId?: bigint;
   addedAt?: Date;
-}
-
-export interface RegisterSessionParams {
-  nonce: string;
-  identityId: bigint;
-  devicePubKey: string;
-  sessionSignature: string; // 65-byte hex from personal_sign over the session hash
-  relayerPrivateKey: `0x${string}`;
-}
-
-export interface RegisterSessionResult {
-  // Absent when alreadyRegistered is true — no transaction was submitted
-  txHash?: `0x${string}`;
-  sessionHash: `0x${string}`; // keccak256(nonce) — the on-chain session identifier
-  // True when the mobile app had already created this session on-chain itself
-  alreadyRegistered: boolean;
 }

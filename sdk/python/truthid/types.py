@@ -45,10 +45,3 @@ class DeviceStatus:
     label: Optional[str] = None
     identity_id: Optional[int] = None
     added_at: Optional[datetime] = None
-
-
-@dataclass
-class RegisterSessionResult:
-    tx_hash: Optional[str]      # "0x..." — None when already_registered is True
-    session_hash: str           # "0x..." — keccak256(nonce), the on-chain session identifier
-    already_registered: bool    # True when the mobile app had already created this session on-chain itself

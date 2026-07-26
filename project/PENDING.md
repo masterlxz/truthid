@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-07-25 (Sessão 159 — M10 corrigido, item 5 do backlog do mobile 100% fechado)
+> Última atualização: 2026-07-26 (Sessão 160 — SDKs atualizados: relayer removido, computeSmartAccountAddress portado)
 
 ---
 
@@ -16,6 +16,7 @@
 |---|---|---|---|
 | P1 | **Deploy em cascata (DeviceRegistry débito #52)** — `DeviceRegistry.sol` alterado (re-registro após revogação). Exige redeploy de 5 contratos em Sepolia e Mainnet. ⚠️ Há identidade real em uso na Mainnet desde a Sessão 116 — avaliar migração antes de redeployar. | `ARCHITECTURE.md` (débito #52, Pendências de Deploy #5) | 🔴 Alta |
 | P2 | **Deploy do RecoveryManager corrigido** (C1 — reentrância) — código corrigido na Sessão 150. Aguardando cascata junto com outros contratos. | `SESSIONS.md` (Sessão 150) | 🔴 Alta |
+| P26 | **Assinatura de sessão desalinhada com o fix C4 (domain separation)** — `SessionRegistry.createSession` já verifica `keccak256(chainId, address(this), hash)` no código-fonte (fix C4, ainda não redeployado — ver P1/P2), mas nem `mobile/lib/services/device_key_service.dart` (`signHash`) nem os 3 SDKs (`registerSession`/`register_session`, TS/Python/Ruby) assinam com esse domain separation — todos ainda fazem `personal_sign(hash)` puro. Não é bug ativo hoje (bytecode em produção é o antigo), mas quebra tudo no dia do redeploy se ninguém atualizar os dois lados (mobile + SDKs) junto. Achado durante a atualização dos SDKs (Sessão 160), decisão explícita do dono do projeto foi só registrar, não mexer agora — fora do escopo daquela sessão e mexe em contratos+mobile, não só SDK. | `SESSIONS.md` (Sessão 160) | 🟠 Média |
 
 ### Validações em Hardware Real
 
@@ -167,6 +168,17 @@
 | ~~M8~~ | ~~Bug de username reintroduzido — `devices_screen.dart` reimplementava inline em vez de usar `resolvePairedUsername()`, só resolvia na auto-descoberta~~ | **Sessão 157** |
 | ~~M9~~ | ~~`expiresAt` ignorado no canal de deep link — `DeepLinkDeliveryChannel.deliver()` recebia o parâmetro mas nunca checava, mascarado pelos chamadores~~ | **Sessão 158** |
 | ~~M10~~ | ~~`IndexedStack` construía as 4 abas de uma vez no cold start — Devices/Sessions/Wallet/Vault cada uma chamando `getDevice` redundante pro mesmo endereço~~ | **Sessão 159** |
+
+### Atualização dos SDKs (TypeScript, Python, Ruby — Sessão 160)
+
+| ID | Item | Resolvida em |
+|---|---|---|
+| ~~SDK1~~ | ~~`registerSession`/`register_session` (relayer server-side) removido dos 3 SDKs — morto na prática desde que o mobile passou a criar a sessão on-chain sozinho via UserOp (14.9.5)~~ | **Sessão 160** |
+| ~~SDK2~~ | ~~`AuthResponse` do TS sem `sessionSignature` — inconsistente com Python/Ruby e com o que o mobile de fato envia~~ | **Sessão 160** |
+| ~~SDK3~~ | ~~`computeSmartAccountAddress`/`compute_smart_account_address` portado do Desktop pros 3 SDKs — `docs/docs/smart-account.mdx` já prometia essa função no SDK TS, mas ela nunca existiu lá~~ | **Sessão 160** |
+| ~~SDK4~~ | ~~Achado real no caminho: `verify_auth_response` do SDK Ruby comparava a chave pública recuperada (`Eth::Signature.personal_recover`, 65 bytes) direto contra um endereço (20 bytes) — nunca batia, rejeitando toda assinatura válida. Corrigido com `Eth::Util.public_key_to_address`~~ | **Sessão 160** |
+| ~~SDK5~~ | ~~Nenhum dos 3 SDKs tinha suíte de testes — adicionados vitest (TS), pytest (Python) e rspec (Ruby), incluindo um vetor fixo de paridade cross-linguagem pra `computeSmartAccountAddress`~~ | **Sessão 160** |
+| ~~SDK6~~ | ~~Documentação (README, 3 páginas de SDK, quickstart, exemplo) reescrita — narrativa de relayer wallet removida, versões fictícias ("mobile app v14.9.5+"/"v1.1+") removidas~~ | **Sessão 160** |
 
 ### Bugs do `/code-review max` (Desktop) — 52/52
 

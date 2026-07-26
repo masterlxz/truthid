@@ -163,6 +163,33 @@ Looks up a device's current status on the blockchain.
 status = truthid.check_device_status(device_pub_key)
 ```
 
+---
+
+### `compute_smart_account_address(ledger_address, index=0)`
+
+Predicts a user's smart account (controller) address via `CREATE2` — pure local computation, no RPC call and no server involved. Useful for showing a deposit address, or checking a balance, before the account has ever been used on-chain.
+
+**Parameters**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `ledger_address` | `str` | The owning hardware wallet / EOA address |
+| `index` *(optional)* | `int` | Account index, for multiple smart accounts per owner. Default: `0` |
+
+**Returns** `str` — the checksummed smart account address.
+
+```python
+smart_account = truthid.compute_smart_account_address(ledger_address)
+```
+
+A standalone function is also exported for when you don't need a full client instance:
+
+```python
+from truthid import compute_smart_account_address
+
+smart_account = compute_smart_account_address(ledger_address, network="base-mainnet")
+```
+
 ## Types
 
 All of the following are exported from `truthid`. `AuthChallenge` and `AuthResponse` use **camelCase** field names because they mirror the JSON shape the mobile app sends and signs directly — every other type follows normal Python snake_case, since it never crosses the wire.
@@ -185,8 +212,9 @@ class AuthChallenge:
 class AuthResponse:
     approved: bool
     nonce: str
-    signature: str      # secp256k1 signature, hex ("0x...")
-    deviceAddress: str  # Ethereum address of the device key
+    signature: str                          # secp256k1 signature, hex ("0x...")
+    deviceAddress: str                      # Ethereum address of the device key
+    sessionSignature: Optional[str] = None  # personal_sign over keccak256(nonce) — always sent alongside signature
 ```
 
 #### `VerifyAuthResult`
@@ -261,59 +289,20 @@ truthid = TruthIDClient(network="base-mainnet", rpc_url="https://your-private-rp
 
 Contract addresses for both networks are in [Smart contracts](/docs/intro#smart-contracts-base-mainnet-chain-8453).
 
-## Session registration
+## Session visibility — nothing to do
 
-### `register_session(...)`
+Completed logins already show up in the user's TruthID mobile/desktop apps and can be individually revoked from there. The phone registers the session on-chain itself (via a UserOperation) before it ever calls your callback URL — there's no separate registration step for you to call.
 
-Registers a completed login session on-chain so it appears in the user's TruthID desktop app and can be individually revoked. Optional — auth still works without it — but enables the user to see and revoke active sessions.
-
-**Why a relayer?** The mobile device key never holds ETH — it only signs messages. Gas is paid by a server-side relayer wallet you fund. On Base this costs fractions of a cent per session.
-
-**Parameters**
-
-| Name | Type | Description |
-|------|------|-------------|
-| `nonce` | `str` | The nonce from the original `AuthChallenge` |
-| `identity_id` | `int` | From `verify_auth_response` result |
-| `device_pub_key` | `str` | From `verify_auth_response` result |
-| `session_signature` | `str` | The session signature from the phone's response (`sessionSignature`) |
-| `relayer_private_key` | `str` | Private key (`"0x..."`) of the funded relayer wallet |
-
-**Returns** `RegisterSessionResult(tx_hash, session_hash, already_registered)`
+If you want to double-check a session landed on-chain, derive its hash from the nonce and call `verify_session`:
 
 ```python
-# After verify_auth_response succeeds:
-session_signature = response_body.get("sessionSignature")
-if session_signature and os.environ.get("RELAYER_PRIVATE_KEY"):
-    try:
-        result = truthid.register_session(
-            nonce=challenge.nonce,
-            identity_id=auth_result.identity_id,
-            device_pub_key=auth_result.device_address,
-            session_signature=session_signature,
-            relayer_private_key=os.environ["RELAYER_PRIVATE_KEY"],
-        )
-        label = "Session already on-chain:" if result.already_registered else "Session registered on-chain:"
-        print(label, result.session_hash)
-    except Exception as e:
-        print("Session registration failed (login still succeeded):", e)
+from web3 import Web3
+
+session_hash = "0x" + Web3.keccak(text=response.nonce).hex()
+session = truthid.verify_session(session_hash)
+if session.exists and not session.revoked:
+    pass  # confirmed on-chain
 ```
-
-:::tip[Non-blocking]
-`register_session` failing does not affect the login — wrap it in a try/except and keep it out of the response path. If the relayer runs out of ETH, auth continues normally.
-:::
-
-:::info[Idempotent]
-TruthID mobile app v14.9.5+ creates the session on-chain itself (via a UserOperation) before it ever calls your callback. `register_session` detects this and returns `already_registered=True` with `tx_hash=None` without submitting a transaction — no relayer gas spent, no `SessionAlreadyExists` revert.
-:::
-
-**Setup** — fund a relayer wallet with a small amount of ETH on Base (0.01 ETH covers thousands of sessions):
-
-```bash
-RELAYER_PRIVATE_KEY=0x... python server.py
-```
-
-**Mobile compatibility** — `sessionSignature` is only present in TruthID mobile app v1.1+. Older clients don't send it; check for its presence before calling `register_session`.
 
 ## Next steps
 

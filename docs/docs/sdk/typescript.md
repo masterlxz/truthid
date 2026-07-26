@@ -159,57 +159,48 @@ const status = await truthid.checkDeviceStatus(devicePubKey);
 
 ---
 
-### `registerSession(params)`
+### Session visibility — nothing to do
 
-Registers a completed login session on-chain so it appears in the user's TruthID desktop app and can be individually revoked. This is optional — auth still works without it — but enables the user to see and revoke active sessions across all their devices.
+Completed logins already show up in the user's TruthID mobile/desktop apps and can be individually revoked from there. The phone registers the session on-chain itself (via a UserOperation) before it ever calls your `callbackUrl` — there's no separate registration step for you to call.
 
-**Why a relayer?** The mobile device key never holds ETH — it only signs messages. Gas is paid by a server-side relayer wallet you fund. On Base this costs fractions of a cent per session.
-
-**Parameters** ([`RegisterSessionParams`](#registersessionparams))
-
-| Name | Type | Description |
-|------|------|-------------|
-| `nonce` | `string` | The nonce from the original `AuthChallenge` |
-| `identityId` | `bigint` | From `verifyAuthResponse` result |
-| `devicePubKey` | `string` | From `verifyAuthResponse` result |
-| `sessionSignature` | `string` | The session signature from the phone's `AuthResponse` |
-| `relayerPrivateKey` | `` `0x${string}` `` | Private key of the funded relayer wallet |
-
-**Returns** [`RegisterSessionResult`](#registersessionresult)
+If you want to double-check a session landed on-chain, derive its hash from the nonce and call [`verifySession`](#verifysessionsessionhash):
 
 ```typescript
-// After verifyAuthResponse succeeds:
-if (response.sessionSignature && process.env.RELAYER_PRIVATE_KEY) {
-  try {
-    const { txHash, sessionHash, alreadyRegistered } = await truthid.registerSession({
-      nonce: response.nonce,
-      identityId: result.identityId!,
-      devicePubKey: result.deviceAddress!,
-      sessionSignature: response.sessionSignature,
-      relayerPrivateKey: process.env.RELAYER_PRIVATE_KEY as `0x${string}`,
-    });
-    console.log(alreadyRegistered ? "Session already on-chain:" : "Session registered on-chain:", sessionHash);
-  } catch (err) {
-    console.error("Session registration failed (login still succeeded):", err);
-  }
+import { keccak256, toBytes } from "viem";
+
+const sessionHash = keccak256(toBytes(response.nonce));
+const session = await truthid.verifySession(sessionHash);
+if (session.exists && !session.revoked) {
+  // confirmed on-chain
 }
 ```
 
-:::tip[Non-blocking]
-`registerSession` failing does not affect the login — wrap it in a try/catch and keep it out of the response path. If the relayer runs out of ETH, auth continues normally.
-:::
+---
 
-:::info[Idempotent]
-TruthID mobile app v14.9.5+ creates the session on-chain itself (via a UserOperation) before it ever calls your callback. `registerSession` detects this and returns `{ alreadyRegistered: true, txHash: undefined, sessionHash }` without submitting a transaction — no relayer gas spent, no `SessionAlreadyExists` revert.
-:::
+### `computeSmartAccountAddress(ledgerAddress, index?)`
 
-**Setup** — fund a relayer wallet with a small amount of ETH on Base (0.01 ETH covers thousands of sessions):
+Predicts a user's smart account (controller) address via `CREATE2` — pure local computation, no RPC call and no server involved. Useful for showing a deposit address, or checking a balance, before the account has ever been used on-chain.
 
-```bash
-RELAYER_PRIVATE_KEY=0x... node server.js
+**Parameters**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `ledgerAddress` | `` `0x${string}` `` | The owning hardware wallet / EOA address |
+| `index` *(optional)* | `bigint` | Account index, for multiple smart accounts per owner. Default: `0n` |
+
+**Returns** `` `0x${string}` `` — the checksummed smart account address.
+
+```typescript
+const smartAccount = truthid.computeSmartAccountAddress(ledgerAddress);
 ```
 
-**Mobile compatibility** — `sessionSignature` is only present in TruthID mobile app v1.1+. Older clients don't send it; check for its presence before calling `registerSession`.
+A standalone function is also exported for when you don't need a full client instance:
+
+```typescript
+import { computeSmartAccountAddress } from "truthid-sdk";
+
+const smartAccount = computeSmartAccountAddress(ledgerAddress, "base-mainnet");
+```
 
 ## Types
 
@@ -238,7 +229,7 @@ interface AuthResponse {
   nonce: string;
   signature: string;          // secp256k1 signature, hex ("0x...")
   deviceAddress: string;      // Ethereum address of the device key
-  sessionSignature?: string;  // present in mobile app v1.1+ only
+  sessionSignature?: string;  // personal_sign over keccak256(nonce) — always sent alongside signature
 }
 ```
 
@@ -284,28 +275,6 @@ interface DeviceStatus {
   label?: string;
   identityId?: bigint;
   addedAt?: Date;
-}
-```
-
-#### `RegisterSessionParams`
-
-```typescript
-interface RegisterSessionParams {
-  nonce: string;
-  identityId: bigint;
-  devicePubKey: string;
-  sessionSignature: string;       // from AuthResponse.sessionSignature
-  relayerPrivateKey: `0x${string}`;
-}
-```
-
-#### `RegisterSessionResult`
-
-```typescript
-interface RegisterSessionResult {
-  txHash?: `0x${string}`; // absent when alreadyRegistered is true
-  sessionHash: `0x${string}`; // keccak256(nonce) — the on-chain session identifier
-  alreadyRegistered: boolean; // true if the mobile app had already created this session
 }
 ```
 

@@ -1,5 +1,6 @@
 from .client import TruthIDClient
-from .types import AuthChallenge, AuthResponse, DeviceStatus, RegisterSessionResult, SessionInfo, VerifyAuthResult
+from .smart_account import compute_smart_account_address
+from .types import AuthChallenge, AuthResponse, DeviceStatus, SessionInfo, VerifyAuthResult
 
 __all__ = [
     "TruthIDClient",
@@ -8,5 +9,5 @@ __all__ = [
     "VerifyAuthResult",
     "SessionInfo",
     "DeviceStatus",
-    "RegisterSessionResult",
+    "compute_smart_account_address",
 ]

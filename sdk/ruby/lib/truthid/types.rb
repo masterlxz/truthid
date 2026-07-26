@@ -46,9 +46,7 @@ module TruthID
   end
 
   # Tipos de resultado: snake_case, sem necessidade de conversão JSON
-  VerifyAuthResult      = Struct.new(:valid, :identity_id, :device_address, :reason, keyword_init: true)
-  SessionInfo           = Struct.new(:exists, :revoked, :identity_id, :device_pub_key, :created_at, keyword_init: true)
-  DeviceStatus          = Struct.new(:exists, :active, :label, :identity_id, :added_at, keyword_init: true)
-  # tx_hash is nil when already_registered is true (no transaction was submitted)
-  RegisterSessionResult = Struct.new(:tx_hash, :session_hash, :already_registered, keyword_init: true)
+  VerifyAuthResult = Struct.new(:valid, :identity_id, :device_address, :reason, keyword_init: true)
+  SessionInfo       = Struct.new(:exists, :revoked, :identity_id, :device_pub_key, :created_at, keyword_init: true)
+  DeviceStatus      = Struct.new(:exists, :active, :label, :identity_id, :added_at, keyword_init: true)
 end

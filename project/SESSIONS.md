@@ -5920,3 +5920,96 @@ foram todos corrigidos (M1-M10), cada um com teste de regressão novo. Falta só
 pré-existente em `cargo test --lib pin::` no Desktop, achado incidental na Sessão 154, não
 relacionado a nenhum dos M1-M10) como pendência separada.
 
+---
+
+### Sessão 160 — 2026-07-26: Atualização completa dos SDKs (TypeScript, Python, Ruby)
+
+**Motivação**: os 3 SDKs (`sdk/typescript`, `sdk/python`, `sdk/ruby`) nunca foram atualizados
+desde que o mobile passou a criar a sessão de login on-chain sozinho via UserOperation
+(`SessionCreator.createSession`, etapa 14.9.5, Sessão 67) — antes disso, era o backend do site
+integrador que registrava a sessão via `registerSession()`/`register_session()`, usando uma
+`relayerPrivateKey` financiada pelo integrador. Levantamento completo (agente Explore) confirmou
+que esse caminho está morto na prática: qualquer chamada real hoje cai sempre no ramo
+`alreadyRegistered: true` sem nunca submeter transação, mas o código, os testes e **toda** a
+documentação (README, 3 páginas de doc, quickstart, exemplo de servidor) continuavam construindo
+uma narrativa inteira em torno da relayer wallet. Nenhum dos 3 SDKs foi publicado de verdade
+(sem workflow de CI de publish, sem changelog, versão `0.1.0` estática nos três, tags git
+desconectadas) — confirmado seguro fazer breaking changes.
+
+**Decisões confirmadas com o dono do projeto antes de codar**:
+1. Remover `registerSession`/relayer de vez (não só deprecar) — recomendado dado que nunca foi
+   publicado.
+2. Portar `computeSmartAccountAddress` (CREATE2, hoje só em `desktop/src/utils/`) pros 3 SDKs —
+   `docs/docs/smart-account.mdx` já prometia essa função "no SDK TypeScript", mas ela nunca
+   existiu lá.
+3. Achado à parte, **não** resolvido nesta sessão (registrado como P26 em `PENDING.md`): o
+   contrato `SessionRegistry` já tem um fix de domain separation (C4, `chainId`+endereço) no
+   código-fonte, mas ainda não redeployado — nem o mobile nem os 3 SDKs assinam com esse esquema
+   novo ainda. Não é bug ativo hoje (bytecode em produção é o antigo), mas vai quebrar tudo no
+   dia do redeploy se ninguém atualizar os dois lados junto. Fora de escopo desta sessão (mexe em
+   contratos + mobile, não só SDK).
+
+**Mudanças (mesmo padrão nos 3 idiomas)**:
+- `registerSession`/`register_session` removido de `client.ts`/`client.py`/`client.rb`, junto com
+  `RegisterSessionParams` (só existia no TS) e `RegisterSessionResult` (existia nos 3) —
+  removidos dos exports (`index.ts`, `__init__.py`; Ruby não tem barrel list).
+  `verifySession`/`verify_session` continua intocado (leitura pura, sem relayer).
+- `AuthResponse` do TS ganhou `sessionSignature?: string` (paridade com Python/Ruby e com o que o
+  mobile de fato envia — o campo já não era lido em `verifyAuthResponse` em nenhum dos 3, é só
+  completude de tipo).
+- `computeSmartAccountAddress`/`compute_smart_account_address` portado dos 3 idiomas, fonte de
+  verdade `desktop/src/utils/computeSmartAccountAddress.ts` +
+  `desktop/src/config/truthidAccount.ts` (bytecode + endereços por rede). Novo arquivo de
+  bytecode (`truthidAccountBytecode.ts`/`truthid_account_bytecode.py`/
+  `truthid_account_bytecode.rb`, cópia literal) + constantes novas por rede em `contracts.*`
+  (`SMART_ACCOUNT_FACTORY_ADDRESSES`, `RECOVERY_MANAGER_ADDRESSES`, `ENTRY_POINT_V07_ADDRESS`) +
+  novo `smartAccount.ts`/`smart_account.py`/`smart_account.rb` com a função pura + método de
+  conveniência no client (`computeSmartAccountAddress(ledgerAddress, index?)`, guardando
+  `network`/`_network`/`@network` como campo novo em cada client). Ruby's `contracts.rb` não
+  tinha `IDENTITY_REGISTRY_ADDRESSES` antes (só Device/Session) — precisou ganhar essa constante
+  nova.
+
+**Achado real no caminho, Ruby**: `verify_auth_response` comparava o retorno de
+`Eth::Signature.personal_recover` (chave pública descomprimida, 65 bytes, conforme o próprio
+código-fonte do gem `eth` documenta) diretamente contra um `device_address` (endereço, 20 bytes)
+— essa comparação nunca batia, rejeitando **toda** assinatura válida com "Signature does not
+match device address". Bug pré-existente, achado ao escrever o teste de sucesso pra
+`verify_auth_response`. Corrigido com o passo de derivação que faltava:
+`Eth::Util.public_key_to_address(public_key).to_s`.
+
+**Testes novos** (nenhum dos 3 SDKs tinha suíte de testes antes):
+- **TypeScript**: `vitest` adicionado (devDependency + script `test`), `src/__tests__/` novo —
+  `smartAccount.test.ts` (determinismo, sensibilidade a cada parâmetro, checksums) e
+  `client.test.ts` (os 6 checks de `verifyAuthResponse`, mockando `viem`'s `createPublicClient`/
+  `recoverMessageAddress`, + confirma que `registerSession` não existe mais). Achado no caminho:
+  `tsconfig.json` incluía `src/__tests__` no build (`tsc`), vazando arquivos de teste pro
+  `dist/` publicado e quebrando o build por causa de um `await` de topo de nível incompatível com
+  o target do pacote — corrigido excluindo `src/__tests__` do `tsconfig.json`.
+- **Python**: `pytest` já era dev dependency (nunca teve arquivo de teste) — novo `tests/` com
+  `test_smart_account.py` e `test_client.py` (assinatura real via `eth_account`, não mockada).
+- **Ruby**: `rspec` adicionado ao gemspec — novo `spec/` com `smart_account_spec.rb` e
+  `client_spec.rb` (assinatura real via `Eth::Key`).
+- **Vetor fixo de paridade cross-linguagem**: mesmo `(ledgerAddress, network, index)` reproduzido
+  nos 3 SDKs, todos produzindo exatamente `0xED83305810c42dEa66bA7C5c12BF61A7adC2356B` — prova
+  que os 3 ports concordam byte-a-byte no cálculo CREATE2 (o tipo de bug que já aconteceu de
+  verdade uma vez, `encodePacked` vs `encodeAbiParameters`, Sessão 70).
+
+**Documentação reescrita**: `sdk/README.md`, `docs/docs/sdk/{typescript,python,ruby}.md`,
+`docs/docs/quickstart.mdx`, `sdk/typescript/example/server.js` — toda a narrativa de "monte uma
+relayer wallet" removida e substituída por uma nota curta ("nada a fazer, o mobile já registra
+sozinho" + como conferir via `verifySession` se curioso). Removidas as referências de versão
+fictícias ("mobile app v14.9.5+", "v1.1+" — não correspondem a nenhuma versão publicada real,
+`pubspec.yaml` é `1.0.0+1` única release). `docs/docs/smart-account.mdx` corrigido pra apontar
+pra função que agora existe de verdade nos 3 SDKs. Build do Docusaurus (`onBrokenLinks: 'throw'`)
+validado limpo, confirmando que todas as âncoras novas resolvem.
+
+**Versionamento**: bump `0.1.0` → `0.2.0` nos 3 SDKs (`package.json`/`pyproject.toml`/
+`.gemspec`) — mudança de API relevante, sem changelog formal no repo.
+
+**Verificação**: `npx vitest run` 17/17 (TS), `pytest` 17/17 (Python), `bundle exec rspec` → na
+verdade sem Gemfile, rodado via `rspec spec/` direto — 17/17 (Ruby). `npm run build` (Docusaurus)
+limpo.
+
+**Próximo passo**: nenhum item novo aberto por essa sessão além do P26 (domain separation,
+registrado, não implementado). Voltar pro roadmap normal do projeto.
+

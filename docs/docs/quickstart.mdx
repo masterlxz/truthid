@@ -186,80 +186,11 @@ end
 
 That's the whole backend integration. Full runnable examples (Express, Flask, Sinatra) with session tokens and a protected route are in the [SDK reference](https://github.com/masterlxz/truthid/blob/main/sdk/README.md#full-examples).
 
-## 5. Register the session on-chain *(optional)*
+:::info[Session visibility — nothing to do]
+Completed logins already show up in the user's TruthID mobile/desktop apps and can be individually revoked from there. The phone registers the session on-chain itself (via a UserOperation) before it ever calls your `/auth/verify` endpoint — there's no relayer to fund and no separate registration step. See the SDK reference ([TypeScript](/docs/sdk/typescript#verifysessionsessionhash), [Python](/docs/sdk/python#verify_sessionsession_hash), [Ruby](/docs/sdk/ruby#verify_sessionsession_hash)) if you want to double-check a session landed on-chain via `verifySession`.
+:::
 
-After a successful login, you can register the session on-chain so the user can see it in the TruthID desktop app and revoke it remotely.
-
-<Tabs groupId="sdk-lang">
-<TabItem value="ts" label="TypeScript">
-
-```typescript
-// Extend your /auth/verify handler — after verifyAuthResponse succeeds:
-if (response.sessionSignature && process.env.RELAYER_PRIVATE_KEY) {
-  try {
-    await truthid.registerSession({
-      nonce: response.nonce,
-      identityId: result.identityId!,
-      devicePubKey: result.deviceAddress!,
-      sessionSignature: response.sessionSignature,
-      relayerPrivateKey: process.env.RELAYER_PRIVATE_KEY as `0x${string}`,
-    });
-  } catch (err) {
-    console.error("Session registration failed (login still succeeded):", err);
-  }
-}
-```
-
-</TabItem>
-<TabItem value="py" label="Python">
-
-```python
-# Extend your /auth/verify handler — after verify_auth_response succeeds:
-session_signature = data.get("sessionSignature")
-if session_signature and os.environ.get("RELAYER_PRIVATE_KEY"):
-    try:
-        truthid.register_session(
-            nonce=challenge.nonce,
-            identity_id=result.identity_id,
-            device_pub_key=result.device_address,
-            session_signature=session_signature,
-            relayer_private_key=os.environ["RELAYER_PRIVATE_KEY"],
-        )
-    except Exception as e:
-        print("Session registration failed (login still succeeded):", e)
-```
-
-</TabItem>
-<TabItem value="rb" label="Ruby">
-
-```ruby
-# Extend your /auth/verify handler — after verify_auth_response succeeds:
-session_signature = data["sessionSignature"]
-if session_signature && ENV["RELAYER_PRIVATE_KEY"]
-  begin
-    truthid.register_session(
-      nonce:               challenge.nonce,
-      identity_id:         result.identity_id,
-      device_pub_key:      result.device_address,
-      session_signature:   session_signature,
-      relayer_private_key: ENV["RELAYER_PRIVATE_KEY"]
-    )
-  rescue => e
-    puts "Session registration failed (login still succeeded): #{e.message}"
-  end
-end
-```
-
-</TabItem>
-</Tabs>
-
-This requires a funded **relayer wallet** — any Ethereum key with a small amount of ETH on Base (0.01 ETH covers thousands of sessions). Pass it via `RELAYER_PRIVATE_KEY`. If registration fails, the login itself is unaffected.
-
-`sessionSignature` is only sent by TruthID mobile app v1.1+. Older clients skip this step automatically.
-
-See the SDK reference for full details: [TypeScript](/docs/sdk/typescript#registersessionparams), [Python](/docs/sdk/python#register_session), [Ruby](/docs/sdk/ruby#register_session).
-
-## 6. Test it with a real device
+## 5. Test it with a real device
 
 To actually scan a QR code and approve a login, you need:
 

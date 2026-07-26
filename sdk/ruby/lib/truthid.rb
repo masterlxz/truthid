@@ -1,5 +1,7 @@
 require_relative "truthid/contracts"
 require_relative "truthid/types"
+require_relative "truthid/truthid_account_bytecode"
+require_relative "truthid/smart_account"
 require_relative "truthid/client"
 
 module TruthID

@@ -15,7 +15,8 @@ from .contracts import (
     SESSION_REGISTRY_ADDRESSES,
     SESSION_REGISTRY_ABI,
 )
-from .types import AuthChallenge, AuthResponse, DeviceStatus, RegisterSessionResult, SessionInfo, VerifyAuthResult
+from .smart_account import compute_smart_account_address
+from .types import AuthChallenge, AuthResponse, DeviceStatus, SessionInfo, VerifyAuthResult
 
 _RPC_URLS = {
     "base-sepolia": "https://sepolia.base.org",
@@ -25,6 +26,7 @@ _RPC_URLS = {
 
 class TruthIDClient:
     def __init__(self, network: str = "base-mainnet", rpc_url: Optional[str] = None):
+        self._network = network
         url = rpc_url or _RPC_URLS[network]
         self._w3 = Web3(Web3.HTTPProvider(url))
         self._devices = self._w3.eth.contract(
@@ -118,51 +120,17 @@ class TruthIDClient:
             created_at=created_at,
         )
 
-    def register_session(
+    def compute_smart_account_address(
         self,
-        nonce: str,
-        identity_id: int,
-        device_pub_key: str,
-        session_signature: str,
-        relayer_private_key: str,
-    ) -> RegisterSessionResult:
-        # Derives the same session hash the mobile computed: keccak256(utf8(nonce))
-        session_hash = Web3.keccak(text=nonce)  # returns bytes
-
-        # The TruthID mobile app (v14.9.5+) already creates the session on-chain itself
-        # via UserOperation before it calls this integrator's callback — so this is
-        # idempotent: if the session is already there, skip the transaction entirely
-        # (avoids a guaranteed-revert and wasted relayer gas).
-        if self._read_session(session_hash) is not None:
-            return RegisterSessionResult(
-                tx_hash=None,
-                session_hash="0x" + session_hash.hex(),
-                already_registered=True,
-            )
-
-        # Splits the compact 65-byte signature into the (r, s, v) the contract expects
-        sig = session_signature.removeprefix("0x")
-        r = bytes.fromhex(sig[0:64])    # bytes32
-        s = bytes.fromhex(sig[64:128])  # bytes32
-        v = int(sig[128:130], 16)       # uint8
-
-        relayer_account = Account.from_key(relayer_private_key)
-        checksum_dev = Web3.to_checksum_address(device_pub_key)
-
-        tx = self._sessions.functions.createSession(
-            session_hash, identity_id, checksum_dev, r, s, v
-        ).build_transaction({
-            "from": relayer_account.address,
-            "nonce": self._w3.eth.get_transaction_count(relayer_account.address),
-        })
-        signed = relayer_account.sign_transaction(tx)
-        tx_hash = self._w3.eth.send_raw_transaction(signed.raw_transaction)
-
-        return RegisterSessionResult(
-            tx_hash="0x" + tx_hash.hex(),
-            session_hash="0x" + session_hash.hex(),
-            already_registered=False,
-        )
+        ledger_address: str,
+        index: int = 0,
+    ) -> str:
+        """Predicts the smart account (controller) address for a given owner
+        key via CREATE2, before the account is ever deployed on-chain — pure
+        local computation, no RPC call needed. See smart_account.py for the
+        algorithm.
+        """
+        return compute_smart_account_address(ledger_address, self._network, index)
 
     def check_device_status(self, device_pub_key: str) -> DeviceStatus:
         checksum_addr = Web3.to_checksum_address(device_pub_key)

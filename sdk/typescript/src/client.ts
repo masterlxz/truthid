@@ -1,7 +1,6 @@
-import { createPublicClient, createWalletClient, http, keccak256, toBytes, recoverMessageAddress } from "viem";
+import { createPublicClient, http, recoverMessageAddress } from "viem";
 import type { Chain } from "viem";
 import { baseSepolia, base } from "viem/chains";
-import { privateKeyToAccount } from "viem/accounts";
 import { randomUUID } from "crypto";
 
 import {
@@ -10,6 +9,7 @@ import {
   SESSION_REGISTRY_ADDRESSES,
   SESSION_REGISTRY_ABI,
 } from "./contracts.js";
+import { computeSmartAccountAddress } from "./smartAccount.js";
 import type {
   TruthIDClientConfig,
   AuthChallenge,
@@ -17,18 +17,19 @@ import type {
   VerifyAuthResult,
   SessionInfo,
   DeviceStatus,
-  RegisterSessionParams,
-  RegisterSessionResult,
+  Network,
 } from "./types.js";
 
 export class TruthIDClient {
   private publicClient: ReturnType<typeof createPublicClient>;
   private chain: Chain;
   private rpcUrl: string;
+  private network: Network;
   private deviceRegistryAddress: `0x${string}`;
   private sessionRegistryAddress: `0x${string}`;
 
   constructor(config: TruthIDClientConfig) {
+    this.network = config.network;
     this.chain = config.network === "base-mainnet" ? base : baseSepolia;
     this.rpcUrl =
       config.rpcUrl ??
@@ -169,52 +170,14 @@ export class TruthIDClient {
     };
   }
 
-  // Registers an authenticated session on-chain via a relayer wallet.
-  // The mobile device signed the session hash (keccak256 of the challenge nonce)
-  // with personal_sign — the contract uses that signature to verify device ownership.
-  // The relayer submits the transaction and pays the gas; the device key never holds ETH.
-  //
-  // The TruthID mobile app (v14.9.5+) already creates the session on-chain itself via
-  // UserOperation before it calls this integrator's callback — so this is idempotent:
-  // if the session is already there, this returns without submitting a transaction
-  // (avoids a guaranteed-revert and wasted relayer gas).
-  async registerSession({
-    nonce,
-    identityId,
-    devicePubKey,
-    sessionSignature,
-    relayerPrivateKey,
-  }: RegisterSessionParams): Promise<RegisterSessionResult> {
-    // Both sides derive the session hash from the nonce — no extra communication needed
-    const sessionHash = keccak256(toBytes(nonce));
-
-    const existing = await this.readSession(sessionHash);
-    if (existing) {
-      return { sessionHash, alreadyRegistered: true };
-    }
-
-    // Split the 65-byte compact signature into the (r, s, v) components the contract expects
-    const r = `0x${sessionSignature.slice(2, 66)}` as `0x${string}`;
-    const s = `0x${sessionSignature.slice(66, 130)}` as `0x${string}`;
-    const v = parseInt(sessionSignature.slice(130, 132), 16);
-
-    const account = privateKeyToAccount(relayerPrivateKey);
-    const walletClient = createWalletClient({
-      account,
-      chain: this.chain,
-      transport: http(this.rpcUrl),
-    });
-
-    const txHash = await walletClient.writeContract({
-      address: this.sessionRegistryAddress,
-      abi: SESSION_REGISTRY_ABI,
-      functionName: "createSession",
-      args: [sessionHash, identityId, devicePubKey as `0x${string}`, r, s, v],
-      account,
-      chain: this.chain,
-    });
-
-    return { txHash, sessionHash, alreadyRegistered: false };
+  // Predicts the smart account (controller) address for a given owner key via
+  // CREATE2, before the account is ever deployed on-chain — pure local
+  // computation, no RPC call needed. See smartAccount.ts for the algorithm.
+  computeSmartAccountAddress(
+    ledgerAddress: `0x${string}`,
+    index = 0n,
+  ): `0x${string}` {
+    return computeSmartAccountAddress(ledgerAddress, this.network, index);
   }
 
   // Checks the status of a device on-chain

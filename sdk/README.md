@@ -321,55 +321,25 @@ end
 
 ---
 
-## Session Registration (On-Chain Audit Trail)
+## Session Visibility — Nothing To Do
 
-After a successful login, you can register the session on-chain so it appears in `ActiveSessions` in the TruthID desktop app and can be individually revoked by the user.
+Completed logins already show up in the user's TruthID mobile/desktop apps and can be individually revoked from there. The phone registers the session on-chain itself (via a UserOperation) before it ever calls your callback URL — there's no relayer to fund, no server-side registration step, and no gas for your backend to pay.
 
-### Why a relayer?
-
-The mobile device key never holds ETH — it only signs messages. Gas must be paid by a server-side **relayer wallet** that you fund. On Base, this costs fractions of a cent per session.
-
-### How it works
-
-When the mobile approves a login, it produces two signatures:
-1. **Auth signature** — `personal_sign(JSON.stringify(challenge))` — verified by `verifyAuthResponse`
-2. **Session signature** — `personal_sign(keccak256(nonce))` — verified on-chain by the contract
-
-Both use the same device key. The session hash (`keccak256(nonce)`) is derived independently by both the mobile and the server from the nonce already in the challenge — no extra round-trip needed.
-
-### Setup
-
-Fund a relayer wallet (any Ethereum key) with a small amount of ETH on Base (0.01 ETH covers thousands of sessions), then pass its private key via environment variable:
-
-```bash
-RELAYER_PRIVATE_KEY=0x... node server.js
-```
-
-### Code
+If you want to double-check a session landed on-chain, derive its hash from the nonce (`keccak256(nonce)`, the same value the contract uses as the session identifier) and call `verifySession`:
 
 ```typescript
-// After verifyAuthResponse succeeds:
-if (response.sessionSignature && process.env.RELAYER_PRIVATE_KEY) {
-  const { txHash, sessionHash, alreadyRegistered } = await truthid.registerSession({
-    nonce: response.nonce,
-    identityId: result.identityId!,
-    devicePubKey: result.deviceAddress!,
-    sessionSignature: response.sessionSignature,
-    relayerPrivateKey: process.env.RELAYER_PRIVATE_KEY as `0x${string}`,
-  });
-  console.log(alreadyRegistered ? "Session already on-chain:" : "Session registered on-chain:", sessionHash);
+import { keccak256, toBytes } from "viem";
+
+const sessionHash = keccak256(toBytes(response.nonce));
+const session = await truthid.verifySession(sessionHash);
+if (session.exists && !session.revoked) {
+  // confirmed on-chain
 }
 ```
 
-`registerSession` is non-blocking for auth — if it fails (e.g. relayer has no ETH), the login still succeeds. Wrap it in a try/catch and log the error.
+### Predicting the smart account address
 
-### Idempotency
-
-TruthID mobile app v14.9.5+ creates the session on-chain itself (via a UserOperation, before it ever calls your callback). `registerSession` checks for this first: if the session already exists, it returns `{ alreadyRegistered: true, txHash: undefined, sessionHash }` without submitting a transaction — no relayer gas spent, no `SessionAlreadyExists` revert. `txHash` is only present when this call actually submitted the transaction.
-
-### Mobile compatibility
-
-`sessionSignature` is only present in TruthID mobile app v1.1+. Older clients don't send it; registrations just won't happen. The field is optional — check for its presence before calling `registerSession`.
+Every SDK also exports `computeSmartAccountAddress` (`compute_smart_account_address` in Python/Ruby) — a pure, local `CREATE2` computation that predicts a user's smart account address from their owner key, with no RPC call and no server involved. Useful for showing a deposit address before the account has ever been used on-chain. See each language's SDK reference for details.
 
 ---
 

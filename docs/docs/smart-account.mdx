@@ -15,7 +15,7 @@ TruthID has no relayer and no hot wallet operated by the project — each user's
 
 There's no paymaster. The account deposits ETH directly with the official [EntryPoint v0.7](https://basescan.org/address/0x0000000071727De22E5E9d8BAf0edAc6f37da032) contract and pays for its own `UserOperation`s from that balance — the same EntryPoint every ERC-4337 account on every EVM chain uses, not something TruthID deployed itself.
 
-The account's address is computed with `CREATE2` before it exists, from the owner's address — see `computeSmartAccountAddress` in the [TypeScript SDK](/docs/sdk/typescript) if you need to predict it off-chain.
+The account's address is computed with `CREATE2` before it exists, from the owner's address — every SDK exports a `computeSmartAccountAddress`/`compute_smart_account_address` function ([TypeScript](/docs/sdk/typescript#computesmartaccountaddressledgeraddress-index), [Python](/docs/sdk/python#compute_smart_account_addressledger_address-index0), [Ruby](/docs/sdk/ruby#compute_smart_account_addressledger_address-index-0)) if you need to predict it off-chain, with no RPC call and no server involved.
 
 ## One-time setup
 

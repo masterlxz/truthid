@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "truthid-sdk"
-version = "0.1.0"
+version = "0.2.0"
 description = "TruthID passwordless, decentralized authentication SDK for Python"
 readme = "README.md"
 license = "MIT"

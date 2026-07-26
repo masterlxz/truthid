@@ -164,6 +164,31 @@ Looks up a device's current status on the blockchain.
 status = truthid.check_device_status(device_pub_key)
 ```
 
+---
+
+### `compute_smart_account_address(ledger_address, index: 0)`
+
+Predicts a user's smart account (controller) address via `CREATE2` — pure local computation, no RPC call and no server involved. Useful for showing a deposit address, or checking a balance, before the account has ever been used on-chain.
+
+**Parameters**
+
+| Name | Type | Description |
+|------|------|-------------|
+| `ledger_address` | `String` | The owning hardware wallet / EOA address |
+| `index:` *(optional)* | `Integer` | Account index, for multiple smart accounts per owner. Default: `0` |
+
+**Returns** `String` — the checksummed smart account address.
+
+```ruby
+smart_account = truthid.compute_smart_account_address(ledger_address)
+```
+
+A module-level function is also available for when you don't need a full client instance:
+
+```ruby
+smart_account = TruthID.compute_smart_account_address(ledger_address, network: "base-mainnet")
+```
+
 ## Types
 
 All of the following are in the `TruthID` module. `AuthChallenge` and `AuthResponse` are plain classes — their attributes follow normal Ruby snake_case (`issued_at`, `device_address`), and each has a conversion method (`to_h` / `from_hash`) at the boundary where it meets the camelCase JSON the mobile app actually sends and signs. `VerifyAuthResult`, `SessionInfo`, and `DeviceStatus` are `Struct`s, since they never cross the wire.
@@ -182,9 +207,10 @@ end
 
 ```ruby
 class AuthResponse
-  attr_reader :approved, :nonce, :signature, :device_address
+  attr_reader :approved, :nonce, :signature, :device_address, :session_signature
 
   # self.from_hash(h) reads h["deviceAddress"] into device_address, etc.
+  # session_signature: personal_sign over keccak256(nonce) — always sent alongside signature
 end
 ```
 
@@ -243,61 +269,19 @@ truthid = TruthID::Client.new(network: "base-mainnet", rpc_url: "https://your-pr
 
 Contract addresses for both networks are in [Smart contracts](/docs/intro#smart-contracts-base-mainnet-chain-8453).
 
-## Session registration
+## Session visibility — nothing to do
 
-### `register_session(...)`
+Completed logins already show up in the user's TruthID mobile/desktop apps and can be individually revoked from there. The phone registers the session on-chain itself (via a UserOperation) before it ever calls your callback URL — there's no separate registration step for you to call.
 
-Registers a completed login session on-chain so it appears in the user's TruthID desktop app and can be individually revoked. Optional — auth still works without it — but enables the user to see and revoke active sessions.
-
-**Why a relayer?** The mobile device key never holds ETH — it only signs messages. Gas is paid by a server-side relayer wallet you fund. On Base this costs fractions of a cent per session.
-
-**Parameters**
-
-| Name | Type | Description |
-|------|------|-------------|
-| `nonce:` | `String` | The nonce from the original `AuthChallenge` |
-| `identity_id:` | `Integer` | From `verify_auth_response` result |
-| `device_pub_key:` | `String` | From `verify_auth_response` result |
-| `session_signature:` | `String` | The session signature from the phone's response (`sessionSignature`) |
-| `relayer_private_key:` | `String` | Private key (`"0x..."`) of the funded relayer wallet |
-
-**Returns** `RegisterSessionResult` with `tx_hash`, `session_hash` and `already_registered`
+If you want to double-check a session landed on-chain, derive its hash from the nonce and call `verify_session`:
 
 ```ruby
-# After verify_auth_response succeeds:
-session_signature = response_body["sessionSignature"]
-if session_signature && ENV["RELAYER_PRIVATE_KEY"]
-  begin
-    result = truthid.register_session(
-      nonce:               challenge.nonce,
-      identity_id:         auth_result.identity_id,
-      device_pub_key:      auth_result.device_address,
-      session_signature:   session_signature,
-      relayer_private_key: ENV["RELAYER_PRIVATE_KEY"]
-    )
-    label = result.already_registered ? "Session already on-chain:" : "Session registered on-chain:"
-    puts "#{label} #{result.session_hash}"
-  rescue => e
-    puts "Session registration failed (login still succeeded): #{e.message}"
-  end
+session_hash = "0x" + Eth::Util.keccak256(response.nonce).unpack1("H*")
+session = truthid.verify_session(session_hash)
+if session.exists && !session.revoked
+  # confirmed on-chain
 end
 ```
-
-:::tip[Non-blocking]
-`register_session` failing does not affect the login — wrap it in a begin/rescue and keep it out of the response path. If the relayer runs out of ETH, auth continues normally.
-:::
-
-:::info[Idempotent]
-TruthID mobile app v14.9.5+ creates the session on-chain itself (via a UserOperation) before it ever calls your callback. `register_session` detects this and returns `already_registered: true` with `tx_hash: nil` without submitting a transaction — no relayer gas spent, no `SessionAlreadyExists` revert.
-:::
-
-**Setup** — fund a relayer wallet with a small amount of ETH on Base (0.01 ETH covers thousands of sessions):
-
-```bash
-RELAYER_PRIVATE_KEY=0x... ruby server.rb
-```
-
-**Mobile compatibility** — `sessionSignature` is only present in TruthID mobile app v1.1+. Older clients don't send it; check for its presence before calling `register_session`.
 
 ## Next steps
 

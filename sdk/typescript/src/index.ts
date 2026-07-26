@@ -1,4 +1,5 @@
 export { TruthIDClient } from "./client.js";
+export { computeSmartAccountAddress } from "./smartAccount.js";
 export type {
   TruthIDClientConfig,
   AuthChallenge,
@@ -8,6 +9,4 @@ export type {
   SessionInfo,
   DeviceStatus,
   Network,
-  RegisterSessionParams,
-  RegisterSessionResult,
 } from "./types.js";

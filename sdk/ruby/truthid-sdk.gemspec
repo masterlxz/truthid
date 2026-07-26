@@ -1,6 +1,6 @@
 Gem::Specification.new do |spec|
   spec.name        = "truthid-sdk"
-  spec.version     = "0.1.0"
+  spec.version     = "0.2.0"
   spec.summary     = "TruthID authentication SDK for Ruby"
   spec.description = "TruthID passwordless, decentralized authentication SDK for Ruby. " \
                       "No TruthID-operated server, no passwords, no third-party login."
@@ -17,4 +17,5 @@ Gem::Specification.new do |spec|
   spec.required_ruby_version = ">= 3.0"
 
   spec.add_dependency "eth", "~> 0.5"
+  spec.add_development_dependency "rspec", "~> 3.13"
 end
