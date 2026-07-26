@@ -5702,3 +5702,51 @@ pré-existentes, nenhum novo).
 **Próximo passo**: M2 fecha o segundo e último achado de segurança da Sessão 151. Restam os 7
 achados de correção/eficiência (M3-M10) antes de fechar o item 5 do backlog do mobile.
 
+---
+
+### Sessão 154 — 2026-07-25: M3 corrigido (Mobile + Desktop) — TOCTOU em markPublished/mark_published
+
+**Achado M3 (Sessão 151)**: `VaultRepository.markPublished` (`mobile/lib/services/vault_repository.dart:577`)
+re-lia o vault atual do disco (`_load()`) pra gerar a assinatura/snapshot de "publicado", mas era
+chamado só depois de operações de rede (pin no IPFS + UserOperation on-chain, janela de ~60s). Uma
+edição feita pelo usuário nesse meio-tempo nunca ia on-chain, mas era gravada como se tivesse sido
+— `pendingChanges()` sumia, escondendo uma pendência real.
+
+Investigação achou o mesmo padrão exato no Desktop (`desktop/src-tauri/src/vault.rs::mark_published`
++ `lib.rs::vault_publish`) — fora do escopo do review (que rodou só sobre `mobile/`), mas o dono do
+projeto confirmou corrigir os dois lados na mesma sessão, seguindo o padrão histórico de paridade
+Desktop/Mobile pra bugs de integridade (Sessões 138/139/150).
+
+**Fix (mesma ideia nos dois lados)**: a causa raiz era a função aceitar só a `version` e descartar
+o conteúdo que o caller já tinha em mãos (lido antes das chamadas de rede), forçando ela a
+"adivinhar" via reload depois. Fix: a função passa a exigir o conteúdo publicado como parâmetro.
+- **Mobile**: `markPublished(int version, Uint8List publishedBlob)` — decifra o blob recebido em
+  vez de `_load()`. 3 call sites atualizados: `VaultPublishService.publish()` (passa o `blob` já
+  lido antes do pin+chain), e os 2 em `VaultSyncService.sync()` (um passa `readRawBlob()` do
+  cache local já sincronizado, o outro passa os `bytes` já baixados e verificados por hash do
+  IPFS).
+- **Desktop**: `mark_published(version: u64, published_vault: &Vault)` — remove o `load()` interno.
+  Único call site (`lib.rs::vault_publish`) já tinha o `Vault` decodificado em memória antes do
+  `.await` de pin — só trocou pra passar `&v` direto.
+
+**Testes**: novo teste de regressão em `vault_publish_service_test.dart` — simula uma edição
+concorrente acontecendo *durante* o mock de `updateVault` (via `thenAnswer` que chama
+`repo.addEntry` antes de resolver) e confirma que `pendingChanges()` continua reportando a edição
+como pendente depois do `publish()` terminar (esse teste falha com o código antigo). Suite mobile
+completa: 385/385. Desktop: sem infraestrutura de teste pra `mark_published`/`pending_changes`
+(dependem de `$HOME` real, sem override de path como o `testPath` do Dart) — não construída agora,
+fora de escopo pro tamanho do bug; verificado via `cargo check` (compila limpo) e
+`cargo test --lib vault::` (34/34 em 1s).
+
+**Achado real no caminho, fora de escopo do M3**: `cargo test --lib` completo no Desktop trava —
+pelo menos 3 testes de `pin.rs` (`authorized_app_within_quota_pins_without_parking`,
+`quota_resets_after_a_full_day`, `revoked_app_is_treated_as_new_on_next_request`) nunca terminam
+(>60s parados). Confirmado via `git stash` que é **pré-existente**, sem nenhuma relação com o fix
+do M3 — nenhum dos três faz I/O de rede real (`fake_pin` do teste é instantâneo) nem usa lock
+global (`PinState.quota` é um `Mutex` por instância, não `static`). Causa raiz não investigada.
+Registrado como P25 em `PENDING.md`, não bloqueia o fechamento do M3.
+
+**Próximo passo**: M4-M10 (7 achados de correção/eficiência restantes) antes de fechar o item 5 do
+backlog do mobile. P25 (hang em `pin.rs`) fica como pendência separada, investigar quando surgir
+oportunidade.
+

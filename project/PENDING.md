@@ -42,7 +42,6 @@
 
 | ID | Item | Onde se originou | Prioridade |
 |---|---|---|---|
-| M3 | **TOCTOU em `markPublished`** — `vault_repository.dart:577` recarrega estado ao vivo em vez de snapshot do publicado; edição durante a janela de publish (~60s) é marcada como publicada sem ir on-chain. | `SESSIONS.md` (Sessão 151) | 🟠 Média |
 | M4 | **Future rejeitada cacheada pra sempre** — `device_key_service.dart:26`, falha transiente na 1ª leitura da secure storage quebra toda assinatura até reiniciar o app. | `SESSIONS.md` (Sessão 151) | 🟠 Média |
 | M5 | **Sem guarda de reentrância — sign_request** — `sign_request_approval_screen.dart:339`, duplo toque pode submeter 2 UserOperations. | `SESSIONS.md` (Sessão 151) | 🟠 Média |
 | M6 | **Sem guarda de reentrância — pin** — `pin_approval_screen.dart:206`, duplo toque dispara 2 fluxos concorrentes de pin/entrega. | `SESSIONS.md` (Sessão 151) | 🟠 Média |
@@ -50,6 +49,12 @@
 | M8 | **Bug de username reintroduzido** — `devices_screen.dart:42` reimplementa inline em vez de usar `resolvePairedUsername()`. | `SESSIONS.md` (Sessão 151) | 🟡 Baixa |
 | M9 | **`expiresAt` ignorado no canal de deep link** — `deep_link_delivery_channel.dart:29`, hoje mascarado pelos chamadores. | `SESSIONS.md` (Sessão 151) | 🟡 Baixa |
 | M10 | **`IndexedStack` triplica chamada RPC** — `main.dart:328`, Devices/Sessions/Wallet buscam `getDevice` redundante no cold start. | `SESSIONS.md` (Sessão 151) | 🟡 Baixa |
+
+### Bugs Descobertos Fora de Escopo
+
+| ID | Item | Onde se originou | Prioridade |
+|---|---|---|---|
+| P25 | **`cargo test --lib pin::` trava/nunca termina** (Desktop) — pelo menos 3 testes (`authorized_app_within_quota_pins_without_parking`, `quota_resets_after_a_full_day`, `revoked_app_is_treated_as_new_on_next_request`) ficam pendurados (>60s, sem terminar). Confirmado via `git stash` que é pré-existente, não relacionado ao fix do M3 — nenhum dos três usa I/O de rede real (`fake_pin` é instantâneo) nem lock global (`PinState.quota` é por instância). Causa raiz não investigada ainda. | `SESSIONS.md` (Sessão 154) | 🟠 Média |
 
 ### Pendências de Arquitetura / Decisões em Aberto
 
@@ -166,6 +171,7 @@
 |---|---|---|
 | ~~M1~~ | ~~Deep link/QR bypassava `AppLockService` — telas de aprovação empurradas por cima do bloqueio~~ | **Sessão 152** |
 | ~~M2~~ | ~~Login sem checagem de `expiresAt` — `approval_screen.dart` não validava expiração do challenge~~ | **Sessão 153** |
+| ~~M3~~ | ~~TOCTOU em `markPublished` — recarregava o vault atual do disco em vez do conteúdo de fato publicado; corrigido em Mobile e Desktop (mesmo padrão nos dois)~~ | **Sessão 154** |
 
 ### Bugs do `/code-review max` (Desktop) — 52/52
 

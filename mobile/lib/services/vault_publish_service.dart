@@ -63,7 +63,7 @@ class VaultPublishService {
       contentHashHex: pinResult.contentHash,
     );
 
-    await _repository.markPublished(version);
+    await _repository.markPublished(version, blob);
 
     return VaultPublishResult(
       cid: pinResult.cid,

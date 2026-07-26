@@ -459,7 +459,7 @@ async fn vault_publish() -> Result<ipfs::PinResult, String> {
     // Decripta do blob já em memória em vez de read()+load() de novo
     let decrypted = vault::decrypt(&encrypted_blob)?;
     let v: vault::Vault = serde_json::from_slice(&decrypted).map_err(|e| e.to_string())?;
-    vault::mark_published(v.version)?;
+    vault::mark_published(v.version, &v)?;
     Ok(result)
 }
 

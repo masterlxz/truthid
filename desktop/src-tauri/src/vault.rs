@@ -486,15 +486,21 @@ fn content_signature(vault: &Vault) -> String {
 /// (`diff_count`). O meta antigo (hash+version) continua sendo escrito só
 /// como fallback pra vaults que ainda não tiverem o snapshot novo (ver
 /// `pending_changes`).
-pub(crate) fn mark_published(version: u64) -> Result<(), String> {
-    let vault = load()?;
+///
+/// Recebe o vault que foi de fato publicado (em vez de reler do disco) —
+/// achado da Sessão 153 (M3, mesmo TOCTOU achado no Mobile pelo
+/// `/code-review high`): entre o `vault_publish` ler o blob e chamar isto
+/// aqui existe um `.await` de rede (pin no IPFS); reler o disco depois
+/// capturava qualquer edição feita nesse meio-tempo como se já tivesse sido
+/// publicada.
+pub(crate) fn mark_published(version: u64, published_vault: &Vault) -> Result<(), String> {
     let path = meta_path()?;
     let meta = serde_json::json!({
         "last_published_version": version,
-        "last_published_content_hash": content_signature(&vault),
+        "last_published_content_hash": content_signature(published_vault),
     });
     crate::config::write_text(&path, &serde_json::to_string(&meta).map_err(|e| e.to_string())?)?;
-    save_published_snapshot(&vault)
+    save_published_snapshot(published_vault)
 }
 
 /// Retorna quantas mudanças de conteúdo o vault local tem em relação ao

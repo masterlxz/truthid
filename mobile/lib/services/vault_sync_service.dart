@@ -105,7 +105,8 @@ class VaultSyncService {
         // localmente mas já nasceu sincronizado com a versão on-chain atual
         // mostrava "pending changes" fantasma).
         if (ref.version == localVersion) {
-          await _repository.markPublished(ref.version);
+          final localBlob = await _repository.readRawBlob();
+          await _repository.markPublished(ref.version, localBlob);
         }
         final entries = await _repository.listEntries();
         final profileNames = await _repository.listProfileNames();
@@ -132,7 +133,7 @@ class VaultSyncService {
       // marcador local de "última publicada por este device") achando que
       // essa versão ainda estava pendente — "pending changes" fantasma no
       // Mobile depois de sincronizar algo publicado pelo Desktop.
-      await _repository.markPublished(ref.version);
+      await _repository.markPublished(ref.version, bytes);
       final entries = await _repository.listEntries();
       final profileNames = await _repository.listProfileNames();
       return VaultSyncOutcome(

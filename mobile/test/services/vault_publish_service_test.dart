@@ -226,4 +226,39 @@ void main() {
     expect(await repo.pendingChanges(), 1,
         reason: 'toggle deveria cancelar, sobrando só a entrada nova');
   });
+
+  test(
+      'edição feita durante a janela de publish (pin+on-chain) continua '
+      'pendente depois — não é marcada como publicada por engano (M3, '
+      'achado do /code-review high: markPublished tinha TOCTOU relendo o '
+      'vault atual do disco em vez de usar o conteúdo que foi de fato '
+      'publicado)', () async {
+    when(() => mockProviderService.load()).thenAnswer((_) async => [provider]);
+    when(() => mockPinClient.pinVault(any(), any())).thenAnswer((_) async => const PinResult(
+          cid: 'QmTestCid',
+          contentHash: '0xabc123',
+          providersOk: ['kubo'],
+          providersFailed: [],
+        ));
+
+    await repo.addEntry(site: 'a.com', username: 'u', password: 'p');
+
+    // Simula a edição concorrente acontecendo enquanto o UserOperation
+    // on-chain ainda está em voo — o mock só resolve depois que a nova
+    // entrada já foi gravada no repositório real.
+    when(() => mockSessionCreator.updateVault(
+          smartAccountAddress: any(named: 'smartAccountAddress'),
+          cid: any(named: 'cid'),
+          contentHashHex: any(named: 'contentHashHex'),
+        )).thenAnswer((_) async {
+      await repo.addEntry(site: 'concurrent-edit.com', username: 'u2', password: 'p2');
+      return const SessionCreationResult(userOpHash: '0xUserOpHash');
+    });
+
+    await publishService.publish(smartAccountAddress);
+
+    expect(await repo.pendingChanges(), 1,
+        reason: 'a edição concorrente nunca foi publicada on-chain — tem '
+            'que continuar pendente, não sumir por causa do markPublished');
+  });
 }

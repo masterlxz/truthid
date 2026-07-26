@@ -574,8 +574,15 @@ class VaultRepository {
   // Persiste a versão + assinatura de conteúdo do vault que acabou de ser
   // publicado no IPFS (fallback pra vaults sem snapshot ainda, ver
   // pendingChanges), e um snapshot cifrado do conteúdo pra diff futuro.
-  Future<void> markPublished(int version) async {
-    final data = await _load();
+  //
+  // Recebe o blob que foi de fato publicado (em vez de reler o vault atual
+  // do disco) — achado da Sessão 153 (M3, `/code-review high`): o publish
+  // real (pin no IPFS + UserOperation on-chain) leva ~60s, e reler do disco
+  // depois desse tempo capturava qualquer edição feita nesse meio-tempo como
+  // se já tivesse sido publicada, mesmo sem nunca ter ido on-chain.
+  Future<void> markPublished(int version, Uint8List publishedBlob) async {
+    final json = await _cipherService.decrypt(publishedBlob);
+    final data = _parseVaultJson(json);
     await _storage.write(
       key: _publishedVersionKey,
       value: version.toString(),
