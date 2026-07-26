@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-07-25 (Sessão 158 — M9 corrigido)
+> Última atualização: 2026-07-25 (Sessão 159 — M10 corrigido, item 5 do backlog do mobile 100% fechado)
 
 ---
 
@@ -37,12 +37,6 @@
 | P11 | **`/truthid/v1/pin`** — endpoint para apps terceiros usarem os providers de pin do TruthID. Modelo de consentimento em aberto. | `ROADMAP.md` (Sessão 106, item 2) | 🟡 Baixa |
 | P12 | **Dead-drop IPFS/IPNS (fatia 2) do cross-device** — transporte para quando LAN não funciona. /sign-message e /sign-request via dead-drop. | `ROADMAP.md` (Sessão 106, item 3) | 🟡 Baixa |
 | P13 | **Callback opcional no login** — tornar `callbackUrl` opcional no QR, permitindo polling on-chain como alternativa. Design fechado, não implementado. | `ROADMAP.md` (Callback opcional) | 🟡 Baixa |
-
-### Achados do `/code-review high` (Mobile — Sessão 151, `mobile/` inteiro)
-
-| ID | Item | Onde se originou | Prioridade |
-|---|---|---|---|
-| M10 | **`IndexedStack` triplica chamada RPC** — `main.dart:328`, Devices/Sessions/Wallet buscam `getDevice` redundante no cold start. | `SESSIONS.md` (Sessão 151) | 🟡 Baixa |
 
 ### Bugs Descobertos Fora de Escopo
 
@@ -172,6 +166,7 @@
 | ~~M7~~ | ~~Sem guarda de reentrância — vault edit — guarda `_entryPersisted` checada só após `await`, duplo toque podia criar entrada duplicada~~ | **Sessão 156** |
 | ~~M8~~ | ~~Bug de username reintroduzido — `devices_screen.dart` reimplementava inline em vez de usar `resolvePairedUsername()`, só resolvia na auto-descoberta~~ | **Sessão 157** |
 | ~~M9~~ | ~~`expiresAt` ignorado no canal de deep link — `DeepLinkDeliveryChannel.deliver()` recebia o parâmetro mas nunca checava, mascarado pelos chamadores~~ | **Sessão 158** |
+| ~~M10~~ | ~~`IndexedStack` construía as 4 abas de uma vez no cold start — Devices/Sessions/Wallet/Vault cada uma chamando `getDevice` redundante pro mesmo endereço~~ | **Sessão 159** |
 
 ### Bugs do `/code-review max` (Desktop) — 52/52
 

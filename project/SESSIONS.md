@@ -5882,3 +5882,41 @@ infos/warnings pré-existentes, nenhum novo).
 **Próximo passo**: M10 (`IndexedStack` triplica chamada RPC no `main.dart`) é o último achado do
 `/code-review high` — fecha o item 5 do backlog do mobile por completo.
 
+---
+
+### Sessão 159 — 2026-07-25: M10 corrigido — abas do Mobile agora constroem sob demanda
+
+**Achado (Sessão 151)**: `main.dart:328`, o `IndexedStack` que hospeda as 4 abas (Devices/Sessions/
+Wallet/Vault) constrói os 4 filhos de uma vez no cold start (`IndexedStack` mantém todo child
+montado na árvore, só esconde os não-selecionados) — cada uma chama `_blockchain.getDevice(address)`
+pro mesmo endereço, de forma totalmente independente. Investigação confirmou que são **4** telas
+afetadas, não 3 como o achado original mencionava — `VaultScreen` também faz a mesma dança
+("mesmo padrão de resolução device→identidade de sessions_screen.dart", já comentado no próprio
+código). 4 round-trips redundantes contra o RPC público que já causou rate-limit antes (ver
+[[project-smart-account-paymaster]]).
+
+**Fix**: lazy-build das abas em vez de mexer na lógica de cada tela (a causa raiz é a eagerness do
+`IndexedStack`, não a lógica de cada uma, que é razoável manter independente). Novo
+`Set<int> _builtTabs = {0}` (aba 0, Devices, sempre construída no cold start); os 4 `onTap` do
+`BottomAppBar` passam por um novo `_selectTab(index)` que adiciona ao set; a lista `children` do
+`IndexedStack` deixa de ser `const` e usa `_builtTabs.contains(n) ? const XScreen() :
+const SizedBox.shrink()` pras abas 1-3. Uma vez construída, o próprio `IndexedStack` preserva
+estado normalmente — só adia a primeira construção até a aba ser visitada.
+
+**Testes**: `widget_test.dart` ganhou 1 teste novo — pumpa `RootScreen` direto (não `TruthIDApp()`,
+pra não passar pelo overlay opaco do `AppLockGate`, que bloqueia hit-test enquanto resolve
+`isEnabled()`, e nem por `pumpAndSettle()`, que travava esperando as chamadas de rede reais das
+telas — nenhum mock nesta suíte — nunca resolverem em ambiente sandboxed). Confirma
+`DevicesScreen` presente e `SessionsScreen`/`WalletScreen`/`VaultScreen` ausentes logo após o
+`pumpWidget`; depois de um `tap` em "Sessions" + `pump()`, `SessionsScreen` passa a estar presente
+e as outras duas continuam ausentes. Esse teste falha no código antigo (as 4 já estariam na
+árvore desde o início).
+
+**Verificação**: `flutter test` 395/395 (suite completa, 1 novo), `flutter analyze` limpo (14
+infos/warnings pré-existentes, nenhum novo).
+
+**Item 5 do backlog do mobile fecha 100%** — os 10 achados do `/code-review high` (Sessão 151)
+foram todos corrigidos (M1-M10), cada um com teste de regressão novo. Falta só o P25 (hang
+pré-existente em `cargo test --lib pin::` no Desktop, achado incidental na Sessão 154, não
+relacionado a nenhum dos M1-M10) como pendência separada.
+

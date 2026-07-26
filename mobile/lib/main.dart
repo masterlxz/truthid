@@ -224,6 +224,11 @@ bool _isNewer(String latest, String current) {
 
 class _RootScreenState extends State<RootScreen> {
   int _currentIndex = 0;
+  // Aba 0 (Devices) sempre construída no cold start; as outras só entram
+  // aqui quando visitadas pela 1ª vez — sem isso, o IndexedStack constrói
+  // as 4 de uma vez e cada uma chama getDevice(address) on-chain pro mesmo
+  // endereço, independente das outras (achado do /code-review high, M10).
+  final Set<int> _builtTabs = {0};
   String? _updateVersion;
   String? _updateUrl;
   bool _updateDismissed = false;
@@ -263,6 +268,13 @@ class _RootScreenState extends State<RootScreen> {
     } finally {
       client.close();
     }
+  }
+
+  void _selectTab(int index) {
+    setState(() {
+      _currentIndex = index;
+      _builtTabs.add(index);
+    });
   }
 
   void _showDonationSheet() {
@@ -346,11 +358,17 @@ class _RootScreenState extends State<RootScreen> {
           Expanded(
             child: IndexedStack(
               index: _currentIndex,
-              children: const [
-                DevicesScreen(),
-                SessionsScreen(),
-                WalletScreen(),
-                VaultScreen(),
+              children: [
+                const DevicesScreen(),
+                _builtTabs.contains(1)
+                    ? const SessionsScreen()
+                    : const SizedBox.shrink(),
+                _builtTabs.contains(2)
+                    ? const WalletScreen()
+                    : const SizedBox.shrink(),
+                _builtTabs.contains(3)
+                    ? const VaultScreen()
+                    : const SizedBox.shrink(),
               ],
             ),
           ),
@@ -375,7 +393,7 @@ class _RootScreenState extends State<RootScreen> {
                 icon: Icons.phonelink_lock,
                 label: 'Devices',
                 selected: _currentIndex == 0,
-                onTap: () => setState(() => _currentIndex = 0),
+                onTap: () => _selectTab(0),
               ),
             ),
             Expanded(
@@ -383,7 +401,7 @@ class _RootScreenState extends State<RootScreen> {
                 icon: Icons.verified_user,
                 label: 'Sessions',
                 selected: _currentIndex == 1,
-                onTap: () => setState(() => _currentIndex = 1),
+                onTap: () => _selectTab(1),
               ),
             ),
             // Espaço reservado pro notch do FAB central — 2 abas de cada lado.
@@ -393,7 +411,7 @@ class _RootScreenState extends State<RootScreen> {
                 icon: Icons.account_balance_wallet,
                 label: 'Wallet',
                 selected: _currentIndex == 2,
-                onTap: () => setState(() => _currentIndex = 2),
+                onTap: () => _selectTab(2),
               ),
             ),
             Expanded(
@@ -401,7 +419,7 @@ class _RootScreenState extends State<RootScreen> {
                 icon: Icons.lock_outline,
                 label: 'Vault',
                 selected: _currentIndex == 3,
-                onTap: () => setState(() => _currentIndex = 3),
+                onTap: () => _selectTab(3),
               ),
             ),
           ],
