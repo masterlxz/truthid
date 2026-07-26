@@ -1,4 +1,5 @@
 import { findLoginFieldPairs } from '../src/autofill/formDetection';
+import { attachNewCredentialCapture } from '../src/autofill/newCredentialCapture';
 import { attachAutofillIconIfMatches } from '../src/autofill/overlay';
 
 // Primeiro content script do projeto — detecta formulários de login em
@@ -15,6 +16,7 @@ export default defineContentScript({
     function scan(root: ParentNode): void {
       for (const { passwordField, usernameField } of findLoginFieldPairs(root)) {
         void attachAutofillIconIfMatches(passwordField, usernameField);
+        attachNewCredentialCapture(passwordField, usernameField);
       }
     }
 

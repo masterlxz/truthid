@@ -36,7 +36,9 @@ function looksLikeUsernameField(input: HTMLInputElement): boolean {
 // que não usam a tag semântica), sobe um número fixo de níveis procurando
 // um container que já tenha pelo menos 2 campos de texto — bom o bastante
 // pra não precisar percorrer o documento inteiro.
-function findScope(passwordField: HTMLInputElement): ParentNode {
+// Pública — reutilizada por newCredentialCapture.ts pra identificar o
+// formulário/escopo e evitar escutar o mesmo submit duas vezes.
+export function findScope(passwordField: HTMLInputElement): ParentNode {
   const form = passwordField.closest('form');
   if (form) return form;
 

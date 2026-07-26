@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-07-26 (Sessão 163 — P26 implementado: domain separation na assinatura de sessão, mobile + desktop, atrás de flag)
+> Última atualização: 2026-07-26 (Sessão 164 — P10 fechado: senha nova via extensão implementada, doc da fatia Mobile corrigida; batch sync separado como P29)
 
 ---
 
@@ -34,7 +34,7 @@
 |---|---|---|---|
 | P8 | **Phase 15 — Digital Identity Vault** — documentos, endereços, cartões de crédito. 8 etapas planejadas. **Não iniciada.** | `PHASE.md` (Fase 15) | 🟠 Média |
 | P9 | **Phase 15 — Autofill SO (Android/iOS)** — implementar `AutofillService` e `ASCredentialProviderViewController`. | `PHASE.md` (Fase 15, etapas 15.5/15.6) | 🟠 Média |
-| P10 | **Fase 2 do passkey na extensão (criação + aprovação)** — Desktop e extensão fechados; Mobile (fatia final) não implementada. Inclui "Sync em lote (batch sync)" para qualquer credencial nova (senha ou passkey). | `ROADMAP.md` (Backlog, item 6) | 🟠 Média |
+| P29 | **Sync em lote (batch sync) pra credencial nova via extensão** — hoje cada credencial nova (passkey ou senha) gera 1 QR + 1 `UserOperation` própria. Acumular várias edições numa sessão e assinar tudo numa `UserOperation` em lote (`executeBatch`) nunca foi construído — infra do tamanho do `/truthid/v1/pin` inteiro (~3 sessões, ver `ROADMAP.md` seção 2.1). | `ROADMAP.md` (Backlog, item 6, seção 2.1) | 🟡 Baixa |
 | P11 | **`/truthid/v1/pin`** — endpoint para apps terceiros usarem os providers de pin do TruthID. Modelo de consentimento em aberto. | `ROADMAP.md` (Sessão 106, item 2) | 🟡 Baixa |
 | P12 | **Dead-drop IPFS/IPNS (fatia 2) do cross-device** — transporte para quando LAN não funciona. /sign-message e /sign-request via dead-drop. | `ROADMAP.md` (Sessão 106, item 3) | 🟡 Baixa |
 | P13 | **Callback opcional no login** — tornar `callbackUrl` opcional no QR, permitindo polling on-chain como alternativa. Design fechado, não implementado. | `ROADMAP.md` (Callback opcional) | 🟡 Baixa |
@@ -192,6 +192,12 @@
 | ID | Item | Resolvida em |
 |---|---|---|
 | ~~P25~~ | ~~Causa raiz: descasamento de casing entre o `app_name` normalizado (minúsculo) que `try_consume_quota` usa pra buscar e o `app_name` capitalizado que 3 testes semeavam direto no arquivo de autorizações — o app "não era encontrado", caía no caminho de aprovação e ficava parqueado esperando um `resolve()` que esses testes nunca chamavam. Corrigido semeando os testes já normalizados e endurecendo `revoke_authorization`/`set_daily_limit` pra também normalizar o `app_name` recebido (mesma consistência que o resto do módulo já tinha)~~ | **Sessão 162** |
+
+### P10 — Fase 2 do passkey na extensão + senha nova via extensão (Sessão 164)
+
+| ID | Item | Resolvida em |
+|---|---|---|
+| ~~P10~~ | ~~Documentação corrigida: a fatia Mobile já tinha fechado 100% em hardware real nas Sessões 135-136 (`PENDING.md`/`ROADMAP.md` nunca foram atualizados depois disso). **Escopo real que faltava — senha nova via extensão — implementado nesta sessão**: novo `extension/src/autofill/newCredentialCapture.ts` detecta submit de formulário com usuário+senha e propõe a credencial pro Device aprovar (mesma heurística do "Salvar senha?" nativo dos navegadores — propõe quando não há entrada existente com esse username exato pro hostname, evita distinguir estruturalmente cadastro de login). Toda a infra downstream (`pendingEdits.ts`, `cipher.ts`, `mobileDelivery.ts`/`desktopDelivery.ts`, `vault_edit_approval_screen.dart`/`VaultEditApprovalModal.tsx`, `vault_edit.rs`) já era genérica — zero mudança fora da extensão. Batch sync (sub-item 2.1 do roadmap) segue de fora, ver P29~~ | **Sessão 164** |
 
 ### Bugs do `/code-review max` (Desktop) — 52/52
 

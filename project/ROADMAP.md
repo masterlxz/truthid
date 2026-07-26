@@ -358,9 +358,22 @@ depois, um de cada vez, em sessão própria (provavelmente com `/plan`).
    implementação começou pela metade menor); e **os dois caminhos de entrega** (Desktop na mesma
    máquina via loopback HTTP, e celular via QR+LAN), confirmado porque o dono do projeto apontou
    explicitamente que "o device não necessariamente é o app no mesmo computador, pode ser a
-   extensão no PC e autorizar com o celular". Ver entrada de sessão logo abaixo pro estado exato
-   (**Desktop e extensão fechados e validados; Mobile — a fatia final — ainda não implementada,
-   trabalho pausado a pedido do dono do projeto pra continuar numa sessão futura**).
+   extensão no PC e autorizar com o celular".
+
+   ~~Desktop e extensão fechados e validados; Mobile — a fatia final — ainda não implementada~~ —
+   **fatia Mobile fechou 100% na Sessão 135, todo o fluxo (Desktop loopback + celular via QR+LAN)
+   validado em hardware real na Sessão 136** (esta seção do ROADMAP nunca tinha sido atualizada
+   depois disso — corrigido na Sessão 164, ver `PENDING.md` P10). **Senha nova via extensão**
+   (a parte que de fato só tinha "desenho de papel" até então) **implementada na Sessão 164**: novo
+   `extension/src/autofill/newCredentialCapture.ts` escuta submit de formulário e propõe a
+   credencial pro Device aprovar quando não há entrada existente com esse username exato pro
+   hostname — mesma heurística do "Salvar senha?" nativo dos navegadores, evita tentar distinguir
+   estruturalmente cadastro de login. Reaproveita 100% da infra já validada pra passkey
+   (`VaultEditProposal` já tinha `password` como campo de primeira classe e `passkey` opcional,
+   zero mudança em `pendingEdits.ts`/`cipher.ts`/`mobileDelivery.ts`/`desktopDelivery.ts`/telas de
+   aprovação/`vault_edit.rs`). `npx vitest run` (extensão) 86/86, `tsc --noEmit`/`npm run build`
+   limpos. **Sync em lote (batch sync, seção 2.1 acima) segue não implementado** — registrado
+   como P29 em `PENDING.md`, infra do tamanho do `/truthid/v1/pin` inteiro, sem prazo.
 
 Nada implementado nesta entrada — só levantamento e registro de causa raiz (item 4), pra rodar item
 por item nas próximas sessões.

@@ -6188,3 +6188,61 @@ achados pré-existentes, nenhum novo). `npx vitest run` 101/101 (suite completa 
 `tsc --noEmit` limpo. Não dá pra validar em hardware real contra o contrato com C4 — ele não está
 deployado; fica pra quando a ativação da flag acontecer junto do redeploy.
 
+### Sessão 164 — 2026-07-26: P10 fechado — senha nova via extensão + correção de documentação
+
+Retomada do P10 (item 6 do backlog, "Fase 2 do passkey na extensão"). Primeiro achado, antes de
+implementar qualquer coisa: o `PENDING.md`/`ROADMAP.md` descreviam a fatia Mobile como "não
+implementada", mas checando o código (`mobile/lib/screens/vault_edit_approval_screen.dart` e o
+resto já existiam) e a memória do projeto, essa fatia tinha fechado 100% em hardware real nas
+Sessões 135-136 — a documentação simplesmente nunca foi atualizada depois disso. Escolhido com o
+dono do projeto, via `AskUserQuestion`, qual dos dois pedaços reais que sobravam atacar: **senha
+nova via extensão** (escopo menor, reaproveita quase toda a infra do passkey) em vez de sync em
+lote (batch sync, infra nova do tamanho do `/truthid/v1/pin` inteiro — registrada à parte como
+P29).
+
+**Exploração confirmou**: toda a infraestrutura downstream do vault-edit já era genérica —
+`VaultEditProposal` (`extension/src/vaultEdit/pendingEdits.ts`) já tinha `password` como campo de
+primeira classe e `passkey` opcional; `cipher.ts`, `mobileDelivery.ts`, `desktopDelivery.ts`, o
+relay `webauthn-bridge.content.ts`→`background.ts` tratam a proposta como payload opaco; Mobile
+(`vault_edit_approval_screen.dart`+`VaultRepository.addEntry`) e Desktop
+(`VaultEditApprovalModal.tsx`+`vault_edit.rs`+`vault_upsert_entry`) já leem `passkey` como opcional
+em todo lugar — `vault_edit.rs` inclusive só rejeita quando **os dois** (senha E passkey) estão
+ausentes. Ou seja, proposta só-senha já era o caminho aceito, só nunca tinha sido exercitado porque
+nada gerava esse tipo de proposta.
+
+**Implementação, 100% do lado da extensão**: `extension/src/autofill/formDetection.ts` teve
+`findScope` (já existia, privada) promovida a pública. Novo
+`extension/src/autofill/newCredentialCapture.ts` (`attachNewCredentialCapture`) escuta `submit` no
+`<form>` (via `findScope`, com guarda por escopo — `WeakSet<ParentNode>` — porque um cadastro com
+senha+confirmar-senha tem 2 `input[type=password]`, e sem a guarda o mesmo submit geraria 2
+propostas), lê os campos no momento do submit, pergunta ao background via
+`GET_MATCHING_ENTRIES_MESSAGE` (já existia, mesmo canal do autofill) se já existe entrada com esse
+username exato pro hostname — se não existir, propõe via `VAULT_EDIT_ENQUEUE_MESSAGE` (mesmo canal
+que a passkey já usa, `background.ts` sem nenhuma mudança). Heurística deliberadamente não tenta
+distinguir cadastro de login estruturalmente (frágil — nem todo cadastro tem confirmar-senha):
+espelha o "Salvar senha?" nativo dos navegadores, propõe sempre que a senha submetida não bate com
+nada já salvo — cobre cadastro de verdade e login numa conta antiga ainda não guardada no Vault.
+Dedupe por página (`Set<string>` de `hostname:username`) evita repetir a proposta a cada tentativa
+de submit igual. `extension/entrypoints/autofill.content.ts` passou a chamar
+`attachNewCredentialCapture` junto de `attachAutofillIconIfMatches` pro mesmo par de campos.
+
+**Limitação conhecida, documentada**: dispara na intenção de submit, não na confirmação de sucesso
+(sem sinal universal de "deu certo" entre sites) — mesma simplificação que gerenciadores de senha
+nativos historicamente também têm; não é regressão, a aprovação real acontece no Device, que
+mostra site/usuário/senha antes de persistir. Só cobre `<form>` de verdade (SPAs sem tag semântica
+não disparam `submit`) — fora de escopo desta rodada.
+
+**Testes**: novo `extension/src/autofill/newCredentialCapture.test.ts` (jsdom) — propõe quando não
+há entrada existente; não propõe com entrada já existente; não propõe com senha vazia; formulário
+com senha+confirmar-senha gera só 1 proposta por submit (prova a guarda por escopo); 2 submits
+seguidos do mesmo hostname+username geram só 1 proposta (prova o dedupe).
+
+**Verificação**: `npx vitest run` (extensão) 86/86 (5 novos), `npm run compile` (`tsc --noEmit`)
+limpo, `npm run build` gera os content scripts certos. Não dá pra validar em hardware real nesta
+sessão (precisa de formulário de cadastro de verdade + Device pareado) — mesma pendência que a
+Fase 2 do passkey também teve até ganhar sessão própria (Sessões 135-136).
+
+**Documentação**: `PENDING.md` — P10 movido pra "Resolvidas"; sync em lote separado como novo P29
+(baixa prioridade, sem prazo). `ROADMAP.md` — seção do item 6 do backlog corrigida pra refletir o
+fechamento real da fatia Mobile (Sessões 135-136) e registrar a senha nova via extensão.
+
