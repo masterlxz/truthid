@@ -14,9 +14,8 @@ contract DeployFactory is Script {
 
         vm.startBroadcast();
 
-        TruthIDAccountFactory factory = new TruthIDAccountFactory(
-            ENTRY_POINT_V07, deviceRegistry, identityRegistry, recoveryManager
-        );
+        TruthIDAccountFactory factory =
+            new TruthIDAccountFactory(ENTRY_POINT_V07, deviceRegistry, identityRegistry, recoveryManager);
 
         // Débito #17: o IdentityRegistry precisa saber o endereço da factory
         // atual pra validar consentimento de controllers do tipo smart

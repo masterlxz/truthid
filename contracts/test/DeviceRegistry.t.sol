@@ -42,9 +42,7 @@ contract DeviceRegistryTest is Test, IdentityConsentHelper {
     }
 
     // Atalho: faz o fluxo completo commit → (1 bloco depois) → registerDevice
-    function _registerDevice(address controller, address devicePubKey, string memory label)
-        internal
-    {
+    function _registerDevice(address controller, address devicePubKey, string memory label) internal {
         bytes32 commitment = keccak256(abi.encodePacked(devicePubKey, SALT, controller));
 
         vm.prank(controller);
@@ -177,9 +175,7 @@ contract DeviceRegistryTest is Test, IdentityConsentHelper {
         vm.roll(block.number + 1);
 
         vm.prank(alice);
-        vm.expectRevert(
-            abi.encodeWithSelector(DeviceRegistry.DeviceAlreadyRegistered.selector, aliceDevice1)
-        );
+        vm.expectRevert(abi.encodeWithSelector(DeviceRegistry.DeviceAlreadyRegistered.selector, aliceDevice1));
         deviceRegistry.registerDevice(aliceDevice1, "Duplicado", SALT, "");
     }
 
@@ -244,11 +240,7 @@ contract DeviceRegistryTest is Test, IdentityConsentHelper {
         vm.roll(block.number + 1);
 
         vm.prank(bob);
-        vm.expectRevert(
-            abi.encodeWithSelector(
-                DeviceRegistry.DeviceBelongsToAnotherIdentity.selector, aliceDevice1
-            )
-        );
+        vm.expectRevert(abi.encodeWithSelector(DeviceRegistry.DeviceBelongsToAnotherIdentity.selector, aliceDevice1));
         deviceRegistry.registerDevice(aliceDevice1, "Device roubado", SALT, "");
     }
 
@@ -298,9 +290,7 @@ contract DeviceRegistryTest is Test, IdentityConsentHelper {
 
     function test_Revert_RevokeDevice_NotFound() public {
         vm.prank(alice);
-        vm.expectRevert(
-            abi.encodeWithSelector(DeviceRegistry.DeviceNotFound.selector, aliceDevice1)
-        );
+        vm.expectRevert(abi.encodeWithSelector(DeviceRegistry.DeviceNotFound.selector, aliceDevice1));
         deviceRegistry.revokeDevice(aliceDevice1);
     }
 
@@ -311,9 +301,7 @@ contract DeviceRegistryTest is Test, IdentityConsentHelper {
         deviceRegistry.revokeDevice(aliceDevice1);
 
         vm.prank(alice);
-        vm.expectRevert(
-            abi.encodeWithSelector(DeviceRegistry.DeviceAlreadyRevoked.selector, aliceDevice1)
-        );
+        vm.expectRevert(abi.encodeWithSelector(DeviceRegistry.DeviceAlreadyRevoked.selector, aliceDevice1));
         deviceRegistry.revokeDevice(aliceDevice1);
     }
 
@@ -475,9 +463,7 @@ contract DeviceRegistryTest is Test, IdentityConsentHelper {
     }
 
     function test_Revert_GetDevice_NotFound() public {
-        vm.expectRevert(
-            abi.encodeWithSelector(DeviceRegistry.DeviceNotFound.selector, aliceDevice1)
-        );
+        vm.expectRevert(abi.encodeWithSelector(DeviceRegistry.DeviceNotFound.selector, aliceDevice1));
         deviceRegistry.getDevice(aliceDevice1);
     }
 
@@ -677,9 +663,7 @@ contract DeviceRegistryTest is Test, IdentityConsentHelper {
         vm.roll(block.number + 1);
 
         vm.prank(alice);
-        vm.expectRevert(
-            abi.encodeWithSelector(DeviceRegistry.MaxDevicesExceeded.selector, uint256(1))
-        );
+        vm.expectRevert(abi.encodeWithSelector(DeviceRegistry.MaxDevicesExceeded.selector, uint256(1)));
         deviceRegistry.registerDevice(extraDevice, "extra", SALT, "");
     }
 }

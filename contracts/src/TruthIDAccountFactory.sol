@@ -54,15 +54,10 @@ contract TruthIDAccountFactory {
     error NotOwner();
     error InvalidRegistryAddress();
 
-    constructor(
-        address entryPoint_,
-        address deviceRegistry_,
-        address identityRegistry_,
-        address recoveryManager_
-    ) {
+    constructor(address entryPoint_, address deviceRegistry_, address identityRegistry_, address recoveryManager_) {
         if (
-            entryPoint_ == address(0) || deviceRegistry_ == address(0)
-                || identityRegistry_ == address(0) || recoveryManager_ == address(0)
+            entryPoint_ == address(0) || deviceRegistry_ == address(0) || identityRegistry_ == address(0)
+                || recoveryManager_ == address(0)
         ) {
             revert InvalidConstructorArgs();
         }
@@ -87,9 +82,7 @@ contract TruthIDAccountFactory {
         bytes32 salt = _salt(owner_, index);
         address predicted = _computeAddress(salt, owner_);
 
-        ret = new TruthIDAccount{salt: salt}(
-            entryPoint, _deviceRegistry, _identityRegistry, _recoveryManager, owner_
-        );
+        ret = new TruthIDAccount{salt: salt}(entryPoint, _deviceRegistry, _identityRegistry, _recoveryManager, owner_);
 
         // Sanity check: CREATE2 deve nos dar exatamente o endereco previsto.
         assert(address(ret) == predicted);
@@ -121,13 +114,7 @@ contract TruthIDAccountFactory {
 
         bytes32 initCodeHash = keccak256(initCode);
 
-        return address(
-            uint160(
-                uint256(
-                    keccak256(abi.encodePacked(bytes1(0xFF), address(this), salt, initCodeHash))
-                )
-            )
-        );
+        return address(uint160(uint256(keccak256(abi.encodePacked(bytes1(0xFF), address(this), salt, initCodeHash)))));
     }
 
     function _salt(address owner_, uint256 index) internal pure returns (bytes32) {
@@ -164,16 +151,9 @@ contract TruthIDAccountFactory {
     /// antes da atualização não são afetadas (continuam com os endereços
     /// antigos). O owner de cada conta existente deve chamar
     /// `updateRegistries` na própria TruthIDAccount para redirecioná-la.
-    function updateRegistries(
-        address deviceRegistry_,
-        address identityRegistry_,
-        address recoveryManager_
-    ) external {
+    function updateRegistries(address deviceRegistry_, address identityRegistry_, address recoveryManager_) external {
         if (msg.sender != owner) revert NotOwner();
-        if (
-            deviceRegistry_ == address(0) || identityRegistry_ == address(0)
-                || recoveryManager_ == address(0)
-        ) {
+        if (deviceRegistry_ == address(0) || identityRegistry_ == address(0) || recoveryManager_ == address(0)) {
             revert InvalidRegistryAddress();
         }
         _deviceRegistry = deviceRegistry_;

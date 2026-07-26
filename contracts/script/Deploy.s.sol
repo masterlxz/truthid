@@ -25,10 +25,7 @@ contract Deploy is Script {
         deviceRegistry.setRecoveryManager(address(recoveryManager));
 
         TruthIDAccountFactory factory = new TruthIDAccountFactory(
-            ENTRY_POINT_V07,
-            address(deviceRegistry),
-            address(identityRegistry),
-            address(recoveryManager)
+            ENTRY_POINT_V07, address(deviceRegistry), address(identityRegistry), address(recoveryManager)
         );
 
         // Débito #17: registra a factory no IdentityRegistry pra validar

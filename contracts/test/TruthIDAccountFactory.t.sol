@@ -33,9 +33,7 @@ contract TruthIDAccountFactoryTest is Test, IdentityConsentHelper {
 
         identityRegistry = new IdentityRegistry();
 
-        factory = new TruthIDAccountFactory(
-            ENTRY_POINT_V07, deviceRegistry, address(identityRegistry), recoveryManager
-        );
+        factory = new TruthIDAccountFactory(ENTRY_POINT_V07, deviceRegistry, address(identityRegistry), recoveryManager);
 
         // Precisa saber sobre a factory pra validar consentimento de
         // controllers do tipo smart account pré-deploy (débito #17).
@@ -116,16 +114,12 @@ contract TruthIDAccountFactoryTest is Test, IdentityConsentHelper {
 
     function test_Revert_Constructor_ZeroAddress_EntryPoint() public {
         vm.expectRevert(TruthIDAccountFactory.InvalidConstructorArgs.selector);
-        new TruthIDAccountFactory(
-            address(0), deviceRegistry, address(identityRegistry), recoveryManager
-        );
+        new TruthIDAccountFactory(address(0), deviceRegistry, address(identityRegistry), recoveryManager);
     }
 
     function test_Revert_Constructor_ZeroAddress_DeviceRegistry() public {
         vm.expectRevert(TruthIDAccountFactory.InvalidConstructorArgs.selector);
-        new TruthIDAccountFactory(
-            ENTRY_POINT_V07, address(0), address(identityRegistry), recoveryManager
-        );
+        new TruthIDAccountFactory(ENTRY_POINT_V07, address(0), address(identityRegistry), recoveryManager);
     }
 
     function test_Revert_Constructor_ZeroAddress_IdentityRegistry() public {
@@ -135,9 +129,7 @@ contract TruthIDAccountFactoryTest is Test, IdentityConsentHelper {
 
     function test_Revert_Constructor_ZeroAddress_RecoveryManager() public {
         vm.expectRevert(TruthIDAccountFactory.InvalidConstructorArgs.selector);
-        new TruthIDAccountFactory(
-            ENTRY_POINT_V07, deviceRegistry, address(identityRegistry), address(0)
-        );
+        new TruthIDAccountFactory(ENTRY_POINT_V07, deviceRegistry, address(identityRegistry), address(0));
     }
 
     // -------------------------------------------------------------------------
@@ -149,11 +141,9 @@ contract TruthIDAccountFactoryTest is Test, IdentityConsentHelper {
 
         // 1. Ledger (owner) assina o consentimento (debito #17) e paga a
         // identidade apontando para o endereco previsto.
-        (uint8 v, bytes32 r, bytes32 s) =
-            _signConsent(identityRegistry, ownerKey, "masterlxz.id", predictedAccount);
+        (uint8 v, bytes32 r, bytes32 s) = _signConsent(identityRegistry, ownerKey, "masterlxz.id", predictedAccount);
         vm.prank(owner);
-        uint256 identityId =
-            identityRegistry.createIdentity("masterlxz.id", predictedAccount, v, r, s);
+        uint256 identityId = identityRegistry.createIdentity("masterlxz.id", predictedAccount, v, r, s);
 
         // sanity: controller registrado e realmente o endereco previsto.
         IdentityRegistry.Identity memory identity = identityRegistry.getIdentity("masterlxz.id");
@@ -301,9 +291,7 @@ contract TruthIDAccountFactoryTest is Test, IdentityConsentHelper {
     function test_UpdateRegistries_GetAddressChanges() public {
         address predictedBefore = factory.getAddress(owner, 0);
 
-        factory.updateRegistries(
-            makeAddr("newDR"), makeAddr("newIR"), makeAddr("newRM")
-        );
+        factory.updateRegistries(makeAddr("newDR"), makeAddr("newIR"), makeAddr("newRM"));
 
         address predictedAfter = factory.getAddress(owner, 0);
 

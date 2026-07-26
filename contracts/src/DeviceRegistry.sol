@@ -23,11 +23,11 @@ contract DeviceRegistry is IdentityResolver {
 
     struct Device {
         uint256 identityId; // identidade à qual este device pertence
-        address pubKey;     // endereço Ethereum derivado da chave pública do device
-        string label;       // nome legível, ex: "iPhone 15 Pro"
-        uint256 addedAt;    // block.timestamp quando o device foi registrado
-        bool revoked;       // true se o device foi revogado
-        bool exists;        // flag para distinguir "não existe" de "existe com valores zerados"
+        address pubKey; // endereço Ethereum derivado da chave pública do device
+        string label; // nome legível, ex: "iPhone 15 Pro"
+        uint256 addedAt; // block.timestamp quando o device foi registrado
+        bool revoked; // true se o device foi revogado
+        bool exists; // flag para distinguir "não existe" de "existe com valores zerados"
     }
 
     // -------------------------------------------------------------------------
@@ -125,12 +125,9 @@ contract DeviceRegistry is IdentityResolver {
     /// com a chave pública do device (ECIES secp256k1) — o device consegue
     /// decifrar com sua chave privada e assim acessar o vault sem precisar da
     /// wallet conectada.
-    function registerDevice(
-        address devicePubKey,
-        string calldata label,
-        bytes32 salt,
-        bytes calldata encryptedVaultKey
-    ) external {
+    function registerDevice(address devicePubKey, string calldata label, bytes32 salt, bytes calldata encryptedVaultKey)
+        external
+    {
         if (devicePubKey == address(0)) revert InvalidPubKey();
 
         Device storage existing = _devices[devicePubKey];
@@ -250,7 +247,9 @@ contract DeviceRegistry is IdentityResolver {
     /// Se `offset >= length`, retorna array vazio. Se `offset + limit > length`,
     /// trunca ao final. C6: previne estouro de gas.
     function getDevicesByIdentityPaginated(uint256 identityId, uint256 offset, uint256 limit)
-        external view returns (address[] memory devices)
+        external
+        view
+        returns (address[] memory devices)
     {
         address[] storage deviceList = _devicesByIdentity[identityId];
         uint256 length = deviceList.length;

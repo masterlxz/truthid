@@ -259,9 +259,7 @@ contract VaultRegistryTest is Test, IdentityConsentHelper {
         vm.store(address(vaultRegistry), slot, bytes32(uint256(vaultRegistry.MAX_HISTORY())));
 
         vm.prank(alice);
-        vm.expectRevert(
-            abi.encodeWithSelector(VaultRegistry.MaxHistoryExceeded.selector, uint256(1))
-        );
+        vm.expectRevert(abi.encodeWithSelector(VaultRegistry.MaxHistoryExceeded.selector, uint256(1)));
         vaultRegistry.updateVault(CID_V1, HASH_V1);
     }
 }

@@ -78,8 +78,7 @@ contract TruthIDAccount {
     // ~97% das assinaturas canônicas válidas (owner e device). Corrigido ao
     // escrever os testes do débito #18: o caminho feliz de `executeBatch`
     // falhava mesmo com assinatura correta, o que expôs o dígito faltante.
-    uint256 internal constant _SECP256K1N_DIV_2 =
-        0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0;
+    uint256 internal constant _SECP256K1N_DIV_2 = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0;
 
     // -------------------------------------------------------------------------
     // Estado
@@ -147,9 +146,8 @@ contract TruthIDAccount {
         address owner_
     ) {
         if (
-            entryPoint_ == address(0) || deviceRegistry_ == address(0)
-                || identityRegistry_ == address(0) || recoveryManager_ == address(0)
-                || owner_ == address(0)
+            entryPoint_ == address(0) || deviceRegistry_ == address(0) || identityRegistry_ == address(0)
+                || recoveryManager_ == address(0) || owner_ == address(0)
         ) {
             revert InvalidConstructorArgs();
         }
@@ -177,11 +175,10 @@ contract TruthIDAccount {
     /// sempre, mesmo se a validação falhar, porque o EntryPoint já gastou
     /// gas de validação e precisa ser ressarcido independentemente (mesmo
     /// comportamento do SimpleAccount original).
-    function validateUserOp(
-        PackedUserOperation calldata userOp,
-        bytes32 userOpHash,
-        uint256 missingAccountFunds
-    ) external returns (uint256 validationData) {
+    function validateUserOp(PackedUserOperation calldata userOp, bytes32 userOpHash, uint256 missingAccountFunds)
+        external
+        returns (uint256 validationData)
+    {
         if (msg.sender != entryPoint) revert NotEntryPoint();
 
         validationData = _validateSignature(userOp, userOpHash);
@@ -208,9 +205,7 @@ contract TruthIDAccount {
 
     /// Executa um lote de chamadas. `dest`, `value` e `func` devem ter o
     /// mesmo tamanho (passe zeros explícitos em `value` pra chamadas sem ETH).
-    function executeBatch(address[] calldata dest, uint256[] calldata value, bytes[] calldata func)
-        external
-    {
+    function executeBatch(address[] calldata dest, uint256[] calldata value, bytes[] calldata func) external {
         _requireAuthorized();
         if (dest.length != func.length || dest.length != value.length) {
             revert ArrayLengthMismatch();
@@ -287,16 +282,9 @@ contract TruthIDAccount {
     /// Só pode ser chamado pelo owner (via execute ou chamada direta),
     /// pelo EntryPoint (via UserOp) ou pela própria conta (auto-chamada).
     /// Nenhum dos endereços pode ser zero.
-    function updateRegistries(
-        address deviceRegistry_,
-        address identityRegistry_,
-        address recoveryManager_
-    ) external {
+    function updateRegistries(address deviceRegistry_, address identityRegistry_, address recoveryManager_) external {
         _requireAuthorized();
-        if (
-            deviceRegistry_ == address(0) || identityRegistry_ == address(0)
-                || recoveryManager_ == address(0)
-        ) {
+        if (deviceRegistry_ == address(0) || identityRegistry_ == address(0) || recoveryManager_ == address(0)) {
             revert InvalidRegistryAddress();
         }
 
@@ -357,8 +345,7 @@ contract TruthIDAccount {
             return SIG_VALIDATION_FAILED;
         }
 
-        bytes32 ethSignedHash =
-            keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", userOpHash));
+        bytes32 ethSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", userOpHash));
         address signer = ecrecover(ethSignedHash, v, r, s);
         if (signer == address(0)) {
             return SIG_VALIDATION_FAILED;
@@ -412,10 +399,7 @@ contract TruthIDAccount {
             // bloqueio existe pra fechar.
             address dest;
             assembly {
-                dest := and(
-                    calldataload(add(callData.offset, 4)),
-                    0xffffffffffffffffffffffffffffffffffffffff
-                )
+                dest := and(calldataload(add(callData.offset, 4)), 0xffffffffffffffffffffffffffffffffffffffff)
             }
             return _isDestAllowed(dest);
         }
@@ -455,11 +439,7 @@ contract TruthIDAccount {
     // de dentro de uma função `view`. Não é pensada pra uso externo de
     // verdade (daí o prefixo `_`), mas por ser `pure` e não acessar nenhum
     // estado sensível, expô-la no ABI não abre superfície de ataque nova.
-    function _decodeExecuteBatchDest(bytes calldata callData)
-        external
-        pure
-        returns (address[] memory dest)
-    {
+    function _decodeExecuteBatchDest(bytes calldata callData) external pure returns (address[] memory dest) {
         dest = abi.decode(callData[4:], (address[]));
     }
 
@@ -467,11 +447,7 @@ contract TruthIDAccount {
         return dest != address(this) && !blockedForDevices[dest];
     }
 
-    function _splitSignature(bytes calldata signature)
-        internal
-        pure
-        returns (bytes32 r, bytes32 s, uint8 v)
-    {
+    function _splitSignature(bytes calldata signature) internal pure returns (bytes32 r, bytes32 s, uint8 v) {
         if (signature.length != 65) revert InvalidSignatureLength();
         assembly {
             r := calldataload(signature.offset)

@@ -56,10 +56,8 @@ contract TruthIDAccountTest is Test {
     // automaticamente, e `TruthIDAccount` rejeita assinaturas non-canônicas
     // (proteção EIP-2 já existente no contrato); sem essa normalização,
     // os testes falhariam de forma intermitente dependendo do hash assinado.
-    uint256 internal constant _SECP256K1N =
-        0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
-    uint256 internal constant _SECP256K1N_DIV_2 =
-        0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0;
+    uint256 internal constant _SECP256K1N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
+    uint256 internal constant _SECP256K1N_DIV_2 = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0;
 
     uint256 internal constant SIG_VALIDATION_SUCCESS = 0;
     uint256 internal constant SIG_VALIDATION_FAILED = 1;
@@ -88,9 +86,7 @@ contract TruthIDAccountTest is Test {
 
         mockDeviceRegistry = new MockDeviceRegistry();
 
-        account = new TruthIDAccount(
-            entryPoint, address(mockDeviceRegistry), identityRegistry, recoveryManager, owner
-        );
+        account = new TruthIDAccount(entryPoint, address(mockDeviceRegistry), identityRegistry, recoveryManager, owner);
 
         (device, deviceKey) = makeAddrAndKey("device");
         mockDeviceRegistry.setActive(device, true);
@@ -107,11 +103,7 @@ contract TruthIDAccountTest is Test {
     // Monta uma PackedUserOperation mínima com o `callData` dado — os
     // demais campos não importam pro que `_validateSignature` verifica
     // (só olha `callData` e a assinatura contra `userOpHash`).
-    function _buildUserOp(bytes memory callData)
-        internal
-        view
-        returns (PackedUserOperation memory)
-    {
+    function _buildUserOp(bytes memory callData) internal view returns (PackedUserOperation memory) {
         return PackedUserOperation({
             sender: address(account),
             nonce: 0,
@@ -129,8 +121,7 @@ contract TruthIDAccountTest is Test {
     // (prefixo "\x19Ethereum Signed Message:\n32", igual SessionRegistry.t.sol),
     // canonicalizando pra low-s (ver comentário nas constantes acima).
     function _sign(uint256 privateKey, bytes32 userOpHash) internal returns (bytes memory) {
-        bytes32 ethSignedHash =
-            keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", userOpHash));
+        bytes32 ethSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", userOpHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, ethSignedHash);
 
         if (uint256(s) > _SECP256K1N_DIV_2) {
@@ -144,12 +135,8 @@ contract TruthIDAccountTest is Test {
     // Variante que NÃO canonicaliza — usada só pra construir de propósito
     // uma assinatura non-canônica (high-s) no teste B4 que confirma que o
     // contrato rejeita esse formato mesmo para o owner.
-    function _signNonCanonical(uint256 privateKey, bytes32 userOpHash)
-        internal
-        returns (bytes memory)
-    {
-        bytes32 ethSignedHash =
-            keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", userOpHash));
+    function _signNonCanonical(uint256 privateKey, bytes32 userOpHash) internal returns (bytes memory) {
+        bytes32 ethSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", userOpHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(privateKey, ethSignedHash);
 
         // Força high-s: se já veio low-s (caso comum), inverte pra high-s.
@@ -187,9 +174,7 @@ contract TruthIDAccountTest is Test {
 
     function test_Revert_Constructor_ZeroAddress_Owner() public {
         vm.expectRevert(TruthIDAccount.InvalidConstructorArgs.selector);
-        new TruthIDAccount(
-            entryPoint, address(mockDeviceRegistry), identityRegistry, recoveryManager, address(0)
-        );
+        new TruthIDAccount(entryPoint, address(mockDeviceRegistry), identityRegistry, recoveryManager, address(0));
     }
 
     // Confirma que os 3 contratos privilegiados já nascem bloqueados para
@@ -240,9 +225,7 @@ contract TruthIDAccountTest is Test {
     function test_Revert_AddDevice_AlreadyAuthorized() public {
         // `device` já foi adicionado no setUp.
         vm.prank(owner);
-        vm.expectRevert(
-            abi.encodeWithSelector(TruthIDAccount.DeviceAlreadyAuthorized.selector, device)
-        );
+        vm.expectRevert(abi.encodeWithSelector(TruthIDAccount.DeviceAlreadyAuthorized.selector, device));
         account.addDevice(device);
     }
 
@@ -265,9 +248,7 @@ contract TruthIDAccountTest is Test {
     function test_Revert_RemoveDevice_NotAuthorizedMapping() public {
         address neverAdded = makeAddr("neverAdded");
         vm.prank(owner);
-        vm.expectRevert(
-            abi.encodeWithSelector(TruthIDAccount.DeviceNotAuthorized.selector, neverAdded)
-        );
+        vm.expectRevert(abi.encodeWithSelector(TruthIDAccount.DeviceNotAuthorized.selector, neverAdded));
         account.removeDevice(neverAdded);
     }
 
@@ -496,8 +477,7 @@ contract TruthIDAccountTest is Test {
     // adicionada em `authorizedDevices` — não é owner nem device conhecido.
     function test_ValidateUserOp_Device_NotAuthorizedMapping_Failed() public {
         (, uint256 strangerKey) = makeAddrAndKey("strangerDevice");
-        bytes memory callData =
-            abi.encodeCall(TruthIDAccount.execute, (makeAddr("allowedDest"), 0, ""));
+        bytes memory callData = abi.encodeCall(TruthIDAccount.execute, (makeAddr("allowedDest"), 0, ""));
         bytes32 userOpHash = keccak256("device-op-unknown-signer");
         PackedUserOperation memory userOp = _buildUserOp(callData);
         userOp.signature = _sign(strangerKey, userOpHash);
@@ -661,16 +641,13 @@ contract TruthIDAccountTest is Test {
     // mesma chave (conta #0 padrão do Anvil/Hardhat, pública, sem fundos
     // reais), o mesmo hash e a mesma assinatura, coladas aqui como literais.
     function test_ValidateUserOp_KnownVector_MatchesMobilePipeline() public {
-        uint256 knownPrivateKey =
-            0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
+        uint256 knownPrivateKey = 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80;
         address knownAddress = 0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266;
         assertEq(vm.addr(knownPrivateKey), knownAddress, "sanity: chave conhecida");
 
         bytes32 knownHash = 0x4c0edff4da8c663198f35c78ab485687133310c50c343920b0e24510b2581b37;
-        bytes memory knownSignature =
-            hex"c957aeb33d6e8289d733442cf9b44fbafc6c1c07fbb71eef974c724cc087deae"
-            hex"0a4be53c6a97b8f41e53559d6327017adcf62341fc176583751ab61f1020f855"
-            hex"1c";
+        bytes memory knownSignature = hex"c957aeb33d6e8289d733442cf9b44fbafc6c1c07fbb71eef974c724cc087deae"
+            hex"0a4be53c6a97b8f41e53559d6327017adcf62341fc176583751ab61f1020f855" hex"1c";
         assertEq(knownSignature.length, 65);
 
         vm.prank(owner);

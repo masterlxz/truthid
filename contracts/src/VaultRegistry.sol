@@ -22,10 +22,10 @@ contract VaultRegistry is IdentityResolver {
     // -------------------------------------------------------------------------
 
     struct VaultRef {
-        string cid;          // IPFS CID do blob cifrado atual
+        string cid; // IPFS CID do blob cifrado atual
         bytes32 contentHash; // keccak256 do blob (verificação de integridade)
-        uint256 updatedAt;   // block.timestamp da última atualização
-        uint256 version;     // contador monotônico — ordena atualizações
+        uint256 updatedAt; // block.timestamp da última atualização
+        uint256 version; // contador monotônico — ordena atualizações
         bool exists;
     }
 
@@ -45,12 +45,7 @@ contract VaultRegistry is IdentityResolver {
     // Eventos
     // -------------------------------------------------------------------------
 
-    event VaultUpdated(
-        uint256 indexed identityId,
-        string cid,
-        bytes32 indexed contentHash,
-        uint256 version
-    );
+    event VaultUpdated(uint256 indexed identityId, string cid, bytes32 indexed contentHash, uint256 version);
 
     // -------------------------------------------------------------------------
     // Erros customizados
@@ -65,9 +60,7 @@ contract VaultRegistry is IdentityResolver {
     // Constructor
     // -------------------------------------------------------------------------
 
-    constructor(address identityRegistry, address deviceRegistry)
-        IdentityResolver(identityRegistry)
-    {
+    constructor(address identityRegistry, address deviceRegistry) IdentityResolver(identityRegistry) {
         _deviceRegistry = DeviceRegistry(deviceRegistry);
     }
 
@@ -84,16 +77,10 @@ contract VaultRegistry is IdentityResolver {
 
         uint256 identityId = _getCallerIdentityId();
 
-        uint256 newVersion = _vaults[identityId].exists
-            ? _vaults[identityId].version + 1
-            : 1;
+        uint256 newVersion = _vaults[identityId].exists ? _vaults[identityId].version + 1 : 1;
 
         _vaults[identityId] = VaultRef({
-            cid: cid,
-            contentHash: contentHash,
-            updatedAt: block.timestamp,
-            version: newVersion,
-            exists: true
+            cid: cid, contentHash: contentHash, updatedAt: block.timestamp, version: newVersion, exists: true
         });
 
         if (_vaultHistory[identityId].length >= MAX_HISTORY) {
@@ -126,7 +113,9 @@ contract VaultRegistry is IdentityResolver {
     /// retorna array vazio. Se `offset + limit > length`, trunca ao final.
     /// C6: previne estouro de gas ao limitar o número de entries retornadas.
     function getVaultHistoryPaginated(uint256 identityId, uint256 offset, uint256 limit)
-        external view returns (string[] memory cids)
+        external
+        view
+        returns (string[] memory cids)
     {
         string[] storage history = _vaultHistory[identityId];
         uint256 length = history.length;

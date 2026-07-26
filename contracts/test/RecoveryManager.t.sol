@@ -174,8 +174,7 @@ contract RecoveryManagerTest is Test, IdentityConsentHelper {
     function test_ConfigureGuardians_Success() public {
         _configureAliceGuardians();
 
-        (address[] memory guardians, uint256 threshold) =
-            recoveryManager.getGuardianConfig("alice.id");
+        (address[] memory guardians, uint256 threshold) = recoveryManager.getGuardianConfig("alice.id");
         assertEq(guardians.length, 5);
         assertEq(threshold, 3);
     }
@@ -273,9 +272,7 @@ contract RecoveryManagerTest is Test, IdentityConsentHelper {
         guardians[2] = guardian2;
 
         vm.prank(alice);
-        vm.expectRevert(
-            abi.encodeWithSelector(RecoveryManager.DuplicateGuardian.selector, guardian1)
-        );
+        vm.expectRevert(abi.encodeWithSelector(RecoveryManager.DuplicateGuardian.selector, guardian1));
         recoveryManager.configureGuardians("alice.id", guardians, 3);
     }
 
@@ -505,8 +502,7 @@ contract RecoveryManagerTest is Test, IdentityConsentHelper {
         recoveryManager.executeRecovery("alice.id");
 
         // A configuração de guardians foi zerada
-        (address[] memory guardians, uint256 threshold) =
-            recoveryManager.getGuardianConfig("alice.id");
+        (address[] memory guardians, uint256 threshold) = recoveryManager.getGuardianConfig("alice.id");
         assertEq(guardians.length, 0);
         assertEq(threshold, 0);
 
@@ -739,12 +735,7 @@ contract RecoveryManagerTest is Test, IdentityConsentHelper {
         // Consentimento: charlie (dono da chave) assina confirmando que quer
         // a smart account como controller da sua identidade.
         {
-            (uint8 v, bytes32 r, bytes32 s) = _signConsent(
-                identityRegistry,
-                charlieKey,
-                "charlie.id",
-                predictedAccount
-            );
+            (uint8 v, bytes32 r, bytes32 s) = _signConsent(identityRegistry, charlieKey, "charlie.id", predictedAccount);
             vm.prank(charlie);
             identityRegistry.createIdentity("charlie.id", predictedAccount, v, r, s);
         }
@@ -871,11 +862,7 @@ contract RecoveryManagerTest is Test, IdentityConsentHelper {
     // -----------------------------------------------------------------
 
     // Helper: commita e registra um device para um controller no DeviceRegistry.
-    function _registerDeviceForRecovery(
-        address controller,
-        address devicePubKey,
-        string memory label
-    ) internal {
+    function _registerDeviceForRecovery(address controller, address devicePubKey, string memory label) internal {
         bytes32 salt = keccak256(abi.encodePacked(devicePubKey, "c3-test"));
         bytes32 commitment = keccak256(abi.encodePacked(devicePubKey, salt, controller));
 
@@ -1003,9 +990,7 @@ contract RecoveryManagerTest is Test, IdentityConsentHelper {
         vm.warp(block.timestamp + 7 days + 1);
 
         vm.expectEmit(true, true, true, false);
-        emit RecoveryManager.RecoveryFundsMigrationFailed(
-            3, charlieTA, address(rejector), taBalanceBefore
-        );
+        emit RecoveryManager.RecoveryFundsMigrationFailed(3, charlieTA, address(rejector), taBalanceBefore);
 
         recoveryManager.executeRecovery("charlie.id");
 

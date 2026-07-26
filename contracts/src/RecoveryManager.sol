@@ -46,18 +46,18 @@ contract RecoveryManager {
 
     struct GuardianConfig {
         address[] guardians; // lista de guardians (ordem não importa)
-        uint256 threshold;   // quantos precisam aprovar (M de N)
-        bool configured;     // false = nunca configurado
+        uint256 threshold; // quantos precisam aprovar (M de N)
+        bool configured; // false = nunca configurado
     }
 
     struct RecoveryProposal {
-        address proposedBy;    // guardian que iniciou
+        address proposedBy; // guardian que iniciou
         address newController; // nova wallet que assumirá o controle
-        uint256 proposedAt;    // timestamp da proposta (base do timelock)
+        uint256 proposedAt; // timestamp da proposta (base do timelock)
         uint256 approvalCount; // quantos guardians aprovaram até agora
-        bool executed;         // true se a recovery já foi executada
-        bool cancelled;        // true se o controller cancelou
-        bool exists;           // false = nunca houve proposta para esta identidade
+        bool executed; // true se a recovery já foi executada
+        bool cancelled; // true se o controller cancelou
+        bool exists; // false = nunca houve proposta para esta identidade
     }
 
     // -------------------------------------------------------------------------
@@ -88,7 +88,9 @@ contract RecoveryManager {
     event RecoveryApproved(uint256 indexed identityId, address indexed guardian, uint256 approvalCount);
     event RecoveryExecuted(uint256 indexed identityId, address indexed newController);
     event RecoveryCancelled(uint256 indexed identityId);
-    event RecoveryFundsMigrationFailed(uint256 indexed identityId, address indexed oldAccount, address indexed newController, uint256 amount);
+    event RecoveryFundsMigrationFailed(
+        uint256 indexed identityId, address indexed oldAccount, address indexed newController, uint256 amount
+    );
 
     // -------------------------------------------------------------------------
     // Erros customizados
@@ -125,11 +127,7 @@ contract RecoveryManager {
 
     /// Define (ou redefine) os guardians de uma identidade.
     /// Só o controller pode configurar. Não pode ter proposta ativa.
-    function configureGuardians(
-        string calldata username,
-        address[] calldata guardians,
-        uint256 threshold
-    ) external {
+    function configureGuardians(string calldata username, address[] calldata guardians, uint256 threshold) external {
         uint256 identityId = _requireController(username);
 
         if (guardians.length == 0 || threshold == 0 || threshold > guardians.length) {
@@ -282,8 +280,9 @@ contract RecoveryManager {
         // antes de high-level calls, entao nao da pra confiar soh no try/catch.
         if (identity.controller.code.length > 0) {
             try TruthIDAccount(payable(identity.controller)).emergencyWithdraw(newController) {
-                // Fundos migrados da smart account antiga para o novo controller.
-            } catch {
+            // Fundos migrados da smart account antiga para o novo controller.
+            }
+            catch {
                 // C9: nao eh uma TruthIDAccount valida, ou o emergencyWithdraw
                 // falhou (ex: newController rejeita ETH). Fundos ficam presos
                 // na conta antiga — emite evento para visibilidade on-chain.
@@ -329,20 +328,12 @@ contract RecoveryManager {
         return (config.guardians, config.threshold);
     }
 
-    function getProposal(string calldata username)
-        external
-        view
-        returns (RecoveryProposal memory)
-    {
+    function getProposal(string calldata username) external view returns (RecoveryProposal memory) {
         IdentityRegistry.Identity memory identity = _identityRegistry.getIdentity(username);
         return _proposals[identity.id];
     }
 
-    function hasGuardianApproved(string calldata username, address guardian)
-        external
-        view
-        returns (bool)
-    {
+    function hasGuardianApproved(string calldata username, address guardian) external view returns (bool) {
         IdentityRegistry.Identity memory identity = _identityRegistry.getIdentity(username);
         return _approvals[identity.id][guardian];
     }

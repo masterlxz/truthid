@@ -12,8 +12,7 @@ contract SessionRegistry is IdentityResolver {
     // Metade superior da ordem da curva secp256k1. Usada para rejeitar
     // assinaturas não-canônicas (EIP-2, low-s), consistente com o padrão
     // já usado em TruthIDAccount (C4 do /code-review).
-    uint256 internal constant _SECP256K1N_DIV_2 =
-        0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0;
+    uint256 internal constant _SECP256K1N_DIV_2 = 0x7FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF5D576E7357A4501DDFE92F46681B20A0;
 
     // Limite máximo de sessões por identidade. Evita DoS de gas nos getters
     // (C6 do /code-review). Cada login pode criar uma sessão — 10000 é
@@ -71,9 +70,7 @@ contract SessionRegistry is IdentityResolver {
     // Constructor
     // -------------------------------------------------------------------------
 
-    constructor(address identityRegistry, address deviceRegistry)
-        IdentityResolver(identityRegistry)
-    {
+    constructor(address identityRegistry, address deviceRegistry) IdentityResolver(identityRegistry) {
         _deviceRegistry = DeviceRegistry(deviceRegistry);
     }
 
@@ -95,14 +92,9 @@ contract SessionRegistry is IdentityResolver {
     /// nunca deve ser usado como prova isolada de "este request está
     /// autenticado". A prova de login real acontece em `verifyAuthResponse`
     /// (fora da chain); esta função só registra/audita um login já aprovado.
-    function createSession(
-        bytes32 hash,
-        uint256 identityId,
-        address devicePubKey,
-        bytes32 r,
-        bytes32 s,
-        uint8 v
-    ) external {
+    function createSession(bytes32 hash, uint256 identityId, address devicePubKey, bytes32 r, bytes32 s, uint8 v)
+        external
+    {
         if (_sessions[hash].exists) revert SessionAlreadyExists(hash);
 
         // Prova de posse: só quem tem a chave privada de devicePubKey
@@ -125,11 +117,7 @@ contract SessionRegistry is IdentityResolver {
         if (device.identityId != identityId || device.revoked) revert DeviceNotOwnedByIdentity();
 
         _sessions[hash] = Session({
-            identityId: identityId,
-            devicePubKey: devicePubKey,
-            createdAt: block.timestamp,
-            revoked: false,
-            exists: true
+            identityId: identityId, devicePubKey: devicePubKey, createdAt: block.timestamp, revoked: false, exists: true
         });
 
         if (_sessionsByIdentity[identityId].length >= MAX_SESSIONS) {
@@ -191,7 +179,9 @@ contract SessionRegistry is IdentityResolver {
     /// `offset >= length`, retorna array vazio. Se `offset + limit > length`,
     /// trunca ao final. C6: previne estouro de gas.
     function getSessionsByIdentityPaginated(uint256 identityId, uint256 offset, uint256 limit)
-        external view returns (bytes32[] memory hashes)
+        external
+        view
+        returns (bytes32[] memory hashes)
     {
         bytes32[] storage sessionList = _sessionsByIdentity[identityId];
         uint256 length = sessionList.length;

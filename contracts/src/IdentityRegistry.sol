@@ -64,9 +64,7 @@ contract IdentityRegistry {
     // -------------------------------------------------------------------------
 
     event IdentityCreated(uint256 indexed id, string username, address indexed controller);
-    event ControllerTransferred(
-        string username, address indexed oldController, address indexed newController
-    );
+    event ControllerTransferred(string username, address indexed oldController, address indexed newController);
     event RecoveryManagerSet(address indexed recoveryManager);
     event FactorySet(address indexed factory);
 
@@ -112,13 +110,10 @@ contract IdentityRegistry {
     ///      é o dono da chave que vai virar o "owner" dela (ex: o Ledger). Como a smart
     ///      account em si não tem chave própria pra assinar antes de existir, verificamos
     ///      através da factory: `factory.getAddress(signer) == controller`.
-    function createIdentity(
-        string calldata username,
-        address controller,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) external returns (uint256 id) {
+    function createIdentity(string calldata username, address controller, uint8 v, bytes32 r, bytes32 s)
+        external
+        returns (uint256 id)
+    {
         _validateUsername(username);
         if (controller == address(0)) revert InvalidNewController();
         if (v != 27 && v != 28) revert InvalidConsentSignature();
@@ -137,8 +132,7 @@ contract IdentityRegistry {
         // porque `username` é de tamanho variável — encode evita ambiguidade entre
         // campos dinâmicos vizinhos.
         bytes32 hash = keccak256(abi.encode(block.chainid, address(this), username, controller));
-        bytes32 ethSignedHash =
-            keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", hash));
+        bytes32 ethSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", hash));
         address signer = ecrecover(ethSignedHash, v, r, s);
         if (signer == address(0)) revert InvalidConsentSignature();
 
@@ -150,8 +144,7 @@ contract IdentityRegistry {
 
         id = ++_nextId;
 
-        _identityByUsername[username] =
-            Identity({id: id, username: username, controller: controller, exists: true});
+        _identityByUsername[username] = Identity({id: id, username: username, controller: controller, exists: true});
 
         _usernameByController[controller] = username;
 

@@ -142,9 +142,7 @@ contract IdentityRegistryTest is Test, IdentityConsentHelper {
         _createIdentity(registry, aliceKey, "alice.id");
 
         vm.prank(alice);
-        vm.expectRevert(
-            abi.encodeWithSelector(IdentityRegistry.AddressAlreadyHasIdentity.selector, alice)
-        );
+        vm.expectRevert(abi.encodeWithSelector(IdentityRegistry.AddressAlreadyHasIdentity.selector, alice));
         _createIdentity(registry, aliceKey, "alice2.id"); // mesmo controller → falha
     }
 
@@ -154,9 +152,7 @@ contract IdentityRegistryTest is Test, IdentityConsentHelper {
     }
 
     function test_Revert_GetNonexistentIdentity() public {
-        vm.expectRevert(
-            abi.encodeWithSelector(IdentityRegistry.IdentityNotFound.selector, "nobody.id")
-        );
+        vm.expectRevert(abi.encodeWithSelector(IdentityRegistry.IdentityNotFound.selector, "nobody.id"));
         registry.getIdentity("nobody.id");
     }
 
@@ -206,9 +202,7 @@ contract IdentityRegistryTest is Test, IdentityConsentHelper {
     function _deployFactory() internal returns (TruthIDAccountFactory) {
         address deviceRegistry = makeAddr("deviceRegistry");
         address recoveryManager = makeAddr("recoveryManager");
-        return new TruthIDAccountFactory(
-            ENTRY_POINT_V07, deviceRegistry, address(registry), recoveryManager
-        );
+        return new TruthIDAccountFactory(ENTRY_POINT_V07, deviceRegistry, address(registry), recoveryManager);
     }
 
     function test_CreateIdentity_Consent_SmartAccountViaFactory() public {
@@ -216,8 +210,7 @@ contract IdentityRegistryTest is Test, IdentityConsentHelper {
         registry.setFactory(address(factory));
 
         address predictedAccount = factory.getAddress(alice, 0);
-        (uint8 v, bytes32 r, bytes32 s) =
-            _signConsent(registry, aliceKey, "alice.id", predictedAccount);
+        (uint8 v, bytes32 r, bytes32 s) = _signConsent(registry, aliceKey, "alice.id", predictedAccount);
 
         uint256 id = registry.createIdentity("alice.id", predictedAccount, v, r, s);
 
@@ -232,8 +225,7 @@ contract IdentityRegistryTest is Test, IdentityConsentHelper {
         // — mas _factory ainda é address(0) (padrão fail-closed).
         TruthIDAccountFactory factory = _deployFactory();
         address predictedAccount = factory.getAddress(alice, 0);
-        (uint8 v, bytes32 r, bytes32 s) =
-            _signConsent(registry, aliceKey, "alice.id", predictedAccount);
+        (uint8 v, bytes32 r, bytes32 s) = _signConsent(registry, aliceKey, "alice.id", predictedAccount);
 
         vm.expectRevert(IdentityRegistry.InvalidConsentSignature.selector);
         registry.createIdentity("alice.id", predictedAccount, v, r, s);
@@ -301,9 +293,7 @@ contract IdentityRegistryTest is Test, IdentityConsentHelper {
         _createIdentity(registry, aliceKey, "alice.id");
 
         vm.prank(bob); // bob tenta transferir, mas não é o controller
-        vm.expectRevert(
-            abi.encodeWithSelector(IdentityRegistry.NotController.selector, bob, "alice.id")
-        );
+        vm.expectRevert(abi.encodeWithSelector(IdentityRegistry.NotController.selector, bob, "alice.id"));
         registry.transferController("alice.id", bob);
     }
 
@@ -315,9 +305,7 @@ contract IdentityRegistryTest is Test, IdentityConsentHelper {
         _createIdentity(registry, bobKey, "bob.id");
 
         vm.prank(alice);
-        vm.expectRevert(
-            abi.encodeWithSelector(IdentityRegistry.AddressAlreadyHasIdentity.selector, bob)
-        );
+        vm.expectRevert(abi.encodeWithSelector(IdentityRegistry.AddressAlreadyHasIdentity.selector, bob));
         registry.transferController("alice.id", bob);
     }
 

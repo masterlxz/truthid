@@ -55,9 +55,7 @@ contract SessionRegistryTest is Test, IdentityConsentHelper {
     }
 
     // Atalho: registra um device via commit-reveal (igual DeviceRegistry.t.sol)
-    function _registerDevice(address controller, address devicePubKey, string memory label)
-        internal
-    {
+    function _registerDevice(address controller, address devicePubKey, string memory label) internal {
         bytes32 commitment = keccak256(abi.encodePacked(devicePubKey, SALT, controller));
 
         vm.prank(controller);
@@ -73,16 +71,9 @@ contract SessionRegistryTest is Test, IdentityConsentHelper {
     // chave do device (C4 — cross-chain replay protection) e chama
     // createSession. Quem efetivamente SUBMETE a transação é quem estiver
     // sob `vm.prank` no momento da chamada — fica a critério de cada teste.
-    function _createSession(
-        uint256 devicePrivateKey,
-        bytes32 hash,
-        uint256 identityId,
-        address devicePubKey
-    ) internal {
+    function _createSession(uint256 devicePrivateKey, bytes32 hash, uint256 identityId, address devicePubKey) internal {
         bytes32 domainHash = keccak256(abi.encode(block.chainid, address(sessionRegistry), hash));
-        bytes32 ethSignedHash = keccak256(
-            abi.encodePacked("\x19Ethereum Signed Message:\n32", domainHash)
-        );
+        bytes32 ethSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", domainHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(devicePrivateKey, ethSignedHash);
         sessionRegistry.createSession(hash, identityId, devicePubKey, r, s, v);
     }
@@ -126,9 +117,7 @@ contract SessionRegistryTest is Test, IdentityConsentHelper {
     function test_CreateSession_HashDuplicado_Reverte() public {
         _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
 
-        vm.expectRevert(
-            abi.encodeWithSelector(SessionRegistry.SessionAlreadyExists.selector, sessionA)
-        );
+        vm.expectRevert(abi.encodeWithSelector(SessionRegistry.SessionAlreadyExists.selector, sessionA));
         _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
     }
 
@@ -137,8 +126,7 @@ contract SessionRegistryTest is Test, IdentityConsentHelper {
         // sem a chave privada certa, ecrecover nunca devolve aliceDevice.
         // O domainHash segue o mesmo formato que o contrato usa (C4).
         bytes32 domainHash = keccak256(abi.encode(block.chainid, address(sessionRegistry), sessionA));
-        bytes32 ethSignedHash =
-            keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", domainHash));
+        bytes32 ethSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", domainHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(bobDeviceKey, ethSignedHash);
 
         vm.expectRevert(SessionRegistry.InvalidSessionSignature.selector);
@@ -233,9 +221,7 @@ contract SessionRegistryTest is Test, IdentityConsentHelper {
         sessionRegistry.revokeSession(sessionA);
 
         vm.prank(alice);
-        vm.expectRevert(
-            abi.encodeWithSelector(SessionRegistry.SessionAlreadyRevoked.selector, sessionA)
-        );
+        vm.expectRevert(abi.encodeWithSelector(SessionRegistry.SessionAlreadyRevoked.selector, sessionA));
         sessionRegistry.revokeSession(sessionA);
     }
 
@@ -264,9 +250,7 @@ contract SessionRegistryTest is Test, IdentityConsentHelper {
 
         // sessionA já está revogada pelo revokeAllSessions
         vm.prank(alice);
-        vm.expectRevert(
-            abi.encodeWithSelector(SessionRegistry.SessionAlreadyRevoked.selector, sessionA)
-        );
+        vm.expectRevert(abi.encodeWithSelector(SessionRegistry.SessionAlreadyRevoked.selector, sessionA));
         sessionRegistry.revokeSession(sessionA);
     }
 
@@ -425,16 +409,12 @@ contract SessionRegistryTest is Test, IdentityConsentHelper {
 
     function test_Revert_CreateSession_HighSRevert() public {
         bytes32 domainHash = keccak256(abi.encode(block.chainid, address(sessionRegistry), sessionA));
-        bytes32 ethSignedHash =
-            keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", domainHash));
+        bytes32 ethSignedHash = keccak256(abi.encodePacked("\x19Ethereum Signed Message:\n32", domainHash));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(aliceDeviceKey, ethSignedHash);
 
         // Converte s para high-s (n - s) — a assinatura ainda é válida
         // criptograficamente, mas o contrato deve rejeitá-la.
-        bytes32 HIGH_S = bytes32(
-            0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
-            - uint256(s)
-        );
+        bytes32 HIGH_S = bytes32(0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141 - uint256(s));
 
         vm.expectRevert(SessionRegistry.InvalidSessionSignature.selector);
         sessionRegistry.createSession(sessionA, 1, aliceDevice, r, HIGH_S, v);
@@ -451,9 +431,7 @@ contract SessionRegistryTest is Test, IdentityConsentHelper {
         bytes32 slot = keccak256(abi.encode(uint256(1), uint256(1)));
         vm.store(address(sessionRegistry), slot, bytes32(uint256(sessionRegistry.MAX_SESSIONS())));
 
-        vm.expectRevert(
-            abi.encodeWithSelector(SessionRegistry.MaxSessionsExceeded.selector, uint256(1))
-        );
+        vm.expectRevert(abi.encodeWithSelector(SessionRegistry.MaxSessionsExceeded.selector, uint256(1)));
         _createSession(aliceDeviceKey, sessionA, 1, aliceDevice);
     }
 }
