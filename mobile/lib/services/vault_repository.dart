@@ -247,10 +247,9 @@ class VaultRepository {
   VaultRepository({
     VaultCipherService? cipherService,
     BackupCipherService? backupCipherService,
-    String? testPath,
+    this._testPath,
   })  : _cipherService = cipherService ?? VaultCipherService(),
-        _backupCipherService = backupCipherService ?? BackupCipherService(),
-        _testPath = testPath;
+        _backupCipherService = backupCipherService ?? BackupCipherService();
 
   Future<List<VaultEntry>> listEntries() async {
     final data = await _load();
@@ -639,7 +638,7 @@ class VaultRepository {
   // -------------------------------------------------------------------------
 
   Future<String> _vaultPath() async {
-    if (_testPath != null) return _testPath!;
+    if (_testPath != null) return _testPath;
     final dir = await getApplicationDocumentsDirectory();
     return '${dir.path}/vault.enc';
   }

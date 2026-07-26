@@ -294,7 +294,7 @@ void main() {
           'expiresAt': (expiresAt ?? farFuture).millisecondsSinceEpoch,
           'appName': appName,
           'purpose': purpose,
-          if (callback != null) 'callback': callback,
+          'callback': ?callback,
         };
 
     Widget buildDeepLinkScreen(

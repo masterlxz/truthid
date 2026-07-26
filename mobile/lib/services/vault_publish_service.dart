@@ -34,12 +34,11 @@ class VaultPublishService {
   final SessionCreator _sessionCreator;
 
   VaultPublishService({
-    required SessionCreator sessionCreator,
+    required this._sessionCreator,
     VaultRepository? repository,
     IpfsPinClient? pinClient,
     PinningProviderService? providerService,
-  })  : _sessionCreator = sessionCreator,
-        _repository = repository ?? VaultRepository(),
+  })  : _repository = repository ?? VaultRepository(),
         _pinClient = pinClient ?? IpfsPinClient(),
         _providerService = providerService ?? PinningProviderService();
 

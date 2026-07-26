@@ -476,7 +476,7 @@ void main() {
           'value': value,
           'callData': callData ?? '$_transferSelector${'ab' * 64}',
           'functionSignature': functionSignature,
-          if (callback != null) 'callback': callback,
+          'callback': ?callback,
         };
 
     Widget buildDeepLinkScreen(

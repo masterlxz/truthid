@@ -70,20 +70,17 @@ class SessionCreator {
   // bastante pra um bloco confirmar em L2 sem travar o app indefinidamente.
   // Configurável pra permitir testes rápidos (intervalo mínimo/poucas tentativas).
   SessionCreator({
-    required PimlicoBundlerClient bundlerClient,
+    required this._bundlerClient,
     BlockchainService? blockchainService,
     DeviceKeyService? deviceKeyService,
     EthereumAddress? entryPoint,
     BigInt? chainId,
-    Duration receiptPollInterval = const Duration(seconds: 2),
-    int receiptPollMaxAttempts = 30,
-  })  : _bundlerClient = bundlerClient,
-        _blockchainService = blockchainService ?? BlockchainService(),
+    this._receiptPollInterval = const Duration(seconds: 2),
+    this._receiptPollMaxAttempts = 30,
+  })  : _blockchainService = blockchainService ?? BlockchainService(),
         _deviceKeyService = deviceKeyService ?? DeviceKeyService(),
         _entryPoint = entryPoint ?? EthereumAddress.fromHex(entryPointV07Address),
-        _chainId = chainId ?? BlockchainService.chainId,
-        _receiptPollInterval = receiptPollInterval,
-        _receiptPollMaxAttempts = receiptPollMaxAttempts;
+        _chainId = chainId ?? BlockchainService.chainId;
 
   Future<SessionCreationResult> createSession({
     required BigInt identityId,

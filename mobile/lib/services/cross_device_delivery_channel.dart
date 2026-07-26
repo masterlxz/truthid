@@ -23,14 +23,11 @@ class CrossDeviceDeliveryChannel implements ResultDeliveryChannel {
 
   CrossDeviceDeliveryChannel({
     required this.requesterPubKeyHex,
-    required EciesService ecies,
-    required RemoteSignerLanServer lanServer,
-    required IpfsPinClient ipfsPinClient,
-    required PinningProviderService pinningProviderService,
-  })  : _ecies = ecies,
-        _lanServer = lanServer,
-        _ipfsPinClient = ipfsPinClient,
-        _pinningProviderService = pinningProviderService;
+    required this._ecies,
+    required this._lanServer,
+    required this._ipfsPinClient,
+    required this._pinningProviderService,
+  });
 
   @override
   Future<DeliveryResult> deliver({
