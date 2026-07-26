@@ -20,15 +20,26 @@ export function VaultEditApprovalModal({
   smartAccountAddress?: Address | null;
 }) {
   const { request, clear } = useIncomingVaultEditRequest();
-  const [showPassword, setShowPassword] = useState(false);
+  // Sync em lote (P29): visibilidade de senha é por item, não mais um único
+  // booleano — um Set dos índices que o usuário revelou.
+  const [visiblePasswords, setVisiblePasswords] = useState<Set<number>>(new Set());
   const [stage, setStage] = useState<"idle" | "publishing" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
   const expired = useRequestExpiry(request?.expiresAtMs ?? null);
 
   // Quando o pedido muda (novo ou cancelado), reseta o estado do modal.
   useEffect(() => {
-    if (!request) { setShowPassword(false); setStage("idle"); setError(null); }
+    if (!request) { setVisiblePasswords(new Set()); setStage("idle"); setError(null); }
   }, [request]);
+
+  function togglePasswordVisible(index: number) {
+    setVisiblePasswords((prev) => {
+      const next = new Set(prev);
+      if (next.has(index)) next.delete(index);
+      else next.add(index);
+      return next;
+    });
+  }
 
   if (!request) return null;
 
@@ -42,20 +53,25 @@ export function VaultEditApprovalModal({
     setStage("publishing");
     setError(null);
     try {
-      const entry: VaultEntry = {
-        id: "",
-        site: request.entry.site,
-        url: request.entry.url,
-        username: request.entry.username,
-        password: request.entry.password,
-        notes: request.entry.notes,
-        profiles: [],
-        passkey: request.entry.passkey,
-        favorite: false,
-        created_at: 0,
-        updated_at: 0,
-      };
-      await invoke<VaultEntry>("vault_upsert_entry", { entry });
+      // Sync em lote (P29): persiste cada proposta localmente primeiro, e só
+      // publica UMA vez no fim — reaproveita exatamente o mesmo caminho de
+      // publish de sempre, só que cobrindo N entradas em vez de 1.
+      for (const proposal of request.entries) {
+        const entry: VaultEntry = {
+          id: "",
+          site: proposal.site,
+          url: proposal.url,
+          username: proposal.username,
+          password: proposal.password,
+          notes: proposal.notes,
+          profiles: [],
+          passkey: proposal.passkey,
+          favorite: false,
+          created_at: 0,
+          updated_at: 0,
+        };
+        await invoke<VaultEntry>("vault_upsert_entry", { entry });
+      }
       const { providersFailed } = await publishVaultViaDeviceKey(smartAccountAddress);
 
       // Só responde ao Rust depois que o vault foi salvo e publicado.
@@ -85,51 +101,65 @@ export function VaultEditApprovalModal({
     respondToRequest("respond_to_vault_edit_request", request.id, clear);
   }
 
-  const { entry } = request;
+  const { entries } = request;
+  const title =
+    entries.length === 1
+      ? "New credential from extension"
+      : `${entries.length} new credentials from extension`;
 
   return (
     <div className="modal-overlay">
       <div className="modal-box">
         <div className="modal-header">
-          <h2 className="modal-title">New credential from extension</h2>
+          <h2 className="modal-title">{title}</h2>
         </div>
 
         <div className="card">
           <p>
-            The TruthID browser extension wants to save a new credential to your Vault.
+            {entries.length === 1
+              ? "The TruthID browser extension wants to save a new credential to your Vault."
+              : `The TruthID browser extension wants to save ${entries.length} new credentials to your Vault.`}
           </p>
 
-          <div className="field" style={{ marginTop: "0.75rem" }}>
-            <label>Site</label>
-            <input value={entry.site} readOnly />
-          </div>
-          {entry.username && (
-            <div className="field" style={{ marginTop: "0.5rem" }}>
-              <label>Username</label>
-              <input value={entry.username} readOnly />
-            </div>
-          )}
-          {entry.password && (
-            <div className="field" style={{ marginTop: "0.5rem" }}>
-              <label>Password</label>
-              <div style={{ display: "flex", gap: "0.4rem" }}>
-                <input
-                  style={{ flex: 1 }}
-                  type={showPassword ? "text" : "password"}
-                  value={entry.password}
-                  readOnly
-                />
-                <button type="button" onClick={() => setShowPassword((s) => !s)}>
-                  {showPassword ? "Hide" : "Show"}
-                </button>
+          {entries.map((entry, index) => (
+            <div
+              key={index}
+              className="card"
+              style={{ marginTop: "0.75rem", background: "var(--bg-alt, transparent)" }}
+            >
+              <div className="field">
+                <label>Site</label>
+                <input value={entry.site} readOnly />
               </div>
+              {entry.username && (
+                <div className="field" style={{ marginTop: "0.5rem" }}>
+                  <label>Username</label>
+                  <input value={entry.username} readOnly />
+                </div>
+              )}
+              {entry.password && (
+                <div className="field" style={{ marginTop: "0.5rem" }}>
+                  <label>Password</label>
+                  <div style={{ display: "flex", gap: "0.4rem" }}>
+                    <input
+                      style={{ flex: 1 }}
+                      type={visiblePasswords.has(index) ? "text" : "password"}
+                      value={entry.password}
+                      readOnly
+                    />
+                    <button type="button" onClick={() => togglePasswordVisible(index)}>
+                      {visiblePasswords.has(index) ? "Hide" : "Show"}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {entry.passkey && (
+                <p className="muted" style={{ marginTop: "0.5rem" }}>
+                  🔑 + new passkey for {entry.passkey.rp_id}
+                </p>
+              )}
             </div>
-          )}
-          {entry.passkey && (
-            <p className="muted" style={{ marginTop: "0.5rem" }}>
-              🔑 + new passkey for {entry.passkey.rp_id}
-            </p>
-          )}
+          ))}
 
           {expired && <p className="error-text">This request has expired.</p>}
           {error && <p className="error-text">{error}</p>}

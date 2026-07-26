@@ -34,21 +34,26 @@ enum _Status {
 }
 
 /// Tela de aprovação de `/truthid/v1/vault-edit` cross-device (Sessão 134,
-/// item 6 do roadmap) — a extensão de navegador propõe uma credencial nova
-/// (só passkey nesta rodada; senha nova via extensão fica pra um item
-/// futuro do backlog) e o celular decide se persiste e publica. Mirror
-/// estrutural de `PinApprovalScreen`: mesma fase 1 (receber o conteúdo via
-/// `RemoteSignerLanServer.receiveOnce`, decifrar com uma chave simétrica
-/// derivada do `sessionId`), mas com dois desvios reais:
+/// item 6 do roadmap) — a extensão de navegador propõe 1+ credenciais novas
+/// (senha e/ou passkey — sync em lote desde o P29, Sessão 166) e o celular
+/// decide se persiste e publica. Mirror estrutural de `PinApprovalScreen`:
+/// mesma fase 1 (receber o conteúdo via `RemoteSignerLanServer.receiveOnce`,
+/// decifrar com uma chave simétrica derivada do `sessionId`), mas com dois
+/// desvios reais:
 ///   1. Sem fase de retorno — a extensão só faz HTTP client, não sobe
 ///      servidor, então não há pra onde entregar um resultado. A extensão
 ///      considera a proposta "enviada" assim que o PUT retorna 200, sem
 ///      esperar confirmação de publicação (best-effort).
-///   2. No approve, o conteúdo recebido JÁ é a proposta de entrada em si
-///      (não algo genérico a repassar) — persiste via `VaultRepository.
-///      addEntry` e publica via `VaultPublishService.publish`, precisando
-///      antes resolver a smart account pareada neste celular (o QR nunca
-///      traz `smartAccountAddress`, mesma postura de `SignRequestApprovalScreen`).
+///   2. No approve, o conteúdo recebido JÁ é a lista de propostas de entrada
+///      em si (não algo genérico a repassar) — persiste cada uma via
+///      `VaultRepository.addEntry` e publica **uma vez só**, no fim, via
+///      `VaultPublishService.publish` (1 pin no IPFS + 1 UserOperation pra
+///      N entradas — `VaultRegistry.updateVault` sempre grava um único
+///      `(cid, contentHash)` por publish, não importa quantas mudaram no
+///      blob, então não precisa de `executeBatch`/multi-call nenhum),
+///      precisando antes resolver a smart account pareada neste celular (o
+///      QR nunca traz `smartAccountAddress`, mesma postura de
+///      `SignRequestApprovalScreen`).
 ///
 /// Schema do QR v1 (`truthid-vault-edit`, mesmos 5 campos do `truthid-pin`):
 ///   { action: 'truthid-vault-edit', v: 1, sessionId, ephemeralPubKey,
@@ -56,6 +61,10 @@ enum _Status {
 /// Espelha `extension/src/session/qrPayload.ts::buildVaultEditQrPayload` e
 /// `extension/src/vaultEdit/cipher.ts` (mesmo salt/info em
 /// `vault_edit_content_cipher_service.dart`, domain separation do `/pin`).
+/// O conteúdo cifrado em si é uma lista de propostas desde o P29 — mas o
+/// SDK Dart (`TruthIDRequester.vaultEdit`) ainda manda um objeto único por
+/// sessão, então `_receiveContent` aceita os dois formatos (ver comentário
+/// lá) sem exigir nenhuma mudança no SDK já lançado.
 class VaultEditApprovalScreen extends StatefulWidget {
   final Map<String, dynamic> payload;
   final RemoteSignerLanServer? lanServer;
@@ -88,15 +97,19 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
   String? _sessionId;
   DateTime? _expiresAt;
   String? _appName;
-  Map<String, dynamic>? _proposal;
+  // Sync em lote (P29): uma sessão cobre 1+ propostas — o conteúdo cifrado
+  // recebido pode ser tanto uma lista (extensão, depois do P29) quanto um
+  // objeto único (SDK Dart's TruthIDRequester.vaultEdit, ainda manda uma
+  // proposta por sessão — ver _receiveContent). Normalizado pra lista sempre.
+  List<Map<String, dynamic>>? _proposals;
   String? _errorMsg;
   List<String> _localIps = [];
-  bool _showPassword = false;
-  // Guarda "Try again" (achado real, Sessão 135) de recriar a entrada no
-  // vault a cada retry — se addEntry já teve sucesso numa tentativa
-  // anterior e só publish() falhou depois, retentar não deve chamar
-  // addEntry de novo (criaria uma 2ª entrada duplicada pro mesmo site).
-  bool _entryPersisted = false;
+  final Set<int> _visiblePasswords = {};
+  // Guarda "Try again" (achado real, Sessão 135) de recriar entradas no
+  // vault a cada retry — índices de _proposals já persistidos via addEntry
+  // numa tentativa anterior não são recriados se só publish() falhou depois
+  // (criaria entradas duplicadas pro mesmo site).
+  final Set<int> _persistedIndices = {};
   // Guarda transiente contra reentrância (duplo toque) — diferente de
   // _entryPersisted, que só protege contra duplicar a entrada num retry
   // SEQUENCIAL depois de falha. Essa aqui é resetada a cada tentativa
@@ -197,11 +210,16 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
     try {
       final key = deriveVaultEditContentKey(_sessionId!);
       final content = await decryptVaultEditContent(encrypted, key);
-      final proposal =
-          jsonDecode(utf8.decode(content)) as Map<String, dynamic>;
+      final decoded = jsonDecode(utf8.decode(content));
+      // A extensão manda uma lista desde o P29 (sync em lote); o SDK Dart's
+      // TruthIDRequester.vaultEdit ainda manda um objeto único por sessão —
+      // aceita os dois formatos sem exigir nenhuma mudança no SDK já lançado.
+      final proposals = decoded is List
+          ? decoded.cast<Map<String, dynamic>>()
+          : [decoded as Map<String, dynamic>];
       if (!mounted) return;
       setState(() {
-        _proposal = proposal;
+        _proposals = proposals;
         _status = _Status.awaitingApproval;
       });
     } catch (e) {
@@ -330,8 +348,10 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
       final smartAccountAddress = await _resolveSmartAccountAddress();
       if (smartAccountAddress == null) return; // erro já setado acima
 
-      if (!_entryPersisted) {
-        final proposal = _proposal!;
+      final proposals = _proposals!;
+      for (var i = 0; i < proposals.length; i++) {
+        if (_persistedIndices.contains(i)) continue;
+        final proposal = proposals[i];
         final passkeyJson = proposal['passkey'] as Map<String, dynamic>?;
         await _repository.addEntry(
           site: proposal['site'] as String? ?? '',
@@ -341,7 +361,7 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
           notes: proposal['notes'] as String? ?? '',
           passkey: passkeyJson != null ? Passkey.fromJson(passkeyJson) : null,
         );
-        _entryPersisted = true;
+        _persistedIndices.add(i);
       }
 
       final publishService = await _ensurePublishService();
@@ -430,12 +450,64 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
     );
   }
 
-  Widget _buildApprovalUI() {
-    final proposal = _proposal!;
+  Widget _buildProposalCard(int index, Map<String, dynamic> proposal) {
     final site = proposal['site'] as String? ?? '';
     final username = proposal['username'] as String? ?? '';
     final password = proposal['password'] as String? ?? '';
     final hasPasskey = proposal['passkey'] != null;
+    final showPassword = _visiblePasswords.contains(index);
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Site', style: const TextStyle(color: AppColors.textMuted)),
+            Text(site, style: const TextStyle(fontSize: 16)),
+            const SizedBox(height: 12),
+            Text('Username', style: const TextStyle(color: AppColors.textMuted)),
+            Text(username, style: const TextStyle(fontSize: 16)),
+            if (password.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text('Password', style: const TextStyle(color: AppColors.textMuted)),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    showPassword ? password : '•' * password.length,
+                    style: const TextStyle(fontSize: 16),
+                  ),
+                  IconButton(
+                    icon: Icon(showPassword
+                        ? Icons.visibility_off
+                        : Icons.visibility),
+                    onPressed: () => setState(() {
+                      if (showPassword) {
+                        _visiblePasswords.remove(index);
+                      } else {
+                        _visiblePasswords.add(index);
+                      }
+                    }),
+                  ),
+                ],
+              ),
+            ],
+            if (hasPasskey) ...[
+              const SizedBox(height: 12),
+              const Chip(label: Text('+ passkey')),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildApprovalUI() {
+    final proposals = _proposals!;
+    final title = proposals.length == 1
+        ? '$_appName wants to save a new credential'
+        : '$_appName wants to save ${proposals.length} new credentials';
 
     return SingleChildScrollView(
       child: Padding(
@@ -447,50 +519,15 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
             const Icon(Icons.key_outlined, size: 64, color: AppColors.accent),
             const SizedBox(height: 16),
             Text(
-              '$_appName wants to save a new credential',
+              title,
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 24),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Site', style: const TextStyle(color: AppColors.textMuted)),
-                    Text(site, style: const TextStyle(fontSize: 16)),
-                    const SizedBox(height: 12),
-                    Text('Username', style: const TextStyle(color: AppColors.textMuted)),
-                    Text(username, style: const TextStyle(fontSize: 16)),
-                    if (password.isNotEmpty) ...[
-                      const SizedBox(height: 12),
-                      Text('Password', style: const TextStyle(color: AppColors.textMuted)),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            _showPassword ? password : '•' * password.length,
-                            style: const TextStyle(fontSize: 16),
-                          ),
-                          IconButton(
-                            icon: Icon(_showPassword
-                                ? Icons.visibility_off
-                                : Icons.visibility),
-                            onPressed: () =>
-                                setState(() => _showPassword = !_showPassword),
-                          ),
-                        ],
-                      ),
-                    ],
-                    if (hasPasskey) ...[
-                      const SizedBox(height: 12),
-                      const Chip(label: Text('+ passkey')),
-                    ],
-                  ],
-                ),
-              ),
-            ),
+            for (var i = 0; i < proposals.length; i++) ...[
+              if (i > 0) const SizedBox(height: 12),
+              _buildProposalCard(i, proposals[i]),
+            ],
             const SizedBox(height: 32),
             ElevatedButton.icon(
               onPressed: _approve,
@@ -524,6 +561,10 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
   }
 
   Widget _buildDoneUI() {
+    final count = _proposals?.length ?? 1;
+    final message = count == 1
+        ? 'The new credential was saved to your vault and published.'
+        : 'The $count new credentials were saved to your vault and published.';
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -538,10 +579,10 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
               style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'The new credential was saved to your vault and published.',
+            Text(
+              message,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
@@ -588,13 +629,13 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
 
   Widget _buildErrorUI() {
     // Achado real (Sessão 135): se o conteúdo já chegou e foi decifrado
-    // (_proposal != null), o erro aconteceu durante o approve (ex: RPC
+    // (_proposals != null), o erro aconteceu durante o approve (ex: RPC
     // falhou ao resolver a smart account) — a proposta já decifrada
     // continua em memória, não precisa de um QR novo pra tentar de novo.
     // "Back" descartava ela pra sempre mesmo quando o retry era trivial.
-    // Erros de validação do QR ou de decrypt (_proposal ainda null) não têm
+    // Erros de validação do QR ou de decrypt (_proposals ainda null) não têm
     // o que retentar — só "Back" faz sentido nesses.
-    final canRetry = _proposal != null;
+    final canRetry = _proposals != null;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),

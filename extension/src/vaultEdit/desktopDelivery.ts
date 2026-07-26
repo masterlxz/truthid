@@ -69,12 +69,16 @@ export async function findDesktopPort(
 }
 
 /**
- * Envia uma proposta pro `/truthid/v1/vault-edit` do Desktop na mesma
- * máquina. Não usa QR nem cifra — loopback já implica mesmo processo de
- * usuário, mesmo nível de confiança de `/truthid/v1/pin`.
+ * Envia 1+ propostas pro `/truthid/v1/vault-edit` do Desktop na mesma
+ * máquina, numa sessão só (sync em lote, P29). Não usa QR nem cifra —
+ * loopback já implica mesmo processo de usuário, mesmo nível de confiança
+ * de `/truthid/v1/pin`. O Rust espera sempre uma lista no corpo do POST —
+ * esse endpoint só é falado pela própria extensão, sem SDK externo
+ * dependendo do formato antigo (diferente do caminho cross-device via
+ * `mobileDelivery.ts`).
  */
 export async function sendToDesktop(
-  proposal: Omit<VaultEditProposal, 'id' | 'createdAtMs'>,
+  proposals: Array<Omit<VaultEditProposal, 'id' | 'createdAtMs'>>,
   ports: number[] = DESKTOP_CANDIDATE_PORTS,
 ): Promise<DesktopDeliveryResult> {
   const port = await findDesktopPort(ports);
@@ -86,7 +90,7 @@ export async function sendToDesktop(
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(proposal),
+        body: JSON.stringify(proposals),
       },
       VAULT_EDIT_TIMEOUT_MS,
     );

@@ -17,7 +17,7 @@ import type { Passkey } from '../session/sessionState';
 // mandar `chrome.runtime.sendMessage({ type: VAULT_EDIT_ENQUEUE_MESSAGE, ... })`
 // pro background (único contexto com storage liberado) chamar `addPendingEdit`
 // por eles — ver `entrypoints/background.ts` e `entrypoints/webauthn-bridge.
-// content.ts`. `listPendingEdits`/`removePendingEdit` são seguros só em
+// content.ts`. `listPendingEdits`/`removePendingEdits` são seguros só em
 // contextos de extensão de verdade (popup, background) — nunca em content
 // script. O projeto não tem ESLint configurado pra uma regra de
 // import-boundary automática; este comentário é a única barreira.
@@ -61,7 +61,12 @@ export async function addPendingEdit(
   return proposal;
 }
 
-export async function removePendingEdit(id: string): Promise<void> {
+// Sync em lote (P29): remove todas as propostas de uma leva enviada de uma
+// vez (mesmo com 1 item só) depois de um envio bem-sucedido — único jeito
+// de remover propostas do storage desde o P29, substitui o antigo
+// `removePendingEdit(id)` de item único.
+export async function removePendingEdits(ids: string[]): Promise<void> {
+  const idSet = new Set(ids);
   const proposals = await loadAll();
-  await saveAll(proposals.filter((p) => p.id !== id));
+  await saveAll(proposals.filter((p) => !idSet.has(p.id)));
 }

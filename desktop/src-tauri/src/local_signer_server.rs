@@ -286,7 +286,7 @@ async fn pin_handler(
 
 async fn vault_edit_handler(
     State(router_state): State<SignRequestRouterState>,
-    Json(body): Json<vault_edit::VaultEditRequestBody>,
+    Json(body): Json<Vec<vault_edit::VaultEditRequestBody>>,
 ) -> (StatusCode, Json<vault_edit::VaultEditResponse>) {
     let outcome = vault_edit::handle_incoming(&router_state.vault_edit_requests, body, |payload| {
         (router_state.on_vault_edit_request)(payload)
@@ -872,11 +872,11 @@ mod tests {
         let started = start(&state, config).await.expect("start should succeed");
 
         let url = format!("{}/truthid/v1/vault-edit", base_url(&started));
-        let request = reqwest::Client::new().post(&url).json(&serde_json::json!({
+        let request = reqwest::Client::new().post(&url).json(&serde_json::json!([{
             "site": "example.com",
             "username": "user",
             "password": "hunter2",
-        }));
+        }]));
 
         let (resp, _) = tokio::join!(request.send(), async {
             let id = loop {
@@ -899,6 +899,46 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn vault_edit_endpoint_parks_a_batch_of_multiple_proposals() {
+        let _guard = PORT_TEST_LOCK.lock().await;
+        let state = LocalSignerServerState::default();
+        let vault_edit_requests = temp_vault_edit_state();
+        let config = ServerConfigBuilder::new()
+            .sign_request(Arc::new(SignRequestState::default()), |_| {})
+            .sign_message(Arc::new(SignMessageState::default()), |_| {})
+            .pin(temp_pin_state(), |_| {})
+            .vault_edit(vault_edit_requests.clone(), |_| {})
+            .build()
+            .expect("config should build");
+        let started = start(&state, config).await.expect("start should succeed");
+
+        let url = format!("{}/truthid/v1/vault-edit", base_url(&started));
+        let request = reqwest::Client::new().post(&url).json(&serde_json::json!([
+            {"site": "one.com", "username": "user", "password": "hunter2"},
+            {"site": "two.com", "username": "user", "password": "hunter3"},
+        ]));
+
+        let (resp, entries_len) = tokio::join!(request.send(), async {
+            let payload = loop {
+                if let Some(payload) = vault_edit::current(&vault_edit_requests).await {
+                    break payload;
+                }
+                tokio::task::yield_now().await;
+            };
+            let len = payload.entries.len();
+            vault_edit::resolve(&vault_edit_requests, &payload.id, vault_edit::VaultEditDecision::Rejected)
+                .await
+                .expect("resolve should succeed");
+            len
+        });
+
+        assert_eq!(entries_len, 2);
+        assert_eq!(resp.expect("request should succeed").status(), 403);
+
+        stop(&state).await;
+    }
+
+    #[tokio::test]
     async fn vault_edit_endpoint_rejects_concurrent_second_request() {
         let _guard = PORT_TEST_LOCK.lock().await;
         let state = LocalSignerServerState::default();
@@ -913,11 +953,11 @@ mod tests {
         let started = start(&state, config).await.expect("start should succeed");
 
         let url = format!("{}/truthid/v1/vault-edit", base_url(&started));
-        let body = serde_json::json!({
+        let body = serde_json::json!([{
             "site": "example.com",
             "username": "user",
             "password": "hunter2",
-        });
+        }]);
 
         let first_request = reqwest::Client::new().post(&url).json(&body).send();
         let second_request = async {

@@ -221,15 +221,35 @@ e commit, reaproveitando o mesmo mecanismo de aprovação já usado no upgrade d
 A extensão participa da cerimônia criptográfica (precisa, é ela que interage com a página), mas
 **quem persiste é sempre o Device raiz**.
 
-**2.1 Sync em lote (batch sync)** — resolve o problema de UX de gerar um QR por credencial
-alterada, e reduz custo de gas (1 transação por sessão de edição, não por item):
-1. Extensão acumula edições pendentes localmente, em memória de sessão cifrada — nada persiste.
-2. Ao clicar "Sincronizar", empacota tudo num payload único e gera um QR code.
-3. Celular escaneia, mostra resumo das mudanças + taxa de gas estimada.
-4. Na aprovação, a smart account assina uma única `UserOperation` em lote (estilo `execBatch`).
-5. **Ordem crítica**: o pinning no IPFS do conteúdo novo deve acontecer a partir do Device
-   **antes** da assinatura do commit on-chain — pra nunca registrar um hash sem conteúdo pinado
-   por trás.
+**2.1 Sync em lote (batch sync)** — **implementado na Sessão 166** (registrado como P29 em
+`PENDING.md`). Resolve o problema de UX de gerar um QR por credencial alterada, e reduz custo de
+gas (1 transação por sessão de edição, não por item):
+1. Extensão acumula edições pendentes localmente, em memória de sessão cifrada (`pendingEdits.ts`
+   já era uma lista desde o início — nada precisou mudar aí).
+2. Ao clicar em "Send to this computer"/"Send to phone", empacota tudo (a leva inteira, não só a
+   1ª) num payload único.
+3. Device mostra uma lista com todas as propostas da leva (site/usuário/senha mascarada/badge de
+   passkey por item).
+4. Na aprovação, N `addEntry`/`vault_upsert_entry` locais seguidos de **1 publish() só**, no fim.
+
+**Achado real ao implementar, mudando o desenho original**: o passo 4 originalmente dizia "a smart
+account assina uma única `UserOperation` em lote (estilo `execBatch`)" — na prática isso não é
+necessário. `VaultRegistry.updateVault` sempre grava um único `(cid, contentHash)` por publish,
+não importa quantas entradas mudaram no blob local — então já era **sempre** 1 UserOperation por
+publish, mesmo antes do sync em lote existir. `executeBatch` (que existe no `TruthIDAccount.sol` e
+funciona, validado em hardware real nas Sessões 115-117) nunca foi usado nesse caminho — só em
+transações diretas do owner (Ledger) durante pareamento de device, sem relação nenhuma com o
+Vault. "1 transação por sessão de edição" já era o comportamento natural do publish existente; o
+trabalho real do sync em lote foi só de UX/transporte (extensão manda N propostas juntas, Device
+revisa e persiste as N antes de publicar), não de infraestrutura on-chain nova.
+
+O passo 3 original ("mostra resumo das mudanças + taxa de gas estimada") teve a parte de "taxa de
+gas estimada" deixada de fora — nenhuma tela de aprovação do projeto mostra estimativa de gas hoje,
+seria uma capacidade nova sem precedente, fora do escopo do sync em lote em si.
+
+O passo 5 original ("ordem crítica: pinning no IPFS antes da assinatura do commit on-chain") já era
+garantido pelo próprio `VaultPublishService.publish()`/`vault_publish` (Rust) — pina no IPFS e só
+depois assina o `updateVault`, mesma ordem de sempre, nada novo precisou ser construído pra isso.
 
 **3. Ideias exploratórias (não são foco, registradas pra não perder)**
 
@@ -372,8 +392,9 @@ depois, um de cada vez, em sessão própria (provavelmente com `/plan`).
    (`VaultEditProposal` já tinha `password` como campo de primeira classe e `passkey` opcional,
    zero mudança em `pendingEdits.ts`/`cipher.ts`/`mobileDelivery.ts`/`desktopDelivery.ts`/telas de
    aprovação/`vault_edit.rs`). `npx vitest run` (extensão) 86/86, `tsc --noEmit`/`npm run build`
-   limpos. **Sync em lote (batch sync, seção 2.1 acima) segue não implementado** — registrado
-   como P29 em `PENDING.md`, infra do tamanho do `/truthid/v1/pin` inteiro, sem prazo.
+   limpos. **Sync em lote (batch sync, seção 2.1 acima) implementado na Sessão 166** — bem menor
+   escopo do que a estimativa original (~3 sessões) porque não precisou de `executeBatch`/infra
+   on-chain nova, ver seção 2.1 pro achado completo. P29 em `PENDING.md`.
 
 Nada implementado nesta entrada — só levantamento e registro de causa raiz (item 4), pra rodar item
 por item nas próximas sessões.

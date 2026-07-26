@@ -478,6 +478,157 @@ void main() {
     });
   });
 
+  group('sync em lote (P29)', () {
+    Future<Uint8List> encryptBatch(List<Map<String, dynamic>> proposals) async {
+      final key = deriveVaultEditContentKey(testSessionId);
+      final plaintext = Uint8List.fromList(utf8.encode(jsonEncode(proposals)));
+      return encryptVaultEditContent(plaintext, key);
+    }
+
+    final proposalA = {
+      'site': 'one.com',
+      'url': '',
+      'username': 'alice',
+      'password': 'hunter2',
+      'notes': '',
+    };
+    final proposalB = {
+      'site': 'two.com',
+      'url': '',
+      'username': 'bob',
+      'password': 'hunter3',
+      'notes': '',
+    };
+
+    testWidgets(
+        'conteúdo cifrado como lista mostra título pluralizado e uma card por proposta',
+        (tester) async {
+      final encrypted = await encryptBatch([proposalA, proposalB]);
+      when(() => mockLanServer.receiveOnce(
+            sessionId: any(named: 'sessionId'),
+            expiresAt: any(named: 'expiresAt'),
+          )).thenAnswer((_) async => encrypted);
+
+      await pumpAndOpen(tester, validPayload());
+
+      expect(
+        find.text('TruthID Extension wants to save 2 new credentials'),
+        findsOneWidget,
+      );
+      expect(find.text('one.com'), findsOneWidget);
+      expect(find.text('two.com'), findsOneWidget);
+      expect(find.text('alice'), findsOneWidget);
+      expect(find.text('bob'), findsOneWidget);
+    });
+
+    testWidgets('approve persiste as duas entradas e publica uma vez só',
+        (tester) async {
+      final encrypted = await encryptBatch([proposalA, proposalB]);
+      when(() => mockLanServer.receiveOnce(
+            sessionId: any(named: 'sessionId'),
+            expiresAt: any(named: 'expiresAt'),
+          )).thenAnswer((_) async => encrypted);
+
+      await pumpAndOpen(tester, validPayload());
+      await tester.ensureVisible(find.text('Approve'));
+      await tester.tap(find.text('Approve'));
+      await tester.pumpAndSettle();
+
+      verify(() => mockRepository.addEntry(
+            site: 'one.com',
+            url: '',
+            username: 'alice',
+            password: 'hunter2',
+            notes: '',
+            passkey: null,
+          )).called(1);
+      verify(() => mockRepository.addEntry(
+            site: 'two.com',
+            url: '',
+            username: 'bob',
+            password: 'hunter3',
+            notes: '',
+            passkey: null,
+          )).called(1);
+      // 1 pin + 1 UserOperation pra N entradas, não N publishes — é isso que
+      // faz "sync em lote" reduzir custo de gas, ver doc comment da tela.
+      verify(() => mockPublishService.publish(smartAccountAddress)).called(1);
+      expect(find.text('Saved'), findsOneWidget);
+    });
+
+    testWidgets(
+        'retry depois de addEntry parcial não duplica a entrada já persistida',
+        (tester) async {
+      // Mesma ideia do teste equivalente de item único (ver grupo "fase 2 —
+      // Approve"): a 1ª tentativa persiste as duas entradas (addEntry roda
+      // pras duas, sem erro) mas falha depois, no publish() — um retry deve
+      // pular o loop de addEntry inteiro (_persistedIndices já cobre os 2
+      // índices) e só tentar publish() de novo.
+      final encrypted = await encryptBatch([proposalA, proposalB]);
+      when(() => mockLanServer.receiveOnce(
+            sessionId: any(named: 'sessionId'),
+            expiresAt: any(named: 'expiresAt'),
+          )).thenAnswer((_) async => encrypted);
+
+      var publishCallCount = 0;
+      when(() => mockPublishService.publish(any())).thenAnswer((_) async {
+        publishCallCount++;
+        if (publishCallCount == 1) throw Exception('bundler timeout');
+        return const VaultPublishResult(
+          cid: 'bafy123',
+          contentHash: '0xhash',
+          providersOk: ['local-kubo'],
+          providersFailed: [],
+        );
+      });
+
+      await pumpAndOpen(tester, validPayload());
+      await tester.ensureVisible(find.text('Approve'));
+      await tester.tap(find.text('Approve'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Try again'), findsOneWidget);
+
+      await tester.tap(find.text('Try again'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Saved'), findsOneWidget);
+      verify(() => mockRepository.addEntry(
+            site: 'one.com',
+            url: '',
+            username: 'alice',
+            password: 'hunter2',
+            notes: '',
+            passkey: null,
+          )).called(1);
+      verify(() => mockRepository.addEntry(
+            site: 'two.com',
+            url: '',
+            username: 'bob',
+            password: 'hunter3',
+            notes: '',
+            passkey: null,
+          )).called(1);
+      expect(publishCallCount, 2);
+    });
+
+    testWidgets(
+        'objeto único (sem lista) continua funcionando — SDK Dart ainda '
+        'manda uma proposta por sessão', (tester) async {
+      final encrypted = await encryptProposal(proposalA);
+      when(() => mockLanServer.receiveOnce(
+            sessionId: any(named: 'sessionId'),
+            expiresAt: any(named: 'expiresAt'),
+          )).thenAnswer((_) async => encrypted);
+
+      await pumpAndOpen(tester, validPayload());
+
+      expect(find.text('TruthID Extension wants to save a new credential'),
+          findsOneWidget);
+      expect(find.text('one.com'), findsOneWidget);
+    });
+  });
+
   group('fase 2 — Reject', () {
     testWidgets('nunca persiste nem publica, só volta', (tester) async {
       final encrypted = await encryptProposal({

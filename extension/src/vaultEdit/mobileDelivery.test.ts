@@ -1,25 +1,27 @@
 import { describe, expect, it, vi } from 'vitest';
 import { startMobileDelivery } from './mobileDelivery';
 
-const proposal = {
-  site: 'example.com',
-  url: 'https://example.com',
-  username: '',
-  password: '',
-  notes: '',
-  passkey: {
-    rp_id: 'example.com',
-    credential_id_b64: 'AAAA',
-    user_handle_b64: 'BBBB',
-    private_key_hex: '00'.repeat(32),
-    sign_count: 0,
-    created_at: 0,
+const proposals = [
+  {
+    site: 'example.com',
+    url: 'https://example.com',
+    username: '',
+    password: '',
+    notes: '',
+    passkey: {
+      rp_id: 'example.com',
+      credential_id_b64: 'AAAA',
+      user_handle_b64: 'BBBB',
+      private_key_hex: '00'.repeat(32),
+      sign_count: 0,
+      created_at: 0,
+    },
   },
-};
+];
 
 describe('startMobileDelivery', () => {
   it('monta um payload de QR válido com action/v/schema esperados', () => {
-    const session = startMobileDelivery(proposal);
+    const session = startMobileDelivery(proposals);
     expect(session.qrPayload.action).toBe('truthid-vault-edit');
     expect(session.qrPayload.v).toBe(1);
     expect(session.qrPayload.sessionId).toHaveLength(32);
@@ -29,7 +31,7 @@ describe('startMobileDelivery', () => {
 
   it('send() cifra a proposta e chama push com o mesmo sessionId do QR', async () => {
     const push = vi.fn(async (_sessionId: string, _body: Uint8Array) => true);
-    const session = startMobileDelivery(proposal, { push });
+    const session = startMobileDelivery(proposals, { push });
 
     const ok = await session.send();
 
@@ -45,7 +47,7 @@ describe('startMobileDelivery', () => {
     const putAt = vi
       .fn(async (_host: string, port: number, _sessionId: string, _body: Uint8Array) => port === 48052)
       .mockName('putAt');
-    const session = startMobileDelivery(proposal, { putAt });
+    const session = startMobileDelivery(proposals, { putAt });
 
     const ok = await session.sendTo('192.168.1.42');
 
@@ -59,14 +61,35 @@ describe('startMobileDelivery', () => {
 
   it('sendTo() devolve false se nenhuma porta aceitar', async () => {
     const putAt = vi.fn(async () => false);
-    const session = startMobileDelivery(proposal, { putAt });
+    const session = startMobileDelivery(proposals, { putAt });
 
     expect(await session.sendTo('192.168.1.42')).toBe(false);
   });
 
   it('duas sessões geram sessionIds diferentes', () => {
-    const a = startMobileDelivery(proposal);
-    const b = startMobileDelivery(proposal);
+    const a = startMobileDelivery(proposals);
+    const b = startMobileDelivery(proposals);
     expect(a.qrPayload.sessionId).not.toBe(b.qrPayload.sessionId);
+  });
+
+  it('sync em lote (P29): send() cifra a lista inteira, não só o 1º item', async () => {
+    const batch = [
+      { site: 'one.com', url: '', username: 'alice', password: 'hunter2', notes: '' },
+      { site: 'two.com', url: '', username: 'bob', password: 'hunter3', notes: '' },
+    ];
+    let pushedBody: Uint8Array | undefined;
+    const push = vi.fn(async (_sessionId: string, body: Uint8Array) => {
+      pushedBody = body;
+      return true;
+    });
+    const session = startMobileDelivery(batch, { push });
+
+    await session.send();
+
+    const { deriveVaultEditContentKey, decryptVaultEditContent } = await import('./cipher');
+    const key = deriveVaultEditContentKey(session.qrPayload.sessionId);
+    const decrypted = await decryptVaultEditContent(pushedBody!, key);
+    const decoded = JSON.parse(new TextDecoder().decode(decrypted));
+    expect(decoded).toEqual(batch);
   });
 });

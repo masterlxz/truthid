@@ -26,12 +26,18 @@ export interface MobileDeliverySession {
  * keypair efêmero (o `ephemeralPubKey` entra no QR pra manter o mesmo
  * schema de 5 campos do `/truthid/v1/pin`, mas nenhuma fase de retorno usa
  * a chave privada nesta rodada — ver project/INDEX.md, "fora de escopo"),
- * monta o payload do QR, e devolve um `send()` que cifra a proposta
+ * monta o payload do QR, e devolve um `send()` que cifra as propostas
  * (`cipher.ts`, chave derivada do `sessionId`) e varre a LAN
  * (`lanDelivery.ts`) até algum device aceitar.
+ *
+ * `proposals` — sync em lote (P29): 1+ propostas viajam juntas numa sessão
+ * só. O conteúdo cifrado é sempre uma lista JSON agora (mesmo com 1 item) —
+ * o Mobile aceita tanto lista quanto objeto único (back-compat com o SDK
+ * Dart, que ainda manda uma proposta por sessão), mas a extensão sempre
+ * manda lista desde este ponto em diante.
  */
 export function startMobileDelivery(
-  proposal: Omit<VaultEditProposal, 'id' | 'createdAtMs'>,
+  proposals: Array<Omit<VaultEditProposal, 'id' | 'createdAtMs'>>,
   deps: {
     push?: typeof pushToMobile;
     putAt?: typeof putSessionContent;
@@ -49,7 +55,7 @@ export function startMobileDelivery(
 
   async function encryptedBody(): Promise<Uint8Array> {
     const key = deriveVaultEditContentKey(sessionId);
-    const plaintext = new TextEncoder().encode(JSON.stringify(proposal));
+    const plaintext = new TextEncoder().encode(JSON.stringify(proposals));
     return encryptVaultEditContent(plaintext, key);
   }
 

@@ -11,9 +11,11 @@ export interface VaultEditEntryProposal {
   pubKey?: string;
 }
 
+// Sync em lote (P29) — uma sessão de aprovação cobre 1+ credenciais
+// propostas juntas pela extensão, não mais uma por sessão.
 export interface IncomingVaultEditRequest {
   id: string;
-  entry: VaultEditEntryProposal;
+  entries: VaultEditEntryProposal[];
   expiresAtMs: number;
   pubKey?: string;
 }

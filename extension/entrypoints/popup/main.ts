@@ -25,7 +25,11 @@ import {
 import { renderEntries } from '../../src/ui/renderEntries';
 import { renderQrToCanvas } from '../../src/ui/renderQr';
 import { bytesToHex, hexToBytes } from '../../src/util/bytes';
-import { listPendingEdits, removePendingEdit, type VaultEditProposal } from '../../src/vaultEdit/pendingEdits';
+import {
+  listPendingEdits,
+  removePendingEdits,
+  type VaultEditProposal,
+} from '../../src/vaultEdit/pendingEdits';
 import { sendToDesktop } from '../../src/vaultEdit/desktopDelivery';
 import { startMobileDelivery, type MobileDeliverySession } from '../../src/vaultEdit/mobileDelivery';
 import { loadPinningProviderConfig, savePinningProviderConfig } from '../../src/vaultEdit/pinningProviderConfig';
@@ -300,21 +304,20 @@ function scheduleRefreshAfterTerminalMessage(): void {
 
 els.sendToDesktopButton.addEventListener('click', async () => {
   const pending = await listPendingEdits();
-  const proposal = pending[0];
-  if (!proposal) return;
+  if (pending.length === 0) return;
 
   els.pendingEditsStatus.textContent = 'Looking for TruthID Desktop on this computer...';
   els.sendToDesktopButton.disabled = true;
   els.sendToPhoneButton.disabled = true;
   let removed = false;
   try {
-    const result = await sendToDesktop(proposal);
+    const result = await sendToDesktop(pending);
     if (result.status === 'approved') {
-      await removePendingEdit(proposal.id);
+      await removePendingEdits(pending.map((p) => p.id));
       els.pendingEditsStatus.textContent = 'Saved.';
       removed = true;
     } else if (result.status === 'rejected') {
-      await removePendingEdit(proposal.id);
+      await removePendingEdits(pending.map((p) => p.id));
       els.pendingEditsStatus.textContent = 'Rejected on the Desktop.';
       removed = true;
     } else if (result.status === 'not-found') {
@@ -323,13 +326,16 @@ els.sendToDesktopButton.addEventListener('click', async () => {
     } else {
       els.pendingEditsStatus.textContent = `Failed: ${result.status}${result.error ? ` (${result.error})` : ''}`;
     }
-    // Achado real (Sessão 135): se essa MESMA proposta também tinha um QR de
-    // celular pendente (usuário mandou pro celular, ainda não escaneou,
-    // trocou de ideia e aprovou pelo Desktop em vez disso), o botão de retry
-    // do celular continuava vivo apontando pra uma proposta já
-    // removida/aprovada — clicá-lo reenviaria a mesma proposta pro celular,
-    // que poderia aprovar de novo. Limpa a sessão de celular junto.
-    if (removed && activeMobileDelivery?.proposal.id === proposal.id) {
+    // Achado real (Sessão 135, agora por leva inteira depois do P29): se
+    // essa MESMA leva também tinha um QR de celular pendente (usuário
+    // mandou pro celular, ainda não escaneou, trocou de ideia e aprovou
+    // pelo Desktop em vez disso), o botão de retry do celular continuava
+    // vivo apontando pra propostas já removidas/aprovadas — clicá-lo
+    // reenviaria a mesma leva pro celular, que poderia aprovar de novo.
+    // Limpa a sessão de celular junto (mesma leva = mesmo conjunto de ids).
+    const sentIds = new Set(pending.map((p) => p.id));
+    const activeIds = activeMobileDelivery?.proposals.map((p) => p.id) ?? [];
+    if (removed && activeIds.length > 0 && activeIds.every((id) => sentIds.has(id))) {
       activeMobileDelivery = null;
       els.pendingEditQrWrapper.hidden = true;
     }
@@ -348,14 +354,17 @@ els.sendToDesktopButton.addEventListener('click', async () => {
 // abrir o servidor de recebimento) — precisa sobreviver ao retorno do
 // handler de clique original pro botão de retry conseguir reusar o MESMO
 // sessionId/chave (gerar uma sessão nova geraria um QR diferente do que o
-// celular já escaneou). Só uma proposta em voo por vez (mesma premissa dos
-// botões desabilitados durante o envio).
-let activeMobileDelivery: { session: MobileDeliverySession; proposal: VaultEditProposal } | null =
-  null;
+// celular já escaneou). Só uma leva em voo por vez (mesma premissa dos
+// botões desabilitados durante o envio) — a leva inteira (1+ propostas,
+// sync em lote do P29) viaja numa sessão só.
+let activeMobileDelivery: {
+  session: MobileDeliverySession;
+  proposals: VaultEditProposal[];
+} | null = null;
 
 async function attemptMobileDelivery(
   session: MobileDeliverySession,
-  proposal: VaultEditProposal,
+  proposals: VaultEditProposal[],
   deliver: () => Promise<boolean> = () => session.send(),
 ): Promise<void> {
   els.sendToDesktopButton.disabled = true;
@@ -370,7 +379,7 @@ async function attemptMobileDelivery(
       // de que o celular publicou de verdade (não roda servidor nenhum) —
       // marca como enviada assim que o PUT chega, mesmo espírito best-effort
       // já aceito em outros lugares do projeto (dead-drop, por exemplo).
-      await removePendingEdit(proposal.id);
+      await removePendingEdits(proposals.map((p) => p.id));
       els.pendingEditsStatus.textContent = 'Sent to your phone — check it to approve.';
       els.pendingEditQrWrapper.hidden = true;
       activeMobileDelivery = null;
@@ -400,8 +409,7 @@ async function attemptMobileDelivery(
 
 els.sendToPhoneButton.addEventListener('click', async () => {
   const pending = await listPendingEdits();
-  const proposal = pending[0];
-  if (!proposal) return;
+  if (pending.length === 0) return;
 
   // Achado real (Sessão 135): sem desabilitar aqui, um clique duplo rápido
   // corre pelas 3 chamadas assíncronas abaixo (permission/startMobileDelivery/
@@ -426,8 +434,8 @@ els.sendToPhoneButton.addEventListener('click', async () => {
   // attemptMobileDelivery, que nunca era alcançado).
   let session: MobileDeliverySession;
   try {
-    session = startMobileDelivery(proposal);
-    activeMobileDelivery = { session, proposal };
+    session = startMobileDelivery(pending);
+    activeMobileDelivery = { session, proposals: pending };
     els.pendingEditQrWrapper.hidden = false;
     await renderQrToCanvas(els.pendingEditQrCanvas, JSON.stringify(session.qrPayload));
     els.pendingEditsStatus.textContent = 'Scan with your phone...';
@@ -440,12 +448,12 @@ els.sendToPhoneButton.addEventListener('click', async () => {
     return;
   }
 
-  await attemptMobileDelivery(session, proposal);
+  await attemptMobileDelivery(session, pending);
 });
 
 els.pendingEditRetryButton.addEventListener('click', async () => {
   if (!activeMobileDelivery) return;
-  await attemptMobileDelivery(activeMobileDelivery.session, activeMobileDelivery.proposal);
+  await attemptMobileDelivery(activeMobileDelivery.session, activeMobileDelivery.proposals);
 });
 
 // Fallback manual (Sessão 136): a varredura automática de `send()` depende
@@ -456,8 +464,8 @@ els.pendingEditManualConnectButton.addEventListener('click', async () => {
   if (!activeMobileDelivery) return;
   const ip = els.pendingEditManualIpInput.value.trim();
   if (!ip) return;
-  const { session, proposal } = activeMobileDelivery;
-  await attemptMobileDelivery(session, proposal, () => session.sendTo(ip));
+  const { session, proposals } = activeMobileDelivery;
+  await attemptMobileDelivery(session, proposals, () => session.sendTo(ip));
 });
 
 // Config do endpoint Kubo usado só pra publicar o dead-drop cross-network

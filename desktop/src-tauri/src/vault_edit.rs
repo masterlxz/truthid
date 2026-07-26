@@ -64,11 +64,17 @@ pub struct VaultEditRequestBody {
 /// precisa inspecionar o blob cifrado), aqui o payload inteiro É o que a UI
 /// precisa mostrar (site/username/senha mascarada/badge de passkey) — nunca
 /// sai do processo, é só IPC interno do Tauri.
+///
+/// `entries` — sync em lote (P29): uma sessão de aprovação cobre 1+
+/// credenciais propostas juntas pela extensão (1 QR/POST, 1 review, 1
+/// publish no fim) em vez de uma por sessão. `pub_key` fica no nível do lote
+/// (não por entrada) — todas as entradas de uma mesma sessão vêm sempre do
+/// mesmo device requisitante.
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct VaultEditApprovalPayload {
     pub id: String,
-    pub entry: VaultEditRequestBody,
+    pub entries: Vec<VaultEditRequestBody>,
     pub expires_at_ms: i64,
     pub pub_key: Option<String>,
 }
@@ -163,7 +169,7 @@ pub type VaultEditState = SingleSlotChannel<VaultEditApprovalPayload, VaultEditD
 /// dependem do fluxo de bundler que só existe em TS).
 pub async fn handle_incoming(
     state: &VaultEditState,
-    body: VaultEditRequestBody,
+    body: Vec<VaultEditRequestBody>,
     notify: impl FnOnce(&VaultEditApprovalPayload),
 ) -> VaultEditOutcome {
     handle_incoming_with_timeout(state, body, notify, VAULT_EDIT_REQUEST_TIMEOUT).await
@@ -171,48 +177,58 @@ pub async fn handle_incoming(
 
 async fn handle_incoming_with_timeout(
     state: &VaultEditState,
-    body: VaultEditRequestBody,
+    body: Vec<VaultEditRequestBody>,
     notify: impl FnOnce(&VaultEditApprovalPayload),
     timeout: Duration,
 ) -> VaultEditOutcome {
-    if body.site.trim().is_empty() {
-        return VaultEditOutcome::Invalid("site is required".to_string());
+    if body.is_empty() {
+        return VaultEditOutcome::Invalid("at least one credential proposal is required".to_string());
     }
-    if body.password.trim().is_empty() && body.passkey.is_none() {
-        return VaultEditOutcome::Invalid(
-            "at least one of password or passkey is required".to_string(),
-        );
+    for entry in &body {
+        if entry.site.trim().is_empty() {
+            return VaultEditOutcome::Invalid("site is required".to_string());
+        }
+        if entry.password.trim().is_empty() && entry.passkey.is_none() {
+            return VaultEditOutcome::Invalid(
+                "at least one of password or passkey is required".to_string(),
+            );
+        }
     }
 
-    // Se o caller identifica um dispositivo (pub_key), verifica permissão
-    // de escrita (canWriteVault) contra o vault local antes de estacionar.
-    if let Some(ref pub_key) = body.pub_key {
-        let v = match vault::load() {
-            Ok(v) => v,
-            Err(e) => return VaultEditOutcome::Invalid(format!("vault permission check failed: {e}")),
-        };
-        let perm = v.device_permissions.iter().find(|p| &p.pub_key == pub_key);
-        match perm {
-            None => {
-                return VaultEditOutcome::Invalid(
-                    format!("device {pub_key} has no vault permission — ask the identity controller to grant write access"),
-                );
+    // Se algum entry identifica um dispositivo (pub_key), verifica permissão
+    // de escrita (canWriteVault) contra o vault local antes de estacionar —
+    // mesma checagem de antes, agora repetida por entrada (uma sessão em
+    // lote sempre vem do mesmo device requisitante, mas cada entrada carrega
+    // seu próprio campo desde o formato de antes do P29).
+    for entry in &body {
+        if let Some(ref pub_key) = entry.pub_key {
+            let v = match vault::load() {
+                Ok(v) => v,
+                Err(e) => return VaultEditOutcome::Invalid(format!("vault permission check failed: {e}")),
+            };
+            let perm = v.device_permissions.iter().find(|p| &p.pub_key == pub_key);
+            match perm {
+                None => {
+                    return VaultEditOutcome::Invalid(
+                        format!("device {pub_key} has no vault permission — ask the identity controller to grant write access"),
+                    );
+                }
+                Some(p) if !p.can_write => {
+                    return VaultEditOutcome::Invalid(
+                        "device does not have write permission for this vault".to_string(),
+                    );
+                }
+                _ => {} // tem permissão de escrita, segue
             }
-            Some(p) if !p.can_write => {
-                return VaultEditOutcome::Invalid(
-                    "device does not have write permission for this vault".to_string(),
-                );
-            }
-            _ => {} // tem permissão de escrita, segue
         }
     }
 
     let (payload, rx) = {
-        let pub_key = body.pub_key.clone();
+        let pub_key = body.first().and_then(|e| e.pub_key.clone());
 
         let payload = VaultEditApprovalPayload {
             id: single_slot_channel::random_id(),
-            entry: body,
+            entries: body,
             expires_at_ms: single_slot_channel::now_ms() + timeout.as_millis() as i64,
             pub_key,
         };
@@ -282,11 +298,12 @@ mod tests {
         let state = Arc::new(VaultEditState::default());
         let state_bg = state.clone();
         let handle = tokio::spawn(async move {
-            handle_incoming(&state_bg, body("example.com"), |_| {}).await
+            handle_incoming(&state_bg, vec![body("example.com")], |_| {}).await
         });
 
         let payload = wait_for_pending(&state).await;
-        assert_eq!(payload.entry.site, "example.com");
+        assert_eq!(payload.entries.len(), 1);
+        assert_eq!(payload.entries[0].site, "example.com");
 
         resolve(&state, &payload.id, VaultEditDecision::Approved)
             .await
@@ -300,11 +317,37 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn batches_multiple_proposals_into_one_approval_session() {
+        let state = Arc::new(VaultEditState::default());
+        let state_bg = state.clone();
+        let handle = tokio::spawn(async move {
+            handle_incoming(
+                &state_bg,
+                vec![body("one.com"), body("two.com"), body("three.com")],
+                |_| {},
+            )
+            .await
+        });
+
+        let payload = wait_for_pending(&state).await;
+        assert_eq!(payload.entries.len(), 3);
+        assert_eq!(
+            payload.entries.iter().map(|e| e.site.as_str()).collect::<Vec<_>>(),
+            vec!["one.com", "two.com", "three.com"],
+        );
+
+        resolve(&state, &payload.id, VaultEditDecision::Approved)
+            .await
+            .expect("resolve should succeed");
+        handle.await.expect("task should not panic");
+    }
+
+    #[tokio::test]
     async fn reject_returns_rejected() {
         let state = Arc::new(VaultEditState::default());
         let state_bg = state.clone();
         let handle = tokio::spawn(async move {
-            handle_incoming(&state_bg, body("example.com"), |_| {}).await
+            handle_incoming(&state_bg, vec![body("example.com")], |_| {}).await
         });
 
         let payload = wait_for_pending(&state).await;
@@ -321,12 +364,12 @@ mod tests {
         let state = Arc::new(VaultEditState::default());
         let state_bg = state.clone();
         let handle = tokio::spawn(async move {
-            handle_incoming(&state_bg, body("one.com"), |_| {}).await
+            handle_incoming(&state_bg, vec![body("one.com")], |_| {}).await
         });
 
         let payload = wait_for_pending(&state).await;
 
-        let second = handle_incoming(&state, body("two.com"), |_| {}).await;
+        let second = handle_incoming(&state, vec![body("two.com")], |_| {}).await;
         assert!(matches!(second, VaultEditOutcome::Busy));
 
         resolve(&state, &payload.id, VaultEditDecision::Rejected)
@@ -336,11 +379,22 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn empty_batch_never_notifies_and_never_parks() {
+        let state = VaultEditState::default();
+
+        let mut notified = false;
+        let outcome = handle_incoming(&state, vec![], |_| notified = true).await;
+        assert!(matches!(outcome, VaultEditOutcome::Invalid(_)));
+        assert!(!notified);
+        assert!(current(&state).await.is_none());
+    }
+
+    #[tokio::test]
     async fn invalid_body_never_notifies_and_never_parks() {
         let state = VaultEditState::default();
 
         let mut notified = false;
-        let outcome = handle_incoming(&state, body(""), |_| notified = true).await;
+        let outcome = handle_incoming(&state, vec![body("")], |_| notified = true).await;
         assert!(matches!(outcome, VaultEditOutcome::Invalid(_)));
         assert!(!notified);
         assert!(current(&state).await.is_none());
@@ -348,9 +402,27 @@ mod tests {
         let mut no_secret = body("example.com");
         no_secret.password = String::new();
         no_secret.passkey = None;
-        let outcome = handle_incoming(&state, no_secret, |_| notified = true).await;
+        let outcome = handle_incoming(&state, vec![no_secret], |_| notified = true).await;
         assert!(matches!(outcome, VaultEditOutcome::Invalid(_)));
         assert!(!notified);
+    }
+
+    #[tokio::test]
+    async fn one_invalid_entry_in_a_batch_rejects_the_whole_batch() {
+        let state = VaultEditState::default();
+
+        let mut notified = false;
+        let mut no_secret = body("two.com");
+        no_secret.password = String::new();
+        no_secret.passkey = None;
+        let outcome = handle_incoming(&state, vec![body("one.com"), no_secret], |_| {
+            notified = true
+        })
+        .await;
+
+        assert!(matches!(outcome, VaultEditOutcome::Invalid(_)));
+        assert!(!notified);
+        assert!(current(&state).await.is_none());
     }
 
     #[tokio::test]
@@ -368,10 +440,11 @@ mod tests {
         });
 
         let state_bg = state.clone();
-        let handle = tokio::spawn(async move { handle_incoming(&state_bg, b, |_| {}).await });
+        let handle =
+            tokio::spawn(async move { handle_incoming(&state_bg, vec![b], |_| {}).await });
 
         let payload = wait_for_pending(&state).await;
-        assert!(payload.entry.passkey.is_some());
+        assert!(payload.entries[0].passkey.is_some());
 
         resolve(&state, &payload.id, VaultEditDecision::Rejected)
             .await
@@ -383,9 +456,13 @@ mod tests {
     async fn timeout_returns_timed_out_and_clears_pending_state() {
         let state = VaultEditState::default();
 
-        let outcome =
-            handle_incoming_with_timeout(&state, body("example.com"), |_| {}, Duration::from_millis(50))
-                .await;
+        let outcome = handle_incoming_with_timeout(
+            &state,
+            vec![body("example.com")],
+            |_| {},
+            Duration::from_millis(50),
+        )
+        .await;
 
         assert!(matches!(outcome, VaultEditOutcome::TimedOut));
         assert!(current(&state).await.is_none());

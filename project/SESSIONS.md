@@ -6296,3 +6296,60 @@ tipos `VaultEditPasskey`/`VaultEditPendingRequest`), removida a menção a `vaul
 escopo". Build do Docusaurus validado. `PENDING.md`: P27 movido pra "Resolvidas"; P28 mantido, nota
 de reavaliação adicionada.
 
+### Sessão 166 — 2026-07-26: P29 fechado — sync em lote pro vault-edit + limpeza de documentação obsoleta
+
+Levantamento de pendências antes de escolher a próxima frente achou 2 itens do `PENDING.md` já
+obsoletos (P12, dead-drop pra `/sign-message`/`/sign-request`, já implementado; P13, callback
+opcional no login, duplicata de **F15**, Sessão 142) — removidos, nada de código mudou. Escolhido
+com o dono do projeto, via `AskUserQuestion`: P29 (sync em lote), o que tinha ficado de fora do P10.
+
+**Exploração mudou o escopo de verdade**: antes de codar, confirmado que `VaultRegistry.
+updateVault` sempre grava um único `(cid, contentHash)` por publish, não importa quantas entradas
+do Vault mudaram no blob local (contrato não tem noção nenhuma de entrada individual) — e que
+`executeBatch` (existe no `TruthIDAccount.sol`, funciona, validado em hardware nas Sessões 115-117)
+nunca foi chamado via UserOperation/device key/bundler, só em transações diretas do owner via
+Ledger, no pareamento de device — sem relação com Vault. Ou seja, "1 transação por sessão de
+edição, não por item" (o objetivo original do `ROADMAP.md` seção 2.1) já era o comportamento
+natural do `publish()` existente, mesmo antes do sync em lote — o trabalho real virou 100%
+UX/transporte (extensão manda N propostas juntas, Device revisa e persiste as N antes de publicar
+uma vez), sem precisar de `executeBatch` nem de nenhuma infra on-chain nova. Isso reduziu o escopo
+de ~3 sessões (estimativa original) pra uma sessão só.
+
+**Implementação, por camada**:
+- **Rust** (`desktop/src-tauri/src/vault_edit.rs` + `local_signer_server.rs`): corpo HTTP de
+  `/truthid/v1/vault-edit` virou `Vec<VaultEditRequestBody>` (valida lista não-vazia + cada item);
+  `VaultEditApprovalPayload.entry` virou `.entries: Vec<...>`. Sem preocupação de compatibilidade —
+  esse endpoint só é falado pela própria extensão, atualizada na mesma sessão.
+- **Desktop TS** (`useIncomingVaultEditRequest.ts` + `VaultEditApprovalModal.tsx`): `entry` →
+  `entries: VaultEditEntryProposal[]`; modal renderiza uma card por proposta (visibilidade de
+  senha vira `Set<number>` em vez de um booleano só); `handleApprove` faz N `vault_upsert_entry`
+  seguidos de 1 `publishVaultViaDeviceKey`.
+- **Mobile** (`vault_edit_approval_screen.dart`): **achado importante** — o SDK Dart lançado na
+  Sessão 165 (`TruthIDRequester.vaultEdit`) ainda manda **um objeto único** por sessão, não uma
+  lista, e não faz sentido forçar uma mudança nele só por causa disso. Fix: `_receiveContent`
+  aceita os dois formatos (`decoded is List ? ... : [decoded as Map]`), normalizando pra
+  `List<Map<String, dynamic>>` sempre — zero mudança necessária no SDK já publicado. `_proposal`
+  (singular) virou `_proposals` (lista) + `_persistedIndices`/`_visiblePasswords` (`Set<int>`, era
+  `bool`/`bool` únicos) pra rastrear estado por item durante retry. UI ganhou `_buildProposalCard`
+  (extraído do que era inline em `_buildApprovalUI`), reusado numa lista.
+- **Extensão** (`popup/main.ts`, `mobileDelivery.ts`, `desktopDelivery.ts`, `pendingEdits.ts`):
+  handlers de "Send to this computer"/"Send to phone" passam a usar a lista `pending` inteira em
+  vez de `pending[0]`; `startMobileDelivery`/`sendToDesktop` recebem array, cifram/mandam a lista
+  inteira. Novo `removePendingEdits(ids[])` (remove a leva inteira num só load+save do storage)
+  substitui `removePendingEdit(id)` — que ficou completamente órfão depois da mudança e foi
+  removido (nada mais o chamava).
+
+**Testes**: `cargo test --lib` 4 novos (`batches_multiple_proposals_into_one_approval_session`,
+`empty_batch_never_notifies_and_never_parks`, `one_invalid_entry_in_a_batch_rejects_the_whole_batch`,
+`vault_edit_endpoint_parks_a_batch_of_multiple_proposals`) — 97/97 no crate inteiro. `flutter test`
+4 novos em `vault_edit_approval_screen_test.dart` (título pluralizado + lista de cards, approve com
+2 entradas chama `addEntry` 2x e `publish()` 1x só, retry depois de publish falhar não duplica
+`addEntry`, objeto único — formato do SDK Dart — continua funcionando) — 407/407 na suite completa.
+`npx vitest run` (extensão) 2 novos (`mobileDelivery`/`desktopDelivery` cifram/mandam a lista
+inteira) — 88/88. `tsc --noEmit`, `npm run build`, `flutter analyze` limpos nos três.
+
+**Documentação**: `PENDING.md` — P29 movido pra "Resolvidas", P12/P13 removidos (obsoletos, nunca
+implementados de verdade nesta sessão, só documentação desatualizada). `ROADMAP.md` seção 2.1
+atualizada com o achado de que `executeBatch` não era necessário e o passo de "taxa de gas
+estimada" deixado de fora (nenhuma tela do projeto mostra isso hoje, fora de escopo).
+

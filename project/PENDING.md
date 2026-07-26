@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-07-26 (Sessão 165 — P27 fechado: `vaultEdit` no SDK Dart, LAN + dead-drop completo; P28 reavaliado e mantido de fora)
+> Última atualização: 2026-07-26 (Sessão 166 — P29 fechado: sync em lote pro vault-edit, sem precisar de `executeBatch`; P12/P13 removidos, já estavam fechados)
 
 ---
 
@@ -34,10 +34,7 @@
 |---|---|---|---|
 | P8 | **Phase 15 — Digital Identity Vault** — documentos, endereços, cartões de crédito. 8 etapas planejadas. **Não iniciada.** | `PHASE.md` (Fase 15) | 🟠 Média |
 | P9 | **Phase 15 — Autofill SO (Android/iOS)** — implementar `AutofillService` e `ASCredentialProviderViewController`. | `PHASE.md` (Fase 15, etapas 15.5/15.6) | 🟠 Média |
-| P29 | **Sync em lote (batch sync) pra credencial nova via extensão** — hoje cada credencial nova (passkey ou senha) gera 1 QR + 1 `UserOperation` própria. Acumular várias edições numa sessão e assinar tudo numa `UserOperation` em lote (`executeBatch`) nunca foi construído — infra do tamanho do `/truthid/v1/pin` inteiro (~3 sessões, ver `ROADMAP.md` seção 2.1). | `ROADMAP.md` (Backlog, item 6, seção 2.1) | 🟡 Baixa |
 | P11 | **`/truthid/v1/pin`** — endpoint para apps terceiros usarem os providers de pin do TruthID. Modelo de consentimento em aberto. | `ROADMAP.md` (Sessão 106, item 2) | 🟡 Baixa |
-| P12 | **Dead-drop IPFS/IPNS (fatia 2) do cross-device** — transporte para quando LAN não funciona. /sign-message e /sign-request via dead-drop. | `ROADMAP.md` (Sessão 106, item 3) | 🟡 Baixa |
-| P13 | **Callback opcional no login** — tornar `callbackUrl` opcional no QR, permitindo polling on-chain como alternativa. Design fechado, não implementado. | `ROADMAP.md` (Callback opcional) | 🟡 Baixa |
 | P28 | **SDK Dart: transporte deep link no `TruthIDRequester`** — só cross-device (QR) implementado. Deep link (mesmo aparelho) exigiria o app host registrar seu próprio esquema de URI, específico de plataforma — decidido deixar de fora de um pacote Dart puro por ora. Reavaliado na Sessão 165: hoje nem o Mobile aceita deep link pra `pin`/`vault-edit` (só `sign-message`/`sign-request`), e um pacote Dart puro não consegue automatizar o registro de URI scheme do app hospedeiro nem depende de `url_launcher` — decisão confirmada, segue de fora. | `SESSIONS.md` (Sessão 161, reavaliado 165) | 🟡 Baixa |
 
 ### Pendências de Arquitetura / Decisões em Aberto
@@ -203,6 +200,19 @@
 | ID | Item | Resolvida em |
 |---|---|---|
 | ~~P27~~ | ~~Novo método `TruthIDRequester.vaultEdit(...)` — LAN + dead-drop cross-network completo, paridade com o requisitante de referência em TypeScript (`extension/src/vaultEdit/*`). Sem fase de resposta (estrutura diferente de `signMessage`/`signRequest`/`pin`), retorna `VaultEditPendingRequest` (`delivered: Future<bool>`) em vez de `PendingRequest<T>`. Novo `internal/vault_edit_content_cipher.dart` (cifra AES-GCM/HKDF, salt domain-separado), `internal/vault_edit_dead_drop_key.dart` (deriva o par Ed25519 completo, não só o nome IPNS público — vetor cross-language TS↔Dart validado byte a byte), `internal/kubo_publish_client.dart` (cliente HTTP Kubo novo via `dart:io`, add/key-import/name-publish/key-rm, best-effort — primeiro cliente Kubo do SDK Dart). `marshalKeyProtobuf`/`computeIpnsName` de `ipns_key.dart` promovidos a públicos e reaproveitados. `dart test` 69/69 (17 novos), `dart analyze` limpo, build do Docusaurus validado~~ | **Sessão 165** |
+
+### P12/P13 — documentação corrigida, já estavam fechados (achado ao levantar pendências, Sessão 166)
+
+| ID | Item | Resolvida em |
+|---|---|---|
+| ~~P12~~ | ~~Dead-drop IPFS/IPNS pra `/sign-message`/`/sign-request` — já implementado nos dois (`_deadDropIpnsName`/`_deadDropError` em `sign_message_approval_screen.dart` e `sign_request_approval_screen.dart`, e no SDK Dart via `DeadDropPollClient` em `_awaitResult`/`_raceForBlob`, requester.dart). Nunca foi removido do PENDING.md depois de implementado~~ | já implementado antes, doc corrigida na Sessão 166 |
+| ~~P13~~ | ~~Callback opcional no login — duplicata: já fechado como **F15** ("Funcionalidades Implementadas", Sessão 142), `callbackUrl` já é `String?` opcional em `approval_screen.dart` desde então. P13 nunca foi removido quando F15 fechou~~ | já implementado (F15, Sessão 142), doc corrigida na Sessão 166 |
+
+### P29 — Sync em lote (batch sync) pro vault-edit (Sessão 166)
+
+| ID | Item | Resolvida em |
+|---|---|---|
+| ~~P29~~ | ~~Extensão acumula 1+ credenciais propostas (`pendingEdits.ts` já era lista) e manda tudo numa sessão só; Device (Mobile/Desktop) mostra uma lista, aprova de uma vez — N `addEntry`/`vault_upsert_entry` locais + **1 publish() só** no fim. **Achado que reduziu bastante o escopo**: `executeBatch` não era necessário — `VaultRegistry.updateVault` sempre grava um único `(cid, contentHash)` por publish, não importa quantas entradas mudaram no blob (confirmado no contrato); `executeBatch` nunca foi usado por nenhum UserOperation via device key/bundler, só por transações diretas do owner (Ledger) em pareamento de device, sem relação com Vault. `desktop/src-tauri/src/vault_edit.rs`/`local_signer_server.rs`: corpo HTTP virou `Vec<VaultEditRequestBody>` (só a extensão fala esse endpoint, sem quebra de compatibilidade). `mobile/lib/screens/vault_edit_approval_screen.dart`: aceita tanto lista quanto objeto único no conteúdo cifrado — o SDK Dart (`TruthIDRequester.vaultEdit`, P27) ainda manda uma proposta por sessão, sem precisar de nenhuma mudança nele. `extension/src/vaultEdit/{mobileDelivery,desktopDelivery}.ts`/`popup/main.ts`: usam a lista `pending` inteira em vez de `pending[0]`; novo `removePendingEdits` (lote) substitui `removePendingEdit` (item único, ficou órfão, removido). `cargo test --lib` 97/97 (4 novos), `flutter test` 407/407 (4 novos), `npx vitest run` (extensão) 88/88 (2 novos), `tsc --noEmit`/`npm run build`/`flutter analyze` limpos~~ | **Sessão 166** |
 
 ### Bugs do `/code-review max` (Desktop) — 52/52
 
