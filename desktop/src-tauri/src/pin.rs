@@ -339,6 +339,7 @@ pub async fn list_authorizations(state: &PinState) -> Vec<PinAuthorization> {
 /// não existe estado intermediário de "revogado mas lembrado", é o mesmo
 /// caminho de um app que nunca pediu nada.
 pub async fn revoke_authorization(state: &PinState, app_name: &str) -> Result<(), String> {
+    let app_name = normalize_app_name(app_name);
     let _guard = state.quota.lock().await;
     let mut authorizations = load_authorizations(&state.authorizations_path);
     authorizations.retain(|a| a.app_name != app_name);
@@ -354,6 +355,7 @@ pub async fn set_daily_limit(
     app_name: &str,
     daily_limit: u32,
 ) -> Result<(), String> {
+    let app_name = normalize_app_name(app_name);
     let _guard = state.quota.lock().await;
     let mut authorizations = load_authorizations(&state.authorizations_path);
     let Some(auth) = authorizations.iter_mut().find(|a| a.app_name == app_name) else {
@@ -590,10 +592,15 @@ mod tests {
     #[tokio::test]
     async fn authorized_app_within_quota_pins_without_parking() {
         let path = temp_authorizations_path();
+        // app_name já normalizado (minúsculo): é como fica persistido de verdade
+        // (normalize_app_name roda antes de qualquer save), e é essa forma que
+        // try_consume_quota busca — semear com "Practice Valuation" nunca bate
+        // e o pedido cai no caminho de aprovação, esperando um approve que este
+        // teste nunca dá (trava até o timeout de 300s).
         save_authorizations(
             &path,
             &[PinAuthorization {
-                app_name: "Practice Valuation".to_string(),
+                app_name: "practice valuation".to_string(),
                 daily_limit: 50,
                 used_today: 3,
                 day_start_ms: now_ms(),
@@ -627,7 +634,7 @@ mod tests {
         save_authorizations(
             &path,
             &[PinAuthorization {
-                app_name: "Practice Valuation".to_string(),
+                app_name: "practice valuation".to_string(),
                 daily_limit: 2,
                 used_today: 2,
                 day_start_ms: now_ms(),
@@ -670,7 +677,7 @@ mod tests {
         save_authorizations(
             &path,
             &[PinAuthorization {
-                app_name: "Practice Valuation".to_string(),
+                app_name: "practice valuation".to_string(),
                 daily_limit: 1,
                 used_today: 1,
                 day_start_ms: now_ms() - DAY_MS - 1,
@@ -787,17 +794,21 @@ mod tests {
     #[tokio::test]
     async fn revoke_authorization_removes_only_the_named_app() {
         let path = temp_authorizations_path();
+        // app_name já normalizado (minúsculo) — ver comentário em
+        // authorized_app_within_quota_pins_without_parking. revoke_authorization
+        // normaliza o nome recebido antes de comparar, então o call abaixo com
+        // casing misto ("App One") ainda precisa bater com o que está persistido.
         save_authorizations(
             &path,
             &[
                 PinAuthorization {
-                    app_name: "App One".to_string(),
+                    app_name: "app one".to_string(),
                     daily_limit: 50,
                     used_today: 3,
                     day_start_ms: now_ms(),
                 },
                 PinAuthorization {
-                    app_name: "App Two".to_string(),
+                    app_name: "app two".to_string(),
                     daily_limit: 10,
                     used_today: 0,
                     day_start_ms: now_ms(),
@@ -813,7 +824,7 @@ mod tests {
 
         let remaining = list_authorizations(&state).await;
         assert_eq!(remaining.len(), 1);
-        assert_eq!(remaining[0].app_name, "App Two");
+        assert_eq!(remaining[0].app_name, "app two");
     }
 
     #[tokio::test]
@@ -868,7 +879,7 @@ mod tests {
         save_authorizations(
             &path,
             &[PinAuthorization {
-                app_name: "Practice Valuation".to_string(),
+                app_name: "practice valuation".to_string(),
                 daily_limit: 50,
                 used_today: 7,
                 day_start_ms: now_ms(),

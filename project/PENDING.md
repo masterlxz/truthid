@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-07-26 (Sessão 161 — novo SDK Dart: verificador + requisitante cross-device)
+> Última atualização: 2026-07-26 (Sessão 162 — P25 corrigido: hang em `cargo test --lib pin::`)
 
 ---
 
@@ -40,12 +40,6 @@
 | P13 | **Callback opcional no login** — tornar `callbackUrl` opcional no QR, permitindo polling on-chain como alternativa. Design fechado, não implementado. | `ROADMAP.md` (Callback opcional) | 🟡 Baixa |
 | P27 | **SDK Dart: `vault-edit` no `TruthIDRequester`** — os 3 fluxos genéricos (`sign-message`/`sign-request`/`pin`) foram implementados na Sessão 161; `vault-edit` (propor credencial nova pro Vault) ficou de fora por decisão explícita — mais nichado, sem fase de resposta, referência completa já existe do lado requisitante em TypeScript (`extension/src/vaultEdit/*`) pra portar quando houver caso de uso concreto pedindo. | `SESSIONS.md` (Sessão 161) | 🟡 Baixa |
 | P28 | **SDK Dart: transporte deep link no `TruthIDRequester`** — só cross-device (QR) implementado. Deep link (mesmo aparelho) exigiria o app host registrar seu próprio esquema de URI, específico de plataforma — decidido deixar de fora de um pacote Dart puro por ora. | `SESSIONS.md` (Sessão 161) | 🟡 Baixa |
-
-### Bugs Descobertos Fora de Escopo
-
-| ID | Item | Onde se originou | Prioridade |
-|---|---|---|---|
-| P25 | **`cargo test --lib pin::` trava/nunca termina** (Desktop) — pelo menos 3 testes (`authorized_app_within_quota_pins_without_parking`, `quota_resets_after_a_full_day`, `revoked_app_is_treated_as_new_on_next_request`) ficam pendurados (>60s, sem terminar). Confirmado via `git stash` que é pré-existente, não relacionado ao fix do M3 — nenhum dos três usa I/O de rede real (`fake_pin` é instantâneo) nem lock global (`PinState.quota` é por instância). Causa raiz não investigada ainda. | `SESSIONS.md` (Sessão 154) | 🟠 Média |
 
 ### Pendências de Arquitetura / Decisões em Aberto
 
@@ -192,6 +186,12 @@
 | ~~SDK10~~ | ~~Vetor de paridade IPNS validado contra Kubo real (mesmo fixture de `mobile/test/services/ipns_key_service_test.dart`, Sessão 113) reaproveitado no SDK Dart~~ | **Sessão 161** |
 | ~~SDK11~~ | ~~Achado real no caminho: conectar um container Docker à sua própria IP externa trava (hairpin NAT) — sweep LAN e dead-drop poll tornados injetáveis em `TruthIDRequester` pra testar a orquestração sem depender de rede real entre dois dispositivos físicos~~ | **Sessão 161** |
 | ~~SDK12~~ | ~~52 testes novos (dart test), `dart analyze` limpo, doc nova (`docs/docs/sdk/dart.md`) + seção no `sdk/README.md`, build do Docusaurus validado~~ | **Sessão 161** |
+
+### P25 — hang em `cargo test --lib pin::` (Sessão 162)
+
+| ID | Item | Resolvida em |
+|---|---|---|
+| ~~P25~~ | ~~Causa raiz: descasamento de casing entre o `app_name` normalizado (minúsculo) que `try_consume_quota` usa pra buscar e o `app_name` capitalizado que 3 testes semeavam direto no arquivo de autorizações — o app "não era encontrado", caía no caminho de aprovação e ficava parqueado esperando um `resolve()` que esses testes nunca chamavam. Corrigido semeando os testes já normalizados e endurecendo `revoke_authorization`/`set_daily_limit` pra também normalizar o `app_name` recebido (mesma consistência que o resto do módulo já tinha)~~ | **Sessão 162** |
 
 ### Bugs do `/code-review max` (Desktop) — 52/52
 

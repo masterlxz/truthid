@@ -6097,3 +6097,46 @@ consegue automatizar).
 **Próximo passo**: nenhum item novo urgente aberto por essa sessão. P27/P28 ficam como itens de
 backlog de baixa prioridade, sem prazo. Voltar pro roadmap normal do projeto.
 
+### Sessão 162 — 2026-07-26: P25 corrigido — hang em `cargo test --lib pin::`
+
+**Causa raiz**: não era I/O de rede nem lock global (como a Sessão 154 já tinha descartado) — era
+um descasamento de *casing* entre o `app_name` normalizado (`normalize_app_name`, minúsculo) que
+`try_consume_quota`/`record_approval` sempre usam pra ler/gravar `pin_authorizations.json`, e o
+`app_name` capitalizado ("Practice Valuation") que 3 testes semeavam direto no arquivo via
+`save_authorizations`, sem passar pela normalização. `try_consume_quota` nunca encontrava a
+autorização semeada, tratava o app como novo e caía no caminho de aprovação — que fica parqueado
+esperando um `resolve()` que esses 3 testes (que não esperavam parquear) nunca chamam. Trava real
+(threads em `S`, confirmado via `/proc/<pid>/task/*/status`, não um loop ocupando CPU) até o
+timeout de 300s de `PIN_REQUEST_TIMEOUT` — não infinito, mas inviável num test suite.
+
+**Descoberta**: prints de diagnóstico temporários (removidos depois) em `try_consume_quota`
+confirmaram exatamente isso — `authorized_app_within_quota_pins_without_parking` logava "app not
+found" apesar do teste ter acabado de salvar uma autorização pra esse app.
+
+**Achado no caminho, mais um teste afetado**: `quota_exceeded_parks_and_reset_on_approve` tem o
+mesmo bug de semente, mas como esse teste sempre parqueia (`NewApp` ou `QuotaExceeded`, os dois
+caminhos chamam `resolve()`), o sintoma ali não é hang — é uma assertion errada
+(`payload.reason` vinha `NewApp`, o teste esperava `QuotaExceeded`), nunca antes pega porque a
+sessão 154 rodou o módulo inteiro e travou nos 3 hangs antes de chegar nessa asserção.
+
+**Fix**: 2 partes.
+1. Nos 3 testes que semeiam `PinAuthorization` direto (`authorized_app_within_quota_pins_without_parking`,
+   `quota_exceeded_parks_and_reset_on_approve`, `quota_resets_after_a_full_day`), `app_name` passa a
+   ser semeado já normalizado (`"practice valuation"`), igual ao que qualquer gravação real do
+   sistema produziria.
+2. `revoke_authorization`/`set_daily_limit` passam a normalizar o `app_name` recebido antes de
+   comparar — mesma consistência que `try_consume_quota`/`record_approval` já tinham, endurecendo
+   contra qualquer chamador futuro que passe um casing diferente do armazenado (hoje o único
+   chamador, a tela de Settings, sempre repassa o nome exato já normalizado que `list_authorizations`
+   devolveu — não é um bug ativo em produção, mas fecha a inconsistência). Isso por si só já
+   resolvia o 3º hang (`revoked_app_is_treated_as_new_on_next_request`, onde o `revoke_authorization`
+   com casing diferente do armazenado silenciosamente não revogava nada). Os 2 testes de gerenciamento
+   que dependiam do comportamento antigo (sem normalizar) — `revoke_authorization_removes_only_the_named_app`
+   e `set_daily_limit_updates_limit_without_touching_used_today` — tiveram a semente ajustada pra
+   minúsculo também, pelo mesmo motivo do item 1.
+
+**Verificação**: `cargo test --lib pin::` — 13/13 em 0.05s (antes travava indefinidamente).
+`cargo test --lib` (crate inteiro) — 93/93 em ~50s, sem regressão.
+
+P25 fechado — era bug de teste (semente não-normalizada), não bug do protocolo de pin em si.
+
