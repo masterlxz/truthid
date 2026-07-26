@@ -250,7 +250,7 @@ const SIGN_CHUNK_SIZE: usize = 150;
 /// derivação + um prefixo extra específico da instrução (vazio pra
 /// transação, 4 bytes big-endian de tamanho da mensagem pra personal_sign)
 /// + o início do payload; os seguintes (`P1 = P1_FOLLOWING_CHUNK`) só levam
-/// o restante dos bytes.
+///   o restante dos bytes.
 fn build_sign_apdus(
     payload: &[u8],
     ins_byte: u8,

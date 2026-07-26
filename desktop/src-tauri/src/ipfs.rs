@@ -133,8 +133,7 @@ async fn kubo_add(client: &reqwest::Client, endpoint_url: &str, content: &[u8]) 
     let text = res.text().await.map_err(|e| e.to_string())?;
     let last = text
         .lines()
-        .filter(|l| !l.trim().is_empty())
-        .last()
+        .rfind(|l| !l.trim().is_empty())
         .ok_or("resposta vazia do kubo")?;
 
     let json: serde_json::Value = serde_json::from_str(last)

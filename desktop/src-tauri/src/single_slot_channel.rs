@@ -94,7 +94,7 @@ where
             .lock()
             .await
             .as_ref()
-            .map_or(false, |s| s.payload_id_matches(id))
+            .is_some_and(|s| s.payload_id_matches(id))
     }
 }
 
