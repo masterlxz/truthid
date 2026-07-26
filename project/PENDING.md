@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-07-26 (Sessão 160 — SDKs atualizados: relayer removido, computeSmartAccountAddress portado)
+> Última atualização: 2026-07-26 (Sessão 161 — novo SDK Dart: verificador + requisitante cross-device)
 
 ---
 
@@ -16,7 +16,7 @@
 |---|---|---|---|
 | P1 | **Deploy em cascata (DeviceRegistry débito #52)** — `DeviceRegistry.sol` alterado (re-registro após revogação). Exige redeploy de 5 contratos em Sepolia e Mainnet. ⚠️ Há identidade real em uso na Mainnet desde a Sessão 116 — avaliar migração antes de redeployar. | `ARCHITECTURE.md` (débito #52, Pendências de Deploy #5) | 🔴 Alta |
 | P2 | **Deploy do RecoveryManager corrigido** (C1 — reentrância) — código corrigido na Sessão 150. Aguardando cascata junto com outros contratos. | `SESSIONS.md` (Sessão 150) | 🔴 Alta |
-| P26 | **Assinatura de sessão desalinhada com o fix C4 (domain separation)** — `SessionRegistry.createSession` já verifica `keccak256(chainId, address(this), hash)` no código-fonte (fix C4, ainda não redeployado — ver P1/P2), mas nem `mobile/lib/services/device_key_service.dart` (`signHash`) nem os 3 SDKs (`registerSession`/`register_session`, TS/Python/Ruby) assinam com esse domain separation — todos ainda fazem `personal_sign(hash)` puro. Não é bug ativo hoje (bytecode em produção é o antigo), mas quebra tudo no dia do redeploy se ninguém atualizar os dois lados (mobile + SDKs) junto. Achado durante a atualização dos SDKs (Sessão 160), decisão explícita do dono do projeto foi só registrar, não mexer agora — fora do escopo daquela sessão e mexe em contratos+mobile, não só SDK. | `SESSIONS.md` (Sessão 160) | 🟠 Média |
+| P26 | **Assinatura de sessão desalinhada com o fix C4 (domain separation)** — `SessionRegistry.createSession` já verifica `keccak256(chainId, address(this), hash)` no código-fonte (fix C4, ainda não redeployado — ver P1/P2), mas `mobile/lib/services/device_key_service.dart` (`signHash`) ainda faz `personal_sign(hash)` puro, sem domain separation. Não é bug ativo hoje (bytecode em produção é o antigo), mas quebra a criação de sessão no dia do redeploy se ninguém atualizar o mobile junto. Achado durante a atualização dos SDKs (Sessão 160) — na época achava-se que também afetava os 3 SDKs via `registerSession`/`register_session`, mas esse método foi removido de vez na mesma sessão (estava morto na prática, nunca mais submetia transação), então o achado hoje é só sobre o mobile. Decisão do dono do projeto: só registrar, não mexer agora — mexe em contratos+mobile, fora do escopo daquela sessão. | `SESSIONS.md` (Sessão 160) | 🟠 Média |
 
 ### Validações em Hardware Real
 
@@ -38,6 +38,8 @@
 | P11 | **`/truthid/v1/pin`** — endpoint para apps terceiros usarem os providers de pin do TruthID. Modelo de consentimento em aberto. | `ROADMAP.md` (Sessão 106, item 2) | 🟡 Baixa |
 | P12 | **Dead-drop IPFS/IPNS (fatia 2) do cross-device** — transporte para quando LAN não funciona. /sign-message e /sign-request via dead-drop. | `ROADMAP.md` (Sessão 106, item 3) | 🟡 Baixa |
 | P13 | **Callback opcional no login** — tornar `callbackUrl` opcional no QR, permitindo polling on-chain como alternativa. Design fechado, não implementado. | `ROADMAP.md` (Callback opcional) | 🟡 Baixa |
+| P27 | **SDK Dart: `vault-edit` no `TruthIDRequester`** — os 3 fluxos genéricos (`sign-message`/`sign-request`/`pin`) foram implementados na Sessão 161; `vault-edit` (propor credencial nova pro Vault) ficou de fora por decisão explícita — mais nichado, sem fase de resposta, referência completa já existe do lado requisitante em TypeScript (`extension/src/vaultEdit/*`) pra portar quando houver caso de uso concreto pedindo. | `SESSIONS.md` (Sessão 161) | 🟡 Baixa |
+| P28 | **SDK Dart: transporte deep link no `TruthIDRequester`** — só cross-device (QR) implementado. Deep link (mesmo aparelho) exigiria o app host registrar seu próprio esquema de URI, específico de plataforma — decidido deixar de fora de um pacote Dart puro por ora. | `SESSIONS.md` (Sessão 161) | 🟡 Baixa |
 
 ### Bugs Descobertos Fora de Escopo
 
@@ -179,6 +181,17 @@
 | ~~SDK4~~ | ~~Achado real no caminho: `verify_auth_response` do SDK Ruby comparava a chave pública recuperada (`Eth::Signature.personal_recover`, 65 bytes) direto contra um endereço (20 bytes) — nunca batia, rejeitando toda assinatura válida. Corrigido com `Eth::Util.public_key_to_address`~~ | **Sessão 160** |
 | ~~SDK5~~ | ~~Nenhum dos 3 SDKs tinha suíte de testes — adicionados vitest (TS), pytest (Python) e rspec (Ruby), incluindo um vetor fixo de paridade cross-linguagem pra `computeSmartAccountAddress`~~ | **Sessão 160** |
 | ~~SDK6~~ | ~~Documentação (README, 3 páginas de SDK, quickstart, exemplo) reescrita — narrativa de relayer wallet removida, versões fictícias ("mobile app v14.9.5+"/"v1.1+") removidas~~ | **Sessão 160** |
+
+### Novo SDK Dart (Sessão 161)
+
+| ID | Item | Resolvida em |
+|---|---|---|
+| ~~SDK7~~ | ~~Novo `sdk/dart/` (`truthid_sdk`) — `TruthIDClient` (verificador, mesmo papel do TS/Python/Ruby: createChallenge/verifyAuthResponse/verifySession/checkDeviceStatus/computeSmartAccountAddress), pure-Dart, sem dependência de `package:flutter`~~ | **Sessão 161** |
+| ~~SDK8~~ | ~~`TruthIDRequester` (papel novo, nunca implementado em nenhum idioma antes) — 3 fluxos genéricos (`signMessage`/`signRequest`/`pin`), portado do protocolo real do Mobile (ECIES, HKDF, IPNS, LAN sweep) e do requisitante de referência da extensão (`vaultEdit/*`, TypeScript)~~ | **Sessão 161** |
+| ~~SDK9~~ | ~~Vetor de paridade cross-linguagem (`computeSmartAccountAddress`) validado também no Dart — 4º SDK bate byte a byte com TS/Python/Ruby na primeira tentativa~~ | **Sessão 161** |
+| ~~SDK10~~ | ~~Vetor de paridade IPNS validado contra Kubo real (mesmo fixture de `mobile/test/services/ipns_key_service_test.dart`, Sessão 113) reaproveitado no SDK Dart~~ | **Sessão 161** |
+| ~~SDK11~~ | ~~Achado real no caminho: conectar um container Docker à sua própria IP externa trava (hairpin NAT) — sweep LAN e dead-drop poll tornados injetáveis em `TruthIDRequester` pra testar a orquestração sem depender de rede real entre dois dispositivos físicos~~ | **Sessão 161** |
+| ~~SDK12~~ | ~~52 testes novos (dart test), `dart analyze` limpo, doc nova (`docs/docs/sdk/dart.md`) + seção no `sdk/README.md`, build do Docusaurus validado~~ | **Sessão 161** |
 
 ### Bugs do `/code-review max` (Desktop) — 52/52
 

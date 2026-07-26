@@ -1,0 +1,95 @@
+import 'types.dart';
+
+const Map<Network, String> identityRegistryAddresses = {
+  Network.baseSepolia: '0x7582E1c55fAFF19619A6c0a8b6575855d4e933d0',
+  Network.baseMainnet: '0xC11426fd1cB103bC56dD3263325b34f2AcEe9903',
+};
+
+// Immutables of the TruthIDAccountFactory (ERC-4337 smart account), used to
+// predict a controller address via CREATE2 before it's ever deployed — see
+// smart_account.dart. Same source as desktop/src/config/truthidAccount.ts.
+const Map<Network, String> smartAccountFactoryAddresses = {
+  Network.baseSepolia: '0x490A82AD72705fA92e0BBc0Dc5A894883fE90a9E',
+  Network.baseMainnet: '0x6b1a78656510f734c7072040000A428e125C50df',
+};
+
+const Map<Network, String> recoveryManagerAddresses = {
+  Network.baseSepolia: '0xC60AE3D7Fc7991A48B780E3bF2838027079204Ce',
+  Network.baseMainnet: '0x1d51daD35Bd3562f8B56B334a9B8637873fE40e9',
+};
+
+// ERC-4337 EntryPoint v0.7 — same canonical singleton address on every chain.
+const String entryPointV07Address = '0x0000000071727De22E5E9d8BAf0edAc6f37da032';
+
+const Map<Network, String> deviceRegistryAddresses = {
+  Network.baseSepolia: '0x867EA636FDF324B0Cc4a631C70421580e2Bbe91c',
+  Network.baseMainnet: '0x4Fd53d70553df00D42c015EB35E2626cB80b1614',
+};
+
+const String deviceRegistryAbi = '''
+[
+  {
+    "type": "function",
+    "name": "isDeviceActive",
+    "inputs": [{ "name": "devicePubKey", "type": "address" }],
+    "outputs": [{ "name": "", "type": "bool" }],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getDevice",
+    "inputs": [{ "name": "devicePubKey", "type": "address" }],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "components": [
+          { "name": "identityId", "type": "uint256" },
+          { "name": "pubKey", "type": "address" },
+          { "name": "label", "type": "string" },
+          { "name": "addedAt", "type": "uint256" },
+          { "name": "revoked", "type": "bool" },
+          { "name": "exists", "type": "bool" }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  }
+]
+''';
+
+const Map<Network, String> sessionRegistryAddresses = {
+  Network.baseSepolia: '0xFE49Cec3a927136f7F18E521BF1547f00b09B17f',
+  Network.baseMainnet: '0x66F10F8c38b3F35551e90ACa3c675F5E3432C6Df',
+};
+
+const String sessionRegistryAbi = '''
+[
+  {
+    "type": "function",
+    "name": "isSessionRevoked",
+    "inputs": [{ "name": "hash", "type": "bytes32" }],
+    "outputs": [{ "name": "", "type": "bool" }],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getSession",
+    "inputs": [{ "name": "hash", "type": "bytes32" }],
+    "outputs": [
+      {
+        "name": "",
+        "type": "tuple",
+        "components": [
+          { "name": "identityId", "type": "uint256" },
+          { "name": "devicePubKey", "type": "address" },
+          { "name": "createdAt", "type": "uint256" },
+          { "name": "revoked", "type": "bool" },
+          { "name": "exists", "type": "bool" }
+        ]
+      }
+    ],
+    "stateMutability": "view"
+  }
+]
+''';

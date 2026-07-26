@@ -61,6 +61,15 @@ gem install truthid-sdk
 
 Requires Ruby 3.0+.
 
+### Dart / Flutter
+
+```yaml
+dependencies:
+  truthid_sdk: ^0.1.0
+```
+
+Pure Dart, no `package:flutter` dependency — works in Flutter apps (mobile or desktop) and plain Dart backends alike. Unlike the other three, this one also ships a second role: `TruthIDRequester`, for requesting a signature/transaction/pin from the user's phone directly — see the [Dart reference](https://masterlxz.github.io/truthid/docs/sdk/dart) for details.
+
 ---
 
 ## Quick Start
@@ -124,6 +133,26 @@ else
 end
 ```
 
+### Dart
+
+```dart
+import 'package:truthid_sdk/truthid_sdk.dart';
+
+final truthid = TruthIDClient(network: Network.baseMainnet);
+
+// 1. Create a challenge (embed this in the QR code)
+final challenge = truthid.createChallenge('yoursite.com');
+
+// 2. After the user approves on their phone, verify the response
+final result = await truthid.verifyAuthResponse(challenge, response);
+
+if (result.valid) {
+  print('Authenticated! Identity ID: ${result.identityId}');
+} else {
+  print('Failed: ${result.reason}');
+}
+```
+
 ---
 
 ## API Reference
@@ -133,6 +162,7 @@ Full parameter tables, return types, and failure reasons for every method now li
 - **[TypeScript reference](https://masterlxz.github.io/truthid/docs/sdk/typescript)**
 - **[Python reference](https://masterlxz.github.io/truthid/docs/sdk/python)**
 - **[Ruby reference](https://masterlxz.github.io/truthid/docs/sdk/ruby)**
+- **[Dart reference](https://masterlxz.github.io/truthid/docs/sdk/dart)** — verifier (`TruthIDClient`) and cross-device requester (`TruthIDRequester`)
 
 Quick summary of what each client gives you:
 
@@ -142,6 +172,8 @@ Quick summary of what each client gives you:
 | `verifyAuthResponse` / `verify_auth_response` | Verify the signed response from the user's phone (signature, TTL, device status) |
 | `verifySession` / `verify_session` | Check whether a session hash is still valid (not revoked) |
 | `checkDeviceStatus` / `check_device_status` | Look up a device's current status on the blockchain |
+
+The Dart SDK additionally exports `TruthIDRequester`, with no equivalent in the other three — see [Dart reference](https://masterlxz.github.io/truthid/docs/sdk/dart#truthidrequester-cross-device-requester).
 
 ---
 
@@ -339,7 +371,7 @@ if (session.exists && !session.revoked) {
 
 ### Predicting the smart account address
 
-Every SDK also exports `computeSmartAccountAddress` (`compute_smart_account_address` in Python/Ruby) — a pure, local `CREATE2` computation that predicts a user's smart account address from their owner key, with no RPC call and no server involved. Useful for showing a deposit address before the account has ever been used on-chain. See each language's SDK reference for details.
+Every SDK also exports `computeSmartAccountAddress` (`compute_smart_account_address` in Python/Ruby/Dart) — a pure, local `CREATE2` computation that predicts a user's smart account address from their owner key, with no RPC call and no server involved. Useful for showing a deposit address before the account has ever been used on-chain. See each language's SDK reference for details.
 
 ---
 
@@ -376,7 +408,7 @@ Always serve your `/auth/*` endpoints over HTTPS. The phone POSTs the signed res
 | `"base-sepolia"` | 84532 | Testnet — for development |
 | `"base-mainnet"` | 8453 | Production (default for Python and Ruby) |
 
-The TypeScript SDK requires `network` explicitly — there is no default. Python and Ruby default to `"base-mainnet"`.
+The TypeScript and Dart SDKs require `network` explicitly — there is no default. Python and Ruby default to `"base-mainnet"`.
 
 **Using testnet during development:**
 

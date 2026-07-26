@@ -6013,3 +6013,87 @@ limpo.
 **Próximo passo**: nenhum item novo aberto por essa sessão além do P26 (domain separation,
 registrado, não implementado). Voltar pro roadmap normal do projeto.
 
+---
+
+### Sessão 161 — 2026-07-26: Novo SDK Dart (`sdk/dart/`) — verificador + requisitante cross-device
+
+**Motivação**: dono do projeto observou que TS/Python/Ruby são todos SDKs de *verificador* (papel
+do backend de um site) — nenhum ajuda quem constrói direto em Flutter/Dart (mobile ou desktop).
+Pedido explícito: construir um SDK Dart com dois papéis — o verificador de sempre, **e** um papel
+novo, nunca implementado em nenhum idioma antes: o *requisitante* cross-device (o lado oposto do
+que o Mobile já faz nas suas 5 telas de aprovação). Decisões confirmadas antes de codar: cobrir só
+os 3 fluxos genéricos (`sign-message`/`sign-request`/`pin` — login/assinatura/armazenar arquivo;
+`vault-edit` fica pra depois, registrado como P27) num único pacote com duas classes
+(`TruthIDClient`/`TruthIDRequester`), não dois pacotes separados.
+
+**Investigação** (agente Explore, leitura completa de `mobile/lib/services/*` relevante +
+`extension/src/vaultEdit/*`/`session/lanDiscovery.ts`, o único requisitante de referência já
+implementado no repo, ainda que em TypeScript e só pro vault-edit) mapeou o protocolo byte a byte:
+schema exato dos 3 QRs, formato do blob ECIES (`pubkey_efêmera_do_mobile(33) || nonce(12) ||
+ciphertext+tag`), HKDF de bloco único com domain separation por fluxo, bloco de portas
+`48050-48054` do `RemoteSignerLanServer`, e a confirmação de que **o requisitante nunca precisa
+publicar em Kubo** pra esses 3 fluxos — só o Mobile publica o dead-drop de resultado, o
+requisitante só faz poll (simplificou bastante o escopo: nada de multipart HTTP pro Kubo nesta
+rodada).
+
+**Pacote**: `sdk/dart/` (`truthid_sdk`), **pure-Dart** (sem `package:flutter`) — funciona em apps
+Flutter (mobile/desktop) e backends Dart puros. `TruthIDClient` é mirror direto dos outros 3
+(`createChallenge`/`verifyAuthResponse`/`verifySession`/`checkDeviceStatus`/
+`computeSmartAccountAddress`, usando `web3dart` pra ABI/RPC manual via `dart:io HttpClient` — mesmo
+padrão que `mobile/lib/services/blockchain_service.dart` já usa, sem depender de `package:http`).
+
+**`TruthIDRequester`**: um método por fluxo (`signMessage`/`signRequest`/`pin`), cada um devolvendo
+um `PendingRequest<T>` com o payload do QR pronto na hora e um `Future<TransportResult<T>>` que
+resolve quando o celular responde (LAN ou dead-drop, o que vencer primeiro) ou expira. Primitivas
+internas portadas quase literalmente do Mobile (mesma linguagem, risco de port bem menor que
+TS/Python/Ruby): `ecies.dart`, `hkdf.dart`, `ipns_key.dart` (só a derivação da chave pública/nome —
+o requisitante nunca precisa da privada), `pin_content_cipher.dart`. LAN sweep (`lan_sweep_client.dart`)
+portado de `extension/src/session/lanDiscovery.ts` + `vaultEdit/lanDelivery.ts`, trocando
+`chrome.system.network`/`fetch` por `dart:io` `NetworkInterface.list`/`HttpClient` — mesmo filtro
+de interfaces virtuais (Docker/VPN/etc.), mesma concorrência (50), mesmo timeout (800ms).
+
+**Achado real no caminho**: `/pin` e o resultado dos outros 2 fluxos têm uma race condition que a
+implementação original (mobile) já tinha implicitamente escondida — o celular só começa a ouvir
+(LAN) ou a esperar aprovação (antes de publicar o dead-drop) depois de escanear o QR e/ou o usuário
+aprovar, então uma única passada de sweep pode rodar cedo demais e não achar nada. Corrigido
+fazendo o sweep repetir a cada ~2s até `expiresAt`, e (pro `/pin`) o push do conteúdo da fase 1
+também repetir até algum celular aceitar, só então entrando na fase 2 — desvio deliberado do
+design original do plano (`Future<PendingRequest<PinResult>> pin(...)`), corrigido pra
+`PendingRequest<PinResult> pin(...)` síncrono (mesmo formato dos outros 2), com o retry da fase 1
+rodando em background dentro do próprio `.result` — mostra o QR imediatamente em vez de atrasar
+até o primeiro push funcionar.
+
+**Achado real no caminho, ambiente**: tentar validar o sweep LAN de ponta a ponta simulando "o
+celular" com um segundo servidor HTTP no MESMO container Docker, escutando na própria IP externa
+do container (`172.17.0.2`), trava indefinidamente — limitação de hairpin NAT do bridge network do
+Docker (conectar a si mesmo via IP externo, não loopback), sem relação com o código do SDK.
+Resolvido tornando o sweep LAN e o dead-drop injetáveis em `TruthIDRequester`
+(`lanSweepForResult`/`lanSweepToPush`/`deadDropClient`, mesmo padrão de injeção que `rpcUrl` já
+tinha em `TruthIDClient`) — os testes de `TruthIDRequester` validam a orquestração (schema do
+payload, race LAN vs dead-drop, decrypt, retry-até-expirar) com fakes, enquanto a implementação
+real do protocolo HTTP (GET/PUT exatos) já está validada à parte contra servidores reais em
+loopback (`lan_sweep_client_test.dart`/`dead_drop_poll_client_test.dart`).
+
+**Testes**: 52 novos, todos verdes — `smart_account_test.dart` (vetor de paridade cross-linguagem,
+bate com TS/Python/Ruby de primeira: `0xED83305810c42dEa66bA7C5c12BF61A7adC2356B`), `client_test.dart`
+(6 checks do `verifyAuthResponse`, servidor RPC fake local), `internal/ipns_key_test.dart` (mesmo
+vetor validado contra Kubo real de `mobile/test/services/ipns_key_service_test.dart`, Sessão 113),
+`internal/ecies_test.dart`/`hkdf_test.dart`/`pin_content_cipher_test.dart` (round-trip com as
+primitivas reais do pacote `cryptography`), `internal/lan_sweep_client_test.dart`/
+`dead_drop_poll_client_test.dart` (protocolo HTTP real via loopback), `requester/*_test.dart` (os 3
+fluxos, orquestração com fakes injetados). `dart analyze` limpo.
+
+**Documentação**: nova `docs/docs/sdk/dart.md` (mesmo padrão das outras 3, cobrindo os 2 papéis),
+nova seção em `sdk/README.md` (instalação, quick start do verificador, link pro requisitante).
+Build do Docusaurus validado limpo.
+
+**Verificação**: `dart analyze` limpo, `dart test` 52/52, `npm run build` (Docusaurus) limpo.
+
+**Escopo deixado de fora, registrado**: P27 (`vault-edit` no requisitante — mais nichado, sem fase
+de resposta, referência TS completa já existe pra portar depois) e P28 (transporte deep link —
+exigiria o app host registrar seu próprio esquema de URI, fora do que um pacote Dart puro
+consegue automatizar).
+
+**Próximo passo**: nenhum item novo urgente aberto por essa sessão. P27/P28 ficam como itens de
+backlog de baixa prioridade, sem prazo. Voltar pro roadmap normal do projeto.
+
