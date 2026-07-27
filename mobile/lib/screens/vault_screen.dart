@@ -4,6 +4,7 @@ import 'package:web3dart/web3dart.dart' show EthereumAddress;
 import '../services/blockchain_service.dart';
 import '../services/bundler_config_service.dart';
 import '../services/device_key_service.dart';
+import '../services/ios_autofill_identity_service.dart';
 import '../services/local_storage_service.dart';
 import '../services/paired_username_resolver.dart';
 import '../services/pimlico_bundler_client.dart';
@@ -55,6 +56,7 @@ class VaultScreen extends StatefulWidget {
   final VaultRepository? vaultRepository;
   final BundlerConfigService? bundlerConfigService;
   final VaultPublishService? vaultPublishService;
+  final IosAutofillIdentityService? iosAutofillIdentityService;
 
   const VaultScreen({
     super.key,
@@ -66,6 +68,7 @@ class VaultScreen extends StatefulWidget {
     this.vaultRepository,
     this.bundlerConfigService,
     this.vaultPublishService,
+    this.iosAutofillIdentityService,
   });
 
   @override
@@ -80,6 +83,7 @@ class _VaultScreenState extends State<VaultScreen> {
   late final VaultKeyService _vaultKeyService;
   late final VaultRepository _repository;
   late final BundlerConfigService _bundlerConfigService;
+  late final IosAutofillIdentityService _iosAutofillIdentityService;
   VaultPublishService? _publishService;
 
   bool _isLoading = true;
@@ -110,6 +114,7 @@ class _VaultScreenState extends State<VaultScreen> {
         VaultKeyService(deviceKeyService: _keyService);
     _repository = widget.vaultRepository ?? VaultRepository();
     _bundlerConfigService = widget.bundlerConfigService ?? BundlerConfigService();
+    _iosAutofillIdentityService = widget.iosAutofillIdentityService ?? IosAutofillIdentityService();
     _publishService = widget.vaultPublishService;
     _load();
   }
@@ -180,6 +185,7 @@ class _VaultScreenState extends State<VaultScreen> {
         _identityId = identityId;
         _pendingChanges = pending;
       });
+      _iosAutofillIdentityService.syncIdentities(_entries);
     }
 
     // Resolver a smart account depende do username — segue em paralelo, sem

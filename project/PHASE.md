@@ -884,10 +884,13 @@ A partir daí: Ledger assina UserOps off-chain → bundler submete → smart acc
 
 **Visão maior**: uma **Identidade Digital portátil** que o usuário carrega entre dispositivos, sem depender de Google/Apple/Microsoft — tudo cifrado, armazenado no mesmo IPFS vault que as senhas, acessível pelos mesmos dispositivos confiáveis.
 
-**Status**: :hourglass: Em andamento — 15.1-15.4 concluídas (Sessões 167-173): 15.1 (schema),
+**Status**: :hourglass: Em andamento — 15.1-15.5 concluídas (Sessões 167-174): 15.1 (schema),
 15.2 (CRUD Desktop), 15.3 (CRUD Mobile), 15.4 fatia 1 (endereço/LAN/Mobile, S170), fatia 2
-(cartão/LAN/Mobile, S171; dead-drop endereço+cartão, S172; Desktop, S173 — fecha a 15.4 inteira).
-Restam 15.5-15.8 (autofill de SO, documentos, revisão de segurança do CVV).
+(cartão/LAN/Mobile, S171; dead-drop endereço+cartão, S172; Desktop, S173 — fecha a 15.4 inteira),
+15.5 (Autofill SO Android, S174). 15.6 (Autofill SO iOS) — fatia 1 concluída (S175): só o
+scaffold da extensão + registro de identidades, ver etapa 6 abaixo pro porquê de não ter saído
+"a mesma lógica do Android" como o escopo original previa. Restam 15.6 fatia 2 (decifra dentro
+da extensão), 15.7 (documentos) e 15.8 (revisão de segurança do CVV).
 
 ---
 
@@ -1195,7 +1198,44 @@ type VaultEntry = VaultEntryCredential | VaultEntryDocument
    dá pra validar o fluxo real** (SO oferecendo "Fill with TruthID" de verdade num app terceiro)
    sem um dispositivo Android físico com o serviço habilitado em Configurações — nova pendência
    registrada em `PENDING.md`.
-6. **15.6 — Autofill SO iOS**: implementar `ASCredentialIdentityStore` / `ASCredentialProviderViewController`. Mesma lógica do Android.
+6. **15.6 — Autofill SO iOS, fatia 1 (Sessão 175)**: duas diferenças de arquitetura reais em
+   relação ao Android (15.5), achadas ao investigar a API antes de codar, que fatiaram o escopo
+   (`AskUserQuestion` com o dono do projeto nas duas). **Primeira**: a API pública de autofill do
+   iOS (`ASCredentialProviderViewController`) só cobre credencial (senha/passkey, e código de
+   verificação no iOS 18+) — não existe extension point pra terceiros preencherem endereço/cartão
+   (isso fica restrito ao Contacts/Wallet da própria Apple); "mesma lógica do Android" (3 tipos)
+   nunca foi possível. Escopo fechado em só credencial. **Segunda, mais séria**: diferente do
+   Android, onde `TruthIdAutofillService` nunca toca no Vault e só abre a `MainActivity` via
+   `PendingIntent` (resultado volta via `EXTRA_AUTHENTICATION_RESULT`), uma extensão iOS que
+   chama `extensionContext.open(_:)` pra abrir o app principal **perde o controle** — a chamada
+   original (Safari, por exemplo) só recebe cancelamento, sem jeito de receber de volta a
+   credencial escolhida no app. A decifra do Vault precisa acontecer *dentro* da extensão, o que
+   exigiria portar a cripto (AES-GCM/HKDF) pra Swift + Keychain/App Group compartilhado — trabalho
+   grande e impossível de validar neste ambiente (Linux, sem Xcode, nem simulador). Fatiado:
+   **fatia 1 (esta sessão)** só cria o scaffold da extensão e registra as identidades (sem
+   decifrar nada); a decifra real fica pra uma fatia 2 futura (P36 no `PENDING.md`).
+   Implementação: novo target `AutofillExtension` (app extension) no `Runner.xcodeproj`, criado
+   **programaticamente via a gem Ruby `xcodeproj`** (não editado à mão — o formato do
+   `.pbxproj` é frágil e não dá pra compilar/validar aqui pra conferir uma edição manual; o
+   `xcodeproj` gerou target/build phases/configs consistentes e o resultado foi validado
+   reabrindo o projeto e inspecionando cada peça — dependency, embed phase, bundle id, entitlements,
+   deployment target — antes de seguir). Achado no caminho: o helper `add_system_framework` da
+   gem gera caminho de framework fixado numa versão de SDK (`iPhoneOS26.0.sdk`) — frágil se a
+   máquina de build tiver outra versão do Xcode; corrigido pra referência `SDKROOT`-relativa
+   (o padrão atual dos templates do Xcode, igual o resto do projeto não usa nenhum caminho
+   versionado). `CredentialProviderViewController.swift` (extensão) só mostra uma tela
+   informativa e cancela — preenchimento de verdade ainda não existe. `AppDelegate.swift` ganhou
+   o primeiro `MethodChannel` iOS do projeto (`truthid/ios_autofill_identities`), registrado no
+   hook `didInitializeImplicitFlutterEngine` (mesmo padrão do `GeneratedPluginRegistrant`) —
+   recebe a lista de credenciais do Dart e chama `ASCredentialIdentityStore.shared.
+   replaceCredentialIdentities(...)`. Novo `ios_autofill_identity_service.dart`
+   (`IosAutofillIdentityService`) filtra só `EntryType.credential` e deriva o hostname do
+   `serviceIdentifier` com o mesmo critério de `_hostnameOf` (RP ID de passkey,
+   `vault_entry_form_screen.dart`) — duplicado de propósito, esse helper é privado à tela de
+   formulário. Chamado (fire-and-forget, fail-silent, mesmo padrão de `_resolveSmartAccount`) toda
+   vez que `vault_screen.dart::_load()` recarrega as entradas. `flutter analyze` limpo, `flutter
+   test` 475/475 (4 novos). **Não builda nem roda nada neste ambiente** — só confirmável abrindo
+   o projeto no Xcode/macOS (nova pendência registrada em `PENDING.md`, P35).
 7. **15.7 — Documentos**: upload/download/visualização de documentos genéricos. Limite de tamanho a definir. Chunking para arquivos grandes, se necessário.
 8. **15.8 — Revisão de segurança**: auditoria focada nos cartões de crédito (cifra extra do CVV, exposição mínima no autofill, zero logging).
 
