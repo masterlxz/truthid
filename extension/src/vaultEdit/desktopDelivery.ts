@@ -31,7 +31,13 @@ export interface DesktopDeliveryResult {
   error?: string;
 }
 
-async function fetchWithTimeout(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+// Exportada (Fase 15.4, fatia 2) — reusada por `autofill/desktopDelivery.ts`,
+// mesmo helper de timeout, nenhum motivo pra duplicar.
+export async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {

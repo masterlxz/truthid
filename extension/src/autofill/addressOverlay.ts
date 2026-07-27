@@ -7,6 +7,7 @@ import { bytesToHex } from '../util/bytes';
 import { fillAddressGroup, type DecryptedAddress } from './addressFill';
 import type { AddressFieldGroup } from './addressFieldDetection';
 import { pullFromDeadDrop } from './deadDropPull';
+import { fetchAddressFromDesktop } from './desktopDelivery';
 import {
   AUTOFILL_ENSURE_HOST_PERMISSION_MESSAGE,
   AUTOFILL_MANUAL_FETCH_MESSAGE,
@@ -192,9 +193,29 @@ export function attachAddressAutofillIcon(group: AddressFieldGroup): void {
 
     let resolved = false;
 
-    async function handleBlob(blobB64: string): Promise<void> {
+    // Compartilhado pelos 3 transportes (LAN/dead-drop, que chegam cifrados
+    // e passam por handleBlob; Desktop loopback, que chega em claro e chama
+    // isto direto) — guarda o `resolved` num único lugar, em vez de repetir
+    // o guard em cada um dos 3 call sites. Sem `await` aqui dentro: mesmo
+    // que 2 transportes resolvam quase juntos, só a primeira chamada aplica
+    // algo (a segunda vê `resolved` true e sai).
+    function applyResult(result: { status: string; address?: DecryptedAddress }): void {
       if (resolved) return;
       resolved = true;
+      if (result.status === 'filled' && result.address) {
+        fillAddressGroup(group, result.address);
+        status.textContent = 'Filled ✓';
+        setTimeout(closePanel, 1500);
+      } else if (result.status === 'no-addresses') {
+        status.textContent =
+          "You don't have any saved addresses yet — add one in the Vault first.";
+      } else {
+        status.textContent = 'Request rejected.';
+      }
+    }
+
+    async function handleBlob(blobB64: string): Promise<void> {
+      if (resolved) return;
       try {
         const blobBytes = Uint8Array.from(atob(blobB64), (c) => c.charCodeAt(0));
         const plaintext = await decrypt(blobBytes, privKey);
@@ -202,18 +223,12 @@ export function attachAddressAutofillIcon(group: AddressFieldGroup): void {
           status: string;
           address?: DecryptedAddress;
         };
-        if (result.status === 'filled' && result.address) {
-          fillAddressGroup(group, result.address);
-          status.textContent = 'Filled ✓';
-          setTimeout(closePanel, 1500);
-        } else if (result.status === 'no-addresses') {
-          status.textContent =
-            "You don't have any saved addresses yet — add one in the Vault first.";
-        } else {
-          status.textContent = 'Request rejected on your phone.';
-        }
+        applyResult(result);
       } catch {
-        status.textContent = 'Received an answer, but could not decrypt it.';
+        if (!resolved) {
+          resolved = true;
+          status.textContent = 'Received an answer, but could not decrypt it.';
+        }
       }
     }
 
@@ -237,6 +252,20 @@ export function attachAddressAutofillIcon(group: AddressFieldGroup): void {
     // quase juntos.
     void pullFromDeadDrop(sessionId, qrPayload.expiresAt).then((blob) => {
       if (blob) void handleBlob(blob);
+    });
+
+    // Desktop loopback (Fase 15.4, fatia 2) — terceira tentativa em
+    // paralelo: se o TruthID Desktop estiver rodando na mesma máquina, ele
+    // responde direto (sem QR, sem cifra — mesmo nível de confiança do
+    // /pin/vault-edit). Chega em claro, não em blob cifrado — vai direto
+    // pra applyResult, não passa por handleBlob. `not-found`/`timeout`/
+    // `busy`/`invalid`/`error` ficam em silêncio: Desktop não está rodando,
+    // ou não é o caminho que resolveu — o LAN/dead-drop (Mobile) ainda
+    // podem responder.
+    void fetchAddressFromDesktop().then((result) => {
+      if (result.status === 'filled' || result.status === 'no-addresses' || result.status === 'rejected') {
+        applyResult(result);
+      }
     });
 
     connectButton.addEventListener('click', () => {

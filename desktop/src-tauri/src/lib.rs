@@ -10,6 +10,8 @@ use serde::Serialize;
 use sha2::Sha256;
 use sha3::{Digest, Keccak256};
 
+mod autofill_address;
+mod autofill_creditcard;
 mod backup;
 mod bundler;
 mod config;
@@ -632,6 +634,13 @@ pub(crate) async fn pin_content(
     ))
 }
 
+// 1 State por canal do local signer server é a convenção já estabelecida
+// (sign-request/sign-message/pin/vault-edit) — os 2 canais de autofill desta
+// fase levaram a contagem de 6 pra 8 argumentos. Reduzir isso exigiria
+// agrupar todos os States num único struct compartilhado, um refactor de
+// arquitetura maior que tocaria os 6 canais existentes só por causa de um
+// lint; aceito deliberadamente por ora.
+#[allow(clippy::too_many_arguments)]
 #[tauri::command]
 async fn local_signer_start(
     app: tauri::AppHandle,
@@ -640,16 +649,28 @@ async fn local_signer_start(
     sign_messages: tauri::State<'_, std::sync::Arc<sign_message::SignMessageState>>,
     pin_requests: tauri::State<'_, std::sync::Arc<pin::PinState>>,
     vault_edit_requests: tauri::State<'_, std::sync::Arc<vault_edit::VaultEditState>>,
+    autofill_address_requests: tauri::State<
+        '_,
+        std::sync::Arc<autofill_address::AutofillAddressState>,
+    >,
+    autofill_creditcard_requests: tauri::State<
+        '_,
+        std::sync::Arc<autofill_creditcard::AutofillCreditCardState>,
+    >,
 ) -> Result<local_signer_server::LocalSignerStatus, String> {
     use tauri::Emitter;
     let sign_request_app = app.clone();
     let sign_message_app = app.clone();
     let pin_app = app.clone();
     let vault_edit_app = app.clone();
+    let autofill_address_app = app.clone();
+    let autofill_creditcard_app = app.clone();
     let sign_request_state = sign_requests.inner().clone();
     let sign_message_state = sign_messages.inner().clone();
     let pin_state = pin_requests.inner().clone();
     let vault_edit_state = vault_edit_requests.inner().clone();
+    let autofill_address_state = autofill_address_requests.inner().clone();
+    let autofill_creditcard_state = autofill_creditcard_requests.inner().clone();
     let config = local_signer_server::ServerConfigBuilder::new()
         .sign_request(sign_request_state, move |payload| {
             let _ = sign_request_app.emit("truthid://sign-request", payload);
@@ -662,6 +683,12 @@ async fn local_signer_start(
         })
         .vault_edit(vault_edit_state, move |payload| {
             let _ = vault_edit_app.emit("truthid://vault-edit", payload);
+        })
+        .autofill_address(autofill_address_state, move |payload| {
+            let _ = autofill_address_app.emit("truthid://autofill-address", payload);
+        })
+        .autofill_creditcard(autofill_creditcard_state, move |payload| {
+            let _ = autofill_creditcard_app.emit("truthid://autofill-creditcard", payload);
         })
         .build()?;
     local_signer_server::start(&state, config).await
@@ -755,6 +782,38 @@ async fn respond_to_vault_edit_request(
     vault_edit::resolve(state.inner(), &id, decision).await
 }
 
+#[tauri::command]
+async fn get_pending_autofill_address_request(
+    state: tauri::State<'_, std::sync::Arc<autofill_address::AutofillAddressState>>,
+) -> Result<Option<autofill_address::AutofillAddressApprovalPayload>, String> {
+    Ok(autofill_address::current(state.inner()).await)
+}
+
+#[tauri::command]
+async fn respond_to_autofill_address_request(
+    id: String,
+    decision: autofill_address::AutofillAddressDecision,
+    state: tauri::State<'_, std::sync::Arc<autofill_address::AutofillAddressState>>,
+) -> Result<(), String> {
+    autofill_address::resolve(state.inner(), &id, decision).await
+}
+
+#[tauri::command]
+async fn get_pending_autofill_creditcard_request(
+    state: tauri::State<'_, std::sync::Arc<autofill_creditcard::AutofillCreditCardState>>,
+) -> Result<Option<autofill_creditcard::AutofillCreditCardApprovalPayload>, String> {
+    Ok(autofill_creditcard::current(state.inner()).await)
+}
+
+#[tauri::command]
+async fn respond_to_autofill_creditcard_request(
+    id: String,
+    decision: autofill_creditcard::AutofillCreditCardDecision,
+    state: tauri::State<'_, std::sync::Arc<autofill_creditcard::AutofillCreditCardState>>,
+) -> Result<(), String> {
+    autofill_creditcard::resolve(state.inner(), &id, decision).await
+}
+
 /// Os 3 comandos abaixo alimentam a tela de Settings de autorizações de
 /// pinning por app (fatia 3) — nenhum deles passa pelo protocolo de
 /// aprovação/parking, só leem/gravam o arquivo de autorizações direto.
@@ -797,6 +856,12 @@ pub fn run() {
         ))
         .manage(std::sync::Arc::new(pin::PinState::default()))
         .manage(std::sync::Arc::new(vault_edit::VaultEditState::default()))
+        .manage(std::sync::Arc::new(
+            autofill_address::AutofillAddressState::default(),
+        ))
+        .manage(std::sync::Arc::new(
+            autofill_creditcard::AutofillCreditCardState::default(),
+        ))
         .setup(|app| {
             // AppHandle (não State) porque a closure/future precisa ser 'static
             // pra rodar em tauri::async_runtime::spawn — um State<'_, T> tomado
@@ -833,6 +898,8 @@ pub fn run() {
             let notify_handle_message = handle.clone();
             let notify_handle_pin = handle.clone();
             let notify_handle_vault_edit = handle.clone();
+            let notify_handle_autofill_address = handle.clone();
+            let notify_handle_autofill_creditcard = handle.clone();
             tauri::async_runtime::spawn(async move {
                 let state = handle.state::<local_signer_server::LocalSignerServerState>();
                 let sign_request_state = handle
@@ -851,6 +918,14 @@ pub fn run() {
                     .state::<std::sync::Arc<vault_edit::VaultEditState>>()
                     .inner()
                     .clone();
+                let autofill_address_state = handle
+                    .state::<std::sync::Arc<autofill_address::AutofillAddressState>>()
+                    .inner()
+                    .clone();
+                let autofill_creditcard_state = handle
+                    .state::<std::sync::Arc<autofill_creditcard::AutofillCreditCardState>>()
+                    .inner()
+                    .clone();
                 let config = local_signer_server::ServerConfigBuilder::new()
                     .sign_request(sign_request_state, move |payload| {
                         let _ = notify_handle.emit("truthid://sign-request", payload);
@@ -863,6 +938,14 @@ pub fn run() {
                     })
                     .vault_edit(vault_edit_state, move |payload| {
                         let _ = notify_handle_vault_edit.emit("truthid://vault-edit", payload);
+                    })
+                    .autofill_address(autofill_address_state, move |payload| {
+                        let _ = notify_handle_autofill_address
+                            .emit("truthid://autofill-address", payload);
+                    })
+                    .autofill_creditcard(autofill_creditcard_state, move |payload| {
+                        let _ = notify_handle_autofill_creditcard
+                            .emit("truthid://autofill-creditcard", payload);
                     })
                     .build()
                     .expect("ServerConfig should build");
@@ -917,6 +1000,10 @@ pub fn run() {
             pin_set_daily_limit,
             get_pending_vault_edit_request,
             respond_to_vault_edit_request,
+            get_pending_autofill_address_request,
+            respond_to_autofill_address_request,
+            get_pending_autofill_creditcard_request,
+            respond_to_autofill_creditcard_request,
             ledger::is_ledger_connected,
             ledger::get_ledger_address,
             ledger::sign_ledger_transaction,

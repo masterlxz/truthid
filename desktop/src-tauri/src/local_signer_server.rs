@@ -7,6 +7,8 @@ use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tokio::sync::{oneshot, Mutex};
 
+use crate::autofill_address::{self, AutofillAddressState};
+use crate::autofill_creditcard::{self, AutofillCreditCardState};
 use crate::pin::{self, PinState};
 use crate::sign_message::{self, SignMessageState};
 use crate::sign_request::{self, SignRequestState};
@@ -28,6 +30,14 @@ type PinNotifier = Arc<dyn Fn(&pin::PinApprovalPayload) + Send + Sync>;
 /// Mesma ideia de SignRequestNotifier, só que pro canal /vault-edit.
 type VaultEditNotifier = Arc<dyn Fn(&vault_edit::VaultEditApprovalPayload) + Send + Sync>;
 
+/// Mesma ideia de SignRequestNotifier, só que pro canal /autofill-address.
+type AutofillAddressNotifier =
+    Arc<dyn Fn(&autofill_address::AutofillAddressApprovalPayload) + Send + Sync>;
+
+/// Mesma ideia de SignRequestNotifier, só que pro canal /autofill-creditcard.
+type AutofillCreditCardNotifier =
+    Arc<dyn Fn(&autofill_creditcard::AutofillCreditCardApprovalPayload) + Send + Sync>;
+
 #[derive(Clone)]
 struct SignRequestRouterState {
     sign_requests: Arc<SignRequestState>,
@@ -38,6 +48,10 @@ struct SignRequestRouterState {
     on_pin_request: PinNotifier,
     vault_edit_requests: Arc<VaultEditState>,
     on_vault_edit_request: VaultEditNotifier,
+    autofill_address_requests: Arc<AutofillAddressState>,
+    on_autofill_address_request: AutofillAddressNotifier,
+    autofill_creditcard_requests: Arc<AutofillCreditCardState>,
+    on_autofill_creditcard_request: AutofillCreditCardNotifier,
 }
 
 /// Configuração nomeada para o servidor local — elimina os 8 argumentos
@@ -51,6 +65,10 @@ pub struct ServerConfig {
     pub pin_notifier: PinNotifier,
     pub vault_edit_state: Arc<VaultEditState>,
     pub vault_edit_notifier: VaultEditNotifier,
+    pub autofill_address_state: Arc<AutofillAddressState>,
+    pub autofill_address_notifier: AutofillAddressNotifier,
+    pub autofill_creditcard_state: Arc<AutofillCreditCardState>,
+    pub autofill_creditcard_notifier: AutofillCreditCardNotifier,
 }
 
 /// Builder para `ServerConfig`. Cada método nomeia o canal que está sendo
@@ -67,6 +85,10 @@ pub struct ServerConfigBuilder {
     pin_notifier: Option<PinNotifier>,
     vault_edit_state: Option<Arc<VaultEditState>>,
     vault_edit_notifier: Option<VaultEditNotifier>,
+    autofill_address_state: Option<Arc<AutofillAddressState>>,
+    autofill_address_notifier: Option<AutofillAddressNotifier>,
+    autofill_creditcard_state: Option<Arc<AutofillCreditCardState>>,
+    autofill_creditcard_notifier: Option<AutofillCreditCardNotifier>,
 }
 
 impl ServerConfigBuilder {
@@ -114,6 +136,29 @@ impl ServerConfigBuilder {
         self
     }
 
+    pub fn autofill_address(
+        mut self,
+        state: Arc<AutofillAddressState>,
+        notifier: impl Fn(&autofill_address::AutofillAddressApprovalPayload) + Send + Sync + 'static,
+    ) -> Self {
+        self.autofill_address_state = Some(state);
+        self.autofill_address_notifier = Some(Arc::new(notifier));
+        self
+    }
+
+    pub fn autofill_creditcard(
+        mut self,
+        state: Arc<AutofillCreditCardState>,
+        notifier: impl Fn(&autofill_creditcard::AutofillCreditCardApprovalPayload)
+            + Send
+            + Sync
+            + 'static,
+    ) -> Self {
+        self.autofill_creditcard_state = Some(state);
+        self.autofill_creditcard_notifier = Some(Arc::new(notifier));
+        self
+    }
+
     pub fn build(self) -> Result<ServerConfig, String> {
         Ok(ServerConfig {
             sign_request_state: self
@@ -140,6 +185,18 @@ impl ServerConfigBuilder {
             vault_edit_notifier: self
                 .vault_edit_notifier
                 .ok_or_else(|| "vault_edit_notifier is required".to_string())?,
+            autofill_address_state: self
+                .autofill_address_state
+                .ok_or_else(|| "autofill_address_state is required".to_string())?,
+            autofill_address_notifier: self
+                .autofill_address_notifier
+                .ok_or_else(|| "autofill_address_notifier is required".to_string())?,
+            autofill_creditcard_state: self
+                .autofill_creditcard_state
+                .ok_or_else(|| "autofill_creditcard_state is required".to_string())?,
+            autofill_creditcard_notifier: self
+                .autofill_creditcard_notifier
+                .ok_or_else(|| "autofill_creditcard_notifier is required".to_string())?,
         })
     }
 }
@@ -294,6 +351,37 @@ async fn vault_edit_handler(
     (status, Json(body))
 }
 
+// Sem corpo no POST (ao contrário de vault_edit_handler) — o Rust já lê o
+// Vault local sozinho pra montar a lista de candidatos, a extensão não tem
+// nada pra enviar (mesmo raciocínio de `pin_handler`, mas sem a parte de
+// cota/autorização).
+async fn autofill_address_handler(
+    State(router_state): State<SignRequestRouterState>,
+) -> (StatusCode, Json<autofill_address::AutofillAddressResponse>) {
+    let outcome =
+        autofill_address::handle_incoming(&router_state.autofill_address_requests, |payload| {
+            (router_state.on_autofill_address_request)(payload)
+        })
+        .await;
+    let (status, body) = outcome.into_response();
+    (status, Json(body))
+}
+
+async fn autofill_creditcard_handler(
+    State(router_state): State<SignRequestRouterState>,
+) -> (
+    StatusCode,
+    Json<autofill_creditcard::AutofillCreditCardResponse>,
+) {
+    let outcome = autofill_creditcard::handle_incoming(
+        &router_state.autofill_creditcard_requests,
+        |payload| (router_state.on_autofill_creditcard_request)(payload),
+    )
+    .await;
+    let (status, body) = outcome.into_response();
+    (status, Json(body))
+}
+
 fn router(config: &ServerConfig) -> Router {
     let router_state = SignRequestRouterState {
         sign_requests: config.sign_request_state.clone(),
@@ -304,6 +392,10 @@ fn router(config: &ServerConfig) -> Router {
         on_pin_request: config.pin_notifier.clone(),
         vault_edit_requests: config.vault_edit_state.clone(),
         on_vault_edit_request: config.vault_edit_notifier.clone(),
+        autofill_address_requests: config.autofill_address_state.clone(),
+        on_autofill_address_request: config.autofill_address_notifier.clone(),
+        autofill_creditcard_requests: config.autofill_creditcard_state.clone(),
+        on_autofill_creditcard_request: config.autofill_creditcard_notifier.clone(),
     };
     // Nota de segurança (Sessão 146, bug #43):
     // Nenhuma rota tem autenticação. O servidor binda em 127.0.0.1 —
@@ -319,6 +411,14 @@ fn router(config: &ServerConfig) -> Router {
         .route("/truthid/v1/sign-message", post(sign_message_handler))
         .route("/truthid/v1/pin", post(pin_handler))
         .route("/truthid/v1/vault-edit", post(vault_edit_handler))
+        .route(
+            "/truthid/v1/autofill-address",
+            post(autofill_address_handler),
+        )
+        .route(
+            "/truthid/v1/autofill-creditcard",
+            post(autofill_creditcard_handler),
+        )
         .with_state(router_state)
 }
 
@@ -465,6 +565,16 @@ mod tests {
         Arc::new(VaultEditState::default())
     }
 
+    // Mesmo motivo de temp_vault_edit_state — sem arquivo, sem isolamento
+    // de caminho a fazer.
+    fn temp_autofill_address_state() -> Arc<AutofillAddressState> {
+        Arc::new(AutofillAddressState::default())
+    }
+
+    fn temp_autofill_creditcard_state() -> Arc<AutofillCreditCardState> {
+        Arc::new(AutofillCreditCardState::default())
+    }
+
     // Testes que só exercitam ping/handshake não se importam com o
     // sign_request::SignRequestState nem com notificação — esse helper
     // isola esse boilerplate.
@@ -474,6 +584,8 @@ mod tests {
             .sign_message(Arc::new(SignMessageState::default()), |_| {})
             .pin(temp_pin_state(), |_| {})
             .vault_edit(temp_vault_edit_state(), |_| {})
+            .autofill_address(temp_autofill_address_state(), |_| {})
+            .autofill_creditcard(temp_autofill_creditcard_state(), |_| {})
             .build()?;
         start(state, config).await
     }
@@ -596,6 +708,8 @@ mod tests {
             .sign_message(Arc::new(SignMessageState::default()), |_| {})
             .pin(temp_pin_state(), |_| {})
             .vault_edit(temp_vault_edit_state(), |_| {})
+            .autofill_address(temp_autofill_address_state(), |_| {})
+            .autofill_creditcard(temp_autofill_creditcard_state(), |_| {})
             .build()
             .expect("config should build");
         let started = start(&state, config).await.expect("start should succeed");
@@ -645,6 +759,8 @@ mod tests {
             .sign_message(Arc::new(SignMessageState::default()), |_| {})
             .pin(temp_pin_state(), |_| {})
             .vault_edit(temp_vault_edit_state(), |_| {})
+            .autofill_address(temp_autofill_address_state(), |_| {})
+            .autofill_creditcard(temp_autofill_creditcard_state(), |_| {})
             .build()
             .expect("config should build");
         let started = start(&state, config).await.expect("start should succeed");
@@ -694,6 +810,8 @@ mod tests {
             .sign_message(sign_messages.clone(), |_| {})
             .pin(temp_pin_state(), |_| {})
             .vault_edit(temp_vault_edit_state(), |_| {})
+            .autofill_address(temp_autofill_address_state(), |_| {})
+            .autofill_creditcard(temp_autofill_creditcard_state(), |_| {})
             .build()
             .expect("config should build");
         let started = start(&state, config).await.expect("start should succeed");
@@ -745,6 +863,8 @@ mod tests {
             .sign_message(sign_messages.clone(), |_| {})
             .pin(temp_pin_state(), |_| {})
             .vault_edit(temp_vault_edit_state(), |_| {})
+            .autofill_address(temp_autofill_address_state(), |_| {})
+            .autofill_creditcard(temp_autofill_creditcard_state(), |_| {})
             .build()
             .expect("config should build");
         let started = start(&state, config).await.expect("start should succeed");
@@ -798,6 +918,8 @@ mod tests {
             .sign_message(Arc::new(SignMessageState::default()), |_| {})
             .pin(pin_requests.clone(), |_| {})
             .vault_edit(temp_vault_edit_state(), |_| {})
+            .autofill_address(temp_autofill_address_state(), |_| {})
+            .autofill_creditcard(temp_autofill_creditcard_state(), |_| {})
             .build()
             .expect("config should build");
         let started = start(&state, config).await.expect("start should succeed");
@@ -838,6 +960,8 @@ mod tests {
             .sign_message(Arc::new(SignMessageState::default()), |_| {})
             .pin(pin_requests.clone(), |_| {})
             .vault_edit(temp_vault_edit_state(), |_| {})
+            .autofill_address(temp_autofill_address_state(), |_| {})
+            .autofill_creditcard(temp_autofill_creditcard_state(), |_| {})
             .build()
             .expect("config should build");
         let started = start(&state, config).await.expect("start should succeed");
@@ -885,6 +1009,8 @@ mod tests {
             .sign_message(Arc::new(SignMessageState::default()), |_| {})
             .pin(temp_pin_state(), |_| {})
             .vault_edit(vault_edit_requests.clone(), |_| {})
+            .autofill_address(temp_autofill_address_state(), |_| {})
+            .autofill_creditcard(temp_autofill_creditcard_state(), |_| {})
             .build()
             .expect("config should build");
         let started = start(&state, config).await.expect("start should succeed");
@@ -930,6 +1056,8 @@ mod tests {
             .sign_message(Arc::new(SignMessageState::default()), |_| {})
             .pin(temp_pin_state(), |_| {})
             .vault_edit(vault_edit_requests.clone(), |_| {})
+            .autofill_address(temp_autofill_address_state(), |_| {})
+            .autofill_creditcard(temp_autofill_creditcard_state(), |_| {})
             .build()
             .expect("config should build");
         let started = start(&state, config).await.expect("start should succeed");
@@ -974,6 +1102,8 @@ mod tests {
             .sign_message(Arc::new(SignMessageState::default()), |_| {})
             .pin(temp_pin_state(), |_| {})
             .vault_edit(vault_edit_requests.clone(), |_| {})
+            .autofill_address(temp_autofill_address_state(), |_| {})
+            .autofill_creditcard(temp_autofill_creditcard_state(), |_| {})
             .build()
             .expect("config should build");
         let started = start(&state, config).await.expect("start should succeed");

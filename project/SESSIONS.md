@@ -6748,3 +6748,93 @@ dono do projeto especificamente pelo caminho do autofill.
 Fase 15 atualizado (só falta Desktop pra fechar a etapa inteira). `PENDING.md` — P8 atualizado,
 novo P32 registrado.
 
+### Sessão 173 — 2026-07-27: Fase 15.4, resto — Desktop responde autofill (fecha a Fase 15.4 inteira)
+
+Última perna da fatia 2, escolhida depois do dead-drop na Sessão 172. Explorado antes de codar
+(2 agentes Explore em paralelo, Sessão anterior a esta) — o achado central: já existe um servidor
+HTTP loopback genérico (`local_signer_server.rs`), bindado só em `127.0.0.1`, multiplexando 4
+canais (`/pin`, `/vault-edit`, `/sign-request`, `/sign-message`) por trás de um único `axum::Router`
+e um `SingleSlotChannel<P, D>` compartilhado (1 pedido pendente por vez, até 300s, resolvido por
+`id`). Localhost já é tratado como confiável por design (mesmo processo, mesmo usuário) — sem QR,
+sem cifra, ao contrário do caminho LAN/dead-drop do Mobile. O trabalho foi encaixar 2 canais novos
+nesse mesmo padrão, não inventar um transporte novo.
+
+**Desenho invertido em relação a `/vault-edit`**: `/vault-edit` recebe dado da extensão (escreve no
+vault). `/autofill-address`/`/autofill-creditcard` fazem o oposto — o POST da extensão não carrega
+corpo nenhum, o próprio Rust lê o Vault local (`vault::load()`) e monta a lista de candidatos
+(endereços/cartões salvos) no payload que vai pro modal. O frontend devolve só o `entry_id`
+escolhido — o Rust já tinha os dados completos (evita reenviar CVV/número de cartão de volta pela
+ponte de IPC do Tauri, mesmo raciocínio de não vazar segredo desnecessariamente).
+
+**`desktop/src-tauri/src/autofill_address.rs`/`autofill_creditcard.rs`** (novos, ~300 linhas cada,
+mirror estrutural de `vault_edit.rs`): `AutofillXApprovalPayload` (id, candidates, expiresAtMs),
+`AutofillXDecision` (`Approved{entry_id}` | `Rejected`), `AutofillXOutcome` (`Filled`/`NoX`/
+`Rejected`/`TimedOut`/`Busy`/`Invalid`). `handle_incoming` só faz a leitura do vault (não
+testável sem tocar `$HOME`) e delega pra `handle_incoming_with_timeout`, que recebe as entradas já
+prontas — mesma separação I/O-vs-lógica que `pin.rs` já faz injetando `authorizations_path`.
+Decidido **não** generalizar os 2 módulos com um tipo genérico `AutofillState<T>` — a convenção já
+estabelecida no arquivo (`sign_request.rs`/`sign_message.rs` são bem parecidos entre si e nunca
+foram unificados) favorece duplicação por canal sobre abstração genérica; `SingleSlotChannel<P, D>`
+já é o nível de compartilhamento aceito no projeto.
+
+**`local_signer_server.rs`**: `SignRequestRouterState`/`ServerConfig`/`ServerConfigBuilder` ganharam
+mais 2 pares (state+notifier), 2 handlers axum novos (sem `Json<...>` extractor — os 2 canais novos
+não recebem corpo), 2 rotas novas. Efeito colateral mecânico: os 10 call-sites de teste que já
+construíam um `ServerConfigBuilder` completo (`build()` valida que todos os canais estão presentes)
+precisaram do `.autofill_address(...)`/`.autofill_creditcard(...)` a mais — script Python
+descartável fez a edição em lote pra não errar nenhum dos 10 manualmente.
+
+**`lib.rs`**: 2 `.manage()` novos, `local_signer_start` ganhou 2 `State` a mais (6→8 argumentos —
+clippy `too_many_arguments` disparou, resolvido com `#[allow]` justificado em comentário, já que
+reduzir isso exigiria agrupar os 6 canais num struct só, refactor maior que o escopo desta sessão),
+`.setup()` (que sobe o servidor automaticamente no boot do app, além do comando manual) ganhou o
+mesmo wiring, 4 comandos Tauri novos (`get_pending_autofill_{address,creditcard}_request`/
+`respond_to_autofill_{address,creditcard}_request`).
+
+**Achado real no caminho**: `VaultEntry` (Rust) tem um campo privado legado (`profile: String`,
+`#[serde(skip_serializing)]`) inacessível fora de `vault.rs` via struct-literal — as fixtures de
+teste dos 2 módulos novos precisaram ser construídas via `serde_json::from_value(json!({...}))` em
+vez de struct-literal direto (a `Deserialize` derivada roda dentro do módulo de origem, não se
+importa com privacidade de campo do chamador).
+
+**Clippy**: 2 avisos novos, os 2 corrigidos. `large_enum_variant` em `AutofillAddressOutcome`
+(`AddressData` tem 9 campos String, ~264 bytes — variante `Filled` boxada). `too_many_arguments`
+em `local_signer_start` (ver acima).
+
+**Frontend (`desktop/src/`)**: `useIncomingAutofillAddressRequest.ts`/
+`useIncomingAutofillCreditCardRequest.ts` (thin wrappers de `useIncomingRequest.ts`, mesmo padrão
+de `useIncomingPinRequest.ts`). `AutofillAddressApprovalModal.tsx`/
+`AutofillCreditCardApprovalModal.tsx` (novos) — cada candidato já vem com um botão "Use this
+X" direto (sem passo de confirmação separado como o picker do Mobile tem, decisão consciente: loopback
+já é o mesmo nível de confiança do próprio usuário na própria máquina, "escolher = aprovar" é
+suficiente); cartão de crédito começa com número/CVV mascarados por candidato, toggle "Show"/"Hide"
+individual (mesmo cuidado que o Mobile já tem). Montados em `App.tsx` nos 2 pontos onde os outros 4
+modais já vivem (útil mesmo sem identidade carregada — outro engano corrigido cedo: `smartAccountAddress`
+não é necessário aqui, ao contrário de `VaultEditApprovalModal`, já que autofill só lê o vault local,
+nunca publica nada on-chain).
+
+**Extensão**: novo `extension/src/autofill/desktopDelivery.ts` — mirror de
+`vaultEdit/desktopDelivery.ts` (`fetchWithTimeout` exportado de lá pra reuso, em vez de duplicado),
+mesmo bloco de portas (`DESKTOP_CANDIDATE_PORTS`, 47950-54). `fetchAddressFromDesktop`/
+`fetchCreditCardFromDesktop` viram uma **terceira tentativa em paralelo** (ao lado de LAN e
+dead-drop) em `addressOverlay.ts`/`creditCardOverlay.ts`. Como o caminho Desktop chega em claro
+(sem blob cifrado — loopback não usa ECIES), não cabia no `handleBlob` existente — refatorado um
+`applyResult()` compartilhado que os 3 caminhos chamam (LAN/dead-drop via `handleBlob` depois de
+decifrar, Desktop direto), guard `resolved` centralizado ali em vez de repetido em cada call site.
+Texto genérico "Request rejected." no lugar de "Request rejected on your phone." — agora pode ter
+sido rejeitado no Desktop também, não só no Mobile.
+
+**Testes**: Rust — `cargo test --lib` 120/120 (14 novos), `cargo clippy --all-targets` e
+`cargo fmt --check` limpos. Extensão — `npx vitest run` 133/133 (8 novos em
+`desktopDelivery.test.ts`, mesmo padrão de mock de `fetch` que `vaultEdit/desktopDelivery.test.ts`
+já usava), `npx tsc --noEmit`/`npm run build` limpos. Desktop — `npx tsc --noEmit`/`npm run build`
+limpos. Mobile não tocado.
+
+**Não validado em hardware/processo real** — novo P33: nunca clicado de verdade nos 2 modais
+(extensão + TruthID Desktop rodando juntos na mesma máquina), nem confirmado que o servidor
+loopback multiplexado continua servindo `/pin`/`/vault-edit` corretamente com os 2 canais novos.
+
+**Documentação**: `PHASE.md` — etapa 15.4 marcada concluída por completo (fatia 1 + fatia 2 inteira),
+status geral da Fase 15 atualizado. `PENDING.md` — P8 atualizado (15.4 fechada), novo P33
+registrado.
+

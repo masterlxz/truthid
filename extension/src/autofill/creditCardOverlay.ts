@@ -5,6 +5,7 @@ import { buildAutofillCreditCardQrPayload, randomSessionId } from '../session/qr
 import { renderQrToCanvas } from '../ui/renderQr';
 import { bytesToHex } from '../util/bytes';
 import { pullFromDeadDrop } from './deadDropPull';
+import { fetchCreditCardFromDesktop } from './desktopDelivery';
 import { fillCreditCardGroup, type DecryptedCreditCard } from './creditCardFill';
 import type { CreditCardFieldGroup } from './creditCardFieldDetection';
 import {
@@ -193,9 +194,24 @@ export function attachCreditCardAutofillIcon(group: CreditCardFieldGroup): void 
 
     let resolved = false;
 
-    async function handleBlob(blobB64: string): Promise<void> {
+    // Compartilhado pelos 3 transportes — mesma estrutura de
+    // addressOverlay.ts::applyResult (ver comentário lá).
+    function applyResult(result: { status: string; card?: DecryptedCreditCard }): void {
       if (resolved) return;
       resolved = true;
+      if (result.status === 'filled' && result.card) {
+        fillCreditCardGroup(group, result.card);
+        status.textContent = 'Filled ✓';
+        setTimeout(closePanel, 1500);
+      } else if (result.status === 'no-cards') {
+        status.textContent = "You don't have any saved cards yet — add one in the Vault first.";
+      } else {
+        status.textContent = 'Request rejected.';
+      }
+    }
+
+    async function handleBlob(blobB64: string): Promise<void> {
+      if (resolved) return;
       try {
         const blobBytes = Uint8Array.from(atob(blobB64), (c) => c.charCodeAt(0));
         const plaintext = await decrypt(blobBytes, privKey);
@@ -203,18 +219,12 @@ export function attachCreditCardAutofillIcon(group: CreditCardFieldGroup): void 
           status: string;
           card?: DecryptedCreditCard;
         };
-        if (result.status === 'filled' && result.card) {
-          fillCreditCardGroup(group, result.card);
-          status.textContent = 'Filled ✓';
-          setTimeout(closePanel, 1500);
-        } else if (result.status === 'no-cards') {
-          status.textContent =
-            "You don't have any saved cards yet — add one in the Vault first.";
-        } else {
-          status.textContent = 'Request rejected on your phone.';
-        }
+        applyResult(result);
       } catch {
-        status.textContent = 'Received an answer, but could not decrypt it.';
+        if (!resolved) {
+          resolved = true;
+          status.textContent = 'Received an answer, but could not decrypt it.';
+        }
       }
     }
 
@@ -234,6 +244,14 @@ export function attachCreditCardAutofillIcon(group: CreditCardFieldGroup): void 
     // com o LAN.
     void pullFromDeadDrop(sessionId, qrPayload.expiresAt).then((blob) => {
       if (blob) void handleBlob(blob);
+    });
+
+    // Desktop loopback (Fase 15.4, fatia 2) — mesmo padrão de
+    // addressOverlay.ts::fetchAddressFromDesktop (ver comentário lá).
+    void fetchCreditCardFromDesktop().then((result) => {
+      if (result.status === 'filled' || result.status === 'no-cards' || result.status === 'rejected') {
+        applyResult(result);
+      }
     });
 
     connectButton.addEventListener('click', () => {

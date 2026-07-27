@@ -884,9 +884,10 @@ A partir daí: Ledger assina UserOps off-chain → bundler submete → smart acc
 
 **Visão maior**: uma **Identidade Digital portátil** que o usuário carrega entre dispositivos, sem depender de Google/Apple/Microsoft — tudo cifrado, armazenado no mesmo IPFS vault que as senhas, acessível pelos mesmos dispositivos confiáveis.
 
-**Status**: :hourglass: Em andamento — 15.1 (Sessão 167), 15.2 (Sessão 168) e 15.3 (Sessão 169)
-concluídas; 15.4 fatia 1 concluída (Sessão 170); 15.4 fatia 2 — cartão de crédito (Sessão 171) e
-dead-drop (Sessão 172) concluídos, só falta Desktop pra fechar a 15.4; demais etapas aguardando.
+**Status**: :hourglass: Em andamento — 15.1-15.4 concluídas (Sessões 167-173): 15.1 (schema),
+15.2 (CRUD Desktop), 15.3 (CRUD Mobile), 15.4 fatia 1 (endereço/LAN/Mobile, S170), fatia 2
+(cartão/LAN/Mobile, S171; dead-drop endereço+cartão, S172; Desktop, S173 — fecha a 15.4 inteira).
+Restam 15.5-15.8 (autofill de SO, documentos, revisão de segurança do CVV).
 
 ---
 
@@ -1133,6 +1134,32 @@ type VaultEntry = VaultEntryCredential | VaultEntryDocument
    `AUTOFILL_DEAD_DROP_RESOLVED_MESSAGE`) genéricas desde o início, reusadas por endereço e cartão.
    `npx vitest run` 125/125 (8 novos), `tsc --noEmit`/`npm run build` limpos, `flutter test`
    462/462 continua verde (nada tocado no Mobile). Só falta Desktop pra fechar a 15.4 inteira.
+   **Desktop concluído na Sessão 173** (2026-07-27) — fecha a 15.4 inteira. Reaproveita o servidor
+   HTTP loopback genérico que já existia (`local_signer_server.rs`, bindado só em 127.0.0.1, mesmo
+   servidor que já atende `/pin`/`/vault-edit`/sign-request/sign-message — localhost tratado como
+   confiável por design, sem QR nem cifra, mesma decisão de segurança já documentada ali). Dois
+   canais novos, cada um seguindo o mesmo padrão de `vault_edit.rs` (`SingleSlotChannel<P,D>`, uma
+   requisição pendente por vez, até 300s): `autofill_address.rs`/`autofill_creditcard.rs`. Desenho
+   inverso do `/vault-edit` (que recebe dado da extensão) — aqui o Rust lê o Vault local sozinho,
+   monta a lista de candidatos (endereços/cartões salvos) e devolve no payload; o POST da extensão
+   não carrega corpo nenhum. Resolução por `entry_id`: o frontend manda de volta só qual candidato
+   escolheu, o Rust já tinha os dados completos (evita reenviar CVV/número pela URL de IPC). Rotas
+   novas `/truthid/v1/autofill-address`/`/truthid/v1/autofill-creditcard`, 4 comandos Tauri novos
+   (`get_pending_autofill_{address,creditcard}_request`/`respond_to_autofill_{address,creditcard}
+   _request`), 2 modais React novos (`AutofillAddressApprovalModal.tsx`/
+   `AutofillCreditCardApprovalModal.tsx`, com reveal-toggle de número/CVV por candidato) montados
+   em `App.tsx` ao lado dos outros 4. Extensão ganhou `extension/src/autofill/desktopDelivery.ts`
+   (mirror de `vaultEdit/desktopDelivery.ts`, mesmo bloco de portas 47950-54) como terceira
+   tentativa em paralelo (LAN, dead-drop, Desktop) nos dois overlays — `handleBlob`/lógica de
+   aplicar resultado refatorada num `applyResult()` compartilhado, já que o caminho Desktop chega
+   em claro (sem blob cifrado pra decifrar) mas precisa do mesmo guard de "só a primeira resposta
+   conta" que os outros dois caminhos já tinham. Achado real no caminho: `VaultEntry` do Rust tem
+   um campo privado legado (`profile`) inacessível de outro módulo via struct-literal — fixtures de
+   teste construídas via `serde_json::from_value` em vez disso (deserialização não se importa com
+   privacidade de campo). `cargo test --lib` 120/120 (14 novos), `cargo clippy`/`cargo fmt` limpos
+   (2 avisos novos corrigidos: `AddressData` boxada no enum de outcome, `#[allow(too_many_arguments)]`
+   justificado no comando Tauri que agora agrega 6 canais). `npx vitest run` (extensão) 133/133 (8
+   novos), `tsc --noEmit`/`npm run build` limpos nos dois lados (extensão e Desktop).
 5. **15.5 — Autofill SO Android**: implementar `AutofillService` (`android.app.service.AutofillService`). Lê vault local, filtra por tipo de campo, preenche.
 6. **15.6 — Autofill SO iOS**: implementar `ASCredentialIdentityStore` / `ASCredentialProviderViewController`. Mesma lógica do Android.
 7. **15.7 — Documentos**: upload/download/visualização de documentos genéricos. Limite de tamanho a definir. Chunking para arquivos grandes, se necessário.

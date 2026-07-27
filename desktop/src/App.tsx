@@ -25,6 +25,8 @@ import { SignRequestModal } from "./components/SignRequestModal";
 import { SignMessageModal } from "./components/SignMessageModal";
 import { PinApprovalModal } from "./components/PinApprovalModal";
 import { VaultEditApprovalModal } from "./components/VaultEditApprovalModal";
+import { AutofillAddressApprovalModal } from "./components/AutofillAddressApprovalModal";
+import { AutofillCreditCardApprovalModal } from "./components/AutofillCreditCardApprovalModal";
 import "./App.css";
 
 type Tab = "dashboard" | "devices" | "sessions" | "vault";
@@ -127,6 +129,8 @@ function App() {
         <SignMessageModal />
         <PinApprovalModal />
         <VaultEditApprovalModal smartAccountAddress={smartAccountAddress} />
+        <AutofillAddressApprovalModal />
+        <AutofillCreditCardApprovalModal />
         <ConnectWallet />
       </>
     );
@@ -148,6 +152,8 @@ function App() {
       <SignMessageModal />
       <PinApprovalModal />
       <VaultEditApprovalModal smartAccountAddress={smartAccountAddress} />
+      <AutofillAddressApprovalModal />
+      <AutofillCreditCardApprovalModal />
       <div className="app-shell">
         <header className="topbar">
           <div className="topbar-left">
