@@ -15,3 +15,14 @@ export function hexToBytes(hex: string): Uint8Array {
 export function bytesToHex(bytes: Uint8Array): string {
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
 }
+
+// Usado por `background.ts` (Fase 15.4, fatia 2) pra reempacotar o blob cru
+// que `tryFetchDeadDrop` devolve no mesmo formato base64 que o caminho LAN
+// já entrega pro `handleBlob` dos overlays (`addressOverlay.ts`/
+// `creditCardOverlay.ts`), que fazem `atob()` sem se importar de onde o
+// blob veio.
+export function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}

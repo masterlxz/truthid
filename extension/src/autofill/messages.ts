@@ -33,3 +33,13 @@ export const AUTOFILL_ENSURE_HOST_PERMISSION_MESSAGE =
   'truthid-autofill-ensure-host-permission';
 export const AUTOFILL_SWEEP_MESSAGE = 'truthid-autofill-sweep';
 export const AUTOFILL_MANUAL_FETCH_MESSAGE = 'truthid-autofill-manual-fetch';
+
+// Fase 15.4, fatia 2 (dead-drop) — mesma ideia genérica dos 3 canais acima,
+// mas pro caminho cross-network (IPFS/IPNS) em vez de LAN. `_START` é
+// content script → background (pede pra começar a rastrear um `sessionId`);
+// `_RESOLVED` é o inverso, um broadcast do background pra qualquer frame da
+// extensão (sem `tabId` — igual `DEAD_DROP_RESOLVED_MESSAGE` já faz pro
+// vault-session), já que o content script certo filtra pelo `sessionId` que
+// já está esperando.
+export const AUTOFILL_START_DEAD_DROP_POLL_MESSAGE = 'truthid-autofill-start-dead-drop-poll';
+export const AUTOFILL_DEAD_DROP_RESOLVED_MESSAGE = 'truthid-autofill-dead-drop-resolved';

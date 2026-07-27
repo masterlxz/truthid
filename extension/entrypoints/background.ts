@@ -1,13 +1,16 @@
 import { decrypt } from '../src/crypto/ecies';
+import { decodeAlarmName, encodeAlarmName } from '../src/session/autofillDeadDropAlarm';
 import { matchesOrigin, matchesRpId } from '../src/session/entryMatching';
 import { tryFetchDeadDrop } from '../src/session/deadDropPolling';
 import type { VaultEntry } from '../src/session/sessionState';
 import { isExpired } from '../src/session/sessionState';
 import { clearSession, loadSession, saveSession } from '../src/storage/sessionStore';
-import { hexToBytes } from '../src/util/bytes';
+import { bytesToBase64, hexToBytes } from '../src/util/bytes';
 import {
+  AUTOFILL_DEAD_DROP_RESOLVED_MESSAGE,
   AUTOFILL_ENSURE_HOST_PERMISSION_MESSAGE,
   AUTOFILL_MANUAL_FETCH_MESSAGE,
+  AUTOFILL_START_DEAD_DROP_POLL_MESSAGE,
   AUTOFILL_SWEEP_MESSAGE,
   GET_MATCHING_ENTRIES_MESSAGE,
   VAULT_EDIT_ENQUEUE_MESSAGE,
@@ -67,6 +70,38 @@ async function pollDeadDropOnce(): Promise<void> {
   }
 }
 
+// Fase 15.4, fatia 2 (dead-drop do autofill) — irmão de `pollDeadDropOnce`,
+// mas sem sessão nenhuma em storage: `sessionId`/`expiresAtMs` vêm
+// decodificados do próprio nome do alarme (`autofillDeadDropAlarm.ts`), já
+// que pode haver várias sessões de autofill pendentes ao mesmo tempo
+// (endereço e cartão no mesmo checkout, várias abas) — o padrão de "1 sessão
+// só" de `pollDeadDropOnce` não serve aqui. Quem decifra é o content script
+// que pediu o polling (a chave privada efêmera vive só no closure dele,
+// nunca chega no background) — esta função só entrega o blob cru em base64,
+// mesmo formato que o caminho LAN já entrega pro `handleBlob` dos overlays.
+async function pollAutofillDeadDropOnce(alarmName: string): Promise<void> {
+  const decoded = decodeAlarmName(alarmName);
+  if (!decoded) return;
+  const { sessionId, expiresAtMs } = decoded;
+
+  if (Date.now() > expiresAtMs) {
+    chrome.alarms.clear(alarmName);
+    return;
+  }
+
+  const blob = await tryFetchDeadDrop(sessionId);
+  if (!blob) return;
+
+  chrome.alarms.clear(alarmName);
+  void chrome.runtime
+    .sendMessage({
+      type: AUTOFILL_DEAD_DROP_RESOLVED_MESSAGE,
+      sessionId,
+      blob: bytesToBase64(blob),
+    })
+    .catch(() => {});
+}
+
 export default defineBackground(() => {
   chrome.alarms.onAlarm.addListener((alarm) => {
     if (alarm.name === SESSION_EXPIRY_ALARM) {
@@ -75,6 +110,10 @@ export default defineBackground(() => {
     }
     if (alarm.name === DEAD_DROP_POLL_ALARM) {
       void pollDeadDropOnce();
+      return;
+    }
+    if (decodeAlarmName(alarm.name)) {
+      void pollAutofillDeadDropOnce(alarm.name);
     }
   });
 
@@ -240,6 +279,25 @@ export default defineBackground(() => {
         sendResponse({ blob }),
       );
       return true;
+    },
+  );
+
+  // Fase 15.4, fatia 2 (dead-drop) — fire-and-forget, sem sendResponse: quem
+  // chamou (`deadDropPull.ts`) já está escutando `AUTOFILL_DEAD_DROP_
+  // RESOLVED_MESSAGE` via `chrome.runtime.onMessage` separadamente. Cria só
+  // o alarme; `pollAutofillDeadDropOnce` (acima) faz o resto a cada tick.
+  chrome.runtime.onMessage.addListener(
+    (message: { type?: string; sessionId?: string; expiresAt?: number } | undefined) => {
+      if (
+        message?.type !== AUTOFILL_START_DEAD_DROP_POLL_MESSAGE ||
+        !message.sessionId ||
+        !message.expiresAt
+      )
+        return;
+      chrome.alarms.create(encodeAlarmName(message.sessionId, message.expiresAt), {
+        delayInMinutes: 1,
+        periodInMinutes: 1,
+      });
     },
   );
 });

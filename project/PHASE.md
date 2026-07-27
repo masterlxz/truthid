@@ -885,8 +885,8 @@ A partir daí: Ledger assina UserOps off-chain → bundler submete → smart acc
 **Visão maior**: uma **Identidade Digital portátil** que o usuário carrega entre dispositivos, sem depender de Google/Apple/Microsoft — tudo cifrado, armazenado no mesmo IPFS vault que as senhas, acessível pelos mesmos dispositivos confiáveis.
 
 **Status**: :hourglass: Em andamento — 15.1 (Sessão 167), 15.2 (Sessão 168) e 15.3 (Sessão 169)
-concluídas; 15.4 fatia 1 concluída (Sessão 170); 15.4 fatia 2, primeira parte (cartão de crédito,
-Sessão 171) concluída; demais etapas aguardando.
+concluídas; 15.4 fatia 1 concluída (Sessão 170); 15.4 fatia 2 — cartão de crédito (Sessão 171) e
+dead-drop (Sessão 172) concluídos, só falta Desktop pra fechar a 15.4; demais etapas aguardando.
 
 ---
 
@@ -1115,7 +1115,24 @@ type VaultEntry = VaultEntryCredential | VaultEntryDocument
    genéricos por natureza (nunca olhavam o conteúdo do pedido) — renomeados (sem "ADDRESS") e
    reusados pelo cartão em vez de triplicados. `npx vitest run` 117/117 (9 novos), `flutter test`
    462/462 (18 novos), `flutter analyze`/`tsc --noEmit`/`npm run build` limpos. Ainda faltam
-   dead-drop e Desktop (resto da fatia 2).
+   dead-drop e Desktop (resto da fatia 2). **Dead-drop (endereço + cartão) concluído na Sessão
+   172** (2026-07-27) — escolhido sobre Desktop via `AskUserQuestion`, depois de uma exploração
+   confirmar que os dois pedaços eram de tamanho parecido. Achado que reduziu bastante o escopo
+   real: o lado Mobile já estava pronto — `CrossDeviceDeliveryChannel.deliver()` já publica
+   dead-drop em paralelo com o LAN pra qualquer `result`, e a chave IPNS depende só do
+   `sessionId` (não do par ECIES efêmero por pedido), então zero mudança em `mobile/`. O trabalho
+   real ficou do lado extensão: o polling de dead-drop existente (`pollDeadDropOnce`/
+   `DEAD_DROP_POLL_ALARM`) foi desenhado pra 1 sessão só em `chrome.storage.session`, incompatível
+   com o autofill (várias sessões pendentes ao mesmo tempo, chave efêmera só no closure do content
+   script) — novo `extension/src/session/autofillDeadDropAlarm.ts` (puro, testável) codifica
+   `sessionId`+`expiresAt` no próprio nome do alarme do `chrome.alarms` em vez de um storage novo;
+   novo `extension/src/autofill/deadDropPull.ts::pullFromDeadDrop()` com a mesma assinatura de
+   `sweepMobileForBlob`/`fetchMobileBlobAt` (`lanPull.ts`), plugado em paralelo ao sweep de LAN
+   já existente em `addressOverlay.ts`/`creditCardOverlay.ts` (nunca como fallback sequencial,
+   mesma decisão já travada na 13.9). Mensagens novas (`AUTOFILL_START_DEAD_DROP_POLL_MESSAGE`/
+   `AUTOFILL_DEAD_DROP_RESOLVED_MESSAGE`) genéricas desde o início, reusadas por endereço e cartão.
+   `npx vitest run` 125/125 (8 novos), `tsc --noEmit`/`npm run build` limpos, `flutter test`
+   462/462 continua verde (nada tocado no Mobile). Só falta Desktop pra fechar a 15.4 inteira.
 5. **15.5 — Autofill SO Android**: implementar `AutofillService` (`android.app.service.AutofillService`). Lê vault local, filtra por tipo de campo, preenche.
 6. **15.6 — Autofill SO iOS**: implementar `ASCredentialIdentityStore` / `ASCredentialProviderViewController`. Mesma lógica do Android.
 7. **15.7 — Documentos**: upload/download/visualização de documentos genéricos. Limite de tamanho a definir. Chunking para arquivos grandes, se necessário.

@@ -6679,3 +6679,72 @@ que o picker nunca mostra o número completo; `card_summary_test.dart`; 1 novo e
 **Documentação**: `PHASE.md` — etapa 15.4 ganhou nota da primeira parte da fatia 2 concluída,
 status geral da Fase 15 atualizado. `PENDING.md` — P8 atualizado, novo P31 registrado.
 
+### Sessão 172 — 2026-07-27: Fase 15.4, fatia 2 (resto) — dead-drop pro autofill (endereço + cartão)
+
+Escolhido sobre Desktop (a outra metade pendente da fatia 2) via `AskUserQuestion`, depois de 2
+agentes Explore em paralelo mapearem os dois caminhos — o dead-drop saiu bem menor do que parecia
+de fora.
+
+**Achado real que reduziu o escopo pela metade**: `CrossDeviceDeliveryChannel.deliver()`
+(`mobile/lib/services/cross_device_delivery_channel.dart`) já publica o dead-drop em paralelo com
+o LAN pra **qualquer** `result`, desde a 13.9 — e as duas telas de aprovação do autofill
+(`autofill_address_approval_screen.dart`/`autofill_creditcard_approval_screen.dart`) já usam esse
+canal desde que foram criadas (Sessões 170/171). A derivação da chave IPNS
+(`computeIpnsName`/`deriveIpnsDeadDropKey`) depende só do `sessionId` — não do par de chaves ECIES
+efêmero que os overlays geram por pedido — então o mesmo `sessionId` que já viaja no QR já é
+suficiente pro Mobile publicar no nome certo. **Zero mudança em `mobile/` nesta sessão.**
+
+**O trabalho real ficou inteiro do lado extensão**, porque o polling de dead-drop que já existia
+(`pollDeadDropOnce`/`DEAD_DROP_POLL_ALARM` em `background.ts`, da 13.9) foi desenhado pro fluxo de
+vault-session: 1 sessão só, guardada em `chrome.storage.session`, com a chave privada efêmera *na
+própria sessão* pra decifrar em background. O autofill quebra as duas premissas — pode haver
+várias sessões pendentes ao mesmo tempo (endereço e cartão no mesmo checkout, várias abas), e a
+chave privada efêmera vive só num closure JS dentro do content script (`addressOverlay.ts`/
+`creditCardOverlay.ts`), nunca em `chrome.storage.session`.
+
+**`extension/src/session/autofillDeadDropAlarm.ts`** (novo, puro, sem mock de `chrome.*` pra
+testar): `encodeAlarmName(sessionId, expiresAtMs)`/`decodeAlarmName(name)` codificam as duas
+informações no próprio nome do alarme do `chrome.alarms`
+(`truthid-autofill-dead-drop-poll:<sessionId>:<expiresAt>`) em vez de um storage novo — decisão
+deliberada: `chrome.alarms` já sobrevive ao service worker sendo suspenso/reiniciado entre ticks
+(cadência de 1min, mesma do `DEAD_DROP_POLL_ALARM`), uma `Map` em memória não sobreviveria.
+
+**`extension/src/autofill/deadDropPull.ts`** (novo): `pullFromDeadDrop(sessionId, expiresAtMs):
+Promise<string | null>` — desenhada com a **mesma assinatura** de `sweepMobileForBlob`/
+`fetchMobileBlobAt` (`lanPull.ts`) de propósito, pra caber no mesmo
+`.then((blob) => { if (blob) void handleBlob(blob); })` que os overlays já usam pro sweep de LAN.
+Registra um listener de `AUTOFILL_DEAD_DROP_RESOLVED_MESSAGE` filtrado por `sessionId`, manda
+`AUTOFILL_START_DEAD_DROP_POLL_MESSAGE` pro background, resolve `null` no mesmo TTL do QR se nada
+chegar — sem inventar um timeout novo.
+
+**`background.ts`**: `pollAutofillDeadDropOnce(alarmName)`, irmã de `pollDeadDropOnce` mas sem
+sessão em storage nenhuma — decodifica `sessionId`/`expiresAtMs` do próprio nome do alarme, chama
+`tryFetchDeadDrop(sessionId)` (já genérico, reusado sem mudança — mesma função que
+`pollDeadDropOnce` já usava), e manda o blob cru em base64 de volta (`bytesToBase64`, novo em
+`util/bytes.ts`) — quem decifra é o content script que pediu (a chave nunca sai do closure dele
+pro background). Novo listener de `AUTOFILL_START_DEAD_DROP_POLL_MESSAGE` só cria o alarme.
+Mensagens novas (`AUTOFILL_START_DEAD_DROP_POLL_MESSAGE`/`AUTOFILL_DEAD_DROP_RESOLVED_MESSAGE`)
+genéricas desde o início — mesma convenção que a fatia 2 pt.1 já adotou pros 3 canais de LAN,
+reusadas por endereço e cartão sem duplicar nada.
+
+**`addressOverlay.ts`/`creditCardOverlay.ts`**: `pullFromDeadDrop(sessionId, qrPayload.expiresAt)`
+plugado em `openPanel()` ao lado do `AUTOFILL_SWEEP_MESSAGE` já existente — em paralelo, nunca como
+fallback sequencial, mesma decisão já travada na 13.9 fatia 2a/2b (esconder a latência de
+propagação do IPNS atrás do tempo que o usuário já ia esperar mesmo assim). O `resolved` guard que
+`handleBlob` já tinha evita processar duas vezes se LAN e dead-drop resolverem quase juntos.
+
+**Testes**: `npx vitest run` 125/125 (8 novos: 3 em `autofillDeadDropAlarm.test.ts` — round-trip,
+nomes de outros esquemas, nomes malformados —, 5 em `deadDropPull.test.ts`, mockando
+`globalThis.chrome` no mesmo padrão que `newCredentialCapture.test.ts` já usava, incluindo um
+teste específico pra confirmar que mensagens de outro `sessionId` são ignoradas). `npx tsc
+--noEmit`/`npm run build` limpos. `flutter test` 462/462 continua verde (rodado como rede de
+segurança — nada tocado em `mobile/` nesta sessão), `flutter analyze` limpo.
+
+**Não validado em hardware real** — mesma limitação de todas as fatias cross-device anteriores
+(P3, P6, P30, P31, e agora P32): nunca testado contra um gateway IPFS real nem contra o Kubo do
+dono do projeto especificamente pelo caminho do autofill.
+
+**Documentação**: `PHASE.md` — etapa 15.4 ganhou nota do dead-drop concluído, status geral da
+Fase 15 atualizado (só falta Desktop pra fechar a etapa inteira). `PENDING.md` — P8 atualizado,
+novo P32 registrado.
+

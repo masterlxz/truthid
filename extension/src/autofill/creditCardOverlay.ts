@@ -4,6 +4,7 @@ import { decrypt } from '../crypto/ecies';
 import { buildAutofillCreditCardQrPayload, randomSessionId } from '../session/qrPayload';
 import { renderQrToCanvas } from '../ui/renderQr';
 import { bytesToHex } from '../util/bytes';
+import { pullFromDeadDrop } from './deadDropPull';
 import { fillCreditCardGroup, type DecryptedCreditCard } from './creditCardFill';
 import type { CreditCardFieldGroup } from './creditCardFieldDetection';
 import {
@@ -227,6 +228,13 @@ export function attachCreditCardAutofillIcon(group: CreditCardFieldGroup): void 
         if (blob) void handleBlob(blob);
       })
       .catch(() => {});
+
+    // Dead-drop (Fase 15.4, fatia 2) — mesmo padrão de addressOverlay.ts:
+    // em paralelo, nunca sequencial, `resolved` guard já cobre a corrida
+    // com o LAN.
+    void pullFromDeadDrop(sessionId, qrPayload.expiresAt).then((blob) => {
+      if (blob) void handleBlob(blob);
+    });
 
     connectButton.addEventListener('click', () => {
       const manualHost = ipInput.value.trim();

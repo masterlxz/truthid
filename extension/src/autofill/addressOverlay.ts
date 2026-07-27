@@ -6,6 +6,7 @@ import { renderQrToCanvas } from '../ui/renderQr';
 import { bytesToHex } from '../util/bytes';
 import { fillAddressGroup, type DecryptedAddress } from './addressFill';
 import type { AddressFieldGroup } from './addressFieldDetection';
+import { pullFromDeadDrop } from './deadDropPull';
 import {
   AUTOFILL_ENSURE_HOST_PERMISSION_MESSAGE,
   AUTOFILL_MANUAL_FETCH_MESSAGE,
@@ -227,6 +228,16 @@ export function attachAddressAutofillIcon(group: AddressFieldGroup): void {
         if (blob) void handleBlob(blob);
       })
       .catch(() => {});
+
+    // Dead-drop (Fase 15.4, fatia 2) — em paralelo com o LAN acima, nunca
+    // como fallback sequencial (mesma decisão já travada na 13.9 fatia
+    // 2a/2b: esconder a latência de propagação do IPNS atrás do tempo que o
+    // usuário já ia esperar de qualquer forma). O `resolved` guard dentro de
+    // `handleBlob` evita processar duas vezes se os dois caminhos resolverem
+    // quase juntos.
+    void pullFromDeadDrop(sessionId, qrPayload.expiresAt).then((blob) => {
+      if (blob) void handleBlob(blob);
+    });
 
     connectButton.addEventListener('click', () => {
       const manualHost = ipInput.value.trim();
