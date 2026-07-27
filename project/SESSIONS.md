@@ -6838,3 +6838,89 @@ loopback multiplexado continua servindo `/pin`/`/vault-edit` corretamente com os
 status geral da Fase 15 atualizado. `PENDING.md` — P8 atualizado (15.4 fechada), novo P33
 registrado.
 
+### Sessão 174 — 2026-07-27: Fase 15.5 — Autofill de SO Android
+
+`project/PHASE.md` tinha só uma frase pra 15.5 ("implementar `AutofillService`... lê vault local,
+filtra por tipo, preenche") — sem diagrama de fluxo, ao contrário do autofill via navegador (Fase
+15.4), que já tinha desenho completo antes de qualquer código. 2 agentes Explore mapearam a camada
+nativa Android do Mobile (nenhuma existia além do boilerplate do `flutter create` — confirmado por
+`grep -rn "MethodChannel" lib/` não achar nada) e o armazenamento da chave/blob do Vault antes de
+qualquer decisão de arquitetura.
+
+**Achado que mudou o desenho original**: não precisa duplicar leitura/decifra do vault em Kotlin
+puro. O mecanismo de autenticação do próprio Android Autofill Framework (`Dataset.setAuthentication`)
+já abre uma `Activity` qualquer via `PendingIntent` antes de revelar o valor — essa `Activity` pode
+ser a própria `MainActivity` Flutter, que já tem tudo (Vault, `AppLockGate`/biometria, o picker "1
+de N entradas salvas" que a Fase 15.4 validou). Por causa disso, o trabalho novo por tipo de dado
+(credencial/endereço/cartão) ficou quase todo do lado Dart (barato) em vez do lado Kotlin
+(caro/arriscado, código nativo novo) — escolhido cobrir os 3 tipos de uma vez com o dono do
+projeto via `AskUserQuestion`, junto com 3 itens confirmados fora de escopo: salvar credencial via
+`onSaveRequest` (o "Salvar senha?" do Android), campos dentro de WebView/navegador (já coberto pela
+extensão), e associação persistente "lembrar esse app" (todo pedido sempre mostra o picker de
+novo).
+
+**`mobile/android/app/src/main/kotlin/.../autofill/AutofillHintClassifier.kt`** (novo, puro):
+`FieldRole` (mais granular que `EntryType` — distingue username de password, mesmo tipo
+"credential") e `classifyHint(String)`/`classifyHints(List<String>)` mapeando
+`View.AUTOFILL_HINT_*` (API 26) pra cada papel. 4 hints granulares de endereço
+(street/locality/region/country) não existem no conjunto base do `View` — só o hint combinado
+`POSTAL_ADDRESS` existe lá; os granulares vêm de `androidx.autofill.HintConstants` na prática
+(Chrome e outros), hardcoded como literais de string pra não puxar essa dependência nova só por
+causa de 4 constantes estáveis.
+
+**`TruthIdAutofillService.kt`** (novo): `onFillRequest` percorre a `AssistStructure` mais recente,
+agrupa `AutofillId`s por `EntryType` via `AutofillHintClassifier`, devolve 1 `Dataset`
+"auth-gated" por grupo — `Dataset.Builder(presentation)` (deprecado, mas mantém compat com a API
+26 mínima do framework em vez de ramificar por versão do SO só pra evitar 1 aviso de lint) com
+`setValue(id, null)` (placeholder) + `setAuthentication` apontando pra um `PendingIntent` que abre
+`MainActivity` com os `AutofillId`s/papéis/tipo/pacote requisitante nos extras do Intent.
+`onSaveRequest` nunca é chamado de propósito — `FillResponse` nunca declara `setSaveInfo`.
+
+**`MainActivity.kt`**: primeiro `MethodChannel` (`truthid/autofill`) deste projeto.
+`onNewIntent`/`onCreate` capturam o Intent com `ACTION_AUTOFILL_AUTH` (`launchMode="singleTop"` já
+reusa a mesma Activity quando o app já está rodando). Canal expõe 3 métodos:
+`getPendingAutofillRequest` (Dart lê os extras), `submitAutofillResult` (Dart devolve
+`Map<role, value>`, Kotlin monta o `Dataset` final e embrulha em
+`Intent.EXTRA_AUTHENTICATION_RESULT` via `setResult`+`finish`) e `cancelAutofillRequest`.
+
+**Reuso da infra existente (Dart)**: em vez de inventar um bootstrap novo, o pedido nativo vira um
+payload sintético (`{action: 'truthid-autofill-system', entryType, requestingPackage}`) que passa
+pelo `DeepLinkRouter.handlePayload` já existente — reusa de graça o "espera desbloquear o
+`AppLockGate` antes de navegar" que o M1 (Sessão 151) já corrigiu pra deep link/QR, sem duplicar
+essa lógica. Novo `autofill_bridge_service.dart` (mesmo espírito de `DeepLinkService`, mas sem
+Stream — o re-check de "tem pedido pendente?" acontece no cold start (`init`) e de novo a cada
+`AppLifecycleState.resumed` do app, já que não existe um jeito simétrico de "stream" do lado
+nativo pra esse caminho). Nova `autofill_system_fill_screen.dart` — um único `Widget` cobre os 3
+tipos (`EntryType`), reaproveitando `card_summary.dart`/`address_summary.dart` e o mesmo padrão de
+picker "1 de N" das telas de aprovação da 15.4, mas sem `ResultDeliveryChannel` (tudo local).
+
+**Achado no caminho, `flutter analyze`**: `use_build_context_synchronously` no bridge service —
+`context` obtido depois de um `await` (`getPendingRequest()`), diferente do `DeepLinkService`
+existente (que nunca tem um `await` antes de obter o `context`). Corrigido com
+`if (context == null || !context.mounted) return;` antes de despachar.
+
+**Achado no caminho, testes**: mesma classe de bug de `pumpAndSettle` já vista antes (Sessão
+169/171) — o estado "sending" da tela nova mostra um `CircularProgressIndicator` indeterminado,
+que nunca deixa a árvore "assentar". Corrigido trocando `tester.pumpAndSettle()` por
+`tester.pump()` nos 3 testes que tocam numa entrada do picker.
+
+**Testes**: primeira infra de teste Kotlin/JUnit deste projeto —
+`src/test/kotlin/.../AutofillHintClassifierTest.kt` roda como JVM puro contra o `android.jar` de
+stub que a AGP já injeta em `testImplementation` automaticamente (sem precisar de Robolectric,
+já que só testa constantes/funções puras, não instancia `View`/`AssistStructure` de verdade).
+`./gradlew :app:testDebugUnitTest --tests '*AutofillHintClassifierTest*'` 9/9. (A suíte completa
+`testDebugUnitTest` sem filtro tem 2 testes pré-existentes falhando dentro de `local_auth_android`
+— plugin terceiro, nada a ver com esta sessão, não investigado.) `flutter analyze` limpo,
+`flutter test` 471/471 (9 novos: picker + branch novo do `DeepLinkRouter`) depois do fix de
+`pumpAndSettle`. `./dev.sh build` (APK debug completo) confirma que `AndroidManifest.xml`/
+`build.gradle.kts` novos não quebram o build.
+
+**Não validado em hardware/processo real** — novo P34: nunca habilitado "TruthID" como serviço de
+preenchimento automático de verdade em Configurações, nem exercitado contra um app terceiro real
+num device físico (API 26+) — nenhuma parte do `AssistStructure`/`PendingIntent`/
+`EXTRA_AUTHENTICATION_RESULT` foi validada contra o framework real do Android, só contra os
+testes automatizados e o build do APK.
+
+**Documentação**: `PHASE.md` — etapa 15.5 marcada concluída, status geral da Fase 15 atualizado.
+`PENDING.md` — P8/P9 atualizados, novo P34 registrado.
+

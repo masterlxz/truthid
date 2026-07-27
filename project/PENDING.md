@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-07-27 (Sessão 173 — P8/Fase 15: Desktop concluído, fecha a 15.4 inteira)
+> Última atualização: 2026-07-27 (Sessão 174 — P8/Fase 15: 15.5 (Autofill SO Android) concluída)
 
 ---
 
@@ -31,13 +31,14 @@
 | P31 | **Validação E2E real — autofill de cartão de crédito (15.4, fatia 2)** — mesmo roteiro de P30, agora com `autocomplete="cc-number"`/`cc-exp`/`cc-csc` num formulário de checkout real. Mesma limitação de hardware (P30 nunca foi validada também). | `PHASE.md` (Fase 15.4, fatia 2) | 🟠 Média |
 | P32 | **Validação E2E real — dead-drop do autofill (15.4, fatia 2)** — mesmo roteiro de P30/P31, mas forçando o caminho sem LAN compartilhada (celular em rede diferente do navegador): confirmar que o Mobile publica no nome IPNS certo, que a extensão resolve via `pullFromDeadDrop`/`background.ts` e decifra corretamente. Nunca testado contra um gateway IPFS real nem contra o Kubo do dono do projeto. | `PHASE.md` (Fase 15.4, fatia 2) | 🟠 Média |
 | P33 | **Validação E2E real — autofill via Desktop loopback (15.4, fatia 2)** — extensão + TruthID Desktop rodando na mesma máquina: `findDesktopPort` achando a porta certa, POST parqueado até o clique no modal, preenchimento de volta no formulário pros dois tipos (endereço/cartão). Nunca clicado de verdade nos 2 modais novos (`AutofillAddressApprovalModal`/`AutofillCreditCardApprovalModal`) nem confirmado que o servidor loopback multiplexado continua servindo `/pin`/`/vault-edit` corretamente com os 2 canais novos adicionados. | `PHASE.md` (Fase 15.4, fatia 2) | 🟠 Média |
+| P34 | **Validação E2E real — Android Autofill Framework (15.5)** — habilitar "TruthID" em Configurações → Sistema → Idiomas e entrada → Serviço de preenchimento automático, num device físico (API 26+), e testar num app terceiro real: campo com hint reconhecido oferece "Fill with TruthID", `PendingIntent` abre a `MainActivity`, o picker mostra as entradas certas, `EXTRA_AUTHENTICATION_RESULT` é aceito pelo framework e o campo é preenchido de verdade. Nunca rodado fora de testes automatizados/build de APK — nenhuma parte do fluxo de autofill de SO (detecção de campo via `AssistStructure`, `PendingIntent`, `Dataset` de autenticação) foi exercitada contra o framework real do Android. | `PHASE.md` (Fase 15.5) | 🟠 Média |
 
 ### Funcionalidades Não Implementadas
 
 | ID | Item | Onde se originou | Prioridade |
 |---|---|---|---|
-| P8 | **Phase 15 — Digital Identity Vault** — documentos, endereços, cartões de crédito. 8 etapas planejadas. **15.1-15.4 concluídas** (15.1 schema S167, 15.2 CRUD Desktop S168, 15.3 CRUD Mobile S169, 15.4 fatia 1 endereço/LAN/Mobile S170, fatia 2 cartão/LAN/Mobile S171 + dead-drop S172 + Desktop S173 — **15.4 fechada por completo**) — faltam 15.5-15.8. | `PHASE.md` (Fase 15) | 🟠 Média |
-| P9 | **Phase 15 — Autofill SO (Android/iOS)** — implementar `AutofillService` e `ASCredentialProviderViewController`. | `PHASE.md` (Fase 15, etapas 15.5/15.6) | 🟠 Média |
+| P8 | **Phase 15 — Digital Identity Vault** — documentos, endereços, cartões de crédito. 8 etapas planejadas. **15.1-15.5 concluídas** (15.1 schema S167, 15.2 CRUD Desktop S168, 15.3 CRUD Mobile S169, 15.4 fatia 1 endereço/LAN/Mobile S170 + fatia 2 cartão/LAN/Mobile S171 + dead-drop S172 + Desktop S173 — 15.4 fechada por completo —, 15.5 Autofill SO Android S174) — faltam 15.6-15.8. | `PHASE.md` (Fase 15) | 🟠 Média |
+| P9 | **Phase 15 — Autofill SO (Android/iOS)** — implementar `AutofillService` e `ASCredentialProviderViewController`. **Android (15.5) concluído na Sessão 174** — `TruthIdAutofillService.kt` detecta campos e delega a leitura/aprovação pra Activity Flutter existente (mesmo Vault/AppLockGate/picker da Fase 15.4), sem duplicar acesso ao vault em Kotlin. Falta só iOS (15.6). | `PHASE.md` (Fase 15, etapas 15.5/15.6) | 🟠 Média |
 | P11 | **`/truthid/v1/pin`** — endpoint para apps terceiros usarem os providers de pin do TruthID. Modelo de consentimento em aberto. | `ROADMAP.md` (Sessão 106, item 2) | 🟡 Baixa |
 | P28 | **SDK Dart: transporte deep link no `TruthIDRequester`** — só cross-device (QR) implementado. Deep link (mesmo aparelho) exigiria o app host registrar seu próprio esquema de URI, específico de plataforma — decidido deixar de fora de um pacote Dart puro por ora. Reavaliado na Sessão 165: hoje nem o Mobile aceita deep link pra `pin`/`vault-edit` (só `sign-message`/`sign-request`), e um pacote Dart puro não consegue automatizar o registro de URI scheme do app hospedeiro nem depende de `url_launcher` — decisão confirmada, segue de fora. | `SESSIONS.md` (Sessão 161, reavaliado 165) | 🟡 Baixa |
 

@@ -12,6 +12,7 @@ import 'screens/settings_screen.dart';
 import 'screens/vault_screen.dart';
 import 'screens/wallet_screen.dart';
 import 'services/app_lock_service.dart';
+import 'services/autofill_bridge_service.dart';
 import 'services/deep_link_router.dart';
 import 'services/deep_link_service.dart';
 import 'theme.dart';
@@ -222,7 +223,7 @@ bool _isNewer(String latest, String current) {
   return false;
 }
 
-class _RootScreenState extends State<RootScreen> {
+class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
   int _currentIndex = 0;
   // Aba 0 (Devices) sempre construída no cold start; as outras só entram
   // aqui quando visitadas pela 1ª vez — sem isso, o IndexedStack constrói
@@ -233,18 +234,33 @@ class _RootScreenState extends State<RootScreen> {
   String? _updateUrl;
   bool _updateDismissed = false;
   final _deepLinkService = DeepLinkService();
+  // Fase 15.5 — mesmo padrão do `_deepLinkService` acima, mas sem stream:
+  // `launchMode="singleTop"` faz o Android reusar a Activity via
+  // `onNewIntent` quando o app já está rodando, então o re-check acontece
+  // no resume (`didChangeAppLifecycleState`), não numa Stream contínua.
+  final _autofillBridgeService = AutofillBridgeService();
 
   @override
   void initState() {
     super.initState();
     _checkForUpdate();
     _deepLinkService.init(navigatorKey);
+    WidgetsBinding.instance.addObserver(this);
+    _autofillBridgeService.init(navigatorKey);
   }
 
   @override
   void dispose() {
     _deepLinkService.dispose();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_autofillBridgeService.onResumed(navigatorKey));
+    }
   }
 
   Future<void> _checkForUpdate() async {

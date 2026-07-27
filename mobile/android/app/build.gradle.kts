@@ -54,3 +54,10 @@ kotlin {
 flutter {
     source = "../.."
 }
+
+// Fase 15.5 — primeira vez que este módulo precisa de um framework de teste
+// Kotlin (`src/test/kotlin/`, JVM puro, roda contra o android.jar de stub
+// que a AGP já injeta automaticamente em testImplementation).
+dependencies {
+    testImplementation("junit:junit:4.13.2")
+}

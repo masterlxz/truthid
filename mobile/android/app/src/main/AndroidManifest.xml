@@ -38,6 +38,21 @@
                 <data android:scheme="truthid"/>
             </intent-filter>
         </activity>
+        <!-- Fase 15.5 — Android Autofill Framework. `BIND_AUTOFILL_SERVICE`
+             garante que só o SO pode se ligar nesse serviço (nenhum app
+             terceiro consegue). Inerte em SOs anteriores à API 26 (o SO
+             nunca oferece "Serviço de preenchimento automático" nas
+             Configurações pra habilitar); a classe em si é anotada
+             @RequiresApi(O), nunca instanciada fora desse caminho. -->
+        <service
+            android:name=".autofill.TruthIdAutofillService"
+            android:label="TruthID"
+            android:permission="android.permission.BIND_AUTOFILL_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.autofill.AutofillService" />
+            </intent-filter>
+        </service>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../screens/approval_screen.dart';
 import '../screens/autofill_address_approval_screen.dart';
 import '../screens/autofill_creditcard_approval_screen.dart';
+import '../screens/autofill_system_fill_screen.dart';
 import '../screens/pin_approval_screen.dart';
 import '../screens/sign_message_approval_screen.dart';
 import '../screens/sign_request_approval_screen.dart';
@@ -78,6 +79,15 @@ class DeepLinkRouter {
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => AutofillCreditCardApprovalScreen(payload: payload),
+        ),
+      );
+    } else if (action == 'truthid-autofill-system') {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => AutofillSystemFillScreen(
+            entryType: payload['entryType'] as String? ?? 'credential',
+            requestingPackage: payload['requestingPackage'] as String? ?? '',
+          ),
         ),
       );
     } else {

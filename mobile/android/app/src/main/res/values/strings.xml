@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fase 15.5 — strings do Android AutofillService. Novo arquivo: o projeto
+     não tinha nenhum strings.xml antes (texto de UI sempre veio do lado
+     Dart) — estas 4 são as únicas que precisam existir do lado nativo,
+     pra aparecer no dropdown do SO antes de qualquer código Flutter rodar. -->
+<resources>
+    <string name="autofill_presentation_credential">Fill with TruthID</string>
+    <string name="autofill_presentation_address">Fill address with TruthID</string>
+    <string name="autofill_presentation_credit_card">Fill card with TruthID</string>
+    <string name="autofill_save_not_supported">Saving via system autofill is not supported yet</string>
+</resources>

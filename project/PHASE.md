@@ -1161,6 +1161,40 @@ type VaultEntry = VaultEntryCredential | VaultEntryDocument
    justificado no comando Tauri que agora agrega 6 canais). `npx vitest run` (extensão) 133/133 (8
    novos), `tsc --noEmit`/`npm run build` limpos nos dois lados (extensão e Desktop).
 5. **15.5 — Autofill SO Android**: implementar `AutofillService` (`android.app.service.AutofillService`). Lê vault local, filtra por tipo de campo, preenche.
+   **Concluída na Sessão 174** (2026-07-27) — escopo negociado com o dono do projeto via
+   `AskUserQuestion` (cobrir os 3 tipos — credencial/endereço/cartão — de uma vez, já que a
+   infra nativa é a mesma; deixar de fora: salvar via `onSaveRequest`, campos em WebView/
+   navegador, associação persistente "lembrar esse app"). Primeiro código nativo Kotlin/Java
+   deste projeto além do boilerplate do `flutter create`. Achado que mudou o desenho original:
+   o `onFillRequest` (Kotlin, `TruthIdAutofillService.kt`) não precisa tocar no Vault — só
+   detecta campos via `AssistStructure` e devolve um `Dataset` "auth-gated"
+   (`setAuthentication`) por tipo encontrado, apontando via `PendingIntent` pra própria
+   `MainActivity` Flutter, que já tem tudo (Vault, `AppLockGate`/biometria, o picker "1 de N" da
+   Fase 15.4). Classificação de hints (`AutofillHintClassifier.kt`, testável, sem tocar em
+   `AssistStructure` real) mapeia `View.AUTOFILL_HINT_*` (+ 4 hints granulares de endereço só
+   documentados como literais estáveis, sem puxar `androidx.autofill`) pra um `FieldRole` por
+   campo — mais granular que `EntryType`, já que "username" e "password" são o mesmo tipo mas
+   `AutofillId`s diferentes. Novo `MethodChannel` (`truthid/autofill`, primeiro deste projeto) em
+   `MainActivity.kt` — Dart lê o pedido pendente e devolve o resultado, que vira
+   `Intent.EXTRA_AUTHENTICATION_RESULT` de volta pro SO. Payload sintético
+   `{action: 'truthid-autofill-system', ...}` passa pelo `DeepLinkRouter.handlePayload` já
+   existente — reusa de graça o mesmo "espera desbloquear o `AppLockGate`" que o M1 (Sessão 151)
+   já corrigiu, sem reinventar nada. Nova `autofill_system_fill_screen.dart` (1 tela cobre os 3
+   tipos) + `autofill_bridge_service.dart` (mesmo padrão de `DeepLinkService`, mas sem stream —
+   `launchMode="singleTop"` faz o Android reusar a `Activity` via `onNewIntent`, então o
+   re-check acontece no resume do app, não numa Stream contínua). `onSaveRequest` nunca é
+   chamado de propósito — `FillResponse` nunca declara `setSaveInfo`. Primeira infra de teste
+   Kotlin/JUnit do projeto (`src/test/kotlin/`, roda contra o `android.jar` de stub que a AGP já
+   injeta). `./gradlew :app:testDebugUnitTest` 9/9 novos (função de classificação de hints,
+   pura). `flutter analyze` limpo (achado no caminho: `use_build_context_synchronously` no
+   bridge service, corrigido com `context.mounted`). `flutter test` 471/471 (9 novos: picker +
+   branch do `DeepLinkRouter`) — achado no caminho, mesma classe de bug já vista antes: o estado
+   "sending" usa `CircularProgressIndicator` indeterminado, `pumpAndSettle()` nunca assenta;
+   corrigido trocando por `tester.pump()` nos 3 testes que tocam a entrada. Build completo do
+   APK (`./dev.sh build`) confirma que o `AndroidManifest`/Gradle novos não quebram nada. **Não
+   dá pra validar o fluxo real** (SO oferecendo "Fill with TruthID" de verdade num app terceiro)
+   sem um dispositivo Android físico com o serviço habilitado em Configurações — nova pendência
+   registrada em `PENDING.md`.
 6. **15.6 — Autofill SO iOS**: implementar `ASCredentialIdentityStore` / `ASCredentialProviderViewController`. Mesma lógica do Android.
 7. **15.7 — Documentos**: upload/download/visualização de documentos genéricos. Limite de tamanho a definir. Chunking para arquivos grandes, se necessário.
 8. **15.8 — Revisão de segurança**: auditoria focada nos cartões de crédito (cifra extra do CVV, exposição mínima no autofill, zero logging).

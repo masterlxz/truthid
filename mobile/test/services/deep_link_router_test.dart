@@ -111,6 +111,18 @@ void main() {
     expect(find.text('Autofill request'), findsOneWidget);
   });
 
+  testWidgets(
+      'truthid-autofill-system (Fase 15.5) empurra AutofillSystemFillScreen',
+      (tester) async {
+    await pumpRouter(tester, {
+      'action': 'truthid-autofill-system',
+      'entryType': 'credential',
+      'requestingPackage': 'com.example.app',
+    });
+
+    expect(find.text('Autofill request'), findsOneWidget);
+  });
+
   testWidgets('action desconhecida mostra snackbar, não navega',
       (tester) async {
     await pumpRouter(tester, {'action': 'something-weird'});
