@@ -62,6 +62,186 @@ class Passkey {
       };
 }
 
+/// Fase 15 — discriminante de tipo da entrada. Ausente no JSON (blob antigo,
+/// pré-Fase 15) == [EntryType.credential], o único tipo que existia antes.
+enum EntryType {
+  credential,
+  document,
+  address,
+  creditCard;
+
+  static EntryType fromJson(String? value) => switch (value) {
+        'document' => EntryType.document,
+        'address' => EntryType.address,
+        'creditCard' => EntryType.creditCard,
+        _ => EntryType.credential,
+      };
+
+  String toJson() => switch (this) {
+        EntryType.credential => 'credential',
+        EntryType.document => 'document',
+        EntryType.address => 'address',
+        EntryType.creditCard => 'creditCard',
+      };
+}
+
+enum CardNetwork {
+  visa,
+  mastercard,
+  amex,
+  elo,
+  hipercard,
+  other;
+
+  static CardNetwork fromJson(String? value) => switch (value) {
+        'visa' => CardNetwork.visa,
+        'mastercard' => CardNetwork.mastercard,
+        'amex' => CardNetwork.amex,
+        'elo' => CardNetwork.elo,
+        'hipercard' => CardNetwork.hipercard,
+        _ => CardNetwork.other,
+      };
+
+  String toJson() => name;
+}
+
+class DocumentData {
+  final String name;
+  final String fileName;
+  /// Conteúdo do arquivo em base64. Sem limite de tamanho imposto aqui — ver
+  /// project/PHASE.md 15.7 (chunking/limite ficam pra quando o upload de
+  /// verdade for implementado).
+  final String fileData;
+  final int fileSizeBytes;
+  final String mimeType;
+
+  const DocumentData({
+    required this.name,
+    required this.fileName,
+    required this.fileData,
+    required this.fileSizeBytes,
+    required this.mimeType,
+  });
+
+  factory DocumentData.fromJson(Map<String, dynamic> json) => DocumentData(
+        name: json['name'] as String,
+        fileName: json['file_name'] as String,
+        fileData: json['file_data'] as String,
+        fileSizeBytes: json['file_size_bytes'] as int,
+        mimeType: json['mime_type'] as String,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'name': name,
+        'file_name': fileName,
+        'file_data': fileData,
+        'file_size_bytes': fileSizeBytes,
+        'mime_type': mimeType,
+      };
+}
+
+class AddressData {
+  final String label;
+  final String fullName;
+  final String street;
+  final String number;
+  final String? complement;
+  final String neighborhood;
+  final String city;
+  final String state;
+  final String zipCode;
+  final String country;
+  final String? phone;
+
+  const AddressData({
+    required this.label,
+    required this.fullName,
+    required this.street,
+    required this.number,
+    this.complement,
+    required this.neighborhood,
+    required this.city,
+    required this.state,
+    required this.zipCode,
+    required this.country,
+    this.phone,
+  });
+
+  factory AddressData.fromJson(Map<String, dynamic> json) => AddressData(
+        label: json['label'] as String,
+        fullName: json['full_name'] as String,
+        street: json['street'] as String,
+        number: json['number'] as String,
+        complement: json['complement'] as String?,
+        neighborhood: json['neighborhood'] as String,
+        city: json['city'] as String,
+        state: json['state'] as String,
+        zipCode: json['zip_code'] as String,
+        country: json['country'] as String,
+        phone: json['phone'] as String?,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'label': label,
+        'full_name': fullName,
+        'street': street,
+        'number': number,
+        'complement': complement,
+        'neighborhood': neighborhood,
+        'city': city,
+        'state': state,
+        'zip_code': zipCode,
+        'country': country,
+        'phone': phone,
+      };
+}
+
+class CreditCardData {
+  final String label;
+  final String cardHolderName;
+  /// Cifra individual extra fica pra 15.8 — hoje viaja em texto plano dentro
+  /// do blob já cifrado como um todo.
+  final String cardNumber;
+  final String expiryMonth;
+  final String expiryYear;
+  final String cvv;
+  final String? bank;
+  final CardNetwork cardNetwork;
+
+  const CreditCardData({
+    required this.label,
+    required this.cardHolderName,
+    required this.cardNumber,
+    required this.expiryMonth,
+    required this.expiryYear,
+    required this.cvv,
+    this.bank,
+    required this.cardNetwork,
+  });
+
+  factory CreditCardData.fromJson(Map<String, dynamic> json) => CreditCardData(
+        label: json['label'] as String,
+        cardHolderName: json['card_holder_name'] as String,
+        cardNumber: json['card_number'] as String,
+        expiryMonth: json['expiry_month'] as String,
+        expiryYear: json['expiry_year'] as String,
+        cvv: json['cvv'] as String,
+        bank: json['bank'] as String?,
+        cardNetwork: CardNetwork.fromJson(json['card_network'] as String?),
+      );
+
+  Map<String, dynamic> toJson() => {
+        'label': label,
+        'card_holder_name': cardHolderName,
+        'card_number': cardNumber,
+        'expiry_month': expiryMonth,
+        'expiry_year': expiryYear,
+        'cvv': cvv,
+        'bank': bank,
+        'card_network': cardNetwork.toJson(),
+      };
+}
+
 class VaultEntry {
   final String id;
   final String site;
@@ -83,6 +263,12 @@ class VaultEntry {
   /// não via [VaultRepository.updateEntry], pra não renovar `updatedAt` só
   /// por causa do toggle.
   final bool favorite;
+  /// Fase 15: tipo da entrada. Só o grupo correspondente
+  /// (document/address/creditCard) deve vir preenchido.
+  final EntryType type;
+  final DocumentData? document;
+  final AddressData? address;
+  final CreditCardData? creditCard;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -97,6 +283,10 @@ class VaultEntry {
     this.totpSecret,
     this.passkey,
     this.favorite = false,
+    this.type = EntryType.credential,
+    this.document,
+    this.address,
+    this.creditCard,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -123,6 +313,16 @@ class VaultEntry {
           ? Passkey.fromJson(json['passkey'] as Map<String, dynamic>)
           : null,
       favorite: json['favorite'] as bool? ?? false,
+      type: EntryType.fromJson(json['type'] as String?),
+      document: json['document'] != null
+          ? DocumentData.fromJson(json['document'] as Map<String, dynamic>)
+          : null,
+      address: json['address'] != null
+          ? AddressData.fromJson(json['address'] as Map<String, dynamic>)
+          : null,
+      creditCard: json['credit_card'] != null
+          ? CreditCardData.fromJson(json['credit_card'] as Map<String, dynamic>)
+          : null,
       createdAt: DateTime.fromMillisecondsSinceEpoch(
         (json['created_at'] as int) * 1000,
         isUtc: true,
@@ -145,6 +345,10 @@ class VaultEntry {
         'totp_secret': totpSecret,
         'passkey': passkey?.toJson(),
         'favorite': favorite,
+        'type': type.toJson(),
+        'document': document?.toJson(),
+        'address': address?.toJson(),
+        'credit_card': creditCard?.toJson(),
         'created_at': createdAt.millisecondsSinceEpoch ~/ 1000,
         'updated_at': updatedAt.millisecondsSinceEpoch ~/ 1000,
       };
@@ -161,10 +365,11 @@ class VaultEntry {
     return json;
   }
 
-  // `totpSecret`/`passkey` usam um sentinel em vez de tipo anulável puro:
-  // precisa distinguir "não passei esse argumento" (mantém o valor atual) de
-  // "passei null de propósito" (apaga o campo da entrada) — um `?? this.x`
-  // comum não permite nunca limpar o campo de volta pra null.
+  // `totpSecret`/`passkey`/`document`/`address`/`creditCard` usam um sentinel
+  // em vez de tipo anulável puro: precisa distinguir "não passei esse
+  // argumento" (mantém o valor atual) de "passei null de propósito" (apaga o
+  // campo da entrada) — um `?? this.x` comum não permite nunca limpar o campo
+  // de volta pra null.
   VaultEntry copyWith({
     String? site,
     String? url,
@@ -175,6 +380,10 @@ class VaultEntry {
     Object? totpSecret = _unset,
     Object? passkey = _unset,
     bool? favorite,
+    EntryType? type,
+    Object? document = _unset,
+    Object? address = _unset,
+    Object? creditCard = _unset,
   }) =>
       VaultEntry(
         id: id,
@@ -188,6 +397,15 @@ class VaultEntry {
             identical(totpSecret, _unset) ? this.totpSecret : totpSecret as String?,
         passkey: identical(passkey, _unset) ? this.passkey : passkey as Passkey?,
         favorite: favorite ?? this.favorite,
+        type: type ?? this.type,
+        document: identical(document, _unset)
+            ? this.document
+            : document as DocumentData?,
+        address:
+            identical(address, _unset) ? this.address : address as AddressData?,
+        creditCard: identical(creditCard, _unset)
+            ? this.creditCard
+            : creditCard as CreditCardData?,
         createdAt: createdAt,
         updatedAt: DateTime.now().toUtc(),
       );

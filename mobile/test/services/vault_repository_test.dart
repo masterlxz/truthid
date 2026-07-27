@@ -638,4 +638,189 @@ void main() {
       expect(extensionJson, equals(fullJson));
     });
   });
+
+  group('VaultEntry schema Fase 15.1 (document/address/creditCard)', () {
+    VaultEntry credentialEntry() => VaultEntry(
+          id: '1',
+          site: 'github.com',
+          url: '',
+          username: 'fab',
+          password: 'x',
+          notes: '',
+          createdAt: DateTime.now().toUtc(),
+          updatedAt: DateTime.now().toUtc(),
+        );
+
+    test('old JSON without "type"/document/address/creditCard parses as credential', () {
+      final oldJson = {
+        'id': '1',
+        'site': 'github.com',
+        'url': '',
+        'username': 'fab',
+        'password': 'x',
+        'notes': '',
+        'profiles': <String>[],
+        'created_at': 0,
+        'updated_at': 0,
+      };
+
+      final entry = VaultEntry.fromJson(oldJson);
+
+      expect(entry.type, EntryType.credential);
+      expect(entry.document, isNull);
+      expect(entry.address, isNull);
+      expect(entry.creditCard, isNull);
+    });
+
+    test('document entry round-trips through JSON', () {
+      final entry = VaultEntry(
+        id: '1',
+        site: '',
+        url: '',
+        username: '',
+        password: '',
+        notes: '',
+        type: EntryType.document,
+        document: const DocumentData(
+          name: 'RG',
+          fileName: 'rg.pdf',
+          fileData: 'base64-fake-content',
+          fileSizeBytes: 12345,
+          mimeType: 'application/pdf',
+        ),
+        createdAt: DateTime.now().toUtc(),
+        updatedAt: DateTime.now().toUtc(),
+      );
+
+      final reparsed = VaultEntry.fromJson(entry.toJson());
+
+      expect(reparsed.type, EntryType.document);
+      expect(reparsed.document?.name, 'RG');
+      expect(reparsed.document?.fileSizeBytes, 12345);
+      expect(reparsed.address, isNull);
+      expect(reparsed.creditCard, isNull);
+    });
+
+    test('address entry round-trips through JSON', () {
+      final entry = VaultEntry(
+        id: '1',
+        site: '',
+        url: '',
+        username: '',
+        password: '',
+        notes: '',
+        type: EntryType.address,
+        address: const AddressData(
+          label: 'Casa',
+          fullName: 'Fabio Junior',
+          street: 'Rua X',
+          number: '123',
+          neighborhood: 'Centro',
+          city: 'São Paulo',
+          state: 'SP',
+          zipCode: '01000-000',
+          country: 'BR',
+        ),
+        createdAt: DateTime.now().toUtc(),
+        updatedAt: DateTime.now().toUtc(),
+      );
+
+      final reparsed = VaultEntry.fromJson(entry.toJson());
+
+      expect(reparsed.type, EntryType.address);
+      expect(reparsed.address?.city, 'São Paulo');
+      expect(reparsed.document, isNull);
+      expect(reparsed.creditCard, isNull);
+    });
+
+    test('credit card entry round-trips through JSON', () {
+      final entry = VaultEntry(
+        id: '1',
+        site: '',
+        url: '',
+        username: '',
+        password: '',
+        notes: '',
+        type: EntryType.creditCard,
+        creditCard: const CreditCardData(
+          label: 'Nubank',
+          cardHolderName: 'Fabio Junior',
+          cardNumber: '4111111111111111',
+          expiryMonth: '12',
+          expiryYear: '2030',
+          cvv: '123',
+          cardNetwork: CardNetwork.visa,
+        ),
+        createdAt: DateTime.now().toUtc(),
+        updatedAt: DateTime.now().toUtc(),
+      );
+
+      final reparsed = VaultEntry.fromJson(entry.toJson());
+
+      expect(reparsed.type, EntryType.creditCard);
+      expect(reparsed.creditCard?.cardNumber, '4111111111111111');
+      expect(reparsed.creditCard?.cardNetwork, CardNetwork.visa);
+      expect(reparsed.document, isNull);
+      expect(reparsed.address, isNull);
+    });
+
+    test('unknown card_network falls back to other (forward-compat)', () {
+      final json = {
+        'label': 'x',
+        'card_holder_name': 'x',
+        'card_number': 'x',
+        'expiry_month': 'x',
+        'expiry_year': 'x',
+        'cvv': 'x',
+        'card_network': 'some_future_network',
+      };
+
+      expect(CreditCardData.fromJson(json).cardNetwork, CardNetwork.other);
+    });
+
+    test('unknown type falls back to credential (forward-compat)', () {
+      expect(EntryType.fromJson('some_future_type'), EntryType.credential);
+      expect(EntryType.fromJson(null), EntryType.credential);
+    });
+
+    test('copyWith preserves document/address/creditCard when not passed', () {
+      final entry = credentialEntry().copyWith(
+        type: EntryType.address,
+        address: const AddressData(
+          label: 'Casa',
+          fullName: 'Fabio Junior',
+          street: 'Rua X',
+          number: '123',
+          neighborhood: 'Centro',
+          city: 'São Paulo',
+          state: 'SP',
+          zipCode: '01000-000',
+          country: 'BR',
+        ),
+      );
+
+      final copy = entry.copyWith(favorite: true);
+
+      expect(copy.type, EntryType.address);
+      expect(copy.address?.city, 'São Paulo');
+      expect(copy.favorite, isTrue);
+    });
+
+    test('copyWith clears document/address/creditCard when explicitly passed null', () {
+      final entry = credentialEntry().copyWith(
+        type: EntryType.document,
+        document: const DocumentData(
+          name: 'RG',
+          fileName: 'rg.pdf',
+          fileData: 'x',
+          fileSizeBytes: 1,
+          mimeType: 'application/pdf',
+        ),
+      );
+
+      final cleared = entry.copyWith(type: EntryType.credential, document: null);
+
+      expect(cleared.document, isNull);
+    });
+  });
 }

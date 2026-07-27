@@ -290,7 +290,7 @@ fn vault_list_entries() -> Result<Vec<vault::VaultEntry>, String> {
 fn vault_upsert_entry(entry: vault::VaultEntry) -> Result<vault::VaultEntry, String> {
     let _guard = vault::lock_vault();
     let mut v = vault::load()?;
-    let saved = v.upsert(entry);
+    let saved = v.upsert(entry)?;
     vault::save(&v)?;
     Ok(saved)
 }

@@ -6353,3 +6353,63 @@ implementados de verdade nesta sessão, só documentação desatualizada). `ROAD
 atualizada com o achado de que `executeBatch` não era necessário e o passo de "taxa de gas
 estimada" deixado de fora (nenhuma tela do projeto mostra isso hoje, fora de escopo).
 
+### Sessão 167 — 2026-07-26: Fase 15.1 — schema do Digital Identity Vault (documentos, endereços, cartões)
+
+Levantamento de pendências (`PENDING.md`) apresentado ao dono do projeto via `AskUserQuestion`
+(monetização/item 7 do roadmap trancado, Fase 15 nova, deploy em cascata P1/P2/P26, ou outra
+pendência específica) — escolhida a Fase 15, que já estava 100% especificada em `PHASE.md`
+(princípios de arquitetura, schema, fluxos de autofill, 8 etapas) mas nunca iniciada. `/plan` rodado
+pra etapa 15.1 (só schema), com exploração paralela do schema atual em Desktop (Rust/TS) e Mobile
+(Dart) via `Explore`.
+
+**Decisão de arquitetura confirmada com o dono do projeto, via `AskUserQuestion`**: `VaultEntry`
+continua um struct único (não virou um enum `#[serde(tag = "type")]` discriminado de verdade) — só
+ganhou um campo `type` + 3 grupos opcionais (`document`/`address`/`credit_card`), exatamente o
+padrão já usado pra `passkey`/`totp_secret`. Isso preservou zero mudança nas UIs existentes
+(`EntryForm`/`VaultManagement.tsx` no Desktop, `vault_entry_form_screen.dart`/`vault_screen.dart` no
+Mobile — nenhum dos dois foi tocado), deixando toda a UI de criar/editar/listar os 3 tipos novos
+pras etapas 15.2/15.3. A alternativa (tagged enum, mais "correto" e impossível representar estado
+inválido) teria antecipado esse trabalho de UI pra dentro de 15.1 — trade-off explicado com preview
+lado a lado antes da escolha.
+
+**Casing**: os 4 valores do discriminante (`"credential"`/`"document"`/`"address"`/`"creditCard"`)
+seguem literalmente o esboço já escrito em `PHASE.md`. Os campos *dentro* dos grupos novos usam
+`snake_case` em vez do camelCase do esboço — convenção real de todo o resto do schema hoje
+(`totp_secret`, `created_at`, `can_write`), o esboço original foi escrito em "modo TypeScript" sem
+checar essa convenção.
+
+**Por camada**:
+- **Rust** (`desktop/src-tauri/src/vault.rs`): novos `EntryType`, `CardNetwork` (com fallback
+  `#[serde(other)]` pra forward-compat), `DocumentData`, `AddressData`, `CreditCardData`. `VaultEntry`
+  ganhou os 4 campos novos, todos com `#[serde(default)]` (mesmo mecanismo de back-compat que
+  `favorite`/`passkey` já usam). Novo `VaultEntry::validate()` garante que só o grupo de dados
+  correspondente ao `type` está presente — chamado no início de `Vault::upsert`, que por isso
+  passou a retornar `Result<VaultEntry, String>` (antes retornava `VaultEntry` direto); ajustado o
+  único call site em `lib.rs` (`vault_upsert_entry`). `card_number`/`cvv` ficam em texto plano
+  dentro do blob (já cifrado como um todo) — a cifra individual extra é uma nota de segurança do
+  próprio `PHASE.md`, mas já estava agendada pra 15.8, não pra 15.1.
+- **TS** (`desktop/src/types.ts`): mirror direto do Rust. Único ponto de atrito: `VaultEditApprovalModal.tsx`
+  construía um literal `VaultEntry` tipado (fluxo do vault-edit da extensão) sem o campo `type`,
+  agora obrigatório — corrigido com `type: "credential"` explícito (é literalmente uma credencial).
+- **Dart** (`mobile/lib/services/vault_repository.dart`): `EntryType`/`CardNetwork` como enums Dart
+  com `fromJson`/`toJson` manuais (fallback pro valor `credential`/`other` em string desconhecida ou
+  ausente), `DocumentData`/`AddressData`/`CreditCardData` no mesmo estilo de `Passkey` já existente.
+  `VaultEntry` ganhou os 4 campos, com `document`/`address`/`creditCard` usando o sentinel `_unset`
+  no `copyWith` (mesmo padrão de `passkey`/`totpSecret`, pra distinguir "não passei" de "passei null
+  de propósito").
+
+**Testes**: `cargo test --lib` 9 novos (deserialização de um JSON literal no formato antigo sem
+nenhum dos 4 campos, round-trip dos 3 tipos novos, `validate()` rejeitando combinação inconsistente,
+`upsert` propagando o erro e não bumpando `version`) — 106/106 no crate inteiro. `flutter test` 11
+novos no mesmo espírito — 415/415 na suite completa. `npx vitest run` 101/101. `tsc --noEmit`/
+`flutter analyze` limpos.
+
+**Não validado em hardware real**: abrir a tela do Vault no Desktop nativo exige desbloquear a
+wallet via Ledger físico, indisponível nesta sessão automatizada (mesma limitação já registrada pra
+outras pendências de hardware, ver P3-P7). A prova de back-compat ficou inteiramente pelos testes
+automatizados — inclusive um teste que desserializa um JSON literal escrito à mão no formato exato
+de antes da Fase 15, não só round-trips sintéticos.
+
+**Documentação**: `PHASE.md` — etapa 15.1 marcada concluída, status da Fase 15 passou de "não
+iniciada" pra "em andamento". `PENDING.md` — P8 atualizado (15.1 concluída, 15.2-15.8 restantes).
+

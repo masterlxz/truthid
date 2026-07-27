@@ -67,6 +67,7 @@ export function VaultEditApprovalModal({
           profiles: [],
           passkey: proposal.passkey,
           favorite: false,
+          type: "credential",
           created_at: 0,
           updated_at: 0,
         };

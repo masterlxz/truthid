@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-07-26 (Sessão 166 — P29 fechado: sync em lote pro vault-edit, sem precisar de `executeBatch`; P12/P13 removidos, já estavam fechados)
+> Última atualização: 2026-07-26 (Sessão 167 — P8/Fase 15: etapa 15.1 (schema do Digital Identity Vault) concluída)
 
 ---
 
@@ -32,7 +32,7 @@
 
 | ID | Item | Onde se originou | Prioridade |
 |---|---|---|---|
-| P8 | **Phase 15 — Digital Identity Vault** — documentos, endereços, cartões de crédito. 8 etapas planejadas. **Não iniciada.** | `PHASE.md` (Fase 15) | 🟠 Média |
+| P8 | **Phase 15 — Digital Identity Vault** — documentos, endereços, cartões de crédito. 8 etapas planejadas. **15.1 (schema) concluída na Sessão 167** — faltam 15.2-15.8 (CRUD Desktop/Mobile, autofill browser/SO, documentos, revisão de segurança). | `PHASE.md` (Fase 15) | 🟠 Média |
 | P9 | **Phase 15 — Autofill SO (Android/iOS)** — implementar `AutofillService` e `ASCredentialProviderViewController`. | `PHASE.md` (Fase 15, etapas 15.5/15.6) | 🟠 Média |
 | P11 | **`/truthid/v1/pin`** — endpoint para apps terceiros usarem os providers de pin do TruthID. Modelo de consentimento em aberto. | `ROADMAP.md` (Sessão 106, item 2) | 🟡 Baixa |
 | P28 | **SDK Dart: transporte deep link no `TruthIDRequester`** — só cross-device (QR) implementado. Deep link (mesmo aparelho) exigiria o app host registrar seu próprio esquema de URI, específico de plataforma — decidido deixar de fora de um pacote Dart puro por ora. Reavaliado na Sessão 165: hoje nem o Mobile aceita deep link pra `pin`/`vault-edit` (só `sign-message`/`sign-request`), e um pacote Dart puro não consegue automatizar o registro de URI scheme do app hospedeiro nem depende de `url_launcher` — decisão confirmada, segue de fora. | `SESSIONS.md` (Sessão 161, reavaliado 165) | 🟡 Baixa |

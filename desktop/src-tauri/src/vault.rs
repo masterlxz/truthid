@@ -47,8 +47,117 @@ pub(crate) struct VaultEntry {
     /// não via `upsert`, pra não renovar `updated_at` só por causa do toggle.
     #[serde(default)]
     pub favorite: bool,
+    /// Discriminante de tipo (Fase 15). Ausente em blobs antigos → default
+    /// `Credential`, que é o único tipo que existia antes desta mudança —
+    /// mesmo mecanismo de back-compat que `favorite`/`passkey` já usam.
+    #[serde(default)]
+    pub r#type: EntryType,
+    /// Presente só se `type == Document`. Ver `VaultEntry::validate`.
+    #[serde(default)]
+    pub document: Option<DocumentData>,
+    /// Presente só se `type == Address`. Ver `VaultEntry::validate`.
+    #[serde(default)]
+    pub address: Option<AddressData>,
+    /// Presente só se `type == CreditCard`. Cifra individual extra de
+    /// `card_number`/`cvv` fica pra 15.8 (revisão de segurança) — por ora
+    /// os dois viajam em texto plano dentro do blob, que já é cifrado como
+    /// um todo (AES-256-GCM).
+    #[serde(default)]
+    pub credit_card: Option<CreditCardData>,
     pub created_at: u64,
     pub updated_at: u64,
+}
+
+impl VaultEntry {
+    /// Garante que só o grupo de dados correspondente ao `type` está
+    /// presente — evita representar um estado inconsistente (ex: uma
+    /// entrada "address" carregando também dados de cartão). Chamado no
+    /// início de `Vault::upsert`.
+    pub(crate) fn validate(&self) -> Result<(), String> {
+        let (document, address, credit_card) = (
+            self.document.is_some(),
+            self.address.is_some(),
+            self.credit_card.is_some(),
+        );
+        let ok = match self.r#type {
+            EntryType::Credential => !document && !address && !credit_card,
+            EntryType::Document => document && !address && !credit_card,
+            EntryType::Address => !document && address && !credit_card,
+            EntryType::CreditCard => !document && !address && credit_card,
+        };
+        if ok {
+            Ok(())
+        } else {
+            Err(format!(
+                "vault entry type {:?} doesn't match its data groups (document={document}, address={address}, credit_card={credit_card})",
+                self.r#type
+            ))
+        }
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub(crate) enum EntryType {
+    #[default]
+    Credential,
+    Document,
+    Address,
+    CreditCard,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub(crate) struct DocumentData {
+    pub name: String,
+    pub file_name: String,
+    /// Conteúdo do arquivo em base64. Sem limite de tamanho imposto aqui —
+    /// ver project/PHASE.md 15.7 (chunking/limite ficam pra quando o upload
+    /// de verdade for implementado).
+    pub file_data: String,
+    pub file_size_bytes: u64,
+    pub mime_type: String,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub(crate) struct AddressData {
+    pub label: String,
+    pub full_name: String,
+    pub street: String,
+    pub number: String,
+    #[serde(default)]
+    pub complement: Option<String>,
+    pub neighborhood: String,
+    pub city: String,
+    pub state: String,
+    pub zip_code: String,
+    pub country: String,
+    #[serde(default)]
+    pub phone: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub(crate) struct CreditCardData {
+    pub label: String,
+    pub card_holder_name: String,
+    pub card_number: String,
+    pub expiry_month: String,
+    pub expiry_year: String,
+    pub cvv: String,
+    #[serde(default)]
+    pub bank: Option<String>,
+    pub card_network: CardNetwork,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum CardNetwork {
+    Visa,
+    Mastercard,
+    Amex,
+    Elo,
+    Hipercard,
+    #[serde(other)]
+    Other,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -89,7 +198,9 @@ pub(crate) struct Vault {
 impl Vault {
     // Cria (id vazio) ou atualiza (id existente) uma entrada.
     // Incrementa version e atualiza updated_at em qualquer caso.
-    pub(crate) fn upsert(&mut self, mut entry: VaultEntry) -> VaultEntry {
+    pub(crate) fn upsert(&mut self, mut entry: VaultEntry) -> Result<VaultEntry, String> {
+        entry.validate()?;
+
         let now = now_secs();
         self.version += 1;
 
@@ -111,7 +222,7 @@ impl Vault {
             self.entries.push(entry.clone());
         }
 
-        entry
+        Ok(entry)
     }
 
     // Remove entrada pelo id. Retorna true se encontrou e removeu.
@@ -605,6 +716,10 @@ mod tests {
             totp_secret: None,
             passkey: None,
             favorite: false,
+            r#type: EntryType::Credential,
+            document: None,
+            address: None,
+            credit_card: None,
             created_at: 0,
             updated_at: 0,
         }
@@ -614,7 +729,7 @@ mod tests {
     fn upsert_new_entry_generates_id_and_timestamps() {
         let mut vault = Vault::default();
         let entry = make_entry("", "github.com");
-        let saved = vault.upsert(entry);
+        let saved = vault.upsert(entry).unwrap();
 
         assert!(!saved.id.is_empty(), "id deve ser gerado");
         assert!(saved.created_at > 0);
@@ -626,7 +741,7 @@ mod tests {
     #[test]
     fn upsert_existing_id_updates_and_preserves_created_at() {
         let mut vault = Vault::default();
-        let first = vault.upsert(make_entry("", "github.com"));
+        let first = vault.upsert(make_entry("", "github.com")).unwrap();
         let created_at = first.created_at;
 
         // Aguarda 1s para updated_at ser diferente (timestamps em segundos)
@@ -634,7 +749,7 @@ mod tests {
 
         let mut updated = first.clone();
         updated.site = "gitlab.com".to_string();
-        let saved = vault.upsert(updated);
+        let saved = vault.upsert(updated).unwrap();
 
         assert_eq!(saved.id, first.id);
         assert_eq!(
@@ -654,7 +769,7 @@ mod tests {
     fn upsert_unknown_id_creates_new_entry_with_that_id() {
         let mut vault = Vault::default();
         let entry = make_entry("custom-id-abc", "example.com");
-        let saved = vault.upsert(entry);
+        let saved = vault.upsert(entry).unwrap();
 
         assert_eq!(saved.id, "custom-id-abc");
         assert_eq!(vault.entries.len(), 1);
@@ -663,7 +778,7 @@ mod tests {
     #[test]
     fn delete_existing_entry_returns_true() {
         let mut vault = Vault::default();
-        let entry = vault.upsert(make_entry("", "github.com"));
+        let entry = vault.upsert(make_entry("", "github.com")).unwrap();
         let removed = vault.delete(&entry.id);
 
         assert!(removed);
@@ -682,9 +797,9 @@ mod tests {
     #[test]
     fn multiple_entries_preserved() {
         let mut vault = Vault::default();
-        let a = vault.upsert(make_entry("", "github.com"));
-        let b = vault.upsert(make_entry("", "google.com"));
-        vault.upsert(make_entry("", "notion.so"));
+        let a = vault.upsert(make_entry("", "github.com")).unwrap();
+        let b = vault.upsert(make_entry("", "google.com")).unwrap();
+        vault.upsert(make_entry("", "notion.so")).unwrap();
 
         assert_eq!(vault.entries.len(), 3);
 
@@ -722,7 +837,7 @@ mod tests {
         vault.add_profile("Trabalho");
         let mut entry = make_entry("", "github.com");
         entry.profiles = vec!["Trabalho".to_string(), "Pessoal".to_string()];
-        vault.upsert(entry);
+        vault.upsert(entry).unwrap();
 
         let ok = vault.rename_profile("Trabalho", "Banco");
 
@@ -746,7 +861,7 @@ mod tests {
         vault.add_profile("Trabalho");
         let mut entry = make_entry("", "github.com");
         entry.profiles = vec!["Trabalho".to_string(), "Pessoal".to_string()];
-        vault.upsert(entry);
+        vault.upsert(entry).unwrap();
 
         let ok = vault.delete_profile("Trabalho");
 
@@ -767,10 +882,10 @@ mod tests {
         let mut vault = Vault::default();
         let mut a = make_entry("", "github.com");
         a.profiles = vec!["Trabalho".to_string()];
-        vault.upsert(a);
+        vault.upsert(a).unwrap();
         let mut b = make_entry("", "google.com");
         b.profiles = vec!["Trabalho".to_string(), "Casa".to_string()];
-        vault.upsert(b);
+        vault.upsert(b).unwrap();
         vault.profile_names = vec![]; // como um vault serializado antes desta mudança
 
         let json = serde_json::to_vec(&vault).unwrap();
@@ -1029,5 +1144,178 @@ mod tests {
 
         assert_eq!(vault.device_permissions.len(), 1);
         assert_eq!(vault.device_permissions[0].pub_key, "0xaaa");
+    }
+
+    // --- testes de schema Fase 15.1 (documentos/endereços/cartões) ---
+
+    fn make_document_entry(id: &str) -> VaultEntry {
+        let mut entry = make_entry(id, "");
+        entry.r#type = EntryType::Document;
+        entry.document = Some(DocumentData {
+            name: "RG".to_string(),
+            file_name: "rg.pdf".to_string(),
+            file_data: "base64-fake-content".to_string(),
+            file_size_bytes: 12345,
+            mime_type: "application/pdf".to_string(),
+        });
+        entry
+    }
+
+    fn make_address_entry(id: &str) -> VaultEntry {
+        let mut entry = make_entry(id, "");
+        entry.r#type = EntryType::Address;
+        entry.address = Some(AddressData {
+            label: "Casa".to_string(),
+            full_name: "Fabio Junior".to_string(),
+            street: "Rua X".to_string(),
+            number: "123".to_string(),
+            complement: None,
+            neighborhood: "Centro".to_string(),
+            city: "São Paulo".to_string(),
+            state: "SP".to_string(),
+            zip_code: "01000-000".to_string(),
+            country: "BR".to_string(),
+            phone: None,
+        });
+        entry
+    }
+
+    fn make_credit_card_entry(id: &str) -> VaultEntry {
+        let mut entry = make_entry(id, "");
+        entry.r#type = EntryType::CreditCard;
+        entry.credit_card = Some(CreditCardData {
+            label: "Nubank".to_string(),
+            card_holder_name: "Fabio Junior".to_string(),
+            card_number: "4111111111111111".to_string(),
+            expiry_month: "12".to_string(),
+            expiry_year: "2030".to_string(),
+            cvv: "123".to_string(),
+            bank: None,
+            card_network: CardNetwork::Visa,
+        });
+        entry
+    }
+
+    #[test]
+    fn old_blob_without_type_deserializes_as_credential() {
+        // Formato antigo (pré-Fase 15): nenhum dos 4 campos novos existe no JSON.
+        let old_json = br#"{
+            "id": "id1",
+            "site": "github.com",
+            "url": "",
+            "username": "user",
+            "password": "pass",
+            "notes": "",
+            "profiles": [],
+            "created_at": 0,
+            "updated_at": 0
+        }"#;
+        let entry: VaultEntry = serde_json::from_slice(old_json).unwrap();
+
+        assert_eq!(entry.r#type, EntryType::Credential);
+        assert!(entry.document.is_none());
+        assert!(entry.address.is_none());
+        assert!(entry.credit_card.is_none());
+        assert!(entry.validate().is_ok());
+    }
+
+    #[test]
+    fn document_entry_round_trips_through_json() {
+        let entry = make_document_entry("id1");
+        let json = serde_json::to_vec(&entry).unwrap();
+        let reparsed: VaultEntry = serde_json::from_slice(&json).unwrap();
+
+        assert_eq!(reparsed.r#type, EntryType::Document);
+        assert_eq!(reparsed.document.unwrap().name, "RG");
+        assert!(reparsed.address.is_none());
+        assert!(reparsed.credit_card.is_none());
+    }
+
+    #[test]
+    fn address_entry_round_trips_through_json() {
+        let entry = make_address_entry("id1");
+        let json = serde_json::to_vec(&entry).unwrap();
+        let reparsed: VaultEntry = serde_json::from_slice(&json).unwrap();
+
+        assert_eq!(reparsed.r#type, EntryType::Address);
+        assert_eq!(reparsed.address.unwrap().city, "São Paulo");
+        assert!(reparsed.document.is_none());
+        assert!(reparsed.credit_card.is_none());
+    }
+
+    #[test]
+    fn credit_card_entry_round_trips_through_json() {
+        let entry = make_credit_card_entry("id1");
+        let json = serde_json::to_vec(&entry).unwrap();
+        let reparsed: VaultEntry = serde_json::from_slice(&json).unwrap();
+
+        assert_eq!(reparsed.r#type, EntryType::CreditCard);
+        let card = reparsed.credit_card.unwrap();
+        assert_eq!(card.card_number, "4111111111111111");
+        assert_eq!(card.card_network, CardNetwork::Visa);
+        assert!(reparsed.document.is_none());
+        assert!(reparsed.address.is_none());
+    }
+
+    #[test]
+    fn unknown_card_network_falls_back_to_other() {
+        // Forward-compat: um valor de card_network desconhecido (ex: uma
+        // bandeira nova adicionada por uma versão futura) não deve quebrar a
+        // desserialização numa versão antiga do app.
+        let json = br#""some_future_network""#;
+        let network: CardNetwork = serde_json::from_slice(json).unwrap();
+        assert_eq!(network, CardNetwork::Other);
+    }
+
+    #[test]
+    fn validate_rejects_mismatched_type_and_data_group() {
+        let mut entry = make_address_entry("id1");
+        // Corrompe o invariante: type=Address mas carrega dados de cartão também.
+        entry.credit_card = Some(CreditCardData {
+            label: "x".to_string(),
+            card_holder_name: "x".to_string(),
+            card_number: "x".to_string(),
+            expiry_month: "x".to_string(),
+            expiry_year: "x".to_string(),
+            cvv: "x".to_string(),
+            bank: None,
+            card_network: CardNetwork::Other,
+        });
+
+        assert!(entry.validate().is_err());
+    }
+
+    #[test]
+    fn validate_rejects_type_without_its_data_group() {
+        let mut entry = make_document_entry("id1");
+        entry.document = None; // type=Document mas sem os dados do documento
+
+        assert!(entry.validate().is_err());
+    }
+
+    #[test]
+    fn upsert_rejects_invalid_entry_and_does_not_bump_version() {
+        let mut vault = Vault::default();
+        let mut invalid = make_address_entry("");
+        invalid.address = None; // inválido: type=Address sem dados de endereço
+
+        let result = vault.upsert(invalid);
+
+        assert!(result.is_err());
+        assert_eq!(vault.version, 0, "upsert inválido não deve bumpar version");
+        assert!(vault.entries.is_empty());
+    }
+
+    #[test]
+    fn upsert_accepts_each_new_entry_type() {
+        let mut vault = Vault::default();
+        vault.upsert(make_document_entry("")).unwrap();
+        vault.upsert(make_address_entry("")).unwrap();
+        vault.upsert(make_credit_card_entry("")).unwrap();
+
+        assert_eq!(vault.entries.len(), 3);
+        assert_eq!(vault.entries[0].r#type, EntryType::Document);
+        assert_eq!(vault.entries[1].r#type, EntryType::Address);
+        assert_eq!(vault.entries[2].r#type, EntryType::CreditCard);
     }
 }

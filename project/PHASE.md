@@ -884,7 +884,8 @@ A partir daí: Ledger assina UserOps off-chain → bundler submete → smart acc
 
 **Visão maior**: uma **Identidade Digital portátil** que o usuário carrega entre dispositivos, sem depender de Google/Apple/Microsoft — tudo cifrado, armazenado no mesmo IPFS vault que as senhas, acessível pelos mesmos dispositivos confiáveis.
 
-**Status**: :hourglass: Não iniciada — registrada na Sessão 151 (2026-07-24), aguardando `/plan`.
+**Status**: :hourglass: Em andamento — 15.1 concluída na Sessão 167 (2026-07-26), demais etapas
+aguardando.
 
 ---
 
@@ -1033,7 +1034,23 @@ type VaultEntry = VaultEntryCredential | VaultEntryDocument
 
 #### Etapas planejadas (ordem sugerida)
 
-1. **15.1 — Schema**: estender o `VaultEntry` (Rust/Dart) para os 3 novos tipos. Migração automática de vaults existentes. Testes de compatibilidade reversa.
+1. ~~**15.1 — Schema**~~ — **concluída na Sessão 167** (2026-07-26): `VaultEntry` continua um
+   struct único (não virou enum tagged) — ganhou `type: EntryType` + 3 grupos opcionais
+   (`document`/`address`/`credit_card`), decisão confirmada com o dono do projeto via
+   `AskUserQuestion` pra manter zero mudança nas UIs existentes (`EntryForm`/
+   `VaultManagement.tsx` no Desktop, `vault_entry_form_screen.dart`/`vault_screen.dart` no
+   Mobile — nenhum dos dois foi tocado). Campos novos com casing `snake_case` (convenção real do
+   resto do schema), diferente do camelCase do esboço original desta seção — só os 4 valores do
+   discriminante (`"credential"`/`"document"`/`"address"`/`"creditCard"`) seguem o esboço
+   literalmente. `VaultEntry::validate()` novo garante que só o grupo correspondente ao `type`
+   está presente, chamado no início de `Vault::upsert` (agora retorna `Result`). Cifra individual
+   extra de `card_number`/`cvv` fica pra 15.8, como já previsto nesta seção — por ora os dois
+   viajam em texto plano dentro do blob (que já é cifrado como um todo). `cargo test --lib`
+   106/106 (9 novos), `flutter test` 415/415 (11 novos), `npx vitest run` 101/101, `tsc --noEmit`/
+   `flutter analyze` limpos. **Não validado com clique real no Desktop nativo** — abrir a tela do
+   Vault exige desbloquear a wallet (Ledger físico), indisponível nesta sessão automatizada; a
+   prova de back-compat ficou pelos testes automatizados (deserialização de um JSON literal no
+   formato antigo, sem nenhum dos 4 campos novos).
 2. **15.2 — CRUD Desktop**: UI para criar/editar/deletar endereços e cartões no `VaultManagement.tsx`. Seção de documentos (upload de arquivo, listagem, visualização).
 3. **15.3 — CRUD Mobile**: paridade no mobile (`vault_entry_form_screen.dart`). Upload de documento via câmera/galeria.
 4. **15.4 — Autofill browser (extensão)**: extensão detecta campos de endereço/cartão e pede ao device os dados específicos (mesmo padrão P2P da 13.9). Aprovação no device mostra o que será preenchido.
