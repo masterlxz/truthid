@@ -1067,7 +1067,26 @@ type VaultEntry = VaultEntryCredential | VaultEntryDocument
    só site/username. `npx tsc --noEmit` limpo, `npx vitest run` 101/101 (sem teste dedicado — este
    componente nunca teve suíte própria, mesma situação de sempre), `npm run build` (Vite) limpo.
    **Não validado com clique real** — mesma limitação de hardware (Ledger) já registrada na 15.1.
-3. **15.3 — CRUD Mobile**: paridade no mobile (`vault_entry_form_screen.dart`). Upload de documento via câmera/galeria.
+3. ~~**15.3 — CRUD Mobile**~~ — **concluída na Sessão 169** (2026-07-26): paridade com o Desktop
+   (15.2) em `vault_entry_form_screen.dart` — seletor de tipo (chips), 3 grupos de campo
+   condicionais (endereço, cartão com `DropdownButtonFormField<CardNetwork>`, documento via
+   `FilePicker.platform.pickFiles(withData: true)` + `base64Encode` nativo do `dart:convert` +
+   limite de 10MB), Notas/Perfis compartilhados, TOTP/Passkey exclusivos de `credential`.
+   **Achado corrigido proativamente** (mesma classe de bug da 15.2, achada no Desktop): trocar o
+   `type` de uma entrada existente exige zerar os outros 2 grupos explicitamente no save — em vez
+   de um switch com 4 branches (como ficou no Desktop, onde um branch esqueceu de zerar), um único
+   getter `_dataGroups` monta os 3 grupos de uma vez (só o do `_type` ativo fica não-nulo) e
+   `_save()` sempre espalha os 3 num único call site, tornando o esquecimento estruturalmente
+   impossível em vez de só coberto por teste. Novo `VaultEntry.validate()` em
+   `vault_repository.dart` (mirror do Rust) chamado por `addEntry`/`updateEntry` — o Mobile não
+   tinha nenhuma outra camada de validação desse invariante (repositório lê/escreve o arquivo
+   cifrado local direto, sem chamada Rust nesse caminho). `vault_screen.dart` ganhou ícone/
+   título/subtítulo por tipo (`_VaultEntryCard`) e busca por campo certo (`_entrySearchText`);
+   `vault_entry_detail_screen.dart` ganhou corpo por tipo (documento com botão "Save to device"
+   via `saveFile`, endereço em `InfoRow`s, cartão com número/CVV mascarados via `_CopyableRow`
+   já existente). `flutter test` 429/429 (14 novos, incluindo um teste de regressão que reproduz
+   exatamente o bug do Desktop), `flutter analyze` limpo. **Não validado com clique real** —
+   mesma limitação de hardware da 15.1/15.2.
 4. **15.4 — Autofill browser (extensão)**: extensão detecta campos de endereço/cartão e pede ao device os dados específicos (mesmo padrão P2P da 13.9). Aprovação no device mostra o que será preenchido.
 5. **15.5 — Autofill SO Android**: implementar `AutofillService` (`android.app.service.AutofillService`). Lê vault local, filtra por tipo de campo, preenche.
 6. **15.6 — Autofill SO iOS**: implementar `ASCredentialIdentityStore` / `ASCredentialProviderViewController`. Mesma lógica do Android.

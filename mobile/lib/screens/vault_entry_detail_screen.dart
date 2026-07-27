@@ -1,6 +1,8 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -36,6 +38,8 @@ class _VaultEntryDetailScreenState extends State<VaultEntryDetailScreen> {
   late final VaultRepository _repository;
   late VaultEntry _entry;
   bool _passwordVisible = false;
+  bool _cardNumberVisible = false;
+  bool _cvvVisible = false;
   bool _deleting = false;
 
   @override
@@ -45,10 +49,38 @@ class _VaultEntryDetailScreenState extends State<VaultEntryDetailScreen> {
     _entry = widget.entry;
   }
 
+  // Fase 15.3 — título por tipo, substitui `entry.site` hardcoded (AppBar +
+  // diálogo de exclusão), mirror do `entryTitle`/título por tipo do Desktop.
+  String get _title => switch (_entry.type) {
+        EntryType.credential => _entry.site,
+        EntryType.document => _entry.document?.name ?? 'Document',
+        EntryType.address => _entry.address?.label ?? 'Address',
+        EntryType.creditCard => _entry.creditCard?.label ?? 'Card',
+      };
+
   void _copy(String label, String value) {
     Clipboard.setData(ClipboardData(text: value));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('$label copied!')),
+    );
+  }
+
+  String _formatBytes(int n) {
+    if (n < 1024) return '$n B';
+    if (n < 1024 * 1024) return '${(n / 1024).toStringAsFixed(1)} KB';
+    return '${(n / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  Future<void> _downloadDocument(DocumentData doc) async {
+    final bytes = base64Decode(doc.fileData);
+    final path = await FilePicker.platform.saveFile(
+      fileName: doc.fileName,
+      type: FileType.any,
+      bytes: bytes,
+    );
+    if (path == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Document saved ✓')),
     );
   }
 
@@ -72,7 +104,7 @@ class _VaultEntryDetailScreenState extends State<VaultEntryDetailScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Delete entry?'),
-        content: Text('This will remove "${_entry.site}" from your vault.'),
+        content: Text('This will remove "$_title" from your vault.'),
         actions: [
           TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
           TextButton(
@@ -95,7 +127,7 @@ class _VaultEntryDetailScreenState extends State<VaultEntryDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(entry.site),
+        title: Text(_title),
         actions: widget.canWrite
             ? [
                 IconButton(icon: const Icon(Icons.edit), onPressed: _deleting ? null : _edit),
@@ -111,40 +143,117 @@ class _VaultEntryDetailScreenState extends State<VaultEntryDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            InfoRow(label: 'Site', value: entry.site),
-            if (entry.url.isNotEmpty) ...[
+            if (entry.type == EntryType.credential) ...[
+              InfoRow(label: 'Site', value: entry.site),
+              if (entry.url.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                _LinkRow(url: entry.url),
+              ],
               const SizedBox(height: 8),
-              _LinkRow(url: entry.url),
+              _CopyableRow(
+                label: 'Username',
+                value: entry.username,
+                onCopy: () => _copy('Username', entry.username),
+              ),
+              const SizedBox(height: 8),
+              _CopyableRow(
+                label: 'Password',
+                value: entry.password,
+                masked: !_passwordVisible,
+                onToggleVisibility: () =>
+                    setState(() => _passwordVisible = !_passwordVisible),
+                onCopy: () => _copy('Password', entry.password),
+              ),
+              if (entry.totpSecret != null && entry.totpSecret!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                _TotpCodeRow(
+                  secret: entry.totpSecret!,
+                  onCopy: (code) => _copy('2FA code', code),
+                ),
+              ],
+              if (entry.passkey != null) ...[
+                const SizedBox(height: 8),
+                _PasskeyRow(passkey: entry.passkey!),
+              ],
             ],
-            const SizedBox(height: 8),
-            _CopyableRow(
-              label: 'Username',
-              value: entry.username,
-              onCopy: () => _copy('Username', entry.username),
-            ),
-            const SizedBox(height: 8),
-            _CopyableRow(
-              label: 'Password',
-              value: entry.password,
-              masked: !_passwordVisible,
-              onToggleVisibility: () =>
-                  setState(() => _passwordVisible = !_passwordVisible),
-              onCopy: () => _copy('Password', entry.password),
-            ),
+            if (entry.type == EntryType.document && entry.document != null) ...[
+              InfoRow(label: 'Name', value: entry.document!.name),
+              const SizedBox(height: 8),
+              InfoRow(label: 'File', value: entry.document!.fileName),
+              const SizedBox(height: 8),
+              InfoRow(
+                label: 'Size',
+                value:
+                    '${_formatBytes(entry.document!.fileSizeBytes)} · ${entry.document!.mimeType}',
+              ),
+              const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: () => _downloadDocument(entry.document!),
+                icon: const Icon(Icons.download),
+                label: const Text('Save to device'),
+              ),
+            ],
+            if (entry.type == EntryType.address && entry.address != null) ...[
+              InfoRow(label: 'Full name', value: entry.address!.fullName),
+              const SizedBox(height: 8),
+              InfoRow(
+                label: 'Street',
+                value: '${entry.address!.street}, ${entry.address!.number}',
+              ),
+              if (entry.address!.complement != null && entry.address!.complement!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                InfoRow(label: 'Complement', value: entry.address!.complement!),
+              ],
+              const SizedBox(height: 8),
+              InfoRow(label: 'Neighborhood', value: entry.address!.neighborhood),
+              const SizedBox(height: 8),
+              InfoRow(
+                label: 'City/State',
+                value: '${entry.address!.city}/${entry.address!.state}',
+              ),
+              const SizedBox(height: 8),
+              InfoRow(label: 'ZIP code', value: entry.address!.zipCode),
+              const SizedBox(height: 8),
+              InfoRow(label: 'Country', value: entry.address!.country),
+              if (entry.address!.phone != null && entry.address!.phone!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                InfoRow(label: 'Phone', value: entry.address!.phone!),
+              ],
+            ],
+            if (entry.type == EntryType.creditCard && entry.creditCard != null) ...[
+              InfoRow(label: 'Card holder', value: entry.creditCard!.cardHolderName),
+              const SizedBox(height: 8),
+              _CopyableRow(
+                label: 'Card number',
+                value: entry.creditCard!.cardNumber,
+                masked: !_cardNumberVisible,
+                onToggleVisibility: () =>
+                    setState(() => _cardNumberVisible = !_cardNumberVisible),
+                onCopy: () => _copy('Card number', entry.creditCard!.cardNumber),
+              ),
+              const SizedBox(height: 8),
+              _CopyableRow(
+                label: 'CVV',
+                value: entry.creditCard!.cvv,
+                masked: !_cvvVisible,
+                onToggleVisibility: () => setState(() => _cvvVisible = !_cvvVisible),
+                onCopy: () => _copy('CVV', entry.creditCard!.cvv),
+              ),
+              const SizedBox(height: 8),
+              InfoRow(
+                label: 'Expiry',
+                value: '${entry.creditCard!.expiryMonth}/${entry.creditCard!.expiryYear}',
+              ),
+              const SizedBox(height: 8),
+              InfoRow(label: 'Network', value: entry.creditCard!.cardNetwork.name),
+              if (entry.creditCard!.bank != null && entry.creditCard!.bank!.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                InfoRow(label: 'Bank', value: entry.creditCard!.bank!),
+              ],
+            ],
             if (entry.notes.isNotEmpty) ...[
               const SizedBox(height: 8),
               InfoRow(label: 'Notes', value: entry.notes),
-            ],
-            if (entry.totpSecret != null && entry.totpSecret!.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              _TotpCodeRow(
-                secret: entry.totpSecret!,
-                onCopy: (code) => _copy('2FA code', code),
-              ),
-            ],
-            if (entry.passkey != null) ...[
-              const SizedBox(height: 8),
-              _PasskeyRow(passkey: entry.passkey!),
             ],
             if (entry.profiles.isNotEmpty) ...[
               const SizedBox(height: 16),

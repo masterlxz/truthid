@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 import 'dart:typed_data';
 
@@ -36,6 +37,37 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
   final _notesCtrl = TextEditingController();
   final _totpSecretCtrl = TextEditingController();
 
+  // Fase 15.3 — endereço
+  final _addrLabelCtrl = TextEditingController();
+  final _addrFullNameCtrl = TextEditingController();
+  final _addrStreetCtrl = TextEditingController();
+  final _addrNumberCtrl = TextEditingController();
+  final _addrComplementCtrl = TextEditingController();
+  final _addrNeighborhoodCtrl = TextEditingController();
+  final _addrCityCtrl = TextEditingController();
+  final _addrStateCtrl = TextEditingController();
+  final _addrZipCodeCtrl = TextEditingController();
+  final _addrCountryCtrl = TextEditingController();
+  final _addrPhoneCtrl = TextEditingController();
+
+  // Fase 15.3 — cartão de crédito
+  final _cardLabelCtrl = TextEditingController();
+  final _cardHolderNameCtrl = TextEditingController();
+  final _cardNumberCtrl = TextEditingController();
+  final _cardExpiryMonthCtrl = TextEditingController();
+  final _cardExpiryYearCtrl = TextEditingController();
+  final _cardCvvCtrl = TextEditingController();
+  final _cardBankCtrl = TextEditingController();
+  CardNetwork _cardNetwork = CardNetwork.visa;
+
+  // Fase 15.3 — documento (sem controller pros campos derivados do arquivo)
+  final _docNameCtrl = TextEditingController();
+  String? _docFileName;
+  String? _docFileData;
+  String? _docMimeType;
+  int? _docFileSizeBytes;
+  String? _docError;
+
   List<String> _profileOptions = [];
   final Set<String> _selectedProfiles = {};
   bool _showPassword = false;
@@ -44,6 +76,7 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
   String? _error;
   String? _totpError;
   Passkey? _passkey;
+  EntryType _type = EntryType.credential;
 
   bool get _isEditing => widget.entry != null;
 
@@ -53,6 +86,7 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
     _repository = widget.repository ?? VaultRepository();
     final entry = widget.entry;
     if (entry != null) {
+      _type = entry.type;
       _siteCtrl.text = entry.site;
       _urlCtrl.text = entry.url;
       _usernameCtrl.text = entry.username;
@@ -61,6 +95,42 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
       _selectedProfiles.addAll(entry.profiles);
       _totpSecretCtrl.text = entry.totpSecret ?? '';
       _passkey = entry.passkey;
+
+      final document = entry.document;
+      if (document != null) {
+        _docNameCtrl.text = document.name;
+        _docFileName = document.fileName;
+        _docFileData = document.fileData;
+        _docMimeType = document.mimeType;
+        _docFileSizeBytes = document.fileSizeBytes;
+      }
+
+      final address = entry.address;
+      if (address != null) {
+        _addrLabelCtrl.text = address.label;
+        _addrFullNameCtrl.text = address.fullName;
+        _addrStreetCtrl.text = address.street;
+        _addrNumberCtrl.text = address.number;
+        _addrComplementCtrl.text = address.complement ?? '';
+        _addrNeighborhoodCtrl.text = address.neighborhood;
+        _addrCityCtrl.text = address.city;
+        _addrStateCtrl.text = address.state;
+        _addrZipCodeCtrl.text = address.zipCode;
+        _addrCountryCtrl.text = address.country;
+        _addrPhoneCtrl.text = address.phone ?? '';
+      }
+
+      final creditCard = entry.creditCard;
+      if (creditCard != null) {
+        _cardLabelCtrl.text = creditCard.label;
+        _cardHolderNameCtrl.text = creditCard.cardHolderName;
+        _cardNumberCtrl.text = creditCard.cardNumber;
+        _cardExpiryMonthCtrl.text = creditCard.expiryMonth;
+        _cardExpiryYearCtrl.text = creditCard.expiryYear;
+        _cardCvvCtrl.text = creditCard.cvv;
+        _cardBankCtrl.text = creditCard.bank ?? '';
+        _cardNetwork = creditCard.cardNetwork;
+      }
     }
     _loadProfileOptions();
   }
@@ -290,13 +360,147 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
     _passwordCtrl.dispose();
     _notesCtrl.dispose();
     _totpSecretCtrl.dispose();
+    _addrLabelCtrl.dispose();
+    _addrFullNameCtrl.dispose();
+    _addrStreetCtrl.dispose();
+    _addrNumberCtrl.dispose();
+    _addrComplementCtrl.dispose();
+    _addrNeighborhoodCtrl.dispose();
+    _addrCityCtrl.dispose();
+    _addrStateCtrl.dispose();
+    _addrZipCodeCtrl.dispose();
+    _addrCountryCtrl.dispose();
+    _addrPhoneCtrl.dispose();
+    _cardLabelCtrl.dispose();
+    _cardHolderNameCtrl.dispose();
+    _cardNumberCtrl.dispose();
+    _cardExpiryMonthCtrl.dispose();
+    _cardExpiryYearCtrl.dispose();
+    _cardCvvCtrl.dispose();
+    _cardBankCtrl.dispose();
+    _docNameCtrl.dispose();
     super.dispose();
   }
 
-  bool get _formInvalid =>
-      _siteCtrl.text.trim().isEmpty ||
-      _usernameCtrl.text.trim().isEmpty ||
-      _passwordCtrl.text.trim().isEmpty;
+  bool get _canSaveForm => switch (_type) {
+        EntryType.credential =>
+          _siteCtrl.text.trim().isNotEmpty &&
+              _usernameCtrl.text.trim().isNotEmpty &&
+              _passwordCtrl.text.trim().isNotEmpty,
+        EntryType.document =>
+          _docNameCtrl.text.trim().isNotEmpty && _docFileData != null,
+        EntryType.address =>
+          _addrLabelCtrl.text.trim().isNotEmpty &&
+              _addrFullNameCtrl.text.trim().isNotEmpty &&
+              _addrStreetCtrl.text.trim().isNotEmpty &&
+              _addrNumberCtrl.text.trim().isNotEmpty &&
+              _addrNeighborhoodCtrl.text.trim().isNotEmpty &&
+              _addrCityCtrl.text.trim().isNotEmpty &&
+              _addrStateCtrl.text.trim().isNotEmpty &&
+              _addrZipCodeCtrl.text.trim().isNotEmpty &&
+              _addrCountryCtrl.text.trim().isNotEmpty,
+        EntryType.creditCard =>
+          _cardLabelCtrl.text.trim().isNotEmpty &&
+              _cardHolderNameCtrl.text.trim().isNotEmpty &&
+              _cardNumberCtrl.text.trim().isNotEmpty &&
+              _cardExpiryMonthCtrl.text.trim().isNotEmpty &&
+              _cardExpiryYearCtrl.text.trim().isNotEmpty &&
+              _cardCvvCtrl.text.trim().isNotEmpty,
+      };
+
+  static const _maxDocumentBytes = 10 * 1024 * 1024; // 10MB — mirror do Desktop (VaultManagement.tsx)
+
+  static const _mimeByExt = {
+    'pdf': 'application/pdf', 'png': 'image/png', 'jpg': 'image/jpeg',
+    'jpeg': 'image/jpeg', 'gif': 'image/gif', 'webp': 'image/webp',
+    'bmp': 'image/bmp', 'svg': 'image/svg+xml', 'txt': 'text/plain',
+    'csv': 'text/csv', 'json': 'application/json',
+    'doc': 'application/msword',
+    'docx':
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'xls': 'application/vnd.ms-excel',
+    'xlsx':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  };
+
+  String _formatBytes(int n) {
+    if (n < 1024) return '$n B';
+    if (n < 1024 * 1024) return '${(n / 1024).toStringAsFixed(1)} KB';
+    return '${(n / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  Future<void> _pickDocument() async {
+    final result = await FilePicker.platform.pickFiles(withData: true);
+    final file = result?.files.single;
+    final bytes = file?.bytes;
+    if (bytes == null || !mounted) return;
+    if (bytes.length > _maxDocumentBytes) {
+      setState(() => _docError =
+          'File too large (${_formatBytes(bytes.length)}) — limit is ${_formatBytes(_maxDocumentBytes)}.');
+      return;
+    }
+    final ext = file!.name.split('.').last.toLowerCase();
+    setState(() {
+      _docError = null;
+      _docFileName = file.name;
+      _docFileData = base64Encode(bytes);
+      _docFileSizeBytes = bytes.length;
+      _docMimeType = _mimeByExt[ext] ?? 'application/octet-stream';
+      if (_docNameCtrl.text.trim().isEmpty) _docNameCtrl.text = file.name;
+    });
+  }
+
+  // Fase 15.3 — monta os 3 grupos opcionais de uma vez só, só o do `_type`
+  // ativo fica não-nulo. Chamado num único call site em `_save()`, que
+  // sempre espalha os 3 campos — diferente do Desktop (VaultManagement.tsx),
+  // onde um switch com 4 branches cada um tinha que lembrar de zerar os
+  // outros 2 grupos (e um deles esqueceu, na Sessão 168), aqui não existe
+  // branch nenhum que só devolva o grupo novo sem tocar nos outros 2.
+  ({DocumentData? document, AddressData? address, CreditCardData? creditCard})
+      get _dataGroups => (
+            document: _type == EntryType.document
+                ? DocumentData(
+                    name: _docNameCtrl.text.trim(),
+                    fileName: _docFileName ?? '',
+                    fileData: _docFileData ?? '',
+                    fileSizeBytes: _docFileSizeBytes ?? 0,
+                    mimeType: _docMimeType ?? 'application/octet-stream',
+                  )
+                : null,
+            address: _type == EntryType.address
+                ? AddressData(
+                    label: _addrLabelCtrl.text.trim(),
+                    fullName: _addrFullNameCtrl.text.trim(),
+                    street: _addrStreetCtrl.text.trim(),
+                    number: _addrNumberCtrl.text.trim(),
+                    complement: _addrComplementCtrl.text.trim().isEmpty
+                        ? null
+                        : _addrComplementCtrl.text.trim(),
+                    neighborhood: _addrNeighborhoodCtrl.text.trim(),
+                    city: _addrCityCtrl.text.trim(),
+                    state: _addrStateCtrl.text.trim(),
+                    zipCode: _addrZipCodeCtrl.text.trim(),
+                    country: _addrCountryCtrl.text.trim(),
+                    phone: _addrPhoneCtrl.text.trim().isEmpty
+                        ? null
+                        : _addrPhoneCtrl.text.trim(),
+                  )
+                : null,
+            creditCard: _type == EntryType.creditCard
+                ? CreditCardData(
+                    label: _cardLabelCtrl.text.trim(),
+                    cardHolderName: _cardHolderNameCtrl.text.trim(),
+                    cardNumber: _cardNumberCtrl.text.trim(),
+                    expiryMonth: _cardExpiryMonthCtrl.text.trim(),
+                    expiryYear: _cardExpiryYearCtrl.text.trim(),
+                    cvv: _cardCvvCtrl.text.trim(),
+                    bank: _cardBankCtrl.text.trim().isEmpty
+                        ? null
+                        : _cardBankCtrl.text.trim(),
+                    cardNetwork: _cardNetwork,
+                  )
+                : null,
+          );
 
   void _onTotpChanged(String value) {
     setState(() {
@@ -379,8 +583,10 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
   }
 
   Future<void> _save() async {
+    final isCredential = _type == EntryType.credential;
+
     String? totpSecret;
-    if (_totpSecretCtrl.text.trim().isNotEmpty) {
+    if (isCredential && _totpSecretCtrl.text.trim().isNotEmpty) {
       try {
         totpSecret = parseTotpSecret(_totpSecretCtrl.text);
       } catch (e) {
@@ -391,27 +597,36 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
 
     setState(() { _saving = true; _error = null; });
     try {
+      final groups = _dataGroups;
       if (_isEditing) {
         await _repository.updateEntry(widget.entry!.copyWith(
-          site: _siteCtrl.text.trim(),
-          url: _urlCtrl.text.trim(),
-          username: _usernameCtrl.text.trim(),
-          password: _passwordCtrl.text.trim(),
+          site: isCredential ? _siteCtrl.text.trim() : '',
+          url: isCredential ? _urlCtrl.text.trim() : '',
+          username: isCredential ? _usernameCtrl.text.trim() : '',
+          password: isCredential ? _passwordCtrl.text.trim() : '',
           notes: _notesCtrl.text.trim(),
           profiles: _selectedProfiles.toList(),
           totpSecret: totpSecret,
-          passkey: _passkey,
+          passkey: isCredential ? _passkey : null,
+          type: _type,
+          document: groups.document,
+          address: groups.address,
+          creditCard: groups.creditCard,
         ));
       } else {
         await _repository.addEntry(
-          site: _siteCtrl.text.trim(),
-          url: _urlCtrl.text.trim(),
-          username: _usernameCtrl.text.trim(),
-          password: _passwordCtrl.text.trim(),
+          site: isCredential ? _siteCtrl.text.trim() : '',
+          url: isCredential ? _urlCtrl.text.trim() : '',
+          username: isCredential ? _usernameCtrl.text.trim() : '',
+          password: isCredential ? _passwordCtrl.text.trim() : '',
           notes: _notesCtrl.text.trim(),
           profiles: _selectedProfiles.toList(),
           totpSecret: totpSecret,
-          passkey: _passkey,
+          passkey: isCredential ? _passkey : null,
+          type: _type,
+          document: groups.document,
+          address: groups.address,
+          creditCard: groups.creditCard,
         );
       }
       if (mounted) Navigator.of(context).pop(true);
@@ -431,96 +646,270 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  TextField(
-                    controller: _siteCtrl,
-                    decoration: const InputDecoration(labelText: 'Site *', hintText: 'ex: github.com'),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _urlCtrl,
-                    decoration: const InputDecoration(labelText: 'URL', hintText: 'https://...'),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _usernameCtrl,
-                    decoration: const InputDecoration(labelText: 'Username *'),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
+                  Wrap(
+                    spacing: 8,
                     children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _passwordCtrl,
-                          obscureText: !_showPassword,
-                          decoration: InputDecoration(
-                            labelText: 'Password *',
-                            suffixIcon: IconButton(
-                              icon: Icon(_showPassword ? Icons.visibility_off : Icons.visibility),
-                              onPressed: () => setState(() => _showPassword = !_showPassword),
+                      (EntryType.credential, '🔑 Password'),
+                      (EntryType.document, '📄 Document'),
+                      (EntryType.address, '🏠 Address'),
+                      (EntryType.creditCard, '💳 Card'),
+                    ].map((e) {
+                      final (type, label) = e;
+                      return ChoiceChip(
+                        label: Text(label),
+                        selected: _type == type,
+                        onSelected: (_) => setState(() => _type = type),
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 16),
+                  if (_type == EntryType.credential) ...[
+                    TextField(
+                      controller: _siteCtrl,
+                      decoration: const InputDecoration(labelText: 'Site *', hintText: 'ex: github.com'),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _urlCtrl,
+                      decoration: const InputDecoration(labelText: 'URL', hintText: 'https://...'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _usernameCtrl,
+                      decoration: const InputDecoration(labelText: 'Username *'),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _passwordCtrl,
+                            obscureText: !_showPassword,
+                            decoration: InputDecoration(
+                              labelText: 'Password *',
+                              suffixIcon: IconButton(
+                                icon: Icon(_showPassword ? Icons.visibility_off : Icons.visibility),
+                                onPressed: () => setState(() => _showPassword = !_showPassword),
+                              ),
                             ),
+                            onChanged: (_) => setState(() {}),
                           ),
-                          onChanged: (_) => setState(() {}),
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.casino_outlined),
-                        tooltip: 'Generate password',
-                        onPressed: _openPasswordGenerator,
+                        IconButton(
+                          icon: const Icon(Icons.casino_outlined),
+                          tooltip: 'Generate password',
+                          onPressed: _openPasswordGenerator,
+                        ),
+                      ],
+                    ),
+                    _buildStrengthMeter(),
+                    const SizedBox(height: 12),
+                  ],
+                  if (_type == EntryType.document) ...[
+                    TextField(
+                      controller: _docNameCtrl,
+                      decoration: const InputDecoration(labelText: 'Name *', hintText: 'ex: ID card, Passport, Contract'),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                      onPressed: _pickDocument,
+                      icon: const Icon(Icons.attach_file),
+                      label: Text(_docFileName == null ? 'Choose file' : 'Change file'),
+                    ),
+                    if (_docFileName != null) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        '$_docFileName · ${_formatBytes(_docFileSizeBytes ?? 0)} · $_docMimeType',
+                        style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
                       ),
                     ],
-                  ),
-                  _buildStrengthMeter(),
-                  const SizedBox(height: 12),
+                    if (_docError != null) ...[
+                      const SizedBox(height: 8),
+                      Text(_docError!, style: const TextStyle(color: AppColors.danger, fontSize: 12)),
+                    ],
+                    const SizedBox(height: 12),
+                  ],
+                  if (_type == EntryType.address) ...[
+                    TextField(
+                      controller: _addrLabelCtrl,
+                      decoration: const InputDecoration(labelText: 'Label *', hintText: 'ex: Home, Work, Delivery'),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _addrFullNameCtrl,
+                      decoration: const InputDecoration(labelText: 'Full name *'),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _addrStreetCtrl,
+                      decoration: const InputDecoration(labelText: 'Street *'),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _addrNumberCtrl,
+                      decoration: const InputDecoration(labelText: 'Number *'),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _addrComplementCtrl,
+                      decoration: const InputDecoration(labelText: 'Complement'),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _addrNeighborhoodCtrl,
+                      decoration: const InputDecoration(labelText: 'Neighborhood *'),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _addrCityCtrl,
+                      decoration: const InputDecoration(labelText: 'City *'),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _addrStateCtrl,
+                      decoration: const InputDecoration(labelText: 'State *'),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _addrZipCodeCtrl,
+                      decoration: const InputDecoration(labelText: 'ZIP code *'),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _addrCountryCtrl,
+                      decoration: const InputDecoration(labelText: 'Country *'),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _addrPhoneCtrl,
+                      decoration: const InputDecoration(labelText: 'Phone'),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  if (_type == EntryType.creditCard) ...[
+                    TextField(
+                      controller: _cardLabelCtrl,
+                      decoration: const InputDecoration(labelText: 'Label *', hintText: 'ex: Nubank, Itaú Platinum'),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _cardHolderNameCtrl,
+                      decoration: const InputDecoration(labelText: 'Card holder *'),
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _cardNumberCtrl,
+                      decoration: const InputDecoration(labelText: 'Card number *'),
+                      keyboardType: TextInputType.number,
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    DropdownButtonFormField<CardNetwork>(
+                      initialValue: _cardNetwork,
+                      decoration: const InputDecoration(labelText: 'Network *'),
+                      items: CardNetwork.values
+                          .map((n) => DropdownMenuItem(value: n, child: Text(n.name)))
+                          .toList(),
+                      onChanged: (v) => setState(() => _cardNetwork = v ?? _cardNetwork),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _cardExpiryMonthCtrl,
+                            decoration: const InputDecoration(labelText: 'Exp. month *', hintText: 'MM'),
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: TextField(
+                            controller: _cardExpiryYearCtrl,
+                            decoration: const InputDecoration(labelText: 'Exp. year *', hintText: 'YYYY'),
+                            onChanged: (_) => setState(() {}),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _cardCvvCtrl,
+                      decoration: const InputDecoration(labelText: 'CVV *'),
+                      keyboardType: TextInputType.number,
+                      onChanged: (_) => setState(() {}),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _cardBankCtrl,
+                      decoration: const InputDecoration(labelText: 'Bank'),
+                    ),
+                    const SizedBox(height: 12),
+                  ],
                   TextField(
                     controller: _notesCtrl,
                     decoration: const InputDecoration(labelText: 'Notes'),
                     maxLines: 3,
                   ),
                   const SizedBox(height: 12),
-                  TextField(
-                    controller: _totpSecretCtrl,
-                    decoration: InputDecoration(
-                      labelText: '2FA secret (optional)',
-                      hintText: 'base32 secret or otpauth://... URI',
-                      errorText: _totpError,
-                      suffixIcon: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          IconButton(
-                            icon: const Icon(Icons.qr_code_scanner),
-                            tooltip: 'Scan QR code',
-                            onPressed: _scanTotpQr,
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.photo_library_outlined),
-                            tooltip: 'Upload QR from photo',
-                            onPressed: _pickTotpQrImage,
-                          ),
-                        ],
-                      ),
-                    ),
-                    onChanged: _onTotpChanged,
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      const Text('Passkey: ', style: TextStyle(fontWeight: FontWeight.bold)),
-                      if (_passkey != null)
-                        Expanded(
-                          child: Text(_passkey!.rpId,
-                              style: const TextStyle(color: AppColors.textMuted),
-                              overflow: TextOverflow.ellipsis),
+                  if (_type == EntryType.credential) ...[
+                    TextField(
+                      controller: _totpSecretCtrl,
+                      decoration: InputDecoration(
+                        labelText: '2FA secret (optional)',
+                        hintText: 'base32 secret or otpauth://... URI',
+                        errorText: _totpError,
+                        suffixIcon: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.qr_code_scanner),
+                              tooltip: 'Scan QR code',
+                              onPressed: _scanTotpQr,
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.photo_library_outlined),
+                              tooltip: 'Upload QR from photo',
+                              onPressed: _pickTotpQrImage,
+                            ),
+                          ],
                         ),
-                      TextButton(
-                        onPressed: _generatePasskey,
-                        child: Text(_passkey == null ? 'Gerar passkey' : 'Recriar'),
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
+                      onChanged: _onTotpChanged,
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Text('Passkey: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                        if (_passkey != null)
+                          Expanded(
+                            child: Text(_passkey!.rpId,
+                                style: const TextStyle(color: AppColors.textMuted),
+                                overflow: TextOverflow.ellipsis),
+                          ),
+                        TextButton(
+                          onPressed: _generatePasskey,
+                          child: Text(_passkey == null ? 'Gerar passkey' : 'Recriar'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   const Text('Profiles', style: TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   if (_profileOptions.isEmpty)
@@ -547,7 +936,11 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                     const SizedBox(height: 12),
                   ],
                   ElevatedButton(
-                    onPressed: (_saving || _formInvalid || _totpError != null) ? null : _save,
+                    onPressed: (_saving ||
+                            !_canSaveForm ||
+                            (_type == EntryType.credential && _totpError != null))
+                        ? null
+                        : _save,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.accent,
                       foregroundColor: AppColors.background,

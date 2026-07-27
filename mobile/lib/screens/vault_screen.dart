@@ -20,6 +20,26 @@ import 'vault_entry_detail_screen.dart';
 import 'vault_entry_form_screen.dart';
 import 'vault_profiles_screen.dart';
 
+const _entryTypeIcon = {
+  EntryType.credential: '🔑',
+  EntryType.document: '📄',
+  EntryType.address: '🏠',
+  EntryType.creditCard: '💳',
+};
+
+// Fase 15.3 — indexa o campo certo por tipo, mirror de entrySearchText do
+// Desktop (VaultManagement.tsx). Sem isso, filtrar por texto nunca encontraria
+// nenhuma entrada de documento/endereço/cartão (site/username ficam vazios
+// nesses tipos).
+String _entrySearchText(VaultEntry e) => switch (e.type) {
+      EntryType.credential => '${e.site} ${e.username}',
+      EntryType.document =>
+        '${e.document?.name ?? ''} ${e.document?.fileName ?? ''}',
+      EntryType.address =>
+        '${e.address?.label ?? ''} ${e.address?.city ?? ''} ${e.address?.fullName ?? ''}',
+      EntryType.creditCard => '${e.creditCard?.label ?? ''} ${e.creditCard?.bank ?? ''}',
+    };
+
 // Leitura + escrita do Vault no mobile — 13.8 trouxe a leitura, a Sessão 97
 // trouxe criar/editar/apagar senha e publicar, condicionado a canWriteVault
 // (concedido só pelo Desktop, ver project/INDEX.md). O conteúdo real vem do
@@ -247,8 +267,7 @@ class _VaultScreenState extends State<VaultScreen> {
     final q = _query.toLowerCase();
     return _sortedEntries
         .where((e) =>
-            e.site.toLowerCase().contains(q) ||
-            e.username.toLowerCase().contains(q) ||
+            _entrySearchText(e).toLowerCase().contains(q) ||
             e.profiles.any((p) => p.toLowerCase().contains(q)))
         .toList();
   }
@@ -543,6 +562,44 @@ class _VaultEntryCard extends StatelessWidget {
     required this.onToggleFavorite,
   });
 
+  String get _title => switch (entry.type) {
+        EntryType.credential => entry.site,
+        EntryType.document => entry.document?.name ?? 'Document',
+        EntryType.address => entry.address?.label ?? 'Address',
+        EntryType.creditCard => entry.creditCard?.label ?? 'Card',
+      };
+
+  String _formatBytes(int n) {
+    if (n < 1024) return '$n B';
+    if (n < 1024 * 1024) return '${(n / 1024).toStringAsFixed(1)} KB';
+    return '${(n / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  Widget _buildSubtitleText() {
+    final style = const TextStyle(color: AppColors.textMuted);
+    return switch (entry.type) {
+      EntryType.credential => Text(entry.username, style: style),
+      EntryType.document => Text(
+          entry.document == null
+              ? ''
+              : '${entry.document!.fileName} · ${_formatBytes(entry.document!.fileSizeBytes)} · ${entry.document!.mimeType}',
+          style: style,
+        ),
+      EntryType.address => Text(
+          entry.address == null
+              ? ''
+              : '${entry.address!.street}, ${entry.address!.number} · ${entry.address!.city}/${entry.address!.state} · ${entry.address!.zipCode}',
+          style: style,
+        ),
+      EntryType.creditCard => Text(
+          entry.creditCard == null
+              ? ''
+              : '${entry.creditCard!.cardNetwork.name} •••• ${entry.creditCard!.cardNumber.length >= 4 ? entry.creditCard!.cardNumber.substring(entry.creditCard!.cardNumber.length - 4) : entry.creditCard!.cardNumber} · ${entry.creditCard!.expiryMonth}/${entry.creditCard!.expiryYear}',
+          style: style,
+        ),
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     return Card(
@@ -557,13 +614,24 @@ class _VaultEntryCard extends StatelessWidget {
               : 'Add to favorites',
           onPressed: canWrite ? onToggleFavorite : null,
         ),
-        title: Text(entry.site,
-            style: const TextStyle(fontWeight: FontWeight.w600)),
+        // Ícone de tipo e título ficam em Text widgets separados (não
+        // concatenados numa string só) — testes existentes fazem
+        // find.text('example.com') com match exato.
+        title: Row(
+          children: [
+            Text(_entryTypeIcon[entry.type] ?? '', style: const TextStyle(fontSize: 14)),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(_title,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis),
+            ),
+          ],
+        ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(entry.username,
-                style: const TextStyle(color: AppColors.textMuted)),
+            _buildSubtitleText(),
             if (entry.profiles.isNotEmpty) ...[
               const SizedBox(height: 4),
               Wrap(
@@ -580,11 +648,14 @@ class _VaultEntryCard extends StatelessWidget {
           ],
         ),
         // Placeholder fixo, não derivado do tamanho real da senha — evita
-        // vazar o comprimento da senha na lista.
-        trailing: const Text(
-          '••••••••',
-          style: TextStyle(color: AppColors.textMuted, letterSpacing: 2),
-        ),
+        // vazar o comprimento da senha na lista. Só faz sentido pra
+        // credential (os outros tipos não têm "senha").
+        trailing: entry.type == EntryType.credential
+            ? const Text(
+                '••••••••',
+                style: TextStyle(color: AppColors.textMuted, letterSpacing: 2),
+              )
+            : null,
       ),
     );
   }

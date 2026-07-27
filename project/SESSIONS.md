@@ -6463,3 +6463,69 @@ desbloquear a wallet via Ledger físico, mesma limitação de hardware já regis
 **Documentação**: `PHASE.md` — etapa 15.2 marcada concluída. `PENDING.md` — P8 atualizado (15.1 e
 15.2 concluídas, 15.3-15.8 restantes).
 
+### Sessão 169 — 2026-07-26: Fase 15.3 — CRUD Mobile pros 3 tipos novos do Vault
+
+Continuação direta da 15.2 (Desktop), na mesma sessão. `/plan` rodado antes de codar — um agente
+Plan recebeu o contexto completo do que a 15.2 tinha acabado de implementar (arquivos, decisões,
+o bug achado) e devolveu um plano detalhado, revisado contra os 5 arquivos relevantes já lidos
+(`vault_repository.dart`, `vault_entry_form_screen.dart`, `vault_screen.dart`,
+`vault_entry_detail_screen.dart`, `vault_backup_screen.dart` como referência de I/O de arquivo)
+antes de aprovar.
+
+**Achado real do 15.2 corrigido proativamente aqui**: no Desktop, trocar o `type` de uma entrada
+existente durante a edição exigia zerar explicitamente os outros 2 grupos no payload — um switch
+com 4 branches, cada um tendo que lembrar de zerar os outros 2 (e um deles esqueceu na primeira
+versão, achado só depois via `tsc`). No Mobile, o mesmo problema foi resolvido **estruturalmente**
+em vez de só coberto por teste: um único getter `_dataGroups` em `vault_entry_form_screen.dart`
+monta os 3 grupos opcionais de uma vez (`({DocumentData? document, AddressData? address,
+CreditCardData? creditCard})`, record type do Dart 3), só o do `_type` ativo fica não-nulo, e
+`_save()` tem um único call site que sempre espalha os 3 campos — não existe nenhum branch que só
+devolva o grupo novo sem tocar nos outros 2, então esquecer de zerar um grupo deixou de ser
+possível de escrever por engano.
+
+**Achado de arquitetura, também aqui**: diferente do Desktop (onde o Rust por trás do comando
+Tauri `vault_upsert_entry` sempre validou tipo/grupo via `Vault::upsert`), o **Mobile nunca teve
+nenhuma camada de validação desse invariante** — `VaultRepository` lê/escreve o arquivo cifrado
+local direto, sem nenhuma chamada Rust nesse caminho. Novo `VaultEntry.validate()` (mirror exato
+do Rust) chamado no início de `addEntry`/`updateEntry`, antes de qualquer leitura/gravação — a
+única rede de segurança que o Mobile tem contra essa classe de bug, e o teste de regressão mais
+importante desta sessão prova que ela pega exatamente o cenário do bug do Desktop (criar uma
+entrada `document`, chamar `updateEntry(entry.copyWith(type: address, address: ...))` sem passar
+`document: null`, esperar `throwsException`).
+
+**Por tela**:
+- `vault_repository.dart`: `addEntry` ganhou params opcionais (`type`, `document`, `address`,
+  `creditCard`) — aditivo, `vault_edit_approval_screen.dart` (único outro call site, só cria
+  credenciais) não precisou de nenhuma mudança.
+- `vault_entry_form_screen.dart`: seletor de tipo (`ChoiceChip` — 🔑/📄/🏠/💳), 3 blocos de campo
+  condicionais, upload de documento via `FilePicker.platform.pickFiles(withData: true)` (mesmo
+  padrão já usado por `vault_backup_screen.dart`) + `base64Encode` nativo do `dart:convert` (sem
+  precisar de helper próprio, diferente do TS que precisou de um por causa do `btoa`) + limite de
+  10MB (mesmo valor do Desktop) + MIME adivinhado por extensão. `_canSaveForm` vira type-aware,
+  TOTP/Passkey ficam exclusivos de `credential`.
+- `vault_screen.dart`: `_VaultEntryCard` ganhou ícone+título+subtítulo por tipo — ícone e título
+  ficam em `Text` widgets **separados** de propósito (não concatenados numa string só), porque
+  `vault_screen_test.dart` já fazia `find.text('example.com')` com match exato, que quebraria se o
+  ícone fosse prefixado no mesmo `Text`. Busca (`_entrySearchText`) passou a indexar o campo certo
+  por tipo.
+- `vault_entry_detail_screen.dart`: `_title` getter por tipo substitui `entry.site` hardcoded no
+  AppBar e no diálogo de exclusão; bloco credential original envolvido em
+  `if (entry.type == EntryType.credential)` sem nenhuma mudança de conteúdo (preserva
+  `vault_entry_detail_screen_test.dart` sem edição); blocos novos pra documento (botão "Save to
+  device" via `FilePicker.platform.saveFile(type: FileType.any, bytes: ...)`), endereço (`InfoRow`s
+  simples) e cartão (reaproveita `_CopyableRow`, já genérico, pro número/CVV mascarados — mesmo
+  padrão da senha).
+
+**Testes**: `flutter test` 429/429 (14 novos — 5 de `VaultEntry.validate()` isolado, 6 de CRUD via
+`VaultRepository`, 3 num `vault_entry_form_screen_test.dart` novo, que não existia antes, mesma
+situação do `EntryForm` do Desktop). `flutter analyze` limpo. Achado no caminho, no próprio teste
+de regressão: o primeiro `tester.tap()` no botão Salvar falhou com "would not hit test" — o
+formulário cresceu o suficiente pra sair da área visível do `SingleChildScrollView`, corrigido com
+`tester.ensureVisible()` antes do tap (não é bug de produto, só do teste). `vault_screen_test.dart`
+e `vault_entry_detail_screen_test.dart` passaram sem nenhuma edição, confirmando a previsão do
+plano. **Não validado com clique real** — mesma limitação de hardware (Ledger/pareamento) já
+registrada em P3-P7 e nas 15.1/15.2.
+
+**Documentação**: `PHASE.md` — etapa 15.3 marcada concluída. `PENDING.md` — P8 atualizado (15.1,
+15.2 e 15.3 concluídas, 15.4-15.8 restantes).
+

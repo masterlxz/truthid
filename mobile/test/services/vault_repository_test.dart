@@ -823,4 +823,190 @@ void main() {
       expect(cleared.document, isNull);
     });
   });
+
+  group('VaultEntry.validate() (Fase 15.3 safety net)', () {
+    VaultEntry credentialEntry() => VaultEntry(
+          id: '1',
+          site: 'github.com',
+          url: '',
+          username: 'fab',
+          password: 'x',
+          notes: '',
+          createdAt: DateTime.now().toUtc(),
+          updatedAt: DateTime.now().toUtc(),
+        );
+
+    const document = DocumentData(
+      name: 'RG',
+      fileName: 'rg.pdf',
+      fileData: 'base64-fake-content',
+      fileSizeBytes: 12345,
+      mimeType: 'application/pdf',
+    );
+    const address = AddressData(
+      label: 'Casa',
+      fullName: 'Fabio Junior',
+      street: 'Rua X',
+      number: '123',
+      neighborhood: 'Centro',
+      city: 'São Paulo',
+      state: 'SP',
+      zipCode: '01000-000',
+      country: 'BR',
+    );
+    const creditCard = CreditCardData(
+      label: 'Nubank',
+      cardHolderName: 'Fabio Junior',
+      cardNumber: '4111111111111111',
+      expiryMonth: '12',
+      expiryYear: '2030',
+      cvv: '123',
+      cardNetwork: CardNetwork.visa,
+    );
+
+    test('credential with no data group is valid', () {
+      expect(() => credentialEntry().validate(), returnsNormally);
+    });
+
+    test('document with only the document group is valid', () {
+      final entry = credentialEntry().copyWith(type: EntryType.document, document: document);
+      expect(() => entry.validate(), returnsNormally);
+    });
+
+    test('credential with a document group set is invalid', () {
+      final entry = credentialEntry().copyWith(document: document);
+      expect(() => entry.validate(), throwsException);
+    });
+
+    test('document type without its data group is invalid', () {
+      final entry = credentialEntry().copyWith(type: EntryType.document);
+      expect(() => entry.validate(), throwsException);
+    });
+
+    test('address type carrying a leftover creditCard group is invalid', () {
+      final entry = credentialEntry().copyWith(
+        type: EntryType.address,
+        address: address,
+        creditCard: creditCard,
+      );
+      expect(() => entry.validate(), throwsException);
+    });
+  });
+
+  group('VaultRepository Fase 15.3 (CRUD dos tipos novos + validate())', () {
+    const document = DocumentData(
+      name: 'RG',
+      fileName: 'rg.pdf',
+      fileData: 'base64-fake-content',
+      fileSizeBytes: 12345,
+      mimeType: 'application/pdf',
+    );
+    const address = AddressData(
+      label: 'Casa',
+      fullName: 'Fabio Junior',
+      street: 'Rua X',
+      number: '123',
+      neighborhood: 'Centro',
+      city: 'São Paulo',
+      state: 'SP',
+      zipCode: '01000-000',
+      country: 'BR',
+    );
+    const creditCard = CreditCardData(
+      label: 'Nubank',
+      cardHolderName: 'Fabio Junior',
+      cardNumber: '4111111111111111',
+      expiryMonth: '12',
+      expiryYear: '2030',
+      cvv: '123',
+      cardNetwork: CardNetwork.visa,
+    );
+
+    test('addEntry persists a document entry and round-trips via listEntries', () async {
+      await repo.addEntry(
+        site: '', username: '', password: '',
+        type: EntryType.document, document: document,
+      );
+
+      final entries = await repo.listEntries();
+      expect(entries, hasLength(1));
+      expect(entries.single.type, EntryType.document);
+      expect(entries.single.document?.name, 'RG');
+      expect(entries.single.address, isNull);
+      expect(entries.single.creditCard, isNull);
+    });
+
+    test('addEntry persists an address entry and round-trips via listEntries', () async {
+      await repo.addEntry(
+        site: '', username: '', password: '',
+        type: EntryType.address, address: address,
+      );
+
+      final entries = await repo.listEntries();
+      expect(entries.single.type, EntryType.address);
+      expect(entries.single.address?.city, 'São Paulo');
+    });
+
+    test('addEntry persists a credit card entry and round-trips via listEntries', () async {
+      await repo.addEntry(
+        site: '', username: '', password: '',
+        type: EntryType.creditCard, creditCard: creditCard,
+      );
+
+      final entries = await repo.listEntries();
+      expect(entries.single.type, EntryType.creditCard);
+      expect(entries.single.creditCard?.cardNumber, '4111111111111111');
+    });
+
+    test('addEntry rejects a type/data-group mismatch and does not bump version', () async {
+      final before = await repo.currentVersion();
+
+      await expectLater(
+        repo.addEntry(site: '', username: '', password: '', type: EntryType.document),
+        throwsException,
+      );
+
+      expect(await repo.currentVersion(), before);
+      expect(await repo.listEntries(), isEmpty);
+    });
+
+    test(
+      'updateEntry rejects switching type without clearing the old data group '
+      '(regression: the exact bug found on Desktop in 15.2)',
+      () async {
+        final doc = await repo.addEntry(
+          site: '', username: '', password: '',
+          type: EntryType.document, document: document,
+        );
+        final beforeVersion = await repo.currentVersion();
+
+        // Troca pra "address" mas esquece de zerar `document` — exatamente o
+        // bug achado no Desktop (VaultManagement.tsx) durante a 15.2, quando
+        // `buildEntryPayload` não zerava explicitamente os outros grupos.
+        await expectLater(
+          repo.updateEntry(doc.copyWith(type: EntryType.address, address: address)),
+          throwsException,
+        );
+
+        expect(await repo.currentVersion(), beforeVersion);
+      },
+    );
+
+    test('updateEntry accepts switching type when the old data group is explicitly cleared', () async {
+      final doc = await repo.addEntry(
+        site: '', username: '', password: '',
+        type: EntryType.document, document: document,
+      );
+
+      final updated = await repo.updateEntry(doc.copyWith(
+        type: EntryType.address,
+        document: null,
+        address: address,
+      ));
+
+      expect(updated.type, EntryType.address);
+      expect(updated.document, isNull);
+      expect(updated.address?.city, 'São Paulo');
+    });
+  });
 }

@@ -409,6 +409,29 @@ class VaultEntry {
         createdAt: createdAt,
         updatedAt: DateTime.now().toUtc(),
       );
+
+  /// Mirror de `VaultEntry::validate` (desktop/src-tauri/src/vault.rs) — o
+  /// Mobile não tem nenhuma outra camada de validação desse invariante
+  /// (VaultRepository lê/escreve o arquivo cifrado local direto, sem chamada
+  /// Rust nesse caminho), então este é o único ponto que impede uma entrada
+  /// com `type` e grupo de dados inconsistentes de ser persistida.
+  void validate() {
+    final hasDocument = document != null;
+    final hasAddress = address != null;
+    final hasCreditCard = creditCard != null;
+    final ok = switch (type) {
+      EntryType.credential => !hasDocument && !hasAddress && !hasCreditCard,
+      EntryType.document => hasDocument && !hasAddress && !hasCreditCard,
+      EntryType.address => !hasDocument && hasAddress && !hasCreditCard,
+      EntryType.creditCard => !hasDocument && !hasAddress && hasCreditCard,
+    };
+    if (!ok) {
+      throw Exception(
+        "vault entry type ${type.toJson()} doesn't match its data groups "
+        '(document=$hasDocument, address=$hasAddress, creditCard=$hasCreditCard)',
+      );
+    }
+  }
 }
 
 /// Permissão de escrita de um device no vault (`pubKey` = endereço do device).
@@ -620,6 +643,10 @@ class VaultRepository {
     List<String> profiles = const [],
     String? totpSecret,
     Passkey? passkey,
+    EntryType type = EntryType.credential,
+    DocumentData? document,
+    AddressData? address,
+    CreditCardData? creditCard,
   }) async {
     final data = await _load();
     final now = DateTime.now().toUtc();
@@ -633,9 +660,14 @@ class VaultRepository {
       profiles: profiles,
       totpSecret: totpSecret,
       passkey: passkey,
+      type: type,
+      document: document,
+      address: address,
+      creditCard: creditCard,
       createdAt: now,
       updatedAt: now,
     );
+    entry.validate();
     await _save(_VaultData(
       version: data.version + 1,
       entries: [...data.entries, entry],
@@ -646,6 +678,7 @@ class VaultRepository {
   }
 
   Future<VaultEntry> updateEntry(VaultEntry entry) async {
+    entry.validate();
     final data = await _load();
     if (!data.entries.any((e) => e.id == entry.id)) {
       throw Exception('Vault entry not found: ${entry.id}');
