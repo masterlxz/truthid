@@ -6413,3 +6413,53 @@ de antes da Fase 15, não só round-trips sintéticos.
 **Documentação**: `PHASE.md` — etapa 15.1 marcada concluída, status da Fase 15 passou de "não
 iniciada" pra "em andamento". `PENDING.md` — P8 atualizado (15.1 concluída, 15.2-15.8 restantes).
 
+### Sessão 168 — 2026-07-26: Fase 15.2 — CRUD Desktop pros 3 tipos novos do Vault
+
+Continuação direta da 15.1 (schema já fechado na sessão anterior). Escopo já vinha 100%
+especificado em `PHASE.md` (etapa 15.2: "CRUD Desktop... Seção de documentos"), sem necessidade de
+`/plan` novo.
+
+**`EntryForm` (`VaultManagement.tsx`) ganhou um seletor de tipo** (🔑 Senha / 📄 Documento / 🏠
+Endereço / 💳 Cartão) no topo do formulário, com os campos de cada tipo renderizados
+condicionalmente — os campos compartilhados entre todos (Notas, Grupos/perfis) continuam únicos,
+fora do bloco condicional. TOTP e Passkey seguem exclusivos de `credential` (não fazem sentido pros
+outros 3 tipos). Documento usa upload de arquivo real: `readFile` (já importado, usado antes só
+pelo scanner de QR do TOTP) + `bytesToBase64` (helper já existente em `utils/base64.ts`, extraído
+na Sessão 146) para o conteúdo, limite de 10MB validado no cliente (sugestão do próprio `PHASE.md`
+15.7), MIME adivinhado por extensão (mapa fixo, sem depender de nenhuma lib nova). Endereço e
+cartão são formulários de campo comum, sem nada especial.
+
+**Achado real no caminho, antes de rodar `tsc`**: a primeira versão do JSX ficou com uma tag de
+fragmento (`</>`) faltando — o bloco `{form.type === "credential" && (<>...`) que envolve
+TOTP+Passkey precisava fechar antes da `<div className="actions-row">` compartilhada (Salvar/
+Cancelar), e a edição inicial só ajustou o conteúdo *antes* do texto "Recriar" (ponto de ancoragem
+do `Edit`), deixando a estrutura de fechamento original intacta e desalinhada com a nova abertura.
+`npx tsc --noEmit` pegou isso imediatamente (efeito cascata de ~150 erros a partir de uma única tag
+não fechada) — corrigido fechando o fragmento e a `<div>` da Passkey no lugar certo.
+
+**Achado de arquitetura, também no caminho**: trocar o `type` durante a edição de uma entrada
+existente (ex: uma entrada `document` virando `address`) exigia zerar explicitamente os 3 grupos
+opcionais (`document`/`address`/`credit_card`) no payload enviado — só *omitir* o campo do objeto
+não bastava, porque `handleEdit` monta `{ ...original, ...payload }`, e um `payload` que não
+menciona `document` deixa o `document` antigo de `original` sobrevivendo no merge. Isso violaria
+`Vault::validate()` no Rust (tipo e grupo de dados inconsistentes), rejeitado pelo backend. Corrigido
+com `buildEntryPayload()`: sempre define os 3 grupos como `undefined` explicitamente e só depois
+preenche o grupo correspondente ao tipo ativo — `undefined` é removido pelo `JSON.stringify` que o
+`invoke()` do Tauri faz por baixo dos panos, então o Rust recebe a chave ausente e aplica o
+`#[serde(default)]` (`None`), exatamente como se o campo nunca tivesse existido.
+
+**Lista de entradas**: cada card agora renderiza título/subtítulo por tipo (ícone + nome do
+documento + tamanho/MIME + botão "💾 Baixar" via `save()` (dialog) + `writeFile`, ou rua/número/
+cidade pro endereço, ou bandeira + últimos 4 dígitos do cartão + validade). A busca
+(`entrySearchText()`) passou a indexar os campos certos por tipo em vez de só `site`/`username` —
+sem isso, filtrar por texto não encontraria nenhuma entrada de documento/endereço/cartão.
+
+**Testes**: `npx tsc --noEmit` limpo, `npx vitest run` 101/101 (inalterado — `VaultManagement.tsx`
+nunca teve suíte própria, mesma situação já registrada na Fase 15.1 e em sessões anteriores),
+`npm run build` (Vite) limpo. **Não validado com clique real** — abrir a tela do Vault exige
+desbloquear a wallet via Ledger físico, mesma limitação de hardware já registrada em P3-P7 e na
+15.1.
+
+**Documentação**: `PHASE.md` — etapa 15.2 marcada concluída. `PENDING.md` — P8 atualizado (15.1 e
+15.2 concluídas, 15.3-15.8 restantes).
+

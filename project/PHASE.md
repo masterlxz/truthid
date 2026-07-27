@@ -1051,7 +1051,22 @@ type VaultEntry = VaultEntryCredential | VaultEntryDocument
    Vault exige desbloquear a wallet (Ledger físico), indisponível nesta sessão automatizada; a
    prova de back-compat ficou pelos testes automatizados (deserialização de um JSON literal no
    formato antigo, sem nenhum dos 4 campos novos).
-2. **15.2 — CRUD Desktop**: UI para criar/editar/deletar endereços e cartões no `VaultManagement.tsx`. Seção de documentos (upload de arquivo, listagem, visualização).
+2. ~~**15.2 — CRUD Desktop**~~ — **concluída na Sessão 168** (2026-07-26): `EntryForm` em
+   `VaultManagement.tsx` ganhou um seletor de tipo (Senha/Documento/Endereço/Cartão) no topo,
+   grupos de campo condicionais por tipo (endereço e cartão como formulários normais; documento via
+   upload de arquivo — `readFile`/base64, limite de 10MB validado no cliente, MIME adivinhado pela
+   extensão), reusando os campos compartilhados (Notas/Grupos) entre os 4 tipos. Achado no caminho:
+   trocar o `type` durante a edição de uma entrada existente exigia zerar explicitamente os 3
+   grupos opcionais no payload (`document`/`address`/`credit_card`) — só omitir o campo não bastava
+   porque `{...original, ...payload}` preservava o grupo antigo, o que `Vault::validate()` (Rust)
+   rejeitaria (tipo e grupo de dados inconsistentes). `buildEntryPayload()` novo sempre zera os 3
+   explicitamente antes de preencher o grupo certo. Lista de entradas ganhou renderização por tipo
+   (ícone + título + subtítulo específico — nome do arquivo/tamanho pra documento com botão
+   "Baixar" via `save()`+`writeFile`, rua/cidade pra endereço, bandeira+últimos 4 dígitos+validade
+   pra cartão) e a busca (`entrySearchText()`) passou a indexar os campos certos por tipo em vez de
+   só site/username. `npx tsc --noEmit` limpo, `npx vitest run` 101/101 (sem teste dedicado — este
+   componente nunca teve suíte própria, mesma situação de sempre), `npm run build` (Vite) limpo.
+   **Não validado com clique real** — mesma limitação de hardware (Ledger) já registrada na 15.1.
 3. **15.3 — CRUD Mobile**: paridade no mobile (`vault_entry_form_screen.dart`). Upload de documento via câmera/galeria.
 4. **15.4 — Autofill browser (extensão)**: extensão detecta campos de endereço/cartão e pede ao device os dados específicos (mesmo padrão P2P da 13.9). Aprovação no device mostra o que será preenchido.
 5. **15.5 — Autofill SO Android**: implementar `AutofillService` (`android.app.service.AutofillService`). Lê vault local, filtra por tipo de campo, preenche.

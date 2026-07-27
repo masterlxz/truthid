@@ -1,13 +1,23 @@
 import { useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
-import { readFile } from "@tauri-apps/plugin-fs";
+import { open, save } from "@tauri-apps/plugin-dialog";
+import { readFile, writeFile } from "@tauri-apps/plugin-fs";
 import { useAccount, useReadContract, useReadContracts, useSignMessage } from "wagmi";
 import { hexToSignature } from "viem";
 import { useIdentity } from "../contexts/IdentityContext";
 import { useWalletModal } from "../contexts/WalletModalContext";
 import { DEVICE_REGISTRY_ADDRESS, DEVICE_REGISTRY_ABI } from "../config/contracts";
-import type { DeviceInfo, VaultEntry, DeviceVaultPermission, Passkey } from "../types";
+import type {
+  DeviceInfo,
+  VaultEntry,
+  DeviceVaultPermission,
+  Passkey,
+  EntryType,
+  DocumentData,
+  AddressData,
+  CreditCardData,
+  CardNetwork,
+} from "../types";
 import { VaultSettings } from "./VaultSettings";
 import { VaultBackup } from "./VaultBackup";
 import { useVaultPublish } from "../hooks/useVaultPublish";
@@ -21,6 +31,7 @@ import { generatePassword, type PasswordGeneratorOptions } from "../utils/passwo
 import { PasswordGeneratorModal } from "./PasswordGeneratorModal";
 import { passwordStrength, type PasswordStrengthScore } from "../utils/passwordStrength";
 import { VAULT_KEY_MESSAGE } from "../config/vaultKey";
+import { bytesToBase64, base64ToBytes } from "../utils/base64";
 
 interface VaultLoadAllResult {
   entries: VaultEntry[];
@@ -47,7 +58,41 @@ function truncate(s: string, n = 10) {
   return s.length > n * 2 + 3 ? `${s.slice(0, n)}…${s.slice(-n)}` : s;
 }
 
+type DocumentFormData = {
+  name: string;
+  file_name: string;
+  file_data: string;
+  file_size_bytes: number;
+  mime_type: string;
+};
+
+type AddressFormData = {
+  label: string;
+  full_name: string;
+  street: string;
+  number: string;
+  complement: string;
+  neighborhood: string;
+  city: string;
+  state: string;
+  zip_code: string;
+  country: string;
+  phone: string;
+};
+
+type CreditCardFormData = {
+  label: string;
+  card_holder_name: string;
+  card_number: string;
+  expiry_month: string;
+  expiry_year: string;
+  cvv: string;
+  bank: string;
+  card_network: CardNetwork;
+};
+
 type FormState = {
+  type: EntryType;
   site: string;
   url: string;
   username: string;
@@ -56,10 +101,157 @@ type FormState = {
   profiles: string[];
   totp_secret: string;
   passkey?: Passkey;
+  document: DocumentFormData;
+  address: AddressFormData;
+  credit_card: CreditCardFormData;
 };
 
-function emptyForm(): FormState {
-  return { site: "", url: "", username: "", password: "", notes: "", profiles: [], totp_secret: "" };
+const ENTRY_TYPE_OPTIONS: { value: EntryType; label: string; icon: string }[] = [
+  { value: "credential", label: "Senha", icon: "🔑" },
+  { value: "document", label: "Documento", icon: "📄" },
+  { value: "address", label: "Endereço", icon: "🏠" },
+  { value: "creditCard", label: "Cartão", icon: "💳" },
+];
+
+const ENTRY_TYPE_ICON: Record<EntryType, string> = {
+  credential: "🔑",
+  document: "📄",
+  address: "🏠",
+  creditCard: "💳",
+};
+
+const CARD_NETWORK_OPTIONS: CardNetwork[] = ["visa", "mastercard", "amex", "elo", "hipercard", "other"];
+
+const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024; // 10MB — ver project/PHASE.md, Fase 15.7
+
+function emptyDocument(): DocumentFormData {
+  return { name: "", file_name: "", file_data: "", file_size_bytes: 0, mime_type: "" };
+}
+
+function emptyAddress(): AddressFormData {
+  return { label: "", full_name: "", street: "", number: "", complement: "", neighborhood: "", city: "", state: "", zip_code: "", country: "", phone: "" };
+}
+
+function emptyCreditCard(): CreditCardFormData {
+  return { label: "", card_holder_name: "", card_number: "", expiry_month: "", expiry_year: "", cvv: "", bank: "", card_network: "visa" };
+}
+
+function emptyForm(type: EntryType = "credential"): FormState {
+  return {
+    type,
+    site: "", url: "", username: "", password: "", notes: "", profiles: [], totp_secret: "",
+    document: emptyDocument(),
+    address: emptyAddress(),
+    credit_card: emptyCreditCard(),
+  };
+}
+
+/** Reconstrói o FormState a partir de uma entrada existente (edição) — os
+ * grupos que não correspondem ao `type` da entrada ficam vazios (não há
+ * dados pra preencher, já que `validate()` no Rust garante que só o grupo
+ * certo vem preenchido). */
+function formStateFromEntry(entry: VaultEntry): FormState {
+  return {
+    type: entry.type,
+    site: entry.site, url: entry.url, username: entry.username, password: entry.password,
+    notes: entry.notes, profiles: entry.profiles, totp_secret: entry.totp_secret ?? "", passkey: entry.passkey,
+    document: entry.document
+      ? { name: entry.document.name, file_name: entry.document.file_name, file_data: entry.document.file_data, file_size_bytes: entry.document.file_size_bytes, mime_type: entry.document.mime_type }
+      : emptyDocument(),
+    address: entry.address
+      ? { ...entry.address, complement: entry.address.complement ?? "", phone: entry.address.phone ?? "" }
+      : emptyAddress(),
+    credit_card: entry.credit_card
+      ? { ...entry.credit_card, bank: entry.credit_card.bank ?? "" }
+      : emptyCreditCard(),
+  };
+}
+
+/** Monta o payload pra `vault_upsert_entry` — sempre zera os 3 grupos opcionais
+ * explicitamente (em vez de só omitir o que não se aplica) porque, em modo de
+ * edição, `{...original, ...payload}` precisa sobrescrever um grupo antigo
+ * deixado por um `type` anterior (senão `Vault::validate` rejeita a
+ * inconsistência tipo+grupo). */
+function buildEntryPayload(form: FormState): Partial<VaultEntry> {
+  const base = {
+    type: form.type,
+    notes: form.notes,
+    profiles: form.profiles,
+    document: undefined as DocumentData | undefined,
+    address: undefined as AddressData | undefined,
+    credit_card: undefined as CreditCardData | undefined,
+  };
+  switch (form.type) {
+    case "document":
+      return { ...base, site: "", url: "", username: "", password: "", totp_secret: undefined, passkey: undefined, document: { ...form.document } };
+    case "address":
+      return {
+        ...base, site: "", url: "", username: "", password: "", totp_secret: undefined, passkey: undefined,
+        address: { ...form.address, complement: form.address.complement.trim() || undefined, phone: form.address.phone.trim() || undefined },
+      };
+    case "creditCard":
+      return {
+        ...base, site: "", url: "", username: "", password: "", totp_secret: undefined, passkey: undefined,
+        credit_card: { ...form.credit_card, bank: form.credit_card.bank.trim() || undefined },
+      };
+    case "credential":
+    default:
+      return {
+        ...base, site: form.site, url: form.url, username: form.username, password: form.password,
+        totp_secret: form.totp_secret.trim() || undefined, passkey: form.passkey,
+      };
+  }
+}
+
+function canSaveForm(form: FormState): boolean {
+  switch (form.type) {
+    case "document":
+      return !!form.document.name.trim() && !!form.document.file_data;
+    case "address": {
+      const a = form.address;
+      return !!a.label.trim() && !!a.full_name.trim() && !!a.street.trim() && !!a.number.trim()
+        && !!a.neighborhood.trim() && !!a.city.trim() && !!a.state.trim() && !!a.zip_code.trim() && !!a.country.trim();
+    }
+    case "creditCard": {
+      const c = form.credit_card;
+      return !!c.label.trim() && !!c.card_holder_name.trim() && !!c.card_number.trim()
+        && !!c.expiry_month.trim() && !!c.expiry_year.trim() && !!c.cvv.trim();
+    }
+    case "credential":
+    default:
+      return !!form.site.trim() && !!form.username.trim() && !!form.password.trim();
+  }
+}
+
+function formatBytes(n: number): string {
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+const MIME_BY_EXT: Record<string, string> = {
+  pdf: "application/pdf", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg",
+  gif: "image/gif", webp: "image/webp", bmp: "image/bmp", svg: "image/svg+xml",
+  txt: "text/plain", csv: "text/csv", json: "application/json",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  xls: "application/vnd.ms-excel",
+  xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+};
+
+function guessMimeType(fileName: string): string {
+  const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+  return MIME_BY_EXT[ext] ?? "application/octet-stream";
+}
+
+function entrySearchText(e: VaultEntry): string {
+  switch (e.type) {
+    case "document": return `${e.document?.name ?? ""} ${e.document?.file_name ?? ""}`;
+    case "address": return `${e.address?.label ?? ""} ${e.address?.city ?? ""} ${e.address?.full_name ?? ""}`;
+    case "creditCard": return `${e.credit_card?.label ?? ""} ${e.credit_card?.bank ?? ""}`;
+    case "credential":
+    default: return `${e.site} ${e.username}`;
+  }
 }
 
 /** Extrai um hostname pra usar como RP ID — tenta a URL, cai pro nome do site
@@ -181,9 +373,45 @@ function EntryForm({
   const [genPreview, setGenPreview] = useState("");
   const [genError, setGenError] = useState<string | null>(null);
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
+  const [docError, setDocError] = useState<string | null>(null);
 
   function set(field: keyof FormState, val: string | string[]) {
     setForm((f) => ({ ...f, [field]: val }));
+  }
+
+  function setDoc(field: keyof DocumentFormData, val: string) {
+    setForm((f) => ({ ...f, document: { ...f.document, [field]: val } }));
+  }
+
+  function setAddr(field: keyof AddressFormData, val: string) {
+    setForm((f) => ({ ...f, address: { ...f.address, [field]: val } }));
+  }
+
+  function setCard(field: keyof CreditCardFormData, val: string) {
+    setForm((f) => ({ ...f, credit_card: { ...f.credit_card, [field]: val } }));
+  }
+
+  async function handleUploadDocument() {
+    const path = await open({ multiple: false });
+    if (!path || Array.isArray(path)) return;
+    const bytes = await readFile(path);
+    if (bytes.byteLength > MAX_DOCUMENT_BYTES) {
+      setDocError(`Arquivo muito grande (${formatBytes(bytes.byteLength)}) — limite de ${formatBytes(MAX_DOCUMENT_BYTES)}.`);
+      return;
+    }
+    setDocError(null);
+    const fileName = path.split(/[\\/]/).pop() ?? path;
+    setForm((f) => ({
+      ...f,
+      document: {
+        ...f.document,
+        name: f.document.name || fileName,
+        file_name: fileName,
+        file_data: bytesToBase64(bytes),
+        file_size_bytes: bytes.byteLength,
+        mime_type: guessMimeType(fileName),
+      },
+    }));
   }
 
   function handleTotpChange(val: string) {
@@ -221,7 +449,7 @@ function EntryForm({
   }
 
   function handleSave() {
-    if (!form.totp_secret.trim()) { onSave(form); return; }
+    if (form.type !== "credential" || !form.totp_secret.trim()) { onSave(form); return; }
     try {
       onSave({ ...form, totp_secret: parseTotpSecret(form.totp_secret) });
     } catch (e) {
@@ -281,56 +509,191 @@ function EntryForm({
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
-        <div className="field">
-          <label>Site *</label>
-          <input value={form.site} onChange={(e) => set("site", e.target.value)} placeholder="ex: github.com" />
-        </div>
-        <div className="field">
-          <label>URL</label>
-          <input value={form.url} onChange={(e) => set("url", e.target.value)} placeholder="https://..." />
-        </div>
-        <div className="field">
-          <label>Usuário *</label>
-          <input value={form.username} onChange={(e) => set("username", e.target.value)} placeholder="@usuário ou email" />
-        </div>
-        <div className="field">
-          <label>Senha *</label>
-          <div style={{ display: "flex", gap: "0.4rem" }}>
-            <input
-              type={showPw ? "text" : "password"}
-              value={form.password}
-              onChange={(e) => set("password", e.target.value)}
-              placeholder="••••••••"
-              style={{ flex: 1 }}
-            />
-            <button type="button" onClick={() => setShowPw((v) => !v)} style={{ padding: "0.3em 0.6em", fontSize: "0.9em" }}>
-              {showPw ? "🙈" : "👁"}
-            </button>
-            <button
-              type="button"
-              onClick={() => (genOpen ? setGenOpen(false) : handleOpenGenerator())}
-              style={{ padding: "0.3em 0.6em", fontSize: "0.9em" }}
-              title="Gerar senha"
-            >
-              🎲
-            </button>
-          </div>
-          <StrengthMeter password={form.password} />
-        </div>
+      <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
+        {ENTRY_TYPE_OPTIONS.map((opt) => (
+          <button
+            key={opt.value}
+            type="button"
+            onClick={() => set("type", opt.value)}
+            style={{
+              padding: "0.3em 0.8em",
+              fontSize: "0.85em",
+              borderColor: form.type === opt.value ? "var(--color-accent)" : "var(--color-border)",
+              color: form.type === opt.value ? "var(--color-accent)" : "var(--color-text-muted)",
+              background: form.type === opt.value ? "rgba(77,208,225,0.1)" : "transparent",
+            }}
+          >
+            {opt.icon} {opt.label}
+          </button>
+        ))}
       </div>
-      {genOpen && (
-        <PasswordGeneratorModal
-          options={genOptions}
-          preview={genPreview}
-          error={genError}
-          onToggleCategory={handleToggleCategory}
-          onLengthChange={handleGenLengthChange}
-          onRegenerate={() => handleRegenerate(genOptions)}
-          onUse={handleUseGeneratedPassword}
-          onClose={() => setGenOpen(false)}
-        />
+
+      {form.type === "credential" && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
+            <div className="field">
+              <label>Site *</label>
+              <input value={form.site} onChange={(e) => set("site", e.target.value)} placeholder="ex: github.com" />
+            </div>
+            <div className="field">
+              <label>URL</label>
+              <input value={form.url} onChange={(e) => set("url", e.target.value)} placeholder="https://..." />
+            </div>
+            <div className="field">
+              <label>Usuário *</label>
+              <input value={form.username} onChange={(e) => set("username", e.target.value)} placeholder="@usuário ou email" />
+            </div>
+            <div className="field">
+              <label>Senha *</label>
+              <div style={{ display: "flex", gap: "0.4rem" }}>
+                <input
+                  type={showPw ? "text" : "password"}
+                  value={form.password}
+                  onChange={(e) => set("password", e.target.value)}
+                  placeholder="••••••••"
+                  style={{ flex: 1 }}
+                />
+                <button type="button" onClick={() => setShowPw((v) => !v)} style={{ padding: "0.3em 0.6em", fontSize: "0.9em" }}>
+                  {showPw ? "🙈" : "👁"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => (genOpen ? setGenOpen(false) : handleOpenGenerator())}
+                  style={{ padding: "0.3em 0.6em", fontSize: "0.9em" }}
+                  title="Gerar senha"
+                >
+                  🎲
+                </button>
+              </div>
+              <StrengthMeter password={form.password} />
+            </div>
+          </div>
+          {genOpen && (
+            <PasswordGeneratorModal
+              options={genOptions}
+              preview={genPreview}
+              error={genError}
+              onToggleCategory={handleToggleCategory}
+              onLengthChange={handleGenLengthChange}
+              onRegenerate={() => handleRegenerate(genOptions)}
+              onUse={handleUseGeneratedPassword}
+              onClose={() => setGenOpen(false)}
+            />
+          )}
+        </>
       )}
+
+      {form.type === "document" && (
+        <>
+          <div className="field">
+            <label>Nome *</label>
+            <input value={form.document.name} onChange={(e) => setDoc("name", e.target.value)} placeholder="ex: RG, CNH, Contrato..." />
+          </div>
+          <div className="field">
+            <label>Arquivo *</label>
+            <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+              <button type="button" onClick={handleUploadDocument} style={{ padding: "0.3em 0.8em", fontSize: "0.85em" }}>
+                📎 {form.document.file_name ? "Trocar arquivo" : "Escolher arquivo"}
+              </button>
+              {form.document.file_name && (
+                <span className="muted" style={{ fontSize: "0.85em" }}>
+                  {form.document.file_name} · {formatBytes(form.document.file_size_bytes)} · {form.document.mime_type}
+                </span>
+              )}
+            </div>
+            {docError && <p className="error-text" style={{ margin: "0.25em 0 0", fontSize: "0.82em" }}>{docError}</p>}
+          </div>
+        </>
+      )}
+
+      {form.type === "address" && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
+          <div className="field">
+            <label>Rótulo *</label>
+            <input value={form.address.label} onChange={(e) => setAddr("label", e.target.value)} placeholder="ex: Casa, Trabalho, Entrega" />
+          </div>
+          <div className="field">
+            <label>Nome completo *</label>
+            <input value={form.address.full_name} onChange={(e) => setAddr("full_name", e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Rua *</label>
+            <input value={form.address.street} onChange={(e) => setAddr("street", e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Número *</label>
+            <input value={form.address.number} onChange={(e) => setAddr("number", e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Complemento</label>
+            <input value={form.address.complement} onChange={(e) => setAddr("complement", e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Bairro *</label>
+            <input value={form.address.neighborhood} onChange={(e) => setAddr("neighborhood", e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Cidade *</label>
+            <input value={form.address.city} onChange={(e) => setAddr("city", e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Estado *</label>
+            <input value={form.address.state} onChange={(e) => setAddr("state", e.target.value)} />
+          </div>
+          <div className="field">
+            <label>CEP *</label>
+            <input value={form.address.zip_code} onChange={(e) => setAddr("zip_code", e.target.value)} />
+          </div>
+          <div className="field">
+            <label>País *</label>
+            <input value={form.address.country} onChange={(e) => setAddr("country", e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Telefone</label>
+            <input value={form.address.phone} onChange={(e) => setAddr("phone", e.target.value)} />
+          </div>
+        </div>
+      )}
+
+      {form.type === "creditCard" && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
+          <div className="field">
+            <label>Rótulo *</label>
+            <input value={form.credit_card.label} onChange={(e) => setCard("label", e.target.value)} placeholder="ex: Nubank, Itaú Platinum" />
+          </div>
+          <div className="field">
+            <label>Titular *</label>
+            <input value={form.credit_card.card_holder_name} onChange={(e) => setCard("card_holder_name", e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Número *</label>
+            <input value={form.credit_card.card_number} onChange={(e) => setCard("card_number", e.target.value)} placeholder="•••• •••• •••• ••••" />
+          </div>
+          <div className="field">
+            <label>Bandeira *</label>
+            <select value={form.credit_card.card_network} onChange={(e) => setCard("card_network", e.target.value)}>
+              {CARD_NETWORK_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </div>
+          <div className="field">
+            <label>Mês de validade *</label>
+            <input value={form.credit_card.expiry_month} onChange={(e) => setCard("expiry_month", e.target.value)} placeholder="MM" />
+          </div>
+          <div className="field">
+            <label>Ano de validade *</label>
+            <input value={form.credit_card.expiry_year} onChange={(e) => setCard("expiry_year", e.target.value)} placeholder="AAAA" />
+          </div>
+          <div className="field">
+            <label>CVV *</label>
+            <input value={form.credit_card.cvv} onChange={(e) => setCard("cvv", e.target.value)} placeholder="•••" />
+          </div>
+          <div className="field">
+            <label>Banco</label>
+            <input value={form.credit_card.bank} onChange={(e) => setCard("bank", e.target.value)} />
+          </div>
+        </div>
+      )}
+
       <div className="field">
         <label>Notas</label>
         <input value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="notas opcionais" />
@@ -339,58 +702,62 @@ function EntryForm({
         <label>Grupos</label>
         <ProfilePicker value={form.profiles} onChange={(v) => set("profiles", v)} options={profileOptions} />
       </div>
-      <div className="field">
-        <label>Segredo 2FA (opcional)</label>
-        <div style={{ display: "flex", gap: "0.4rem" }}>
-          <input
-            style={{ flex: 1 }}
-            value={form.totp_secret}
-            onChange={(e) => handleTotpChange(e.target.value)}
-            placeholder="Segredo base32 ou URI otpauth://..."
-          />
-          <button
-            type="button"
-            onClick={() => setQrScannerOpen(true)}
-            title="Escanear QR pela webcam"
-            style={{ padding: "0.2em 0.6em", fontSize: "0.9em" }}
-          >
-            📷
-          </button>
-          <button
-            type="button"
-            onClick={handleUploadQrImage}
-            title="Carregar QR de uma imagem"
-            style={{ padding: "0.2em 0.6em", fontSize: "0.9em" }}
-          >
-            🖼
-          </button>
-        </div>
-        {totpError && <p className="error-text" style={{ margin: "0.25em 0 0", fontSize: "0.82em" }}>{totpError}</p>}
-      </div>
-      {qrScannerOpen && (
-        <TotpQrScanner onDetected={handleQrDetected} onClose={() => setQrScannerOpen(false)} />
-      )}
-      <div className="field">
-        <label>Passkey (opcional)</label>
-        {form.passkey ? (
-          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
-            <span className="muted" style={{ fontSize: "0.85em" }}>
-              🔑 {form.passkey.rp_id}
-            </span>
-            <button type="button" onClick={handleGeneratePasskey} style={{ padding: "0.2em 0.6em", fontSize: "0.8em" }}>
-              Recriar
-            </button>
+      {form.type === "credential" && (
+        <>
+          <div className="field">
+            <label>Segredo 2FA (opcional)</label>
+            <div style={{ display: "flex", gap: "0.4rem" }}>
+              <input
+                style={{ flex: 1 }}
+                value={form.totp_secret}
+                onChange={(e) => handleTotpChange(e.target.value)}
+                placeholder="Segredo base32 ou URI otpauth://..."
+              />
+              <button
+                type="button"
+                onClick={() => setQrScannerOpen(true)}
+                title="Escanear QR pela webcam"
+                style={{ padding: "0.2em 0.6em", fontSize: "0.9em" }}
+              >
+                📷
+              </button>
+              <button
+                type="button"
+                onClick={handleUploadQrImage}
+                title="Carregar QR de uma imagem"
+                style={{ padding: "0.2em 0.6em", fontSize: "0.9em" }}
+              >
+                🖼
+              </button>
+            </div>
+            {totpError && <p className="error-text" style={{ margin: "0.25em 0 0", fontSize: "0.82em" }}>{totpError}</p>}
           </div>
-        ) : (
-          <button type="button" onClick={handleGeneratePasskey} style={{ padding: "0.3em 0.8em", fontSize: "0.85em", alignSelf: "flex-start" }}>
-            Gerar passkey
-          </button>
-        )}
-      </div>
+          {qrScannerOpen && (
+            <TotpQrScanner onDetected={handleQrDetected} onClose={() => setQrScannerOpen(false)} />
+          )}
+          <div className="field">
+            <label>Passkey (opcional)</label>
+            {form.passkey ? (
+              <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                <span className="muted" style={{ fontSize: "0.85em" }}>
+                  🔑 {form.passkey.rp_id}
+                </span>
+                <button type="button" onClick={handleGeneratePasskey} style={{ padding: "0.2em 0.6em", fontSize: "0.8em" }}>
+                  Recriar
+                </button>
+              </div>
+            ) : (
+              <button type="button" onClick={handleGeneratePasskey} style={{ padding: "0.3em 0.8em", fontSize: "0.85em", alignSelf: "flex-start" }}>
+                Gerar passkey
+              </button>
+            )}
+          </div>
+        </>
+      )}
       <div className="actions-row">
         <button
           onClick={handleSave}
-          disabled={saving || !form.site.trim() || !form.username.trim() || !form.password.trim() || !!totpError}
+          disabled={saving || !canSaveForm(form) || (form.type === "credential" && !!totpError)}
         >
           {saving ? "Salvando..." : "Salvar"}
         </button>
@@ -543,8 +910,8 @@ export function VaultManagement() {
     setMutating(true);
     setMutateError(null);
     try {
-      const entry: Partial<VaultEntry> = { ...form, id: "" };
-      await invoke<VaultEntry>("vault_upsert_entry", { entry: { ...entry, id: "", created_at: 0, updated_at: 0 } });
+      const entry: Partial<VaultEntry> = { ...buildEntryPayload(form), id: "", created_at: 0, updated_at: 0 };
+      await invoke<VaultEntry>("vault_upsert_entry", { entry });
       await loadAll();
       setAddOpen(false);
     } catch (e) {
@@ -560,7 +927,7 @@ export function VaultManagement() {
     setMutateError(null);
     try {
       await invoke<VaultEntry>("vault_upsert_entry", {
-        entry: { ...original, ...form },
+        entry: { ...original, ...buildEntryPayload(form) },
       });
       await loadAll();
       setEditingId(null);
@@ -582,6 +949,13 @@ export function VaultManagement() {
     } finally {
       setMutating(false);
     }
+  }
+
+  // ── Documentos: baixar pra um arquivo local ──────────────────────────────
+  async function handleDownloadDocument(doc: DocumentData) {
+    const path = await save({ defaultPath: doc.file_name });
+    if (!path) return;
+    await writeFile(path, base64ToBytes(doc.file_data));
   }
 
   // ── Favoritos ────────────────────────────────────────────────────────────
@@ -660,8 +1034,7 @@ export function VaultManagement() {
   const filtered = useMemo(
     () => filter.trim()
       ? sortedEntries.filter((e) =>
-          e.site.toLowerCase().includes(filter.toLowerCase()) ||
-          e.username.toLowerCase().includes(filter.toLowerCase()) ||
+          entrySearchText(e).toLowerCase().includes(filter.toLowerCase()) ||
           e.profiles.some((p) => p.toLowerCase().includes(filter.toLowerCase()))
         )
       : sortedEntries,
@@ -844,7 +1217,7 @@ export function VaultManagement() {
               return (
                 <div key={entry.id} className="card">
                   <EntryForm
-                    initial={{ site: entry.site, url: entry.url, username: entry.username, password: entry.password, notes: entry.notes, profiles: entry.profiles, totp_secret: entry.totp_secret ?? "", passkey: entry.passkey }}
+                    initial={formStateFromEntry(entry)}
                     onSave={(f) => handleEdit(entry.id, f)}
                     onCancel={() => setEditingId(null)}
                     saving={mutating}
@@ -874,26 +1247,63 @@ export function VaultManagement() {
                       >
                         {entry.favorite ? "★" : "☆"}
                       </button>
-                      <strong>{entry.site}</strong>
+                      <span style={{ fontSize: "0.9em" }}>{ENTRY_TYPE_ICON[entry.type]}</span>
+                      <strong>
+                        {entry.type === "document" ? (entry.document?.name ?? "Documento")
+                          : entry.type === "address" ? (entry.address?.label ?? "Endereço")
+                          : entry.type === "creditCard" ? (entry.credit_card?.label ?? "Cartão")
+                          : entry.site}
+                      </strong>
                       {entry.profiles.map((p) => (
                         <span key={p} className="status-badge" style={{ fontSize: "0.75em", padding: "0.15em 0.5em" }}>{p}</span>
                       ))}
                     </div>
-                    <div className="muted" style={{ fontSize: "0.87em", marginTop: "0.2rem" }}>
-                      {entry.username}
-                      {entry.url ? <> · <a href={entry.url} target="_blank" rel="noreferrer" style={{ fontSize: "0.9em" }}>{entry.url}</a></> : ""}
-                    </div>
-                    <div className="address" style={{ fontSize: "0.82em", color: "var(--color-text-muted)", marginTop: "0.15rem" }}>
-                      {maskPassword(entry.password)}
-                    </div>
-                    {entry.totp_secret && (
-                      <div style={{ marginTop: "0.3rem" }}>
-                        <TotpCode secret={entry.totp_secret} />
+
+                    {entry.type === "credential" && (
+                      <>
+                        <div className="muted" style={{ fontSize: "0.87em", marginTop: "0.2rem" }}>
+                          {entry.username}
+                          {entry.url ? <> · <a href={entry.url} target="_blank" rel="noreferrer" style={{ fontSize: "0.9em" }}>{entry.url}</a></> : ""}
+                        </div>
+                        <div className="address" style={{ fontSize: "0.82em", color: "var(--color-text-muted)", marginTop: "0.15rem" }}>
+                          {maskPassword(entry.password)}
+                        </div>
+                        {entry.totp_secret && (
+                          <div style={{ marginTop: "0.3rem" }}>
+                            <TotpCode secret={entry.totp_secret} />
+                          </div>
+                        )}
+                        {entry.passkey && (
+                          <div style={{ marginTop: "0.3rem" }}>
+                            <PasskeyBadge passkey={entry.passkey} />
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {entry.type === "document" && entry.document && (
+                      <div className="muted" style={{ fontSize: "0.87em", marginTop: "0.2rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        <span>{entry.document.file_name} · {formatBytes(entry.document.file_size_bytes)} · {entry.document.mime_type}</span>
+                        <button
+                          onClick={() => handleDownloadDocument(entry.document!)}
+                          style={{ padding: "0.2em 0.6em", fontSize: "0.82em" }}
+                        >
+                          💾 Baixar
+                        </button>
                       </div>
                     )}
-                    {entry.passkey && (
-                      <div style={{ marginTop: "0.3rem" }}>
-                        <PasskeyBadge passkey={entry.passkey} />
+
+                    {entry.type === "address" && entry.address && (
+                      <div className="muted" style={{ fontSize: "0.87em", marginTop: "0.2rem" }}>
+                        {entry.address.street}, {entry.address.number}
+                        {entry.address.complement ? ` (${entry.address.complement})` : ""} · {entry.address.city}/{entry.address.state} · {entry.address.zip_code}
+                      </div>
+                    )}
+
+                    {entry.type === "creditCard" && entry.credit_card && (
+                      <div className="muted" style={{ fontSize: "0.87em", marginTop: "0.2rem" }}>
+                        {entry.credit_card.card_network} •••• {entry.credit_card.card_number.slice(-4)} · {entry.credit_card.expiry_month}/{entry.credit_card.expiry_year}
+                        {entry.credit_card.bank ? ` · ${entry.credit_card.bank}` : ""}
                       </div>
                     )}
                   </div>
