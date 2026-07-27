@@ -1,3 +1,5 @@
+import { findAddressFieldGroups } from '../src/autofill/addressFieldDetection';
+import { attachAddressAutofillIcon } from '../src/autofill/addressOverlay';
 import { findLoginFieldPairs } from '../src/autofill/formDetection';
 import { attachNewCredentialCapture } from '../src/autofill/newCredentialCapture';
 import { attachAutofillIconIfMatches } from '../src/autofill/overlay';
@@ -17,6 +19,14 @@ export default defineContentScript({
       for (const { passwordField, usernameField } of findLoginFieldPairs(root)) {
         void attachAutofillIconIfMatches(passwordField, usernameField);
         attachNewCredentialCapture(passwordField, usernameField);
+      }
+
+      // Fase 15.4, fatia 1 — mesma varredura, mas por grupo de campos de
+      // endereço (autocomplete) em vez de par usuário/senha. Passada
+      // independente da de login: um formulário pode ter só endereço
+      // (checkout), só login, ou os dois.
+      for (const group of findAddressFieldGroups(root)) {
+        attachAddressAutofillIcon(group);
       }
     }
 

@@ -6529,3 +6529,97 @@ registrada em P3-P7 e nas 15.1/15.2.
 **Documentação**: `PHASE.md` — etapa 15.3 marcada concluída. `PENDING.md` — P8 atualizado (15.1,
 15.2 e 15.3 concluídas, 15.4-15.8 restantes).
 
+### Sessão 170 — 2026-07-27: Fase 15.4, fatia 1 — Autofill browser (endereço, LAN, só Mobile)
+
+Escopo negociado com o dono do projeto via `AskUserQuestion` antes de codar — 15.4 inteira (extensão
+detecta endereço/cartão, pede ao device, aprovação com escolha entre N entradas, Desktop e Mobile,
+LAN e dead-drop) era grande demais pra uma sessão só. Fatiado do mesmo jeito que a 13.9 já foi:
+**só endereço** (cartão de crédito fica pra fatia 2), **só transporte LAN** (dead-drop IPFS/IPNS
+fica pra fatia 2), **só Mobile** responde (Desktop, que seria loopback-only — mesmo padrão de
+`/pin`/`vault-edit` — fica pra uma fatia futura separada). `/plan` rodado com 2 agentes Explore em
+paralelo (extensão: transporte/protocolo P2P existente; Mobile/Desktop: telas de aprovação) mais
+leitura direta de arquivos-chave antes de fechar o plano.
+
+**Achado real confirmado por leitura direta, decisivo pro desenho**: `wxt.config.ts` não declara
+mais `system.network` no manifest (achado de uma sessão anterior, já sabido) — `chrome.system.network`
+está morto em todo navegador hoje, não só no Brave. A varredura automática de LAN já é, na
+prática, um no-op gracioso em produção; o **IP digitado manualmente** é o caminho real que
+funciona, mesmo padrão que os fluxos existentes (`vaultEdit`, leitura do vault) já assumem — a
+fatia 1 foi desenhada em cima dessa premissa em vez de investir na automação.
+
+**Achado real confirmado por leitura direta, sobre reuso de porta**: `lanDiscovery.ts::CANDIDATE_PORTS`
+(47850-54) está hardcoded dentro de `sweepLan` e é exclusivo do fluxo de leitura do vault da
+13.9 — a fatia usa `vaultEdit/lanDelivery.ts::MOBILE_CANDIDATE_PORTS` (48050-54), o bloco genérico
+que `RemoteSignerLanServer` (Mobile) já serve pra sign-message/sign-request/pin/vault-edit.
+`fetchSessionBlob(host, port, sessionId)` (`GET /session/<id>` → `{blob}`) já bate byte a byte com
+a rota que `RemoteSignerLanServer.serveOnce` serve — reaproveitado direto, só trocando a lista de
+portas (`extension/src/autofill/lanPull.ts`, novo).
+
+**Schema novo**: `AutofillAddressQrPayload` (`extension/src/session/qrPayload.ts`, terceiro tipo
+no arquivo, mesmo esqueleto de 5 campos de `VaultEditQrPayload`) — `{action: 'truthid-autofill-
+address', v: 1, sessionId, ephemeralPubKey, expiresAt, appName}`. Resposta cifrada via ECIES:
+`{status: 'filled', address: {...}} | {status: 'rejected'} | {status: 'no-addresses'}` — o
+terceiro status é novo em relação a sign-message/pin, dá uma mensagem específica em vez de um
+timeout ambíguo quando o celular não tem nenhum `EntryType.address` salvo.
+
+**Detecção de campo (extensão)**: `addressFieldDetection.ts` (novo) mirror estrutural de
+`formDetection.ts` — `findScope`/`isVisible` reaproveitados (ambos promovidos a exportados nesta
+sessão; `isVisible` era privada, `findScope` teve o parâmetro alargado de `HTMLInputElement` pra
+`HTMLElement`, mudança sem efeito colateral, já que nada ali dentro é específico de input).
+Classificação por token WHATWG de `autocomplete` (`street-address`, `address-line1/2`,
+`address-level1/2`, `postal-code`, `country`, `tel`, `name`) — sem token padrão pra "número"/
+"bairro" (não existem no vocabulário WHATWG), resolvido em `addressFill.ts` embutindo o número no
+campo de rua (`"{street}, {number}"`) e deixando bairro de fora do preenchimento nesta fatia
+(best-effort, documentado, não bloqueante). Achado no caminho, pego pelo próprio `vitest`: a
+propriedade IDL `.autocomplete` não é implementada pra `HTMLSelectElement` no jsdom (diferente de
+navegador real) — corrigido lendo `getAttribute('autocomplete')` em vez da propriedade, funciona
+nos dois ambientes.
+
+**UI (extensão)**: ícone Shadow-DOM ancorado ao grupo de campos (`addressOverlay.ts`, mesma
+técnica de `overlay.ts`), não `chrome.action.openPopup()` — decisão explícita: o popup abre no
+retângulo fixo da toolbar, longe do campo, quebrando a localidade que é o ponto central do
+autofill inline. Ao clicar, mostra QR + fallback de IP manual; toda a criptografia
+(`qrPayload.ts`, `crypto/ecies.ts`) roda direto no content script, sem depender de `chrome.*`.
+Estado de sessão (sessionId, par de chaves efêmero) guardado em variável de módulo dentro do
+próprio `addressOverlay.ts`, não `chrome.storage.session` — diferente da fila do vault-edit (que
+precisa sobreviver fechar/reabrir a popup), esta sessão só precisa viver enquanto o content script
+está vivo, evitando de vez a restrição do Brave com `chrome.storage.session` em content script.
+
+**`background.ts`** ganhou 3 canais novos (`AUTOFILL_ADDRESS_ENSURE_HOST_PERMISSION_MESSAGE`/
+`_SWEEP_MESSAGE`/`_MANUAL_FETCH_MESSAGE`) — mesmo motivo de sempre (`chrome.permissions`/
+`chrome.system.*` não são acessíveis direto de um content script). `chrome.permissions.request()`
+exige gesto do usuário e não há garantia de que um clique no ícone in-page preserve esse gesto até
+o background; se vier `false`, a overlay pede pra abrir o ícone da extensão uma vez (fluxo de
+concessão que já funciona hoje) em vez de um truque de propagação de gesto não validado —
+registrado como pendência de hardware (P30).
+
+**Mobile**: `mobile/lib/widgets/address_summary.dart` (novo) extrai `addressTitle`/
+`addressSubtitle` de `vault_screen.dart` (`_VaultEntryCard`, refactor puro, mesmas strings, zero
+mudança em `vault_screen_test.dart`). Nova `autofill_address_approval_screen.dart` — copiada/
+adaptada de `sign_message_approval_screen.dart` (mais simples que `pin_approval_screen.dart`
+como base, já que não há fase de *receber* conteúdo: o endereço já está no celular). Introduz um
+padrão inédito no projeto: nenhuma tela de aprovação anterior deixava o usuário escolher 1 de N
+itens salvos (todas mostram uma coisa fixa, ou — vault-edit — uma lista proposta pelo requisitante
+aprovada em lote). Novo enum `loadingAddresses → pickingAddress → confirming → sending →
+sent/timeout/error`; Reject disponível tanto no picker quanto na confirmação, sempre recusando o
+pedido inteiro (não só o endereço). Reaproveita `CrossDeviceDeliveryChannel`/`RemoteSignerLanServer`
+sem nenhuma mudança — decisão explícita de não bifurcar um canal "só LAN" próprio (a metade de
+dead-drop dessa classe simplesmente não importa nesta fatia, mas reescrever custaria mais do que
+economiza). `deep_link_router.dart` ganhou o branch `truthid-autofill-address`.
+
+**Testes**: extensão — `npx vitest run` 108/108 (14 novos: `qrPayload.test.ts`, que não tinha
+nenhum teste antes apesar de já hospedar 2 schemas; `lanPull.test.ts`; `addressFieldDetection.test.ts`).
+`npx tsc --noEmit`/`npm run build` limpos. Mobile — `flutter test` 444/444 (15 novos:
+`autofill_address_approval_screen_test.dart`, incluindo o "no-addresses" e o picker completo;
+1 novo em `deep_link_router_test.dart`; `address_summary_test.dart`). `flutter analyze` limpo.
+Achado no caminho, mesmo padrão da Sessão 169: o formulário de confirmação cresceu o suficiente
+pra o botão Approve/Reject sair da área visível — corrigido com `tester.ensureVisible()` antes do
+tap (teste, não produto).
+
+**Não validado em hardware real** — mesma limitação de todas as fatias cross-device anteriores
+(P3, P6, e agora P30): handshake LAN real entre extensão e celular físico, scan de QR ao vivo, e
+a pergunta em aberto sobre propagação de gesto de `chrome.permissions.request()`.
+
+**Documentação**: `PHASE.md` — etapa 15.4 ganhou nota de fatia 1 concluída, status geral da Fase
+15 atualizado. `PENDING.md` — P8 atualizado, novo P30 registrado.
+

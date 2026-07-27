@@ -13,6 +13,7 @@ import '../services/vault_publish_service.dart';
 import '../services/vault_repository.dart';
 import '../services/vault_sync_service.dart';
 import '../theme.dart';
+import '../widgets/address_summary.dart';
 import 'pinning_providers_screen.dart';
 import 'vault_backup_screen.dart';
 import 'vault_device_permissions_screen.dart';
@@ -565,7 +566,8 @@ class _VaultEntryCard extends StatelessWidget {
   String get _title => switch (entry.type) {
         EntryType.credential => entry.site,
         EntryType.document => entry.document?.name ?? 'Document',
-        EntryType.address => entry.address?.label ?? 'Address',
+        EntryType.address =>
+          entry.address == null ? 'Address' : addressTitle(entry.address!),
         EntryType.creditCard => entry.creditCard?.label ?? 'Card',
       };
 
@@ -586,9 +588,7 @@ class _VaultEntryCard extends StatelessWidget {
           style: style,
         ),
       EntryType.address => Text(
-          entry.address == null
-              ? ''
-              : '${entry.address!.street}, ${entry.address!.number} · ${entry.address!.city}/${entry.address!.state} · ${entry.address!.zipCode}',
+          entry.address == null ? '' : addressSubtitle(entry.address!),
           style: style,
         ),
       EntryType.creditCard => Text(

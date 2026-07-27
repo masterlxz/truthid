@@ -20,3 +20,11 @@ export const WEBAUTHN_SIGN_ASSERTION_MESSAGE = 'truthid-webauthn-sign-assertion'
 // motivo pelo qual GET_MATCHING_ENTRIES_MESSAGE já existe: "só o background
 // lê/escreve chrome.storage.session".
 export const VAULT_EDIT_ENQUEUE_MESSAGE = 'truthid-vault-edit-enqueue';
+
+// Fase 15.4, fatia 1 (autofill de endereço) — o content script não pode
+// chamar `chrome.permissions`/`chrome.system.*` direto, mesmo motivo de
+// `chrome.storage.session` acima: precisa passar pelo background.
+export const AUTOFILL_ADDRESS_ENSURE_HOST_PERMISSION_MESSAGE =
+  'truthid-autofill-address-ensure-host-permission';
+export const AUTOFILL_ADDRESS_SWEEP_MESSAGE = 'truthid-autofill-address-sweep';
+export const AUTOFILL_ADDRESS_MANUAL_FETCH_MESSAGE = 'truthid-autofill-address-manual-fetch';

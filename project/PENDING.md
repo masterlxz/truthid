@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-07-26 (Sessão 169 — P8/Fase 15: etapa 15.3 (CRUD Mobile) concluída)
+> Última atualização: 2026-07-27 (Sessão 170 — P8/Fase 15: etapa 15.4 fatia 1 (autofill de endereço, LAN, Mobile) concluída)
 
 ---
 
@@ -27,12 +27,13 @@
 | P5 | **Validação E2E real — assinatura via device key no Mainnet** — device key do Desktop nunca foi registrada on-chain. Falta configurar bundler + parear o Desktop como device. | `ROADMAP.md` (Vault genérico, fatia 1) | 🟠 Média |
 | P6 | **Revalidar decifra da vault key de pareamento (ECIES)** em hardware real — corrigido na Sessão 92 (SHA-256 do shared secret) + 99 (Mac.empty no Dart), mas nunca confirmado ao vivo no celular. | `PHASE.md` (Fase 13.9, pendências finais) | 🟠 Média |
 | P7 | **Diálogo de Local Network Privacy do iOS** — mitigação aplicada (timing), não validada em device real. | `PHASE.md` (Fase 13.9, pendências finais) | 🟡 Baixa |
+| P30 | **Validação E2E real — autofill de endereço (15.4, fatia 1)** — extensão carregada unpacked num formulário real (`autocomplete="street-address"` etc) + celular físico na mesma Wi-Fi: detecção do campo, QR, LAN (ou IP manual), picker no Mobile, preenchimento de volta no formulário. Também em aberto: se o gesto de clique no ícone in-page propaga até `chrome.permissions.request()` via `background.ts` (só confirmável em hardware real). | `PHASE.md` (Fase 15.4, fatia 1) | 🟠 Média |
 
 ### Funcionalidades Não Implementadas
 
 | ID | Item | Onde se originou | Prioridade |
 |---|---|---|---|
-| P8 | **Phase 15 — Digital Identity Vault** — documentos, endereços, cartões de crédito. 8 etapas planejadas. **15.1 (schema, Sessão 167), 15.2 (CRUD Desktop, Sessão 168) e 15.3 (CRUD Mobile, Sessão 169) concluídas** — faltam 15.4-15.8 (autofill browser/SO, documentos, revisão de segurança). | `PHASE.md` (Fase 15) | 🟠 Média |
+| P8 | **Phase 15 — Digital Identity Vault** — documentos, endereços, cartões de crédito. 8 etapas planejadas. **15.1 (schema, S167), 15.2 (CRUD Desktop, S168), 15.3 (CRUD Mobile, S169) e 15.4 fatia 1 (autofill de endereço, LAN, Mobile, S170) concluídas** — faltam 15.4 fatia 2 (cartão, dead-drop, Desktop), 15.5-15.8. | `PHASE.md` (Fase 15) | 🟠 Média |
 | P9 | **Phase 15 — Autofill SO (Android/iOS)** — implementar `AutofillService` e `ASCredentialProviderViewController`. | `PHASE.md` (Fase 15, etapas 15.5/15.6) | 🟠 Média |
 | P11 | **`/truthid/v1/pin`** — endpoint para apps terceiros usarem os providers de pin do TruthID. Modelo de consentimento em aberto. | `ROADMAP.md` (Sessão 106, item 2) | 🟡 Baixa |
 | P28 | **SDK Dart: transporte deep link no `TruthIDRequester`** — só cross-device (QR) implementado. Deep link (mesmo aparelho) exigiria o app host registrar seu próprio esquema de URI, específico de plataforma — decidido deixar de fora de um pacote Dart puro por ora. Reavaliado na Sessão 165: hoje nem o Mobile aceita deep link pra `pin`/`vault-edit` (só `sign-message`/`sign-request`), e um pacote Dart puro não consegue automatizar o registro de URI scheme do app hospedeiro nem depende de `url_launcher` — decisão confirmada, segue de fora. | `SESSIONS.md` (Sessão 161, reavaliado 165) | 🟡 Baixa |

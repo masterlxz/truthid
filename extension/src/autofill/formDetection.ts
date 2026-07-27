@@ -15,7 +15,9 @@ const processedPasswordFields = new WeakSet<HTMLInputElement>();
 // cobre o caso comum de campo escondido (`display:none`/`visibility:hidden`/
 // atributo `hidden`), só não pega truques mais elaborados de honeypot
 // (ex: `opacity:0` fora da tela), aceitável nesta primeira fatia.
-function isVisible(el: HTMLElement): boolean {
+// Exportada (Fase 15.4) — reutilizada por addressFieldDetection.ts, mesma
+// checagem de visibilidade serve pra qualquer tipo de campo, não só senha.
+export function isVisible(el: HTMLElement): boolean {
   if (el.hidden) return false;
   const style = getComputedStyle(el);
   return style.display !== 'none' && style.visibility !== 'hidden';
@@ -37,8 +39,12 @@ function looksLikeUsernameField(input: HTMLInputElement): boolean {
 // um container que já tenha pelo menos 2 campos de texto — bom o bastante
 // pra não precisar percorrer o documento inteiro.
 // Pública — reutilizada por newCredentialCapture.ts pra identificar o
-// formulário/escopo e evitar escutar o mesmo submit duas vezes.
-export function findScope(passwordField: HTMLInputElement): ParentNode {
+// formulário/escopo e evitar escutar o mesmo submit duas vezes. Parâmetro
+// tipado como `HTMLElement` (não `HTMLInputElement`) desde a Fase 15.4 —
+// nada aqui dentro é específico de campo de senha/input, e
+// `addressFieldDetection.ts` precisa chamar isto também a partir de
+// `<select>` (ex: campo de estado/país).
+export function findScope(passwordField: HTMLElement): ParentNode {
   const form = passwordField.closest('form');
   if (form) return form;
 

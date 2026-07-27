@@ -83,3 +83,40 @@ export function buildVaultEditQrPayload(
     appName: 'TruthID Extension',
   };
 }
+
+/**
+ * Schema v1 do QR de pedido de autofill de endereço (Fase 15.4, fatia 1 — só
+ * endereço, só transporte LAN). Mesmo esqueleto de 5 campos que
+ * `VaultEditQrPayload` já usa — a extensão é quem gera o par efêmero aqui
+ * (ela é a "requisitante", como no `/truthid/v1/pin`), o Device decifra a
+ * resposta com a chave pública anunciada e entrega via
+ * `RemoteSignerLanServer` (mesmo servidor genérico de sign-message/pin,
+ * portas 48050-48054 — não o bloco 47850-47854, que é exclusivo da leitura
+ * do vault da 13.9). Espelha a validação em
+ * `mobile/lib/screens/autofill_address_approval_screen.dart`.
+ */
+export interface AutofillAddressQrPayload {
+  action: 'truthid-autofill-address';
+  v: 1;
+  sessionId: string;
+  ephemeralPubKey: string; // 0x + 33 bytes SEC1 comprimido, hex
+  expiresAt: number; // unix ms, absoluto
+  appName: 'TruthID Extension';
+}
+
+export const AUTOFILL_ADDRESS_QR_TTL_MS = 3 * 60 * 1000;
+
+export function buildAutofillAddressQrPayload(
+  sessionId: string,
+  ephemeralPubKeyHex: string,
+  now: number = Date.now(),
+): AutofillAddressQrPayload {
+  return {
+    action: 'truthid-autofill-address',
+    v: 1,
+    sessionId,
+    ephemeralPubKey: ephemeralPubKeyHex,
+    expiresAt: now + AUTOFILL_ADDRESS_QR_TTL_MS,
+    appName: 'TruthID Extension',
+  };
+}

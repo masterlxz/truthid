@@ -6,11 +6,15 @@ import { isExpired } from '../src/session/sessionState';
 import { clearSession, loadSession, saveSession } from '../src/storage/sessionStore';
 import { hexToBytes } from '../src/util/bytes';
 import {
+  AUTOFILL_ADDRESS_ENSURE_HOST_PERMISSION_MESSAGE,
+  AUTOFILL_ADDRESS_MANUAL_FETCH_MESSAGE,
+  AUTOFILL_ADDRESS_SWEEP_MESSAGE,
   GET_MATCHING_ENTRIES_MESSAGE,
   VAULT_EDIT_ENQUEUE_MESSAGE,
   WEBAUTHN_FIND_PASSKEY_MESSAGE,
   WEBAUTHN_SIGN_ASSERTION_MESSAGE,
 } from '../src/autofill/messages';
+import { fetchMobileBlobAt, sweepMobileForBlob } from '../src/autofill/lanPull';
 import { signAssertion } from '../src/webauthn';
 import { addPendingEdit, type VaultEditProposal } from '../src/vaultEdit/pendingEdits';
 
@@ -173,6 +177,68 @@ export default defineBackground(() => {
     (message: { type?: string; proposal?: Omit<VaultEditProposal, 'id' | 'createdAtMs'> } | undefined) => {
       if (message?.type !== VAULT_EDIT_ENQUEUE_MESSAGE || !message.proposal) return;
       void addPendingEdit(message.proposal);
+    },
+  );
+
+  // Fase 15.4, fatia 1 (autofill de endereço) — `chrome.permissions`/
+  // `chrome.system.*` não são acessíveis direto de um content script, mesmo
+  // motivo do `chrome.storage.session` (canal VAULT_EDIT_ENQUEUE_MESSAGE
+  // acima). Checa se `http://*/*` já foi concedido e, se não, tenta pedir —
+  // `chrome.permissions.request()` exige gesto do usuário, e não há garantia
+  // de que um clique no ícone in-page (content script → background) preserve
+  // esse gesto até aqui; se vier `false`, a overlay mostra uma mensagem
+  // pedindo pra abrir o ícone da extensão uma vez (fluxo de concessão que já
+  // funciona hoje) em vez de tentar um truque de propagação de gesto não
+  // validado.
+  chrome.runtime.onMessage.addListener(
+    (message: { type?: string } | undefined, _sender, sendResponse) => {
+      if (message?.type !== AUTOFILL_ADDRESS_ENSURE_HOST_PERMISSION_MESSAGE) return;
+      void (async () => {
+        try {
+          const alreadyGranted = await chrome.permissions.contains({ origins: ['http://*/*'] });
+          if (alreadyGranted) {
+            sendResponse({ granted: true });
+            return;
+          }
+          const granted = await chrome.permissions.request({ origins: ['http://*/*'] });
+          sendResponse({ granted });
+        } catch {
+          sendResponse({ granted: false });
+        }
+      })();
+      return true;
+    },
+  );
+
+  // Varredura automática de LAN (porta 48050-48054, RemoteSignerLanServer
+  // genérico do Mobile) — na prática, um no-op gracioso na maioria dos
+  // navegadores hoje (chrome.system.network não é declarado no manifest, ver
+  // wxt.config.ts), mas mantido por paridade/future-proofing; o fallback de
+  // IP manual (canal abaixo) é o caminho que realmente funciona.
+  chrome.runtime.onMessage.addListener(
+    (message: { type?: string; sessionId?: string } | undefined, _sender, sendResponse) => {
+      if (message?.type !== AUTOFILL_ADDRESS_SWEEP_MESSAGE || !message.sessionId) return;
+      void sweepMobileForBlob(message.sessionId).then((blob) => sendResponse({ blob }));
+      return true;
+    },
+  );
+
+  chrome.runtime.onMessage.addListener(
+    (
+      message: { type?: string; host?: string; sessionId?: string } | undefined,
+      _sender,
+      sendResponse,
+    ) => {
+      if (
+        message?.type !== AUTOFILL_ADDRESS_MANUAL_FETCH_MESSAGE ||
+        !message.host ||
+        !message.sessionId
+      )
+        return;
+      void fetchMobileBlobAt(message.host, message.sessionId).then((blob) =>
+        sendResponse({ blob }),
+      );
+      return true;
     },
   );
 });

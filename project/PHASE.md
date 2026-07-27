@@ -884,8 +884,8 @@ A partir daí: Ledger assina UserOps off-chain → bundler submete → smart acc
 
 **Visão maior**: uma **Identidade Digital portátil** que o usuário carrega entre dispositivos, sem depender de Google/Apple/Microsoft — tudo cifrado, armazenado no mesmo IPFS vault que as senhas, acessível pelos mesmos dispositivos confiáveis.
 
-**Status**: :hourglass: Em andamento — 15.1 concluída na Sessão 167 (2026-07-26), demais etapas
-aguardando.
+**Status**: :hourglass: Em andamento — 15.1 (Sessão 167), 15.2 (Sessão 168) e 15.3 (Sessão 169)
+concluídas; 15.4 fatia 1 concluída (Sessão 170); demais etapas aguardando.
 
 ---
 
@@ -1087,7 +1087,22 @@ type VaultEntry = VaultEntryCredential | VaultEntryDocument
    já existente). `flutter test` 429/429 (14 novos, incluindo um teste de regressão que reproduz
    exatamente o bug do Desktop), `flutter analyze` limpo. **Não validado com clique real** —
    mesma limitação de hardware da 15.1/15.2.
-4. **15.4 — Autofill browser (extensão)**: extensão detecta campos de endereço/cartão e pede ao device os dados específicos (mesmo padrão P2P da 13.9). Aprovação no device mostra o que será preenchido.
+4. :hourglass: **15.4 — Autofill browser (extensão)**: extensão detecta campos de endereço/cartão
+   e pede ao device os dados específicos (mesmo padrão P2P da 13.9). Aprovação no device mostra o
+   que será preenchido. **Fatia 1 (só endereço, só transporte LAN, só Mobile) concluída na Sessão
+   170** (2026-07-27) — escopo negociado com o dono do projeto via `AskUserQuestion` (fatiado do
+   mesmo jeito que a 13.9: LAN antes de dead-drop; Mobile antes de Desktop, que ficaria
+   loopback-only). Novo schema de QR `truthid-autofill-address` (`extension/src/session/
+   qrPayload.ts`), transporte LAN reaproveitando o `RemoteSignerLanServer` genérico do Mobile
+   (portas 48050-54 — não o bloco 47850-54, exclusivo da leitura do vault da 13.9), detecção de
+   campo de endereço por token `autocomplete` WHATWG (`extension/src/autofill/
+   addressFieldDetection.ts`), ícone Shadow-DOM com QR + fallback de IP manual
+   (`addressOverlay.ts`), e uma tela de aprovação Mobile nova
+   (`autofill_address_approval_screen.dart`) que introduz um padrão inédito no projeto: deixar o
+   usuário escolher 1 de N entradas salvas antes de aprovar (nenhuma tela de aprovação anterior
+   tinha esse picker). `npx vitest run` (extensão) 108/108 (14 novos), `flutter test` 444/444 (15
+   novos), `flutter analyze`/`tsc --noEmit`/`npm run build` limpos. Faltam cartão de crédito,
+   dead-drop e Desktop (fatia 2).
 5. **15.5 — Autofill SO Android**: implementar `AutofillService` (`android.app.service.AutofillService`). Lê vault local, filtra por tipo de campo, preenche.
 6. **15.6 — Autofill SO iOS**: implementar `ASCredentialIdentityStore` / `ASCredentialProviderViewController`. Mesma lógica do Android.
 7. **15.7 — Documentos**: upload/download/visualização de documentos genéricos. Limite de tamanho a definir. Chunking para arquivos grandes, se necessário.
