@@ -14,6 +14,7 @@ import '../services/vault_repository.dart';
 import '../services/vault_sync_service.dart';
 import '../theme.dart';
 import '../widgets/address_summary.dart';
+import '../widgets/card_summary.dart';
 import 'pinning_providers_screen.dart';
 import 'vault_backup_screen.dart';
 import 'vault_device_permissions_screen.dart';
@@ -568,7 +569,9 @@ class _VaultEntryCard extends StatelessWidget {
         EntryType.document => entry.document?.name ?? 'Document',
         EntryType.address =>
           entry.address == null ? 'Address' : addressTitle(entry.address!),
-        EntryType.creditCard => entry.creditCard?.label ?? 'Card',
+        EntryType.creditCard => entry.creditCard == null
+            ? 'Card'
+            : cardTitle(entry.creditCard!),
       };
 
   String _formatBytes(int n) {
@@ -592,9 +595,7 @@ class _VaultEntryCard extends StatelessWidget {
           style: style,
         ),
       EntryType.creditCard => Text(
-          entry.creditCard == null
-              ? ''
-              : '${entry.creditCard!.cardNetwork.name} •••• ${entry.creditCard!.cardNumber.length >= 4 ? entry.creditCard!.cardNumber.substring(entry.creditCard!.cardNumber.length - 4) : entry.creditCard!.cardNumber} · ${entry.creditCard!.expiryMonth}/${entry.creditCard!.expiryYear}',
+          entry.creditCard == null ? '' : cardSubtitle(entry.creditCard!),
           style: style,
         ),
     };

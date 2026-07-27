@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../screens/approval_screen.dart';
 import '../screens/autofill_address_approval_screen.dart';
+import '../screens/autofill_creditcard_approval_screen.dart';
 import '../screens/pin_approval_screen.dart';
 import '../screens/sign_message_approval_screen.dart';
 import '../screens/sign_request_approval_screen.dart';
@@ -71,6 +72,12 @@ class DeepLinkRouter {
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => AutofillAddressApprovalScreen(payload: payload),
+        ),
+      );
+    } else if (action == 'truthid-autofill-creditcard') {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => AutofillCreditCardApprovalScreen(payload: payload),
         ),
       );
     } else {

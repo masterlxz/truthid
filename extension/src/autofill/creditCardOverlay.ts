@@ -1,20 +1,19 @@
 import { secp256k1 } from '@noble/curves/secp256k1';
 
 import { decrypt } from '../crypto/ecies';
-import { buildAutofillAddressQrPayload, randomSessionId } from '../session/qrPayload';
+import { buildAutofillCreditCardQrPayload, randomSessionId } from '../session/qrPayload';
 import { renderQrToCanvas } from '../ui/renderQr';
 import { bytesToHex } from '../util/bytes';
-import { fillAddressGroup, type DecryptedAddress } from './addressFill';
-import type { AddressFieldGroup } from './addressFieldDetection';
+import { fillCreditCardGroup, type DecryptedCreditCard } from './creditCardFill';
+import type { CreditCardFieldGroup } from './creditCardFieldDetection';
 import {
   AUTOFILL_ENSURE_HOST_PERMISSION_MESSAGE,
   AUTOFILL_MANUAL_FETCH_MESSAGE,
   AUTOFILL_SWEEP_MESSAGE,
 } from './messages';
 
-// Mesma técnica de Shadow DOM de overlay.ts (senha) — isola do CSS da
-// página hospedeira. Painel maior que o dropdown de senha (tem QR canvas +
-// input de IP manual), mas os tokens de cor são os mesmos.
+// Mesmo estilo Shadow-DOM de addressOverlay.ts — só o rótulo do ícone muda
+// (acessibilidade), o painel de QR + IP manual é idêntico.
 const OVERLAY_STYLE = `
   .icon {
     position: fixed;
@@ -86,22 +85,24 @@ const OVERLAY_STYLE = `
   }
 `;
 
-// Um ícone por grupo de campos detectado (não por campo individual) — evita
-// mostrar N ícones pro mesmo formulário de endereço.
+// Um ícone por grupo de campos detectado (não por campo individual) —
+// WeakSet própria, separada da de addressOverlay.ts: um checkout real pode
+// ter endereço e cartão no mesmo escopo (`findScope` devolve o mesmo
+// `<form>` pra ambos), e cada tipo precisa do próprio ícone/pedido.
 const processedGroups = new WeakSet<ParentNode>();
 
 /**
- * Ancora um ícone Shadow-DOM ao grupo de campos de endereço detectado
- * (`addressFieldDetection.ts`). Ao clicar, mostra QR + fallback de IP
- * manual, aguarda a resposta cifrada do celular (LAN, fatia 1 — sem
- * dead-drop ainda) e preenche o formulário ao aprovar.
+ * Ancora um ícone Shadow-DOM ao grupo de campos de cartão detectado
+ * (`creditCardFieldDetection.ts`). Mesmo fluxo de `attachAddressAutofillIcon`
+ * (QR + fallback de IP manual, LAN só, Mobile só) — a diferença é o tipo de
+ * dado pedido e a chave usada pra decifrar a resposta.
  */
-export function attachAddressAutofillIcon(group: AddressFieldGroup): void {
+export function attachCreditCardAutofillIcon(group: CreditCardFieldGroup): void {
   if (processedGroups.has(group.scope)) return;
   processedGroups.add(group.scope);
 
   const anchorField =
-    group.fields.street ?? group.fields.fullName ?? Object.values(group.fields)[0];
+    group.fields.cardNumber ?? group.fields.cardHolderName ?? Object.values(group.fields)[0];
   if (!anchorField) return;
 
   const host = document.createElement('div');
@@ -115,7 +116,7 @@ export function attachAddressAutofillIcon(group: AddressFieldGroup): void {
   const icon = document.createElement('button');
   icon.className = 'icon';
   icon.type = 'button';
-  icon.setAttribute('aria-label', 'Fill address with TruthID');
+  icon.setAttribute('aria-label', 'Fill card with TruthID');
   const iconImg = document.createElement('img');
   iconImg.src = chrome.runtime.getURL('icon/32.png');
   iconImg.alt = '';
@@ -169,9 +170,9 @@ export function attachAddressAutofillIcon(group: AddressFieldGroup): void {
     const sessionId = randomSessionId();
     const privKey = secp256k1.utils.randomPrivateKey();
     const pubKey = secp256k1.getPublicKey(privKey, true);
-    const qrPayload = buildAutofillAddressQrPayload(sessionId, `0x${bytesToHex(pubKey)}`);
+    const qrPayload = buildAutofillCreditCardQrPayload(sessionId, `0x${bytesToHex(pubKey)}`);
 
-    status.textContent = 'Scan this QR with your phone to fill this address:';
+    status.textContent = 'Scan this QR with your phone to fill this card:';
 
     const canvas = document.createElement('canvas');
     panel.appendChild(canvas);
@@ -199,15 +200,15 @@ export function attachAddressAutofillIcon(group: AddressFieldGroup): void {
         const plaintext = await decrypt(blobBytes, privKey);
         const result = JSON.parse(new TextDecoder().decode(plaintext)) as {
           status: string;
-          address?: DecryptedAddress;
+          card?: DecryptedCreditCard;
         };
-        if (result.status === 'filled' && result.address) {
-          fillAddressGroup(group, result.address);
+        if (result.status === 'filled' && result.card) {
+          fillCreditCardGroup(group, result.card);
           status.textContent = 'Filled ✓';
           setTimeout(closePanel, 1500);
-        } else if (result.status === 'no-addresses') {
+        } else if (result.status === 'no-cards') {
           status.textContent =
-            "You don't have any saved addresses yet — add one in the Vault first.";
+            "You don't have any saved cards yet — add one in the Vault first.";
         } else {
           status.textContent = 'Request rejected on your phone.';
         }
@@ -216,10 +217,9 @@ export function attachAddressAutofillIcon(group: AddressFieldGroup): void {
       }
     }
 
-    // Varredura automática — na prática um no-op gracioso na maioria dos
-    // navegadores hoje (chrome.system.network não é declarado no manifest,
-    // ver wxt.config.ts), mantida por paridade/future-proofing. O fallback
-    // de IP manual abaixo é o caminho que realmente funciona.
+    // Varredura automática — mesmo no-op gracioso de addressOverlay.ts
+    // (chrome.system.network indisponível na prática). Fallback de IP
+    // manual abaixo é o caminho real.
     void chrome.runtime
       .sendMessage({ type: AUTOFILL_SWEEP_MESSAGE, sessionId })
       .then((response) => {

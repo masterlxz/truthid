@@ -6623,3 +6623,59 @@ a pergunta em aberto sobre propagação de gesto de `chrome.permissions.request(
 **Documentação**: `PHASE.md` — etapa 15.4 ganhou nota de fatia 1 concluída, status geral da Fase
 15 atualizado. `PENDING.md` — P8 atualizado, novo P30 registrado.
 
+### Sessão 171 — 2026-07-27: Fase 15.4, fatia 2 (primeira parte) — Autofill browser (cartão de crédito, LAN, só Mobile)
+
+Escopo escolhido com o dono do projeto via `AskUserQuestion`: fatia 2 inteira (cartão + dead-drop +
+Desktop) ainda era grande demais pra uma sessão só — fatiada de novo, começando por **cartão de
+crédito** no mesmo recorte de transporte da fatia 1 (só LAN, só Mobile responde). Dead-drop e
+Desktop seguem em aberto pro resto da fatia 2.
+
+**Simplificação que só fez sentido com o segundo consumidor em mãos**: os 3 canais de
+`background.ts` que a fatia 1 introduziu (`AUTOFILL_ADDRESS_ENSURE_HOST_PERMISSION_MESSAGE`/
+`_SWEEP_MESSAGE`/`_MANUAL_FETCH_MESSAGE`) nunca olhavam o conteúdo do pedido — só `sessionId` e a
+permissão de host `http://*/*`, genéricos por natureza. Renomeados pra
+`AUTOFILL_ENSURE_HOST_PERMISSION_MESSAGE`/`_SWEEP_MESSAGE`/`_MANUAL_FETCH_MESSAGE` (sem "ADDRESS")
+e reusados por `creditCardOverlay.ts` sem duplicar os 3 listeners em `background.ts` — só
+`sweepMobileForBlob`/`fetchMobileBlobAt` (`lanPull.ts`, já genéricos desde a fatia 1) também
+reaproveitados sem mudança nenhuma. O schema do QR (`AutofillCreditCardQrPayload`, `action:
+'truthid-autofill-creditcard'`) continua específico do tipo, por necessidade real: é o `action`
+que o `DeepLinkRouter` do Mobile usa pra decidir qual tela abrir.
+
+**Detecção de campo (extensão)**: `creditCardFieldDetection.ts` (novo), mesmo mirror estrutural de
+`addressFieldDetection.ts` — tokens WHATWG de pagamento (`cc-name`, `cc-number`, `cc-exp`,
+`cc-exp-month`, `cc-exp-year`, `cc-csc`). `cc-exp` (campo único) e `cc-exp-month`/`cc-exp-year`
+(campos separados) viram `CreditCardFieldKind`s distintos — sites usam os dois formatos, e
+`creditCardFill.ts` decide o texto certo pra cada um (`cc-exp` recebe `MM/AA` com o ano cortado
+pra 2 dígitos, convenção real de checkout; os campos separados recebem os valores crus, incluindo
+o ano com 4 dígitos como o Vault guarda). `cc-type` (bandeira) ficou de fora — a maioria dos
+formulários infere a bandeira do próprio número digitado, não pede como campo separado.
+
+**UI (extensão)**: `creditCardOverlay.ts` — cópia estrutural de `addressOverlay.ts` (ícone
+Shadow-DOM, QR + fallback de IP manual, WeakSet própria de grupos processados, já que um checkout
+real pode ter endereço e cartão no mesmo `<form>` e cada tipo precisa do próprio ícone). Resposta
+cifrada: `{status: 'filled', card: {...}} | {status: 'rejected'} | {status: 'no-cards'}` — mesmo
+padrão de 3 status que `truthid-autofill-address` já usa.
+
+**Mobile**: `mobile/lib/widgets/card_summary.dart` (novo) extrai `cardTitle`/`cardSubtitle` de
+`vault_screen.dart` (`_VaultEntryCard`, refactor puro, mesmas strings, zero mudança de comportamento
+em `vault_screen_test.dart`) — `cardSubtitle` já mascara o número (só os últimos 4 dígitos), seguro
+o bastante pra aparecer no picker. Nova `autofill_creditcard_approval_screen.dart`, cópia/adaptação
+de `autofill_address_approval_screen.dart` com uma diferença de segurança real: a tela de
+confirmação introduz `_MaskedInfoRow` (novo, privado ao arquivo) — número do cartão e CVV começam
+mascarados (`••••`) com um botão de revelar cada, diferente do `InfoRow` puro que o endereço usa
+(dado bem menos sensível). `deep_link_router.dart` ganhou o branch `truthid-autofill-creditcard`.
+
+**Testes**: extensão — `npx vitest run` 117/117 (9 novos: `creditCardFieldDetection.test.ts`, 2
+casos novos em `qrPayload.test.ts` pro payload de cartão; nenhum teste novo de `lanPull`/mensagens
+genéricas, já cobertos pela fatia 1 e reusados sem mudança). `npx tsc --noEmit`/`npm run build`
+limpos. Mobile — `flutter test` 462/462 (18 novos: `autofill_creditcard_approval_screen_test.dart`,
+incluindo um teste específico pro mascaramento do número/CVV na confirmação e outro confirmando
+que o picker nunca mostra o número completo; `card_summary_test.dart`; 1 novo em
+`deep_link_router_test.dart`). `flutter analyze` limpo.
+
+**Não validado em hardware real** — mesma limitação de todas as fatias cross-device anteriores
+(P3, P6, P30, e agora P31).
+
+**Documentação**: `PHASE.md` — etapa 15.4 ganhou nota da primeira parte da fatia 2 concluída,
+status geral da Fase 15 atualizado. `PENDING.md` — P8 atualizado, novo P31 registrado.
+

@@ -885,7 +885,8 @@ A partir daí: Ledger assina UserOps off-chain → bundler submete → smart acc
 **Visão maior**: uma **Identidade Digital portátil** que o usuário carrega entre dispositivos, sem depender de Google/Apple/Microsoft — tudo cifrado, armazenado no mesmo IPFS vault que as senhas, acessível pelos mesmos dispositivos confiáveis.
 
 **Status**: :hourglass: Em andamento — 15.1 (Sessão 167), 15.2 (Sessão 168) e 15.3 (Sessão 169)
-concluídas; 15.4 fatia 1 concluída (Sessão 170); demais etapas aguardando.
+concluídas; 15.4 fatia 1 concluída (Sessão 170); 15.4 fatia 2, primeira parte (cartão de crédito,
+Sessão 171) concluída; demais etapas aguardando.
 
 ---
 
@@ -1102,7 +1103,19 @@ type VaultEntry = VaultEntryCredential | VaultEntryDocument
    usuário escolher 1 de N entradas salvas antes de aprovar (nenhuma tela de aprovação anterior
    tinha esse picker). `npx vitest run` (extensão) 108/108 (14 novos), `flutter test` 444/444 (15
    novos), `flutter analyze`/`tsc --noEmit`/`npm run build` limpos. Faltam cartão de crédito,
-   dead-drop e Desktop (fatia 2).
+   dead-drop e Desktop (fatia 2). **Primeira parte da fatia 2 (cartão de crédito) concluída na
+   Sessão 171** (2026-07-27) — mesmo recorte de transporte da fatia 1 (só LAN, só Mobile
+   responde), escolhido com o dono do projeto via `AskUserQuestion`. Novo schema de QR
+   `truthid-autofill-creditcard`, `extension/src/autofill/{creditCardFieldDetection,
+   creditCardFill,creditCardOverlay}.ts` (tokens WHATWG de pagamento: `cc-name`/`cc-number`/
+   `cc-exp`/`cc-exp-month`/`cc-exp-year`/`cc-csc`), `mobile/lib/screens/
+   autofill_creditcard_approval_screen.dart` (mesmo picker "1 de N" da fatia 1, mas com número/CVV
+   mascarados por padrão na confirmação — mais sensíveis que endereço). Os 3 canais de
+   `background.ts` que a fatia 1 criou (permissão de host/sweep de LAN/fetch manual) eram
+   genéricos por natureza (nunca olhavam o conteúdo do pedido) — renomeados (sem "ADDRESS") e
+   reusados pelo cartão em vez de triplicados. `npx vitest run` 117/117 (9 novos), `flutter test`
+   462/462 (18 novos), `flutter analyze`/`tsc --noEmit`/`npm run build` limpos. Ainda faltam
+   dead-drop e Desktop (resto da fatia 2).
 5. **15.5 — Autofill SO Android**: implementar `AutofillService` (`android.app.service.AutofillService`). Lê vault local, filtra por tipo de campo, preenche.
 6. **15.6 — Autofill SO iOS**: implementar `ASCredentialIdentityStore` / `ASCredentialProviderViewController`. Mesma lógica do Android.
 7. **15.7 — Documentos**: upload/download/visualização de documentos genéricos. Limite de tamanho a definir. Chunking para arquivos grandes, se necessário.

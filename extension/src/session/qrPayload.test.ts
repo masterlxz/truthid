@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   AUTOFILL_ADDRESS_QR_TTL_MS,
+  AUTOFILL_CREDITCARD_QR_TTL_MS,
   buildAutofillAddressQrPayload,
+  buildAutofillCreditCardQrPayload,
   buildQrPayload,
   buildVaultEditQrPayload,
   randomSessionId,
@@ -83,5 +85,30 @@ describe('buildAutofillAddressQrPayload (Fase 15.4, fatia 1)', () => {
 
     expect(payload.expiresAt).toBeGreaterThanOrEqual(before + AUTOFILL_ADDRESS_QR_TTL_MS);
     expect(payload.expiresAt).toBeLessThanOrEqual(after + AUTOFILL_ADDRESS_QR_TTL_MS);
+  });
+});
+
+describe('buildAutofillCreditCardQrPayload (Fase 15.4, fatia 2)', () => {
+  it('monta o payload v1 com appName fixo e o TTL certo', () => {
+    const now = 4_000_000;
+    const payload = buildAutofillCreditCardQrPayload('abc', '0xdeadbeef', now);
+
+    expect(payload).toEqual({
+      action: 'truthid-autofill-creditcard',
+      v: 1,
+      sessionId: 'abc',
+      ephemeralPubKey: '0xdeadbeef',
+      expiresAt: now + AUTOFILL_CREDITCARD_QR_TTL_MS,
+      appName: 'TruthID Extension',
+    });
+  });
+
+  it('usa Date.now() quando `now` não é passado', () => {
+    const before = Date.now();
+    const payload = buildAutofillCreditCardQrPayload('abc', '0xdeadbeef');
+    const after = Date.now();
+
+    expect(payload.expiresAt).toBeGreaterThanOrEqual(before + AUTOFILL_CREDITCARD_QR_TTL_MS);
+    expect(payload.expiresAt).toBeLessThanOrEqual(after + AUTOFILL_CREDITCARD_QR_TTL_MS);
   });
 });

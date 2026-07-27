@@ -23,8 +23,13 @@ export const VAULT_EDIT_ENQUEUE_MESSAGE = 'truthid-vault-edit-enqueue';
 
 // Fase 15.4, fatia 1 (autofill de endereço) — o content script não pode
 // chamar `chrome.permissions`/`chrome.system.*` direto, mesmo motivo de
-// `chrome.storage.session` acima: precisa passar pelo background.
-export const AUTOFILL_ADDRESS_ENSURE_HOST_PERMISSION_MESSAGE =
-  'truthid-autofill-address-ensure-host-permission';
-export const AUTOFILL_ADDRESS_SWEEP_MESSAGE = 'truthid-autofill-address-sweep';
-export const AUTOFILL_ADDRESS_MANUAL_FETCH_MESSAGE = 'truthid-autofill-address-manual-fetch';
+// `chrome.storage.session` acima: precisa passar pelo background. Nomes
+// genéricos (não "ADDRESS") desde a fatia 2 (cartão de crédito) — o
+// transporte (permissão de host, sweep de LAN, fetch manual por IP) nunca
+// olhou o conteúdo do pedido, só o `sessionId`; batizar por tipo de dado
+// teria forçado 3 handlers idênticos a mais em `background.ts` por tipo
+// novo, em vez de 1 handler reusado por todos.
+export const AUTOFILL_ENSURE_HOST_PERMISSION_MESSAGE =
+  'truthid-autofill-ensure-host-permission';
+export const AUTOFILL_SWEEP_MESSAGE = 'truthid-autofill-sweep';
+export const AUTOFILL_MANUAL_FETCH_MESSAGE = 'truthid-autofill-manual-fetch';

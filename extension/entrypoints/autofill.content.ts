@@ -1,5 +1,7 @@
 import { findAddressFieldGroups } from '../src/autofill/addressFieldDetection';
 import { attachAddressAutofillIcon } from '../src/autofill/addressOverlay';
+import { findCreditCardFieldGroups } from '../src/autofill/creditCardFieldDetection';
+import { attachCreditCardAutofillIcon } from '../src/autofill/creditCardOverlay';
 import { findLoginFieldPairs } from '../src/autofill/formDetection';
 import { attachNewCredentialCapture } from '../src/autofill/newCredentialCapture';
 import { attachAutofillIconIfMatches } from '../src/autofill/overlay';
@@ -27,6 +29,14 @@ export default defineContentScript({
       // (checkout), só login, ou os dois.
       for (const group of findAddressFieldGroups(root)) {
         attachAddressAutofillIcon(group);
+      }
+
+      // Fase 15.4, fatia 2 — mesmo padrão pra cartão de crédito. Passada
+      // independente da de endereço: um checkout real costuma ter os dois
+      // no mesmo `<form>`, mas cada tipo detecta e mostra seu próprio ícone
+      // (o pedido pro Mobile é sempre de um tipo só, nunca combinado).
+      for (const group of findCreditCardFieldGroups(root)) {
+        attachCreditCardAutofillIcon(group);
       }
     }
 

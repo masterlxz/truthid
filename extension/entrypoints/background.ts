@@ -6,9 +6,9 @@ import { isExpired } from '../src/session/sessionState';
 import { clearSession, loadSession, saveSession } from '../src/storage/sessionStore';
 import { hexToBytes } from '../src/util/bytes';
 import {
-  AUTOFILL_ADDRESS_ENSURE_HOST_PERMISSION_MESSAGE,
-  AUTOFILL_ADDRESS_MANUAL_FETCH_MESSAGE,
-  AUTOFILL_ADDRESS_SWEEP_MESSAGE,
+  AUTOFILL_ENSURE_HOST_PERMISSION_MESSAGE,
+  AUTOFILL_MANUAL_FETCH_MESSAGE,
+  AUTOFILL_SWEEP_MESSAGE,
   GET_MATCHING_ENTRIES_MESSAGE,
   VAULT_EDIT_ENQUEUE_MESSAGE,
   WEBAUTHN_FIND_PASSKEY_MESSAGE,
@@ -180,10 +180,11 @@ export default defineBackground(() => {
     },
   );
 
-  // Fase 15.4, fatia 1 (autofill de endereço) — `chrome.permissions`/
-  // `chrome.system.*` não são acessíveis direto de um content script, mesmo
-  // motivo do `chrome.storage.session` (canal VAULT_EDIT_ENQUEUE_MESSAGE
-  // acima). Checa se `http://*/*` já foi concedido e, se não, tenta pedir —
+  // Fase 15.4 (autofill de endereço/cartão — canal genérico, reusado por
+  // ambos desde a fatia 2) — `chrome.permissions`/`chrome.system.*` não são
+  // acessíveis direto de um content script, mesmo motivo do
+  // `chrome.storage.session` (canal VAULT_EDIT_ENQUEUE_MESSAGE acima).
+  // Checa se `http://*/*` já foi concedido e, se não, tenta pedir —
   // `chrome.permissions.request()` exige gesto do usuário, e não há garantia
   // de que um clique no ícone in-page (content script → background) preserve
   // esse gesto até aqui; se vier `false`, a overlay mostra uma mensagem
@@ -192,7 +193,7 @@ export default defineBackground(() => {
   // validado.
   chrome.runtime.onMessage.addListener(
     (message: { type?: string } | undefined, _sender, sendResponse) => {
-      if (message?.type !== AUTOFILL_ADDRESS_ENSURE_HOST_PERMISSION_MESSAGE) return;
+      if (message?.type !== AUTOFILL_ENSURE_HOST_PERMISSION_MESSAGE) return;
       void (async () => {
         try {
           const alreadyGranted = await chrome.permissions.contains({ origins: ['http://*/*'] });
@@ -217,7 +218,7 @@ export default defineBackground(() => {
   // IP manual (canal abaixo) é o caminho que realmente funciona.
   chrome.runtime.onMessage.addListener(
     (message: { type?: string; sessionId?: string } | undefined, _sender, sendResponse) => {
-      if (message?.type !== AUTOFILL_ADDRESS_SWEEP_MESSAGE || !message.sessionId) return;
+      if (message?.type !== AUTOFILL_SWEEP_MESSAGE || !message.sessionId) return;
       void sweepMobileForBlob(message.sessionId).then((blob) => sendResponse({ blob }));
       return true;
     },
@@ -230,7 +231,7 @@ export default defineBackground(() => {
       sendResponse,
     ) => {
       if (
-        message?.type !== AUTOFILL_ADDRESS_MANUAL_FETCH_MESSAGE ||
+        message?.type !== AUTOFILL_MANUAL_FETCH_MESSAGE ||
         !message.host ||
         !message.sessionId
       )

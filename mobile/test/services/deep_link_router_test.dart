@@ -95,6 +95,22 @@ void main() {
     expect(find.text('Autofill request'), findsOneWidget);
   });
 
+  testWidgets(
+      'truthid-autofill-creditcard empurra AutofillCreditCardApprovalScreen',
+      (tester) async {
+    await pumpRouter(tester, {
+      'action': 'truthid-autofill-creditcard',
+      'v': 1,
+      'sessionId': 's1',
+      'ephemeralPubKey': '0x02${'ab' * 32}',
+      'expiresAt':
+          DateTime.now().add(const Duration(minutes: 3)).millisecondsSinceEpoch,
+      'appName': 'Test App',
+    });
+
+    expect(find.text('Autofill request'), findsOneWidget);
+  });
+
   testWidgets('action desconhecida mostra snackbar, não navega',
       (tester) async {
     await pumpRouter(tester, {'action': 'something-weird'});

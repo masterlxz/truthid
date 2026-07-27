@@ -120,3 +120,39 @@ export function buildAutofillAddressQrPayload(
     appName: 'TruthID Extension',
   };
 }
+
+/**
+ * Schema v1 do QR de pedido de autofill de cartão de crédito (Fase 15.4,
+ * fatia 2 — mesmo recorte de transporte da fatia 1: só LAN, só Mobile
+ * responde). Mesmo esqueleto de 5 campos que `AutofillAddressQrPayload` já
+ * usa — só o `action` muda, pra o Mobile rotear pra
+ * `AutofillCreditCardApprovalScreen` em vez de
+ * `AutofillAddressApprovalScreen` (o restante do transporte — LAN sweep,
+ * fetch manual por IP — já era genérico o bastante pra servir aos dois,
+ * ver `autofill/messages.ts`).
+ */
+export interface AutofillCreditCardQrPayload {
+  action: 'truthid-autofill-creditcard';
+  v: 1;
+  sessionId: string;
+  ephemeralPubKey: string; // 0x + 33 bytes SEC1 comprimido, hex
+  expiresAt: number; // unix ms, absoluto
+  appName: 'TruthID Extension';
+}
+
+export const AUTOFILL_CREDITCARD_QR_TTL_MS = 3 * 60 * 1000;
+
+export function buildAutofillCreditCardQrPayload(
+  sessionId: string,
+  ephemeralPubKeyHex: string,
+  now: number = Date.now(),
+): AutofillCreditCardQrPayload {
+  return {
+    action: 'truthid-autofill-creditcard',
+    v: 1,
+    sessionId,
+    ephemeralPubKey: ephemeralPubKeyHex,
+    expiresAt: now + AUTOFILL_CREDITCARD_QR_TTL_MS,
+    appName: 'TruthID Extension',
+  };
+}
