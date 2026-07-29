@@ -118,6 +118,16 @@ function App() {
   // Only block rendering with a loading state when we have no cached identity to show
   const isLoadingIdentity = isConnected && !isWrongNetwork && isLoadingUsername && !storedUsername;
 
+  // Precisam rodar incondicionalmente, antes de qualquer return — chamá-los
+  // só no branch do shell principal (abaixo do early return de "sem
+  // identidade") violava a regra de hooks (contagem de hooks mudando entre
+  // renders conforme `displayUsername`/`isConnected`), causando "Rendered
+  // more hooks than during the previous render" assim que o estado mudava de
+  // "sem identidade" pra "com identidade" (achado real, Sessão 31 do
+  // Practice Valuation, ao testar o canal /sign-request contra este app).
+  const openConnectModal = useCallback(() => setConnectModalOpen(true), []);
+  const walletModalContextValue = useMemo(() => ({ openConnectModal }), [openConnectModal]);
+
   // ── No identity at all → full-screen login ───────────────────────────────
   // SignRequestModal fica montado nos dois caminhos de retorno (aqui e no
   // shell principal abaixo) porque um pedido de assinatura pode chegar a
@@ -136,8 +146,6 @@ function App() {
     );
   }
 
-  const openConnectModal = useCallback(() => setConnectModalOpen(true), []);
-
   function handleLogout() {
     clearUsername();
     disconnect();
@@ -145,9 +153,7 @@ function App() {
 
   // ── App shell ─────────────────────────────────────────────────────────────
   return (
-    <WalletModalContext.Provider
-      value={useMemo(() => ({ openConnectModal }), [openConnectModal])}
-    >
+    <WalletModalContext.Provider value={walletModalContextValue}>
       <SignRequestModal smartAccountAddress={smartAccountAddress} />
       <SignMessageModal />
       <PinApprovalModal />
