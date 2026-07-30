@@ -219,11 +219,13 @@ class AddressData {
 class CreditCardData {
   final String label;
   final String cardHolderName;
-  /// Cifra individual extra fica pra 15.8 — hoje viaja em texto plano dentro
-  /// do blob já cifrado como um todo.
+  /// Cifrado individualmente (Fase 15.8) na representação em disco/export
+  /// (`VaultRepository._save`/`exportBackup`) — em memória, sempre em claro
+  /// (pós `_load()`), igual ao resto do app já espera.
   final String cardNumber;
   final String expiryMonth;
   final String expiryYear;
+  /// Idem `cardNumber`.
   final String cvv;
   final String? bank;
   final CardNetwork cardNetwork;
@@ -373,15 +375,25 @@ class VaultEntry {
         'updated_at': updatedAt.millisecondsSinceEpoch ~/ 1000,
       };
 
-  /// Igual a [toJson], mas sem `totp_secret` — usar sempre que a entrada for
-  /// sair pro canal da extensão de navegador (LAN/dead-drop em
-  /// vault_session_screen.dart). 2FA continua isolado no Device por design
-  /// (fatores separados); `passkey` já é enviado desde a Sessão 132 — a
-  /// extensão precisa da chave privada pra assinar `navigator.credentials.get`
-  /// em sites reais (ver `extension/src/webauthn.ts`).
+  /// Igual a [toJson], mas sem `totp_secret`/`document`/`address`/
+  /// `credit_card` — usar sempre que a entrada for sair pro canal da
+  /// extensão de navegador (LAN/dead-drop em vault_session_screen.dart).
+  /// 2FA continua isolado no Device por design (fatores separados);
+  /// `passkey` já é enviado desde a Sessão 132 — a extensão precisa da
+  /// chave privada pra assinar `navigator.credentials.get` em sites reais
+  /// (ver `extension/src/webauthn.ts`). Achado da 15.8: esse canal só
+  /// consome username/password/passkey (o tipo `VaultEntry` da própria
+  /// extensão nem tem campos pros outros 3 grupos) — document/address/
+  /// credit_card nunca deveriam ter chegado lá; sem essa remoção, uma
+  /// entrada tipo cartão num perfil sincronizado por esse canal deixava
+  /// `card_number`/`cvv` em texto pleno no `chrome.storage.session` da
+  /// extensão pelo tempo de vida da sessão.
   Map<String, dynamic> toJsonForExtension() {
     final json = toJson();
     json.remove('totp_secret');
+    json.remove('document');
+    json.remove('address');
+    json.remove('credit_card');
     return json;
   }
 
@@ -901,7 +913,18 @@ class VaultRepository {
   // se já tivesse sido publicada, mesmo sem nunca ter ido on-chain.
   Future<void> markPublished(int version, Uint8List publishedBlob) async {
     final json = await _cipherService.decrypt(publishedBlob);
-    final data = _parseVaultJson(json);
+    final parsed = _parseVaultJson(json);
+    // Fase 15.8: normaliza card_number/cvv pra texto plano antes de marcar
+    // publicado — crítico pra corretude do diff em pendingChanges(), que
+    // sempre compara contra _load() (também em claro). Sem isso, o
+    // snapshot guardaria os campos cifrados (nonce novo a cada save), e
+    // qualquer vault com cartão veria "pendência fantasma" pra sempre.
+    final data = _VaultData(
+      version: parsed.version,
+      entries: await _decryptCardFieldsInEntries(parsed.entries),
+      profileNames: parsed.profileNames,
+      devicePermissions: parsed.devicePermissions,
+    );
     await _storage.write(
       key: _publishedVersionKey,
       value: version.toString(),
@@ -939,7 +962,16 @@ class VaultRepository {
   // da wallet/pareamento — ver project/INDEX.md, roadmap item 4.
   Future<Uint8List> exportBackup(String password) async {
     final data = await _load();
-    return _backupCipherService.encrypt(_serializeVaultData(data), password);
+    // Fase 15.8: backup exportado sai de circulação (USB, nuvem, etc.) —
+    // card_number/cvv ganham a mesma cifra individual extra que vault.enc
+    // já tem, além da cifra por senha do backup em si.
+    final forExport = _VaultData(
+      version: data.version,
+      entries: await _encryptCardFieldsInEntries(data.entries),
+      profileNames: data.profileNames,
+      devicePermissions: data.devicePermissions,
+    );
+    return _backupCipherService.encrypt(_serializeVaultData(forExport), password);
   }
 
   // Decifra um blob de backup com a senha de export e **sobrescreve** o
@@ -950,7 +982,17 @@ class VaultRepository {
   // vault_sync_service.dart, `if (ref.version <= localVersion)`).
   Future<void> importBackup(Uint8List blob, String password) async {
     final json = await _backupCipherService.decrypt(blob, password);
-    await _save(_parseVaultJson(json));
+    final parsed = _parseVaultJson(json);
+    // Fase 15.8: normaliza card_number/cvv pra texto plano antes de
+    // _save() — o backup carrega os campos já cifrados (ver
+    // exportBackup); sem isso, _save() cifraria de novo em cima de um
+    // valor já cifrado.
+    await _save(_VaultData(
+      version: parsed.version,
+      entries: await _decryptCardFieldsInEntries(parsed.entries),
+      profileNames: parsed.profileNames,
+      devicePermissions: parsed.devicePermissions,
+    ));
   }
 
   // -------------------------------------------------------------------------
@@ -1008,11 +1050,29 @@ class VaultRepository {
     final json = await _cipherService.decrypt(blob);
     final data = _parseVaultJson(json);
     await _migrateLegacyDocuments(data.entries);
-    return data;
+    // Fase 15.8: decifra card_number/cvv — em memória, o resto do app
+    // sempre vê texto plano (fallback automático pra entradas anteriores à
+    // 15.8, ainda em claro no disco).
+    final entries = await _decryptCardFieldsInEntries(data.entries);
+    return _VaultData(
+      version: data.version,
+      entries: entries,
+      profileNames: data.profileNames,
+      devicePermissions: data.devicePermissions,
+    );
   }
 
+  // Serializa o vault, cifra os campos individuais de cartão numa cópia
+  // (nunca muta `data` do caller, que continua em claro depois desta
+  // chamada) e grava em disco.
   Future<void> _save(_VaultData data) async {
-    final json = _serializeVaultData(data);
+    final forDisk = _VaultData(
+      version: data.version,
+      entries: await _encryptCardFieldsInEntries(data.entries),
+      profileNames: data.profileNames,
+      devicePermissions: data.devicePermissions,
+    );
+    final json = _serializeVaultData(forDisk);
     final blob = await _cipherService.encrypt(json);
     final path = await _vaultPath();
     await File(path).writeAsBytes(blob);
@@ -1104,6 +1164,101 @@ class VaultRepository {
     if (storedHash == null) return true;
     final actual = bytesToHex(keccak256(localBlob), include0x: true);
     return actual != storedHash;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cifra individual de card_number/cvv (Fase 15.8)
+  // ---------------------------------------------------------------------------
+  //
+  // Princípio único: card_number/cvv são SEMPRE texto plano na representação
+  // em memória (o resto do app nunca muda) e SEMPRE cifrados individualmente
+  // na representação em disco/export. A fronteira entre as duas é só nos
+  // pontos de parse/serialize bruto — ver _decryptCardFieldsInEntries (usado
+  // em _load()/markPublished()/importBackup()) e _encryptCardFieldsInEntries
+  // (usado em _save()/exportBackup()). Reusa a mesma vault key/cifra de
+  // _cipherService (mesmo precedente da 15.7 com documentos) — sem sub-chave
+  // derivada, ver justificativa em project/PHASE.md, 15.8.
+
+  Future<String> _encryptCardField(String value) async {
+    final blob = await _cipherService.encrypt(Uint8List.fromList(utf8.encode(value)));
+    return base64Encode(blob);
+  }
+
+  /// Tenta decifrar um campo individualmente cifrado. Se falhar por
+  /// qualquer motivo (base64 inválido, blob curto demais, tag AEAD não
+  /// bate), assume que é uma entrada anterior à 15.8 (ainda em texto
+  /// plano) e devolve o valor como está — mesmo padrão de fallback que o
+  /// Rust (`vault.rs::try_decrypt_card_field`) usa.
+  Future<String> _tryDecryptCardField(String value) async {
+    try {
+      final blob = base64Decode(value);
+      final plain = await _cipherService.decrypt(blob);
+      return utf8.decode(plain);
+    } catch (_) {
+      return value;
+    }
+  }
+
+  CreditCardData _withCardFields(CreditCardData card, String cardNumber, String cvv) =>
+      CreditCardData(
+        label: card.label,
+        cardHolderName: card.cardHolderName,
+        cardNumber: cardNumber,
+        expiryMonth: card.expiryMonth,
+        expiryYear: card.expiryYear,
+        cvv: cvv,
+        bank: card.bank,
+        cardNetwork: card.cardNetwork,
+      );
+
+  /// Decifra card_number/cvv de toda entrada tipo cartão, devolvendo uma
+  /// nova lista (VaultEntry é imutável). Chamado por `_load()`,
+  /// `markPublished()` e `importBackup()` — os 3 pontos que fazem
+  /// parse bruto de um Vault vindo de fora da representação em memória já
+  /// normalizada por `_load()`. Crítico pra corretude em `markPublished()`,
+  /// não só consistência: sem essa normalização ali, o snapshot local
+  /// ficaria com os campos cifrados (nonce novo a cada save) enquanto
+  /// `pendingChanges()` compara contra `_load()` (sempre em claro) —
+  /// qualquer vault com cartão veria "pendência fantasma" pra sempre.
+  Future<List<VaultEntry>> _decryptCardFieldsInEntries(List<VaultEntry> entries) async {
+    final result = <VaultEntry>[];
+    for (final entry in entries) {
+      final card = entry.creditCard;
+      if (card == null) {
+        result.add(entry);
+        continue;
+      }
+      result.add(entry.copyWith(
+        creditCard: _withCardFields(
+          card,
+          await _tryDecryptCardField(card.cardNumber),
+          await _tryDecryptCardField(card.cvv),
+        ),
+      ));
+    }
+    return result;
+  }
+
+  /// Cifra card_number/cvv individualmente numa nova lista, pra
+  /// serialização em disco/export — nunca muta as entradas do caller.
+  /// Chamado por `_save()` e `exportBackup()`.
+  Future<List<VaultEntry>> _encryptCardFieldsInEntries(List<VaultEntry> entries) async {
+    final result = <VaultEntry>[];
+    for (final entry in entries) {
+      final card = entry.creditCard;
+      if (card == null) {
+        result.add(entry);
+        continue;
+      }
+      result.add(entry.copyWith(
+        creditCard: _withCardFields(
+          card,
+          await _encryptCardField(card.cardNumber),
+          await _encryptCardField(card.cvv),
+        ),
+      ));
+    }
+    return result;
   }
 
   // Migração (Fase 15.7): documentos antigos guardavam o conteúdo em base64

@@ -585,7 +585,12 @@ class _MaskedInfoRow extends StatelessWidget {
           ),
           Expanded(
             child: Text(
-              visible ? value : '•' * value.length,
+              // Máscara de tamanho fixo, não proporcional ao valor real —
+              // evita vazar o comprimento do número/CVV mesmo mascarado
+              // (achado da 15.8: `'•' * value.length` distinguia um CVV de
+              // 3 x 4 dígitos, ou um PAN Amex de 15 x Visa/Master de 16).
+              // Mesmo padrão de `_CopyableRow` em vault_entry_detail_screen.dart.
+              visible ? value : '••••••••',
               style: const TextStyle(fontFamily: 'monospace', fontSize: 15),
             ),
           ),

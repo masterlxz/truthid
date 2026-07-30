@@ -884,15 +884,16 @@ A partir daí: Ledger assina UserOps off-chain → bundler submete → smart acc
 
 **Visão maior**: uma **Identidade Digital portátil** que o usuário carrega entre dispositivos, sem depender de Google/Apple/Microsoft — tudo cifrado, armazenado no mesmo IPFS vault que as senhas, acessível pelos mesmos dispositivos confiáveis.
 
-**Status**: :hourglass: Em andamento — 15.1-15.6 concluídas (Sessões 167-176): 15.1 (schema),
-15.2 (CRUD Desktop), 15.3 (CRUD Mobile), 15.4 fatia 1 (endereço/LAN/Mobile, S170), fatia 2
-(cartão/LAN/Mobile, S171; dead-drop endereço+cartão, S172; Desktop, S173 — fecha a 15.4 inteira),
-15.5 (Autofill SO Android, S174), 15.6 (Autofill SO iOS) — fatia 1 (S175): scaffold da extensão +
-registro de identidades, ver etapa 6 abaixo pro porquê de não ter saído "a mesma lógica do
-Android" como o escopo original previa; fatia 2 (S176): decifra real dentro da extensão,
-fechando a 15.6 inteira — nada disso builda neste ambiente (Linux, sem Xcode/macOS/simulador),
-validação em Mac real é P35 no `PENDING.md`. Restam 15.7 (documentos) e 15.8 (revisão de
-segurança do CVV).
+**Status**: :white_check_mark: **Fase 15 concluída por completo** (Sessões 167-177): 15.1
+(schema), 15.2 (CRUD Desktop), 15.3 (CRUD Mobile), 15.4 fatia 1 (endereço/LAN/Mobile, S170),
+fatia 2 (cartão/LAN/Mobile, S171; dead-drop endereço+cartão, S172; Desktop, S173 — fecha a 15.4
+inteira), 15.5 (Autofill SO Android, S174), 15.6 (Autofill SO iOS) — fatia 1 (S175): scaffold da
+extensão + registro de identidades; fatia 2 (S176): decifra real dentro da extensão, fechando a
+15.6 inteira — nada disso builda neste ambiente (Linux, sem Xcode/macOS/simulador), validação em
+Mac real é P35 no `PENDING.md`. 15.7 (S177): documentos separados do blob único do vault, limite
+definitivo de 50MB. 15.8 (S177): cifra individual de card_number/cvv, exposição mínima no
+autofill (fechada `toJsonForExtension`), zero logging (confirmado + redação de `Debug`
+preventiva) — ver etapa 9 abaixo pro detalhe completo da auditoria.
 
 ---
 
@@ -1346,7 +1347,61 @@ type VaultEntry = VaultEntryCredential | VaultEntryDocument
    `vault_repository_test.dart` e `vault_publish_service_test.dart`, com I/O real de disco via o
    mecanismo de `testPath` que já existia — diferente do Rust, que não tem infra de path override
    em testes). `npx vitest run` 101/101 sem regressão, `tsc --noEmit` limpo.
-9. **15.8 — Revisão de segurança**: auditoria focada nos cartões de crédito (cifra extra do CVV, exposição mínima no autofill, zero logging).
+9. **15.8 — Revisão de segurança, cifra individual de card_number/cvv (Sessão 177), fecha a Fase
+   15 inteira**: 2 agentes Explore auditaram o estado real antes de codar. **Zero logging** já era
+   verdade (grep completo — extensão/Mobile/Desktop, produção e testes — não achou nenhum
+   `console.log`/`print`/`debugPrint`/`println!`/`dbg!`/`tracing` tocando `card_number`/`cvv`) —
+   risco estrutural fechado preventivamente: `CreditCardData` (Rust) ganhou `impl Debug`
+   customizado redigindo os dois campos, já que o `derive(Debug)` automático não tinha proteção
+   nenhuma contra um `dbg!`/`tracing::debug!` futuro. **Exposição mínima no autofill**: o fluxo
+   dedicado de autofill de cartão (extensão + Mobile + loopback Desktop) já estava limpo. Achado
+   real fora do fluxo perguntado: o canal *mais antigo* (13.9, QR `truthid-vault-session`) usava
+   `VaultEntry.toJsonForExtension()`, que só removia `totp_secret` — não removia
+   `document`/`address`/`credit_card`, então uma entrada tipo cartão num perfil sincronizado por
+   esse canal deixava `card_number`/`cvv` em texto pleno no `chrome.storage.session` da extensão
+   pelo tempo de vida da sessão. Corrigido removendo os 3 grupos também. Achado secundário de UX:
+   `_MaskedInfoRow` (Mobile, tela de aprovação de autofill de cartão) mascarava proporcional ao
+   tamanho do valor (`'•' * value.length`, vazando CVV de 3 x 4 dígitos ou PAN Amex de 15 x
+   Visa/Master de 16) — trocado pra máscara de tamanho fixo, igual `_CopyableRow` já fazia na tela
+   de detalhe.
+
+   **Cifra individual**: sem flag de schema nova — tentativa + fallback, mesmo padrão que
+   `vault::load()` já usa pra migrar a chave do vault (nova → legada): tenta decifrar
+   `card_number`/`cvv`; se falhar (base64 inválido, tag AEAD não bate — `decrypt()` já rejeita
+   blobs com menos de 28 bytes, e qualquer PAN/CVV plausível em base64 dá bem menos), assume
+   entrada anterior à 15.8 (ainda em claro) e devolve como está. Zero chance real de falso
+   positivo (tag de 128 bits do AES-GCM). **Princípio único**: card_number/cvv são sempre texto
+   plano em memória (resto do app nunca muda) e sempre cifrados individualmente em disco/export —
+   reusa a mesma vault key/`vault::encrypt`/`decrypt` (mesmo precedente da 15.7 com documentos),
+   sem sub-chave derivada (justificativa: o modelo de ameaça real é vazamento do JSON já decifrado
+   por bug, não comprometimento direto da chave — nesse cenário uma sub-chave HKDF não protege
+   mais, já que é rederivável sem nenhuma interação nova).
+
+   **Achado crítico no caminho**: o reparse inline de `vault_publish` (Rust) e `markPublished`
+   (Dart) — ambos otimizações pré-existentes que evitam um `load()`/`_load()` duplicado — faziam
+   parse bruto do blob decifrado sem passar pela normalização de card fields. Sem corrigir isso, o
+   snapshot local de publish ficaria com os campos cifrados (nonce novo a cada save) enquanto
+   `pending_changes()`/`pendingChanges()` comparam contra `load()`/`_load()` (sempre em claro) —
+   **qualquer vault com cartão veria "pendência fantasma" pra sempre**, mesmo sem editar nada.
+   Corrigido chamando a mesma normalização nos dois pontos, com teste de regressão específico nos
+   dois lados. Mesmo tratamento aplicado a `vault_export_backup`/`exportBackup` (cifra os campos
+   antes de exportar — o backup sai de circulação, mesmo defense-in-depth do vault.enc) e
+   `vault_import_backup`/`importBackup` (decifra antes de `save()`, senão cifraria em cima de um
+   valor já cifrado).
+
+   **Polish menor**: campos de cartão no formulário Desktop (`VaultManagement.tsx`) ganharam o
+   mesmo toggle de revelar que a senha já tinha (`type={showPw ? "text" : "password"}`) — antes
+   eram `<input>` sem máscara nenhuma.
+
+   **Testes**: `cargo test --lib` 135/135 (10 novos em `vault.rs`: round-trip, fallback pra
+   entrada legada, `Debug` redigido, e o teste de regressão da "pendência fantasma").
+   `flutter test` 496/496 (achado no caminho ao escrever os testes: o grupo novo foi o primeiro
+   deste arquivo a exercitar `markPublished`, expondo falta de mock do canal de
+   `FlutterSecureStorage` — corrigido replicando o mesmo mock de
+   `vault_publish_service_test.dart`; e um teste pré-existente de `toJsonForExtension` que
+   esperava `document`/`address`/`credit_card` sobrevivendo, agora corretamente removidos,
+   atualizado). `flutter analyze` limpo, `npx vitest run` 101/101, `tsc --noEmit`/`cargo
+   clippy`/`cargo fmt --check` limpos.
 
 ---
 

@@ -218,6 +218,24 @@ void main() {
       expect(find.text(card1.cardNumber), findsOneWidget);
     });
 
+    testWidgets(
+        'máscara é de tamanho fixo, não vaza o comprimento do número/CVV '
+        '(achado da 15.8: `\'•\' * value.length` distinguia CVV de 3 x 4 '
+        'dígitos, ou PAN Amex de 15 x Visa/Master de 16)', (tester) async {
+      when(() => mockRepository.listEntries())
+          .thenAnswer((_) async => [cardEntry(card1)]);
+
+      await tester.pumpWidget(buildScreen(validPayload()));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Nubank'));
+      await tester.pumpAndSettle();
+
+      // Mesma máscara fixa que _CopyableRow (vault_entry_detail_screen.dart)
+      // já usa — não '•' * value.length, que vazaria o comprimento real.
+      expect(find.text('••••••••'), findsNWidgets(2)); // card number + cvv
+    });
+
     testWidgets('Approve entrega o cartão escolhido', (tester) async {
       when(() => mockRepository.listEntries())
           .thenAnswer((_) async => [cardEntry(card1), cardEntry(card2)]);

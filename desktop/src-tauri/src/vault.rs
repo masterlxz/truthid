@@ -150,17 +150,42 @@ pub(crate) struct AddressData {
     pub phone: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone)]
 pub(crate) struct CreditCardData {
     pub label: String,
     pub card_holder_name: String,
+    /// Cifrado individualmente (Fase 15.8) na representação em disco/export
+    /// (`vault::save`/`vault_export_backup`) — em memória, sempre em claro
+    /// (pós `vault::load()`/migrações), igual ao resto do app já espera.
+    /// Ver `encrypt_card_field`/`try_decrypt_card_field`.
     pub card_number: String,
     pub expiry_month: String,
     pub expiry_year: String,
+    /// Idem `card_number`.
     pub cvv: String,
     #[serde(default)]
     pub bank: Option<String>,
     pub card_network: CardNetwork,
+}
+
+/// `Debug` customizado (Fase 15.8) — redige `card_number`/`cvv` mesmo que
+/// algum código futuro chame `dbg!`/`tracing::debug!("{:?}", ...)` numa
+/// `CreditCardData`/`VaultEntry` por engano. Auditoria confirmou que nada
+/// faz isso hoje (zero logging real), mas o `derive(Debug)` automático não
+/// tinha essa proteção — landmine fechada preventivamente.
+impl std::fmt::Debug for CreditCardData {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("CreditCardData")
+            .field("label", &self.label)
+            .field("card_holder_name", &self.card_holder_name)
+            .field("card_number", &"[redacted]")
+            .field("expiry_month", &self.expiry_month)
+            .field("expiry_year", &self.expiry_year)
+            .field("cvv", &"[redacted]")
+            .field("bank", &self.bank)
+            .field("card_network", &self.card_network)
+            .finish()
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -195,7 +220,7 @@ pub(crate) struct DeviceVaultPermission {
     pub can_write: bool,
 }
 
-#[derive(Serialize, Deserialize, Default, Debug)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub(crate) struct Vault {
     pub version: u64,
     pub entries: Vec<VaultEntry>,
@@ -464,6 +489,10 @@ pub(crate) fn load() -> Result<Vault, String> {
             }
         }
     }
+    // Fase 15.8: decifra card_number/cvv — em memória, o resto do app
+    // sempre vê texto plano (fallback automático pra entradas anteriores à
+    // 15.8, ainda em claro no disco).
+    decrypt_card_fields_in_place(&mut vault);
     Ok(vault)
 }
 
@@ -520,9 +549,12 @@ pub(crate) fn document_needs_pin(local_blob: &[u8], stored_hash: Option<&str>) -
     }
 }
 
-// Serializa o vault, cifra e escreve em disco.
+// Serializa o vault, cifra e escreve em disco. Fase 15.8: card_number/cvv
+// são cifrados individualmente numa cópia antes de serializar — o `&Vault`
+// do caller nunca é mutado, continua em claro depois desta chamada.
 pub(crate) fn save(vault: &Vault) -> Result<(), String> {
-    let json = serde_json::to_vec(vault).map_err(|e| e.to_string())?;
+    let for_disk = vault_with_encrypted_card_fields(vault)?;
+    let json = serde_json::to_vec(&for_disk).map_err(|e| e.to_string())?;
     let blob = encrypt(&json)?;
     let path = vault_path()?;
     crate::config::write_file(&path, &blob)
@@ -560,6 +592,70 @@ pub(crate) fn decrypt(blob: &[u8]) -> Result<Vec<u8>, String> {
     cipher
         .decrypt(nonce, &blob[12..])
         .map_err(|_| "vault decrypt failed — blob corrupted or wrong key".to_string())
+}
+
+// ---------------------------------------------------------------------------
+// Cifra individual de card_number/cvv (Fase 15.8)
+// ---------------------------------------------------------------------------
+//
+// Princípio único: card_number/cvv são SEMPRE texto plano na representação
+// em memória (o resto do app nunca muda) e SEMPRE cifrados individualmente
+// na representação em disco/export (vault.enc, backup exportado). A
+// fronteira entre as duas é só nos pontos de parse/serialize bruto de
+// Vault — ver decrypt_card_fields_in_place (usado em load() e no reparse
+// inline de vault_publish) e vault_with_encrypted_card_fields (usado em
+// save() e vault_export_backup). Reusa a mesma vault key/cifra de
+// encrypt()/decrypt() (mesmo precedente da 15.7 com documentos) — sem
+// sub-chave derivada, ver justificativa em project/PHASE.md, 15.8.
+
+fn encrypt_card_field(value: &str) -> Result<String, String> {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    Ok(STANDARD.encode(encrypt(value.as_bytes())?))
+}
+
+/// Tenta decifrar um campo individualmente cifrado. Se falhar por qualquer
+/// motivo (base64 inválido, blob curto demais, tag AEAD não bate), assume
+/// que é uma entrada anterior à 15.8 (ainda em texto plano) e devolve o
+/// valor como está — mesmo padrão de fallback que `load()` já usa pra
+/// migrar a chave do vault (nova → legada), aqui pro formato do campo.
+fn try_decrypt_card_field(value: &str) -> String {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    let Ok(blob) = STANDARD.decode(value) else {
+        return value.to_string();
+    };
+    match decrypt(&blob) {
+        Ok(plain) => String::from_utf8(plain).unwrap_or_else(|_| value.to_string()),
+        Err(_) => value.to_string(),
+    }
+}
+
+/// Decifra card_number/cvv de toda entrada tipo cartão, em memória. Chamado
+/// por `load()` e pelo reparse inline de `vault_publish` (lib.rs) — este
+/// último é crítico pra corretude, não só consistência: sem essa
+/// normalização ali, o snapshot local de publish ficaria com os campos
+/// cifrados (nonce novo a cada save) enquanto `pending_changes()` compara
+/// contra `load()` (sempre em claro) — qualquer vault com cartão veria
+/// "pendência fantasma" pra sempre.
+pub(crate) fn decrypt_card_fields_in_place(vault: &mut Vault) {
+    for entry in &mut vault.entries {
+        if let Some(card) = &mut entry.credit_card {
+            card.card_number = try_decrypt_card_field(&card.card_number);
+            card.cvv = try_decrypt_card_field(&card.cvv);
+        }
+    }
+}
+
+/// Cifra card_number/cvv individualmente numa CÓPIA do vault, pra
+/// serialização em disco/export — nunca muta o `&Vault` do caller.
+pub(crate) fn vault_with_encrypted_card_fields(vault: &Vault) -> Result<Vault, String> {
+    let mut copy = vault.clone();
+    for entry in &mut copy.entries {
+        if let Some(card) = &mut entry.credit_card {
+            card.card_number = encrypt_card_field(&card.card_number)?;
+            card.cvv = encrypt_card_field(&card.cvv)?;
+        }
+    }
+    Ok(copy)
 }
 
 // ---------------------------------------------------------------------------
@@ -1495,5 +1591,137 @@ mod tests {
         let new_blob = b"conteudo novo, diferente";
         let old_hash = crate::ipfs::keccak256_hex(old_blob);
         assert!(document_needs_pin(new_blob, Some(&old_hash)));
+    }
+
+    // --- testes de cifra individual de card_number/cvv (Fase 15.8) ---
+
+    #[test]
+    fn encrypt_then_decrypt_card_field_round_trips() {
+        let ciphertext = encrypt_card_field("4111111111111111").unwrap();
+        assert_ne!(ciphertext, "4111111111111111");
+        assert_eq!(try_decrypt_card_field(&ciphertext), "4111111111111111");
+    }
+
+    #[test]
+    fn try_decrypt_card_field_falls_back_to_plaintext_for_legacy_value() {
+        // Entrada anterior à 15.8: valor nunca foi cifrado, não é base64
+        // válido de um blob AES-GCM (curto demais, ou simplesmente não é
+        // o formato certo) — deve voltar como está, sem erro.
+        assert_eq!(
+            try_decrypt_card_field("4111111111111111"),
+            "4111111111111111"
+        );
+        assert_eq!(try_decrypt_card_field("123"), "123");
+        assert_eq!(try_decrypt_card_field(""), "");
+    }
+
+    #[test]
+    fn decrypt_card_fields_in_place_decrypts_encrypted_entry() {
+        let mut vault = Vault::default();
+        let mut entry = make_credit_card_entry("id1");
+        let card = entry.credit_card.as_mut().unwrap();
+        card.card_number = encrypt_card_field(&card.card_number).unwrap();
+        card.cvv = encrypt_card_field(&card.cvv).unwrap();
+        vault.entries.push(entry);
+
+        decrypt_card_fields_in_place(&mut vault);
+
+        let card = vault.entries[0].credit_card.as_ref().unwrap();
+        assert_eq!(card.card_number, "4111111111111111");
+        assert_eq!(card.cvv, "123");
+    }
+
+    #[test]
+    fn decrypt_card_fields_in_place_is_noop_for_legacy_plaintext_entry() {
+        let mut vault = Vault::default();
+        vault.entries.push(make_credit_card_entry("id1")); // já em claro
+
+        decrypt_card_fields_in_place(&mut vault);
+
+        let card = vault.entries[0].credit_card.as_ref().unwrap();
+        assert_eq!(card.card_number, "4111111111111111");
+        assert_eq!(card.cvv, "123");
+    }
+
+    #[test]
+    fn decrypt_card_fields_in_place_ignores_non_credit_card_entries() {
+        let mut vault = Vault::default();
+        vault.entries.push(make_entry("id1", "github.com"));
+
+        decrypt_card_fields_in_place(&mut vault); // não deve panicar nem mudar nada
+
+        assert!(vault.entries[0].credit_card.is_none());
+    }
+
+    #[test]
+    fn vault_with_encrypted_card_fields_does_not_mutate_original() {
+        let mut vault = Vault::default();
+        vault.entries.push(make_credit_card_entry("id1"));
+
+        let for_disk = vault_with_encrypted_card_fields(&vault).unwrap();
+
+        // Original continua em claro (save() não deve mutar o vault do caller).
+        assert_eq!(
+            vault.entries[0].credit_card.as_ref().unwrap().card_number,
+            "4111111111111111"
+        );
+        // Cópia pra disco está cifrada.
+        assert_ne!(
+            for_disk.entries[0]
+                .credit_card
+                .as_ref()
+                .unwrap()
+                .card_number,
+            "4111111111111111"
+        );
+    }
+
+    #[test]
+    fn encrypt_then_decrypt_whole_vault_round_trips() {
+        let mut vault = Vault::default();
+        vault.entries.push(make_credit_card_entry("id1"));
+
+        let mut for_disk = vault_with_encrypted_card_fields(&vault).unwrap();
+        decrypt_card_fields_in_place(&mut for_disk);
+
+        let card = for_disk.entries[0].credit_card.as_ref().unwrap();
+        assert_eq!(card.card_number, "4111111111111111");
+        assert_eq!(card.cvv, "123");
+    }
+
+    #[test]
+    fn credit_card_data_debug_redacts_number_and_cvv() {
+        let entry = make_credit_card_entry("id1");
+        let debug_output = format!("{:?}", entry.credit_card.unwrap());
+
+        assert!(!debug_output.contains("4111111111111111"));
+        assert!(!debug_output.contains("123"));
+        assert!(debug_output.contains("[redacted]"));
+        // Outros campos continuam visíveis — não é uma redação cega.
+        assert!(debug_output.contains("Nubank"));
+        assert!(debug_output.contains("Fabio Junior"));
+    }
+
+    // --- teste de regressão: pending_changes não deve "vazar" por causa da
+    // cifra individual (achado crítico da 15.8 — ver decrypt_card_fields_in_place) ---
+
+    #[test]
+    fn diff_count_zero_for_identical_vaults_with_credit_card_entry() {
+        let mut vault = Vault::default();
+        vault.entries.push(make_credit_card_entry("id1"));
+        let published = Vault {
+            version: vault.version,
+            entries: vault.entries.clone(),
+            profile_names: vault.profile_names.clone(),
+            device_permissions: vault.device_permissions.clone(),
+        };
+
+        // Simula o ciclo save()→load() (cifra pro disco, decifra de volta)
+        // que aconteceria de verdade num publish — ambos os lados devem
+        // continuar batendo depois, sem diferença fantasma.
+        let mut round_tripped = vault_with_encrypted_card_fields(&vault).unwrap();
+        decrypt_card_fields_in_place(&mut round_tripped);
+
+        assert_eq!(diff_count(&round_tripped, &published), 0);
     }
 }

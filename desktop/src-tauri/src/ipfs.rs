@@ -214,7 +214,11 @@ pub(crate) async fn fetch_from_gateway(cid: &str) -> Result<Vec<u8>, String> {
         let url = format!("{gateway}{cid}");
         match client.get(&url).send().await {
             Ok(res) if res.status().is_success() => {
-                return res.bytes().await.map(|b| b.to_vec()).map_err(|e| e.to_string());
+                return res
+                    .bytes()
+                    .await
+                    .map(|b| b.to_vec())
+                    .map_err(|e| e.to_string());
             }
             Ok(res) => errors.push(format!("{gateway}: HTTP {}", res.status())),
             Err(e) => errors.push(format!("{gateway}: {e}")),

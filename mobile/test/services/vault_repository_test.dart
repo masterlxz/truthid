@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:web3dart/crypto.dart' show keccak256, bytesToHex;
 
@@ -18,11 +19,35 @@ class _FakeCipherService extends VaultCipherService {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   late Directory tempDir;
   late String vaultPath;
   late VaultRepository repo;
 
+  // markPublished()/pendingChanges() usam FlutterSecureStorage real (campo
+  // estático, não injetável) — mockar o canal aqui pelo mesmo motivo de
+  // vault_publish_service_test.dart (Sessão 98/15.7): sem isso, o grupo
+  // "Fase 15.8" (que exercita markPublished pela 1ª vez neste arquivo)
+  // trava com "Binding has not yet been initialized".
+  const secureStorageChannel =
+      MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
+  final fakeSecureStorage = <String, String>{};
+
   setUp(() async {
+    fakeSecureStorage.clear();
+    TestWidgetsFlutterBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(secureStorageChannel, (call) async {
+      switch (call.method) {
+        case 'write':
+          fakeSecureStorage[call.arguments['key']] = call.arguments['value'];
+          return null;
+        case 'read':
+          return fakeSecureStorage[call.arguments['key']];
+        default:
+          return null;
+      }
+    });
     tempDir = await Directory.systemTemp.createTemp('vault_test_');
     vaultPath = '${tempDir.path}/vault.enc';
     repo = VaultRepository(
@@ -32,6 +57,8 @@ void main() {
   });
 
   tearDown(() async {
+    TestWidgetsFlutterBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(secureStorageChannel, null);
     await tempDir.delete(recursive: true);
   });
 
@@ -635,7 +662,14 @@ void main() {
       );
 
       final extensionJson = entry.toJsonForExtension();
-      final fullJson = entry.toJson()..remove('totp_secret');
+      // Fase 15.8: document/address/credit_card também são removidos (ver
+      // grupo "Fase 15.8" abaixo) — esse canal só consome username/
+      // password/passkey.
+      final fullJson = entry.toJson()
+        ..remove('totp_secret')
+        ..remove('document')
+        ..remove('address')
+        ..remove('credit_card');
       expect(extensionJson, equals(fullJson));
     });
   });
@@ -1127,6 +1161,140 @@ void main() {
 
       // Nunca migrado (já tinha cid) — cache local não deveria ter sido criado.
       expect(await repo.readDocumentBlob('doc1'), isNull);
+    });
+  });
+
+  group('Fase 15.8 (cifra individual de card_number/cvv)', () {
+    const creditCard = CreditCardData(
+      label: 'Nubank',
+      cardHolderName: 'Fabio Junior',
+      cardNumber: '4111111111111111',
+      expiryMonth: '12',
+      expiryYear: '2030',
+      cvv: '123',
+      cardNetwork: CardNetwork.visa,
+    );
+
+    test('addEntry then listEntries round-trips card_number/cvv em texto plano', () async {
+      await repo.addEntry(
+        site: '', username: '', password: '',
+        type: EntryType.creditCard, creditCard: creditCard,
+      );
+
+      final entries = await repo.listEntries();
+
+      expect(entries.single.creditCard?.cardNumber, '4111111111111111');
+      expect(entries.single.creditCard?.cvv, '123');
+    });
+
+    test('save() não muta a entrada em memória (continua em claro depois de salvar)', () async {
+      final saved = await repo.addEntry(
+        site: '', username: '', password: '',
+        type: EntryType.creditCard, creditCard: creditCard,
+      );
+
+      expect(saved.creditCard?.cardNumber, '4111111111111111');
+      expect(saved.creditCard?.cvv, '123');
+    });
+
+    test('card_number/cvv não ficam gravados como texto literal no arquivo em disco', () async {
+      // _FakeCipherService é passthrough (identidade), então isto não prova
+      // força criptográfica — prova que o valor passa por uma transformação
+      // (o encrypt individual, aqui reduzido a base64) antes de ir pro
+      // disco, em vez de ser gravado literalmente. A cifra real (AES-GCM)
+      // é validada à parte pelos testes puros do Rust equivalente.
+      await repo.addEntry(
+        site: '', username: '', password: '',
+        type: EntryType.creditCard, creditCard: creditCard,
+      );
+
+      final rawBytes = await File(vaultPath).readAsBytes();
+      final rawContent = utf8.decode(rawBytes, allowMalformed: true);
+
+      expect(rawContent.contains('4111111111111111'), isFalse);
+      expect(rawContent.contains('"123"'), isFalse);
+    });
+
+    test('uma entrada legada (formato pré-15.8, card_number/cvv em claro) continua carregando certo', () async {
+      final legacyVaultJson = jsonEncode({
+        'version': 1,
+        'entries': [
+          {
+            'id': 'card1',
+            'site': '', 'url': '', 'username': '', 'password': '', 'notes': '',
+            'profiles': [],
+            'type': 'creditCard',
+            'credit_card': {
+              'label': 'Nubank',
+              'card_holder_name': 'Fabio Junior',
+              'card_number': '4111111111111111',
+              'expiry_month': '12',
+              'expiry_year': '2030',
+              'cvv': '123',
+              'card_network': 'visa',
+            },
+            'created_at': 0,
+            'updated_at': 0,
+          }
+        ],
+      });
+      await File(vaultPath).writeAsBytes(utf8.encode(legacyVaultJson));
+
+      final entries = await repo.listEntries();
+
+      expect(entries.single.creditCard?.cardNumber, '4111111111111111');
+      expect(entries.single.creditCard?.cvv, '123');
+    });
+
+    test(
+        'publicar não cria pendência fantasma pra uma entrada de cartão '
+        '(achado crítico: markPublished tinha que normalizar os campos pro '
+        'mesmo formato que _load() usa, senão o diff via nonce novo a cada '
+        'save nunca bateria)', () async {
+      await repo.addEntry(
+        site: '', username: '', password: '',
+        type: EntryType.creditCard, creditCard: creditCard,
+      );
+      final blob = await repo.readRawBlob();
+      await repo.markPublished(await repo.currentVersion(), blob);
+
+      expect(await repo.pendingChanges(), 0);
+    });
+
+    test('exportBackup + importBackup round-trip card_number/cvv em texto plano', () async {
+      await repo.addEntry(
+        site: '', username: '', password: '',
+        type: EntryType.creditCard, creditCard: creditCard,
+      );
+
+      final backup = await repo.exportBackup('senha-forte');
+      await repo.importBackup(backup, 'senha-forte');
+
+      final entries = await repo.listEntries();
+      expect(entries.single.creditCard?.cardNumber, '4111111111111111');
+      expect(entries.single.creditCard?.cvv, '123');
+    });
+
+    test('toJsonForExtension remove credit_card (junto de document/address/totp_secret)', () {
+      final entry = VaultEntry(
+        id: '1',
+        site: '',
+        url: '',
+        username: 'u',
+        password: 'p',
+        notes: '',
+        type: EntryType.creditCard,
+        creditCard: creditCard,
+        createdAt: DateTime.now().toUtc(),
+        updatedAt: DateTime.now().toUtc(),
+      );
+
+      final json = entry.toJsonForExtension();
+
+      expect(json.containsKey('credit_card'), isFalse);
+      expect(json.containsKey('document'), isFalse);
+      expect(json.containsKey('address'), isFalse);
+      expect(json.containsKey('totp_secret'), isFalse);
     });
   });
 }

@@ -7110,3 +7110,65 @@ de disco via o mecanismo de `testPath` que já existia — diferente do Rust). `
 concluídas (só 15.8 resta). `PENDING.md` — P8 atualizado, novo P37 registrado (validação E2E real
 contra Kubo/gateway público, nunca exercitada fora de testes automatizados/blobs sintéticos).
 
+### Sessão 177 — 2026-07-30: Fase 15.8 — Cifra individual de card_number/cvv, exposição mínima no autofill, zero logging (fecha a Fase 15 inteira)
+
+2 agentes Explore auditaram o estado real antes de codar, em vez de assumir. **Zero logging** já
+era verdade hoje — grep completo (extensão/Mobile/Desktop, produção e testes) não achou nenhum
+`console.log`/`print`/`debugPrint`/`println!`/`dbg!`/`tracing` tocando `card_number`/`cvv`. Risco
+estrutural fechado preventivamente: `CreditCardData` (Rust) derivava `Debug` sem redação — uma
+landmine pra logging futuro, não um vazamento ativo. **Exposição mínima no autofill**: o fluxo
+dedicado (extensão + Mobile + loopback Desktop) já estava limpo (sem `chrome.storage`, cifrado
+ponta a ponta exceto o loopback, que já era texto plano por design). **Achado real fora do fluxo
+perguntado**: o canal mais antigo (13.9, QR `truthid-vault-session`) usa
+`VaultEntry.toJsonForExtension()`, que só removia `totp_secret` — não `document`/`address`/
+`credit_card`. Uma entrada tipo cartão num perfil sincronizado por esse canal deixava
+`card_number`/`cvv` em texto pleno no `chrome.storage.session` da extensão pelo tempo de vida da
+sessão, mesmo a extensão nunca renderizando esses campos. Corrigido.
+
+**Cifra individual — o item principal, prometido em 3 lugares no código desde a 15.1**: sem flag
+de schema nova (evita 2 significados conflitantes pro mesmo campo dependendo de quando é lido) —
+tentativa + fallback, mesmo padrão que `vault::load()` já usa pra migrar a chave do vault (nova →
+legada): tenta decifrar; se falhar (base64 inválido, tag AEAD não bate — `decrypt()` já rejeita
+blobs com menos de 28 bytes, e qualquer PAN/CVV plausível em base64 dá bem menos), assume entrada
+anterior à 15.8 (ainda em claro) e devolve como está. Zero chance real de falso positivo (tag de
+128 bits do AES-GCM). Princípio único: card_number/cvv são sempre texto plano em memória (resto
+do app nunca muda) e sempre cifrados individualmente em disco/export — reusa a mesma vault
+key/`vault::encrypt`/`decrypt` (mesmo precedente da 15.7 com documentos), sem sub-chave derivada
+(justificativa registrada: o modelo de ameaça real é vazamento do JSON já decifrado por bug, não
+comprometimento direto da chave — uma sub-chave HKDF não protegeria mais nesse cenário, já que é
+rederivável sem nenhuma interação nova).
+
+**Achado crítico no caminho, achado só ao mapear TODOS os pontos de parse/serialize bruto de
+`Vault`** (não só `load()`/`save()`): o reparse inline de `vault_publish` (Rust) e `markPublished`
+(Dart) — ambas otimizações pré-existentes que evitam um `load()`/`_load()` duplicado — faziam
+parse bruto do blob decifrado sem passar pela normalização de card fields. Sem corrigir, o
+snapshot local de publish ficaria com os campos cifrados (nonce novo a cada save) enquanto
+`pending_changes()`/`pendingChanges()` comparam contra `load()`/`_load()` (sempre em claro) —
+**qualquer vault com cartão veria "pendência fantasma" pra sempre**, mesmo sem editar nada.
+Corrigido nos 2 lados, com teste de regressão específico. Mesmo tratamento aplicado a
+`vault_export_backup`/`exportBackup` (cifra antes de exportar — o backup sai de circulação, mesmo
+defense-in-depth do vault.enc) e `vault_import_backup`/`importBackup` (decifra antes de `save()`,
+senão cifraria em cima de um valor já cifrado).
+
+**Achados secundários**: `_MaskedInfoRow` (Mobile, aprovação de autofill de cartão) mascarava
+proporcional ao tamanho do valor (`'•' * value.length`, vazando CVV de 3 x 4 dígitos ou PAN Amex
+de 15 x Visa/Master de 16) — trocado pra máscara fixa, igual `_CopyableRow` já fazia na tela de
+detalhe (mesmo raciocínio já documentado lá). Polish menor: campos de cartão no formulário
+Desktop ganharam o mesmo reveal toggle que a senha já tinha — antes eram `<input>` sem máscara
+nenhuma.
+
+**Achado no caminho, testes**: o grupo novo de testes foi o primeiro em `vault_repository_test.dart`
+a exercitar `markPublished()`/`pendingChanges()` — expôs que o arquivo não tinha o mock do canal
+`FlutterSecureStorage` que `vault_publish_service_test.dart` já usa (travava com "Binding has not
+yet been initialized"); corrigido replicando o mesmo setup. Um teste pré-existente de
+`toJsonForExtension` esperava `document`/`address`/`credit_card` sobrevivendo — desatualizado pela
+correção intencional desta sessão, atualizado.
+
+**Testes**: `cargo test --lib` 135/135 (10 novos: round-trip, fallback pra entrada legada, `Debug`
+redigido, regressão da pendência fantasma). `flutter test` 496/496. `flutter analyze` limpo,
+`npx vitest run` 101/101, `tsc --noEmit`/`cargo clippy`/`cargo fmt --check` limpos.
+
+**Documentação**: `PHASE.md` — etapa 15.8 documentada por completo, Fase 15 marcada
+**concluída por completo** (15.1-15.8). `PENDING.md` — P8 movido pra "Resolvidas" (Fase 15
+fechada), P9 mantido (só falta validação em Mac real, P35).
+

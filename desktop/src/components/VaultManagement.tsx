@@ -391,6 +391,10 @@ function EntryForm({
 }) {
   const [form, setForm] = useState<FormState>(initial);
   const [showPw, setShowPw] = useState(false);
+  // Fase 15.8: mesmo padrão de reveal toggle da senha, aplicado aos campos
+  // de cartão — antes eram <input> sem máscara nenhuma.
+  const [showCardNumber, setShowCardNumber] = useState(false);
+  const [showCvv, setShowCvv] = useState(false);
   const [totpError, setTotpError] = useState<string | null>(null);
   const [genOpen, setGenOpen] = useState(false);
   const [genOptions, setGenOptions] = useState<PasswordGeneratorOptions>({
@@ -697,7 +701,18 @@ function EntryForm({
           </div>
           <div className="field">
             <label>Número *</label>
-            <input value={form.credit_card.card_number} onChange={(e) => setCard("card_number", e.target.value)} placeholder="•••• •••• •••• ••••" />
+            <div style={{ display: "flex", gap: "0.4rem" }}>
+              <input
+                type={showCardNumber ? "text" : "password"}
+                value={form.credit_card.card_number}
+                onChange={(e) => setCard("card_number", e.target.value)}
+                placeholder="•••• •••• •••• ••••"
+                style={{ flex: 1 }}
+              />
+              <button type="button" onClick={() => setShowCardNumber((v) => !v)} style={{ padding: "0.3em 0.6em", fontSize: "0.9em" }}>
+                {showCardNumber ? "🙈" : "👁"}
+              </button>
+            </div>
           </div>
           <div className="field">
             <label>Bandeira *</label>
@@ -715,7 +730,18 @@ function EntryForm({
           </div>
           <div className="field">
             <label>CVV *</label>
-            <input value={form.credit_card.cvv} onChange={(e) => setCard("cvv", e.target.value)} placeholder="•••" />
+            <div style={{ display: "flex", gap: "0.4rem" }}>
+              <input
+                type={showCvv ? "text" : "password"}
+                value={form.credit_card.cvv}
+                onChange={(e) => setCard("cvv", e.target.value)}
+                placeholder="•••"
+                style={{ flex: 1 }}
+              />
+              <button type="button" onClick={() => setShowCvv((v) => !v)} style={{ padding: "0.3em 0.6em", fontSize: "0.9em" }}>
+                {showCvv ? "🙈" : "👁"}
+              </button>
+            </div>
           </div>
           <div className="field">
             <label>Banco</label>

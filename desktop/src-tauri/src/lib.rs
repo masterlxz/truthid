@@ -490,7 +490,13 @@ async fn vault_publish() -> Result<ipfs::PinResult, String> {
     let result = ipfs::pin_vault(&encrypted_blob, &providers).await?;
     // Decripta do blob já em memória em vez de read()+load() de novo
     let decrypted = vault::decrypt(&encrypted_blob)?;
-    let v: vault::Vault = serde_json::from_slice(&decrypted).map_err(|e| e.to_string())?;
+    let mut v: vault::Vault = serde_json::from_slice(&decrypted).map_err(|e| e.to_string())?;
+    // Fase 15.8: normaliza card_number/cvv pra texto plano antes de marcar
+    // publicado — crítico pra corretude do diff de pending_changes(), que
+    // sempre compara contra load() (também em claro). Sem isso, o snapshot
+    // guardaria os campos cifrados (nonce novo a cada save), e qualquer
+    // vault com cartão veria "pendência fantasma" pra sempre.
+    vault::decrypt_card_fields_in_place(&mut v);
     vault::mark_published(v.version, &v)?;
     Ok(result)
 }
@@ -502,9 +508,7 @@ async fn vault_publish() -> Result<ipfs::PinResult, String> {
 #[tauri::command]
 fn vault_document_write(entry_id: String, content_b64: String) -> Result<(), String> {
     use base64::{engine::general_purpose::STANDARD, Engine as _};
-    let plaintext = STANDARD
-        .decode(&content_b64)
-        .map_err(|e| e.to_string())?;
+    let plaintext = STANDARD.decode(&content_b64).map_err(|e| e.to_string())?;
     vault::write_document_blob(&entry_id, &plaintext)?;
     Ok(())
 }
@@ -534,7 +538,7 @@ async fn vault_document_read(
                 let actual = ipfs::keccak256_hex(&fetched);
                 if &actual != expected {
                     return Err(
-                        "hash do documento não bate — blob corrompido ou adulterado".to_string(),
+                        "hash do documento não bate — blob corrompido ou adulterado".to_string()
                     );
                 }
             }
@@ -626,7 +630,11 @@ fn vault_decrypt(blob_b64: String) -> Result<String, String> {
 fn vault_export_backup(password: String) -> Result<String, String> {
     use base64::{engine::general_purpose::STANDARD, Engine as _};
     let v = vault::load()?;
-    let json = serde_json::to_vec(&v).map_err(|e| e.to_string())?;
+    // Fase 15.8: backup exportado sai de circulação (USB, nuvem, etc.) —
+    // card_number/cvv ganham a mesma cifra individual extra que vault.enc
+    // já tem, além da cifra por senha do backup em si.
+    let for_export = vault::vault_with_encrypted_card_fields(&v)?;
+    let json = serde_json::to_vec(&for_export).map_err(|e| e.to_string())?;
     let blob = backup::encrypt(&json, &password)?;
     Ok(STANDARD.encode(blob))
 }
@@ -642,8 +650,13 @@ fn vault_import_backup(blob_b64: String, password: String) -> Result<(), String>
     use base64::{engine::general_purpose::STANDARD, Engine as _};
     let blob = STANDARD.decode(&blob_b64).map_err(|e| e.to_string())?;
     let json = backup::decrypt(&blob, &password)?;
-    let imported: vault::Vault = serde_json::from_slice(&json)
+    let mut imported: vault::Vault = serde_json::from_slice(&json)
         .map_err(|_| "backup file has invalid vault contents".to_string())?;
+    // Fase 15.8: normaliza card_number/cvv pra texto plano antes de
+    // save() — o backup carrega os campos já cifrados (ver
+    // vault_export_backup); sem isso, save() cifraria de novo em cima de
+    // um valor já cifrado.
+    vault::decrypt_card_fields_in_place(&mut imported);
     vault::save(&imported)
 }
 
