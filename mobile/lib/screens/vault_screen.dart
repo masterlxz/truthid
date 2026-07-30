@@ -5,6 +5,7 @@ import '../services/blockchain_service.dart';
 import '../services/bundler_config_service.dart';
 import '../services/device_key_service.dart';
 import '../services/ios_autofill_identity_service.dart';
+import '../services/ios_autofill_vault_sync_service.dart';
 import '../services/local_storage_service.dart';
 import '../services/paired_username_resolver.dart';
 import '../services/pimlico_bundler_client.dart';
@@ -57,6 +58,7 @@ class VaultScreen extends StatefulWidget {
   final BundlerConfigService? bundlerConfigService;
   final VaultPublishService? vaultPublishService;
   final IosAutofillIdentityService? iosAutofillIdentityService;
+  final IosAutofillVaultSyncService? iosAutofillVaultSyncService;
 
   const VaultScreen({
     super.key,
@@ -69,6 +71,7 @@ class VaultScreen extends StatefulWidget {
     this.bundlerConfigService,
     this.vaultPublishService,
     this.iosAutofillIdentityService,
+    this.iosAutofillVaultSyncService,
   });
 
   @override
@@ -84,6 +87,7 @@ class _VaultScreenState extends State<VaultScreen> {
   late final VaultRepository _repository;
   late final BundlerConfigService _bundlerConfigService;
   late final IosAutofillIdentityService _iosAutofillIdentityService;
+  late final IosAutofillVaultSyncService _iosAutofillVaultSyncService;
   VaultPublishService? _publishService;
 
   bool _isLoading = true;
@@ -115,6 +119,8 @@ class _VaultScreenState extends State<VaultScreen> {
     _repository = widget.vaultRepository ?? VaultRepository();
     _bundlerConfigService = widget.bundlerConfigService ?? BundlerConfigService();
     _iosAutofillIdentityService = widget.iosAutofillIdentityService ?? IosAutofillIdentityService();
+    _iosAutofillVaultSyncService =
+        widget.iosAutofillVaultSyncService ?? IosAutofillVaultSyncService();
     _publishService = widget.vaultPublishService;
     _load();
   }
@@ -186,6 +192,7 @@ class _VaultScreenState extends State<VaultScreen> {
         _pendingChanges = pending;
       });
       _iosAutofillIdentityService.syncIdentities(_entries);
+      _syncIosAutofillVault();
     }
 
     // Resolver a smart account depende do username — segue em paralelo, sem
@@ -195,6 +202,21 @@ class _VaultScreenState extends State<VaultScreen> {
     // resolvido ficava travado pra sempre sem retry — `_resolveSmartAccount`
     // agora tenta de novo via `resolvePairedUsername` antes de desistir).
     _resolveSmartAccount(identityId);
+  }
+
+  // Fase 15.6, fatia 2 — mantém a cópia do vault cifrado + chave que a
+  // extensão iOS lê (Keychain Access Group / App Group compartilhados)
+  // sempre atualizada, um passo atrás de `syncIdentities`. Fire-and-forget,
+  // como o resto do sync do autofill iOS — qualquer falha (chave ainda não
+  // disponível, vault ainda não sincronizado) não deve travar a tela.
+  Future<void> _syncIosAutofillVault() async {
+    try {
+      final blob = await _repository.readRawBlob();
+      final key = await _vaultKeyService.deriveVaultKey();
+      await _iosAutofillVaultSyncService.sync(blob, key);
+    } catch (_) {
+      // Informativo — mesma postura de _resolveSmartAccount.
+    }
   }
 
   Future<void> _resolveSmartAccount(String identityId) async {

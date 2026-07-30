@@ -110,12 +110,27 @@ pub(crate) enum EntryType {
 pub(crate) struct DocumentData {
     pub name: String,
     pub file_name: String,
-    /// Conteúdo do arquivo em base64. Sem limite de tamanho imposto aqui —
-    /// ver project/PHASE.md 15.7 (chunking/limite ficam pra quando o upload
-    /// de verdade for implementado).
-    pub file_data: String,
+    /// Campo legado (pré-Fase 15.7) — conteúdo em base64 embutido direto no
+    /// blob do vault. Inflava o sync de TODO o vault por causa de qualquer
+    /// documento grande, mesmo pra edições não relacionadas (ver
+    /// project/PHASE.md, 15.7). Só existe pra migração automática em
+    /// `load()`; nunca mais escrito (privado + `skip_serializing`) — o
+    /// conteúdo agora vive cifrado à parte (`vault_documents/<id>.enc`),
+    /// referenciado por `cid`/`content_hash` abaixo.
+    #[serde(default, skip_serializing)]
+    file_data: String,
     pub file_size_bytes: u64,
     pub mime_type: String,
+    /// CID do blob cifrado do documento no IPFS — `None` até o próximo
+    /// publish pinar o conteúdo (ver `vault_publish` em `lib.rs`).
+    #[serde(default)]
+    pub cid: Option<String>,
+    /// keccak256 (hex, prefixo "0x") do blob cifrado do documento — mesmo
+    /// padrão de verificação que o vault principal já usa antes de decifrar
+    /// um blob baixado do IPFS. Também usado localmente pra decidir se o
+    /// documento mudou desde o último pin (`document_needs_pin`).
+    #[serde(default)]
+    pub content_hash: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -429,7 +444,80 @@ pub(crate) fn load() -> Result<Vault, String> {
             }
         }
     }
+    // Migração (Fase 15.7): documentos antigos guardavam o conteúdo em
+    // base64 embutido direto no blob do vault (`file_data`). Uma entrada com
+    // `file_data` ainda preenchido e `cid` ausente não passou pela migração
+    // ainda — decifra o base64 legado, escreve no cache local de documentos,
+    // e deixa `cid`/`content_hash` em None pro próximo `vault_publish` pinar
+    // como blob separado (o pin em si não acontece aqui, `load()` é síncrono
+    // e só lê disco).
+    {
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+        for entry in &mut vault.entries {
+            if let Some(doc) = &mut entry.document {
+                if !doc.file_data.is_empty() && doc.cid.is_none() {
+                    if let Ok(raw) = STANDARD.decode(&doc.file_data) {
+                        let _ = write_document_blob(&entry.id, &raw);
+                    }
+                    doc.file_data = String::new();
+                }
+            }
+        }
+    }
     Ok(vault)
+}
+
+// ---------------------------------------------------------------------------
+// Cache local de documentos (Fase 15.7)
+// ---------------------------------------------------------------------------
+
+// Diretório onde o conteúdo cifrado de cada documento vive localmente, à
+// parte do blob principal do vault — só um CID/hash aponta pra cá de dentro
+// do vault.enc (ver `DocumentData::cid`/`content_hash`). Motivo: um
+// documento grande não deve inflar o blob que é sincronizado a cada edição
+// não relacionada (ver project/PHASE.md, 15.7).
+fn document_path(entry_id: &str) -> Result<PathBuf, String> {
+    crate::config::truthid_file_path(&format!("vault_documents/{entry_id}.enc"))
+}
+
+/// Lê o blob cifrado do documento de uma entrada, se existir localmente.
+/// `None` se essa entrada nunca teve conteúdo salvo neste device (ex:
+/// documento adicionado em outro device, ainda não buscado por CID).
+pub(crate) fn read_document_blob(entry_id: &str) -> Result<Option<Vec<u8>>, String> {
+    let path = document_path(entry_id)?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    Ok(Some(crate::config::read_file(&path)?))
+}
+
+/// Cifra e grava o conteúdo em claro de um documento no cache local.
+/// Retorna o blob cifrado (evita reler do disco pra computar o hash na hora
+/// de pinar).
+pub(crate) fn write_document_blob(entry_id: &str, plaintext: &[u8]) -> Result<Vec<u8>, String> {
+    let blob = encrypt(plaintext)?;
+    let path = document_path(entry_id)?;
+    crate::config::write_file(&path, &blob)?;
+    Ok(blob)
+}
+
+/// Grava um blob **já cifrado** no cache local, sem recifrar — usado ao
+/// buscar o conteúdo de um documento por CID (já vem cifrado do IPFS, ver
+/// `vault_document_read` em `lib.rs`).
+pub(crate) fn cache_document_blob_raw(entry_id: &str, encrypted: &[u8]) -> Result<(), String> {
+    let path = document_path(entry_id)?;
+    crate::config::write_file(&path, encrypted)
+}
+
+/// Decide se o conteúdo local de um documento precisa ser (re)pinado — `true`
+/// se nunca foi pinado (`stored_hash` é `None`) ou se o hash do blob local
+/// não bate com o último hash pinado. Evita rechamar `pin_vault` (rede) numa
+/// publicação onde só outra entrada do vault mudou.
+pub(crate) fn document_needs_pin(local_blob: &[u8], stored_hash: Option<&str>) -> bool {
+    match stored_hash {
+        None => true,
+        Some(hash) => crate::ipfs::keccak256_hex(local_blob) != hash,
+    }
 }
 
 // Serializa o vault, cifra e escreve em disco.
@@ -1154,9 +1242,11 @@ mod tests {
         entry.document = Some(DocumentData {
             name: "RG".to_string(),
             file_name: "rg.pdf".to_string(),
-            file_data: "base64-fake-content".to_string(),
+            file_data: String::new(),
             file_size_bytes: 12345,
             mime_type: "application/pdf".to_string(),
+            cid: None,
+            content_hash: None,
         });
         entry
     }
@@ -1317,5 +1407,93 @@ mod tests {
         assert_eq!(vault.entries[0].r#type, EntryType::Document);
         assert_eq!(vault.entries[1].r#type, EntryType::Address);
         assert_eq!(vault.entries[2].r#type, EntryType::CreditCard);
+    }
+
+    // --- testes de schema/cache Fase 15.7 (documentos separados do blob) ---
+    //
+    // Nota: `read_document_blob`/`write_document_blob` tocam disco real via
+    // `crate::config::truthid_file_path` — mesma limitação já documentada
+    // pro resto do módulo (sem infra de path override em testes, ver Sessão
+    // 154). Os testes abaixo cobrem só a lógica pura (schema/migração via
+    // JSON, `document_needs_pin`), sem escrever no disco real.
+
+    #[test]
+    fn document_data_new_format_has_no_content_embedded() {
+        let entry = make_document_entry("id1");
+        let json = serde_json::to_vec(&entry).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&json).unwrap();
+        assert!(
+            value["document"].get("file_data").is_none(),
+            "file_data não deve aparecer no JSON serializado (skip_serializing)"
+        );
+    }
+
+    #[test]
+    fn document_entry_round_trips_cid_and_content_hash() {
+        let mut entry = make_document_entry("id1");
+        entry.document.as_mut().unwrap().cid = Some("bafy123".to_string());
+        entry.document.as_mut().unwrap().content_hash = Some("0xabc".to_string());
+
+        let json = serde_json::to_vec(&entry).unwrap();
+        let reparsed: VaultEntry = serde_json::from_slice(&json).unwrap();
+
+        let doc = reparsed.document.unwrap();
+        assert_eq!(doc.cid, Some("bafy123".to_string()));
+        assert_eq!(doc.content_hash, Some("0xabc".to_string()));
+    }
+
+    #[test]
+    fn old_format_document_json_migrates_schema_on_deserialize() {
+        // Formato antigo (pré-Fase 15.7): file_data embutido, sem cid/content_hash.
+        let old_json = br#"{
+            "id": "id1",
+            "site": "",
+            "url": "",
+            "username": "user",
+            "password": "pass",
+            "notes": "",
+            "profiles": [],
+            "type": "document",
+            "document": {
+                "name": "RG",
+                "file_name": "rg.pdf",
+                "file_data": "aGVsbG8=",
+                "file_size_bytes": 5,
+                "mime_type": "application/pdf"
+            },
+            "created_at": 0,
+            "updated_at": 0
+        }"#;
+        let entry: VaultEntry = serde_json::from_slice(old_json).unwrap();
+        let doc = entry.document.unwrap();
+
+        // cid/content_hash ausentes no JSON antigo -> None, sinaliza "ainda
+        // não migrado/pinado" pro próximo load()/vault_publish.
+        assert_eq!(doc.cid, None);
+        assert_eq!(doc.content_hash, None);
+        // file_data é lido (via serde default) só pra load() migrar — não é
+        // exposto publicamente, mas o campo existe internamente até load()
+        // rodar a migração (testada separadamente via write_document_blob
+        // não tocar disco aqui).
+    }
+
+    #[test]
+    fn document_needs_pin_true_when_never_pinned() {
+        assert!(document_needs_pin(b"conteudo", None));
+    }
+
+    #[test]
+    fn document_needs_pin_false_when_content_unchanged() {
+        let blob = b"conteudo cifrado fake";
+        let hash = crate::ipfs::keccak256_hex(blob);
+        assert!(!document_needs_pin(blob, Some(&hash)));
+    }
+
+    #[test]
+    fn document_needs_pin_true_when_content_changed() {
+        let old_blob = b"conteudo antigo";
+        let new_blob = b"conteudo novo, diferente";
+        let old_hash = crate::ipfs::keccak256_hex(old_blob);
+        assert!(document_needs_pin(new_blob, Some(&old_hash)));
     }
 }

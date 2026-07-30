@@ -6,8 +6,10 @@ import 'dart:typed_data';
 import 'package:crypto/crypto.dart' show sha256;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
+import 'package:web3dart/crypto.dart' show keccak256, bytesToHex;
 
 import 'backup_cipher_service.dart';
+import 'ipfs_gateway_client.dart';
 import 'vault_cipher_service.dart';
 
 // ---------------------------------------------------------------------------
@@ -108,35 +110,53 @@ enum CardNetwork {
 class DocumentData {
   final String name;
   final String fileName;
-  /// Conteúdo do arquivo em base64. Sem limite de tamanho imposto aqui — ver
-  /// project/PHASE.md 15.7 (chunking/limite ficam pra quando o upload de
-  /// verdade for implementado).
-  final String fileData;
   final int fileSizeBytes;
   final String mimeType;
+  /// CID do blob cifrado do documento no IPFS (Fase 15.7) — null até o
+  /// próximo publish pinar o conteúdo (ver [VaultPublishService]).
+  final String? cid;
+  /// keccak256 (hex, prefixo "0x") do blob cifrado do documento — mesmo
+  /// padrão de verificação que o vault principal já usa antes de decifrar
+  /// um blob baixado do IPFS ([VaultSyncService.sync]). Também usado
+  /// localmente pra decidir se o documento mudou desde o último pin.
+  final String? contentHash;
+  /// Campo legado (pré-Fase 15.7) — conteúdo em base64 embutido direto no
+  /// JSON da entrada. Inflava o sync de TODO o vault por causa de qualquer
+  /// documento grande, mesmo pra edições não relacionadas (ver
+  /// project/PHASE.md, 15.7). Privado ao arquivo: só existe pra
+  /// [VaultRepository._migrateLegacyDocuments] mover o conteúdo pro cache
+  /// local; nunca incluído em [toJson] — não faz parte do modelo daqui pra
+  /// frente (o conteúdo agora vive cifrado à parte, ver
+  /// [VaultRepository.readDocumentBlob]).
+  final String? _legacyFileData;
 
   const DocumentData({
     required this.name,
     required this.fileName,
-    required this.fileData,
     required this.fileSizeBytes,
     required this.mimeType,
+    this.cid,
+    this.contentHash,
+    this._legacyFileData,
   });
 
   factory DocumentData.fromJson(Map<String, dynamic> json) => DocumentData(
         name: json['name'] as String,
         fileName: json['file_name'] as String,
-        fileData: json['file_data'] as String,
         fileSizeBytes: json['file_size_bytes'] as int,
         mimeType: json['mime_type'] as String,
+        cid: json['cid'] as String?,
+        contentHash: json['content_hash'] as String?,
+        legacyFileData: json['file_data'] as String?,
       );
 
   Map<String, dynamic> toJson() => {
         'name': name,
         'file_name': fileName,
-        'file_data': fileData,
         'file_size_bytes': fileSizeBytes,
         'mime_type': mimeType,
+        'cid': cid,
+        'content_hash': contentHash,
       };
 }
 
@@ -611,6 +631,55 @@ class VaultRepository {
     ));
   }
 
+  // Fase 15.7 — grava o cid/contentHash do blob separado de um documento
+  // depois de pinado, chamado só por VaultPublishService antes de publicar o
+  // blob principal (mesmo espírito de setFavorite: entra pelo find-by-id,
+  // não por updateEntry, porque não é uma edição de usuário).
+  Future<void> setDocumentPinInfo(
+    String entryId, {
+    required String cid,
+    required String contentHash,
+  }) async {
+    final data = await _load();
+    final index = data.entries.indexWhere((e) => e.id == entryId);
+    if (index < 0 || data.entries[index].document == null) return;
+    final target = data.entries[index];
+    final doc = target.document!;
+    final updatedEntry = VaultEntry(
+      id: target.id,
+      site: target.site,
+      url: target.url,
+      username: target.username,
+      password: target.password,
+      notes: target.notes,
+      profiles: target.profiles,
+      totpSecret: target.totpSecret,
+      passkey: target.passkey,
+      favorite: target.favorite,
+      type: target.type,
+      document: DocumentData(
+        name: doc.name,
+        fileName: doc.fileName,
+        fileSizeBytes: doc.fileSizeBytes,
+        mimeType: doc.mimeType,
+        cid: cid,
+        contentHash: contentHash,
+      ),
+      address: target.address,
+      creditCard: target.creditCard,
+      createdAt: target.createdAt,
+      updatedAt: target.updatedAt,
+    );
+    final entries = [...data.entries];
+    entries[index] = updatedEntry;
+    await _save(_VaultData(
+      version: data.version + 1,
+      entries: entries,
+      profileNames: data.profileNames,
+      devicePermissions: data.devicePermissions,
+    ));
+  }
+
   // Concede/revoga a permissão de escrita de um device. Mirror de
   // Vault::set_device_permission (desktop/src-tauri/src/vault.rs) —
   // find-or-insert por pubKey (case-insensitive, mesma comparação de
@@ -937,7 +1006,9 @@ class VaultRepository {
     }
     final blob = await file.readAsBytes();
     final json = await _cipherService.decrypt(blob);
-    return _parseVaultJson(json);
+    final data = _parseVaultJson(json);
+    await _migrateLegacyDocuments(data.entries);
+    return data;
   }
 
   Future<void> _save(_VaultData data) async {
@@ -945,6 +1016,114 @@ class VaultRepository {
     final blob = await _cipherService.encrypt(json);
     final path = await _vaultPath();
     await File(path).writeAsBytes(blob);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cache local de documentos (Fase 15.7)
+  // ---------------------------------------------------------------------------
+  //
+  // Conteúdo cifrado de cada documento vive à parte do blob principal do
+  // vault — só um cid/hash aponta pra cá de dentro do vault.enc (ver
+  // DocumentData.cid/contentHash). Motivo: um documento grande não deve
+  // inflar o blob que é sincronizado a cada edição não relacionada (ver
+  // project/PHASE.md, 15.7).
+
+  Future<String> _documentDir() async {
+    if (_testPath != null) return '$_testPath.documents';
+    final dir = await getApplicationDocumentsDirectory();
+    return '${dir.path}/vault_documents';
+  }
+
+  Future<String> _documentPath(String entryId) async =>
+      '${await _documentDir()}/$entryId.enc';
+
+  /// Lê o blob cifrado do documento de uma entrada, se existir localmente.
+  /// `null` se essa entrada nunca teve conteúdo salvo neste device (ex:
+  /// documento adicionado em outro device, ainda não buscado por cid).
+  Future<Uint8List?> readDocumentBlob(String entryId) async {
+    final file = File(await _documentPath(entryId));
+    if (!await file.exists()) return null;
+    return file.readAsBytes();
+  }
+
+  /// Cifra e grava o conteúdo em claro de um documento no cache local.
+  /// Retorna o blob cifrado (evita reler do disco pra computar o hash na
+  /// hora de pinar).
+  Future<Uint8List> writeDocumentBlob(String entryId, Uint8List plaintext) async {
+    final blob = await _cipherService.encrypt(plaintext);
+    await cacheDocumentBlobRaw(entryId, blob);
+    return blob;
+  }
+
+  /// Grava um blob **já cifrado** no cache local, sem recifrar — usado ao
+  /// buscar o conteúdo de um documento por cid (já vem cifrado do IPFS).
+  Future<void> cacheDocumentBlobRaw(String entryId, Uint8List encrypted) async {
+    final dir = Directory(await _documentDir());
+    if (!await dir.exists()) await dir.create(recursive: true);
+    await File(await _documentPath(entryId)).writeAsBytes(encrypted);
+  }
+
+  /// Lê o conteúdo (em claro) do documento de uma entrada — cache local
+  /// primeiro (rápido, offline); se ausente (documento adicionado em outro
+  /// device e nunca buscado aqui), busca pelo `cid` num gateway IPFS
+  /// público, confere `contentHash` antes de decifrar (mesmo padrão
+  /// defensivo de [VaultSyncService.sync]), e grava no cache local pra
+  /// próxima vez.
+  Future<Uint8List> readDocumentContent(
+    String entryId, {
+    String? cid,
+    String? contentHash,
+    IpfsGatewayClient? gatewayClient,
+  }) async {
+    var blob = await readDocumentBlob(entryId);
+    if (blob == null) {
+      if (cid == null) {
+        throw Exception(
+            'document has no local content and was never published');
+      }
+      final client = gatewayClient ?? IpfsGatewayClient();
+      final fetched = await client.fetch(cid);
+      if (contentHash != null) {
+        final actual = bytesToHex(keccak256(fetched), include0x: true);
+        if (actual != contentHash) {
+          throw Exception(
+              'document hash mismatch — blob corrupted or tampered');
+        }
+      }
+      await cacheDocumentBlobRaw(entryId, fetched);
+      blob = fetched;
+    }
+    return _cipherService.decrypt(blob);
+  }
+
+  /// Decide se o conteúdo local de um documento precisa ser (re)pinado —
+  /// `true` se nunca foi pinado (`storedHash` null) ou se o hash do blob
+  /// local não bate com o último hash pinado. Evita rechamar o pin (rede)
+  /// numa publicação onde só outra entrada do vault mudou.
+  bool documentNeedsPin(Uint8List localBlob, String? storedHash) {
+    if (storedHash == null) return true;
+    final actual = bytesToHex(keccak256(localBlob), include0x: true);
+    return actual != storedHash;
+  }
+
+  // Migração (Fase 15.7): documentos antigos guardavam o conteúdo em base64
+  // embutido direto no JSON da entrada (DocumentData._legacyFileData, só
+  // populado por fromJson pra esse fim). Uma entrada com esse campo ainda
+  // preenchido e cid ausente não passou pela migração ainda — decifra o
+  // base64 legado e escreve no cache local; cid/contentHash continuam null
+  // até o próximo publish pinar como blob separado.
+  Future<void> _migrateLegacyDocuments(List<VaultEntry> entries) async {
+    for (final entry in entries) {
+      final doc = entry.document;
+      if (doc == null || doc.cid != null) continue;
+      final legacy = doc._legacyFileData;
+      if (legacy == null || legacy.isEmpty) continue;
+      try {
+        await writeDocumentBlob(entry.id, base64Decode(legacy));
+      } catch (_) {
+        // base64 inválido — não trava o load, só não migra essa entrada
+      }
+    }
   }
 }
 

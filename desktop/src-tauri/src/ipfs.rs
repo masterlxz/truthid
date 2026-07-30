@@ -36,6 +36,14 @@ pub(crate) struct PinResult {
 // Lógica de upload / pin
 // ---------------------------------------------------------------------------
 
+/// keccak256 do conteúdo, hex prefixado com "0x" — mesmo formato usado pelo
+/// `content_hash` do `VaultRegistry`. Reaproveitado (Fase 15.7) fora do pin
+/// em si pra decidir se o conteúdo de um documento mudou desde o último pin,
+/// sem precisar rede (`vault::document_needs_pin`).
+pub(crate) fn keccak256_hex(content: &[u8]) -> String {
+    format!("0x{}", hex::encode(Keccak256::digest(content)))
+}
+
 /// Faz upload do `content` para todos os Kubo providers e depois pina o CID
 /// em todos os PSA providers. Retorna `PinResult` com o CID obtido e o hash
 /// do conteúdo para o contrato VaultRegistry.
@@ -43,7 +51,7 @@ pub(crate) async fn pin_vault(
     content: &[u8],
     providers: &[PinningProvider],
 ) -> Result<PinResult, String> {
-    let content_hash = format!("0x{}", hex::encode(Keccak256::digest(content)));
+    let content_hash = keccak256_hex(content);
 
     let kubo: Vec<_> = providers.iter().filter(|p| p.kind == "kubo").collect();
     let psa: Vec<_> = providers.iter().filter(|p| p.kind == "psa").collect();
@@ -179,6 +187,43 @@ async fn psa_pin(
     } else {
         Err(format!("PSA pin retornou {status}"))
     }
+}
+
+// ---------------------------------------------------------------------------
+// Leitura por CID — gateways públicos (Fase 15.7)
+// ---------------------------------------------------------------------------
+
+/// Mesmos 2 gateways públicos e timeout que `IpfsGatewayClient` do Mobile
+/// (`ipfs_gateway_client.dart`) usa pra ler o blob do vault publicado por
+/// outro device — reaproveitado aqui só pra buscar o blob **separado** de um
+/// documento (Fase 15.7) quando o cache local não tem o conteúdo ainda (ex:
+/// documento adicionado em outro device).
+const GATEWAYS: [&str; 2] = ["https://ipfs.io/ipfs/", "https://dweb.link/ipfs/"];
+const GATEWAY_TIMEOUT_SECS: u64 = 15;
+
+/// Tenta cada gateway em ordem, a primeira resposta 200 vence. Retorna erro
+/// com um resumo do que cada gateway retornou se todos falharem.
+pub(crate) async fn fetch_from_gateway(cid: &str) -> Result<Vec<u8>, String> {
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(GATEWAY_TIMEOUT_SECS))
+        .build()
+        .map_err(|e| e.to_string())?;
+
+    let mut errors = Vec::new();
+    for gateway in GATEWAYS {
+        let url = format!("{gateway}{cid}");
+        match client.get(&url).send().await {
+            Ok(res) if res.status().is_success() => {
+                return res.bytes().await.map(|b| b.to_vec()).map_err(|e| e.to_string());
+            }
+            Ok(res) => errors.push(format!("{gateway}: HTTP {}", res.status())),
+            Err(e) => errors.push(format!("{gateway}: {e}")),
+        }
+    }
+    Err(format!(
+        "todos os gateways IPFS falharam pro cid {cid}: {}",
+        errors.join("; ")
+    ))
 }
 
 // ---------------------------------------------------------------------------

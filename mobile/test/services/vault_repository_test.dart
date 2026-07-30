@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:web3dart/crypto.dart' show keccak256, bytesToHex;
 
 import 'package:truthid_mobile/services/vault_cipher_service.dart';
 import 'package:truthid_mobile/services/vault_repository.dart';
@@ -684,7 +685,6 @@ void main() {
         document: const DocumentData(
           name: 'RG',
           fileName: 'rg.pdf',
-          fileData: 'base64-fake-content',
           fileSizeBytes: 12345,
           mimeType: 'application/pdf',
         ),
@@ -812,7 +812,6 @@ void main() {
         document: const DocumentData(
           name: 'RG',
           fileName: 'rg.pdf',
-          fileData: 'x',
           fileSizeBytes: 1,
           mimeType: 'application/pdf',
         ),
@@ -839,7 +838,6 @@ void main() {
     const document = DocumentData(
       name: 'RG',
       fileName: 'rg.pdf',
-      fileData: 'base64-fake-content',
       fileSizeBytes: 12345,
       mimeType: 'application/pdf',
     );
@@ -897,7 +895,6 @@ void main() {
     const document = DocumentData(
       name: 'RG',
       fileName: 'rg.pdf',
-      fileData: 'base64-fake-content',
       fileSizeBytes: 12345,
       mimeType: 'application/pdf',
     );
@@ -1007,6 +1004,129 @@ void main() {
       expect(updated.type, EntryType.address);
       expect(updated.document, isNull);
       expect(updated.address?.city, 'São Paulo');
+    });
+  });
+
+  group('Fase 15.7 (documentos separados do blob principal)', () {
+    test('writeDocumentBlob + readDocumentBlob round-trips', () async {
+      final bytes = Uint8List.fromList(utf8.encode('conteudo do documento'));
+      final blob = await repo.writeDocumentBlob('id1', bytes);
+
+      final read = await repo.readDocumentBlob('id1');
+
+      expect(read, equals(blob));
+      expect(read, equals(bytes)); // _FakeCipherService é passthrough
+    });
+
+    test('readDocumentBlob returns null when nothing cached yet', () async {
+      expect(await repo.readDocumentBlob('never-written'), isNull);
+    });
+
+    test('cacheDocumentBlobRaw stores bytes without re-encrypting', () async {
+      final alreadyEncrypted = Uint8List.fromList([1, 2, 3, 4]);
+      await repo.cacheDocumentBlobRaw('id1', alreadyEncrypted);
+
+      expect(await repo.readDocumentBlob('id1'), equals(alreadyEncrypted));
+    });
+
+    test('documentNeedsPin is true when never pinned', () {
+      final blob = Uint8List.fromList(utf8.encode('conteudo'));
+      expect(repo.documentNeedsPin(blob, null), isTrue);
+    });
+
+    test('documentNeedsPin is false when content unchanged', () {
+      final blob = Uint8List.fromList(utf8.encode('conteudo cifrado fake'));
+      final hash = bytesToHex(keccak256(blob), include0x: true);
+      expect(repo.documentNeedsPin(blob, hash), isFalse);
+    });
+
+    test('documentNeedsPin is true when content changed', () {
+      final oldBlob = Uint8List.fromList(utf8.encode('conteudo antigo'));
+      final newBlob = Uint8List.fromList(utf8.encode('conteudo novo, diferente'));
+      final oldHash = bytesToHex(keccak256(oldBlob), include0x: true);
+      expect(repo.documentNeedsPin(newBlob, oldHash), isTrue);
+    });
+
+    test('document entry toJson never includes file_data', () {
+      const doc = DocumentData(
+        name: 'RG', fileName: 'rg.pdf', fileSizeBytes: 5, mimeType: 'application/pdf',
+      );
+      expect(doc.toJson().containsKey('file_data'), isFalse);
+    });
+
+    test('DocumentData round-trips cid and content_hash through JSON', () {
+      const doc = DocumentData(
+        name: 'RG', fileName: 'rg.pdf', fileSizeBytes: 5, mimeType: 'application/pdf',
+        cid: 'bafy123', contentHash: '0xabc',
+      );
+      final reparsed = DocumentData.fromJson(doc.toJson());
+      expect(reparsed.cid, 'bafy123');
+      expect(reparsed.contentHash, '0xabc');
+    });
+
+    test('load() migrates old-format document (file_data embedded, no cid) into local cache', () async {
+      // Simula um vault antigo (pré-Fase 15.7): file_data em base64 embutido
+      // direto no JSON, sem cid/content_hash.
+      final legacyContent = utf8.encode('conteudo legado do RG');
+      final legacyVaultJson = jsonEncode({
+        'version': 1,
+        'entries': [
+          {
+            'id': 'doc1',
+            'site': '', 'url': '', 'username': '', 'password': '', 'notes': '',
+            'profiles': [],
+            'type': 'document',
+            'document': {
+              'name': 'RG',
+              'file_name': 'rg.pdf',
+              'file_data': base64Encode(legacyContent),
+              'file_size_bytes': legacyContent.length,
+              'mime_type': 'application/pdf',
+            },
+            'created_at': 0,
+            'updated_at': 0,
+          }
+        ],
+      });
+      await File(vaultPath).writeAsBytes(utf8.encode(legacyVaultJson));
+
+      final entries = await repo.listEntries();
+
+      expect(entries.single.document?.cid, isNull);
+      final cached = await repo.readDocumentBlob('doc1');
+      expect(cached, isNotNull);
+      expect(utf8.decode(cached!), 'conteudo legado do RG');
+    });
+
+    test('load() does not re-migrate a document that already has a cid', () async {
+      final legacyVaultJson = jsonEncode({
+        'version': 1,
+        'entries': [
+          {
+            'id': 'doc1',
+            'site': '', 'url': '', 'username': '', 'password': '', 'notes': '',
+            'profiles': [],
+            'type': 'document',
+            'document': {
+              'name': 'RG',
+              'file_name': 'rg.pdf',
+              'file_data': base64Encode(utf8.encode('nunca deveria ser lido')),
+              'file_size_bytes': 5,
+              'mime_type': 'application/pdf',
+              'cid': 'bafyalready',
+              'content_hash': '0xdef',
+            },
+            'created_at': 0,
+            'updated_at': 0,
+          }
+        ],
+      });
+      await File(vaultPath).writeAsBytes(utf8.encode(legacyVaultJson));
+
+      await repo.listEntries();
+
+      // Nunca migrado (já tinha cid) — cache local não deveria ter sido criado.
+      expect(await repo.readDocumentBlob('doc1'), isNull);
     });
   });
 }

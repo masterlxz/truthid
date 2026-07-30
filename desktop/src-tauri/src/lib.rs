@@ -444,6 +444,13 @@ fn vault_encrypt(plaintext_b64: String) -> Result<String, String> {
 /// Publica o vault local no IPFS (upload multi-pin) e retorna o CID e o
 /// content hash (keccak256) para o frontend registrar no VaultRegistry.
 /// Requer ao menos um provider `kind = "kubo"` configurado.
+///
+/// Fase 15.7: antes de pinar o blob principal, pina separadamente o
+/// conteúdo (cache local cifrado) de cada documento que ainda não tem `cid`
+/// ou cujo conteúdo local mudou desde o último pin — o blob do vault carrega
+/// só o ponteiro (`cid`/`content_hash`), nunca o conteúdo do documento em
+/// si, então documentos grandes não inflam o sync de edições não
+/// relacionadas (ver project/PHASE.md, 15.7).
 #[tauri::command]
 async fn vault_publish() -> Result<ipfs::PinResult, String> {
     let path = vault::vault_path()?;
@@ -452,19 +459,91 @@ async fn vault_publish() -> Result<ipfs::PinResult, String> {
             "vault ainda não existe — adicione ao menos uma entrada antes de publicar".to_string(),
         );
     }
-    let encrypted_blob = crate::config::read_file(&path)?;
     let providers = ipfs::load_providers();
     if providers.is_empty() {
         return Err(
             "nenhum provider de pinning configurado — use vault_set_providers primeiro".to_string(),
         );
     }
+
+    let mut v = vault::load()?;
+    let mut documents_changed = false;
+    for entry in &mut v.entries {
+        let Some(doc) = &mut entry.document else {
+            continue;
+        };
+        let Some(local_blob) = vault::read_document_blob(&entry.id)? else {
+            continue;
+        };
+        if vault::document_needs_pin(&local_blob, doc.content_hash.as_deref()) {
+            let result = ipfs::pin_vault(&local_blob, &providers).await?;
+            doc.cid = Some(result.cid);
+            doc.content_hash = Some(result.content_hash);
+            documents_changed = true;
+        }
+    }
+    if documents_changed {
+        vault::save(&v)?;
+    }
+
+    let encrypted_blob = crate::config::read_file(&path)?;
     let result = ipfs::pin_vault(&encrypted_blob, &providers).await?;
     // Decripta do blob já em memória em vez de read()+load() de novo
     let decrypted = vault::decrypt(&encrypted_blob)?;
     let v: vault::Vault = serde_json::from_slice(&decrypted).map_err(|e| e.to_string())?;
     vault::mark_published(v.version, &v)?;
     Ok(result)
+}
+
+/// Cifra e grava localmente o conteúdo (em claro, Base64) do documento de
+/// uma entrada — o pin de verdade no IPFS só acontece no próximo
+/// `vault_publish` (Fase 15.7). Chamado pela UI assim que o usuário escolhe
+/// um arquivo, antes mesmo de salvar a entrada.
+#[tauri::command]
+fn vault_document_write(entry_id: String, content_b64: String) -> Result<(), String> {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    let plaintext = STANDARD
+        .decode(&content_b64)
+        .map_err(|e| e.to_string())?;
+    vault::write_document_blob(&entry_id, &plaintext)?;
+    Ok(())
+}
+
+/// Lê o conteúdo (em claro, Base64) do documento de uma entrada — cache
+/// local primeiro (rápido, offline); se ausente (documento adicionado em
+/// outro device e nunca buscado aqui), busca pelo `cid` num gateway IPFS
+/// público, confere `content_hash` antes de decifrar (mesmo padrão
+/// defensivo do `VaultSyncService.sync()` no Mobile), e grava no cache local
+/// pra próxima vez.
+#[tauri::command]
+async fn vault_document_read(
+    entry_id: String,
+    cid: Option<String>,
+    content_hash: Option<String>,
+) -> Result<String, String> {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+
+    let blob = match vault::read_document_blob(&entry_id)? {
+        Some(blob) => blob,
+        None => {
+            let cid = cid.ok_or_else(|| {
+                "documento sem conteúdo local e sem cid — nunca foi publicado".to_string()
+            })?;
+            let fetched = ipfs::fetch_from_gateway(&cid).await?;
+            if let Some(expected) = &content_hash {
+                let actual = ipfs::keccak256_hex(&fetched);
+                if &actual != expected {
+                    return Err(
+                        "hash do documento não bate — blob corrompido ou adulterado".to_string(),
+                    );
+                }
+            }
+            vault::cache_document_blob_raw(&entry_id, &fetched)?;
+            fetched
+        }
+    };
+    let plaintext = vault::decrypt(&blob)?;
+    Ok(STANDARD.encode(plaintext))
 }
 
 /// Quantas edições locais ainda não foram publicadas no IPFS.
@@ -979,6 +1058,8 @@ pub fn run() {
             vault_export_backup,
             vault_import_backup,
             vault_publish,
+            vault_document_write,
+            vault_document_read,
             vault_pending_changes,
             vault_get_providers,
             vault_set_providers,

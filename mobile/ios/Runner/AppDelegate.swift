@@ -14,6 +14,7 @@ import UIKit
   func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
     GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
     registerAutofillIdentityChannel(with: engineBridge)
+    registerVaultSyncChannel(with: engineBridge)
   }
 
   // Fase 15.6, fatia 1 — só registra identidades de credencial no
@@ -64,6 +65,50 @@ import UIKit
             result(nil)
           }
         }
+      }
+    }
+  }
+
+  // Fase 15.6, fatia 2 — espelha pro Keychain Access Group / App Group
+  // compartilhados (`SharedVaultAccess`) a chave do vault e o blob cifrado
+  // (`vault.enc`), pra que `CredentialProviderViewController` (processo
+  // separado da extensão) consiga decifrar sozinha. Contrato próprio, não
+  // depende do schema interno do `flutter_secure_storage`.
+  private func registerVaultSyncChannel(with engineBridge: FlutterImplicitEngineBridge) {
+    let registrar = engineBridge.pluginRegistry.registrar(forPlugin: "IosAutofillVaultSyncChannel")
+    let channel = FlutterMethodChannel(
+      name: "truthid/ios_autofill_vault_sync",
+      binaryMessenger: registrar.messenger()
+    )
+    channel.setMethodCallHandler { call, result in
+      switch call.method {
+      case "syncVaultKey":
+        guard let args = call.arguments as? [String: Any],
+              let keyBase64 = args["keyBase64"] as? String,
+              let keyData = Data(base64Encoded: keyBase64) else {
+          result(FlutterError(code: "invalid_arguments", message: "expected base64 vault key", details: nil))
+          return
+        }
+        let status = SharedVaultAccess.writeVaultKey(keyData)
+        if status == errSecSuccess {
+          result(nil)
+        } else {
+          result(FlutterError(code: "keychain_error", message: "SecItemAdd failed (\(status))", details: nil))
+        }
+      case "syncVaultBlob":
+        guard let args = call.arguments as? [String: Any],
+              let blobData = (args["bytes"] as? FlutterStandardTypedData)?.data else {
+          result(FlutterError(code: "invalid_arguments", message: "expected raw bytes", details: nil))
+          return
+        }
+        do {
+          try SharedVaultAccess.writeVaultBlob(blobData)
+          result(nil)
+        } catch {
+          result(FlutterError(code: "app_group_error", message: error.localizedDescription, details: nil))
+        }
+      default:
+        result(FlutterMethodNotImplemented)
       }
     }
   }

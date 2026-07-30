@@ -884,13 +884,15 @@ A partir daí: Ledger assina UserOps off-chain → bundler submete → smart acc
 
 **Visão maior**: uma **Identidade Digital portátil** que o usuário carrega entre dispositivos, sem depender de Google/Apple/Microsoft — tudo cifrado, armazenado no mesmo IPFS vault que as senhas, acessível pelos mesmos dispositivos confiáveis.
 
-**Status**: :hourglass: Em andamento — 15.1-15.5 concluídas (Sessões 167-174): 15.1 (schema),
+**Status**: :hourglass: Em andamento — 15.1-15.6 concluídas (Sessões 167-176): 15.1 (schema),
 15.2 (CRUD Desktop), 15.3 (CRUD Mobile), 15.4 fatia 1 (endereço/LAN/Mobile, S170), fatia 2
 (cartão/LAN/Mobile, S171; dead-drop endereço+cartão, S172; Desktop, S173 — fecha a 15.4 inteira),
-15.5 (Autofill SO Android, S174). 15.6 (Autofill SO iOS) — fatia 1 concluída (S175): só o
-scaffold da extensão + registro de identidades, ver etapa 6 abaixo pro porquê de não ter saído
-"a mesma lógica do Android" como o escopo original previa. Restam 15.6 fatia 2 (decifra dentro
-da extensão), 15.7 (documentos) e 15.8 (revisão de segurança do CVV).
+15.5 (Autofill SO Android, S174), 15.6 (Autofill SO iOS) — fatia 1 (S175): scaffold da extensão +
+registro de identidades, ver etapa 6 abaixo pro porquê de não ter saído "a mesma lógica do
+Android" como o escopo original previa; fatia 2 (S176): decifra real dentro da extensão,
+fechando a 15.6 inteira — nada disso builda neste ambiente (Linux, sem Xcode/macOS/simulador),
+validação em Mac real é P35 no `PENDING.md`. Restam 15.7 (documentos) e 15.8 (revisão de
+segurança do CVV).
 
 ---
 
@@ -1236,8 +1238,115 @@ type VaultEntry = VaultEntryCredential | VaultEntryDocument
    vez que `vault_screen.dart::_load()` recarrega as entradas. `flutter analyze` limpo, `flutter
    test` 475/475 (4 novos). **Não builda nem roda nada neste ambiente** — só confirmável abrindo
    o projeto no Xcode/macOS (nova pendência registrada em `PENDING.md`, P35).
-7. **15.7 — Documentos**: upload/download/visualização de documentos genéricos. Limite de tamanho a definir. Chunking para arquivos grandes, se necessário.
-8. **15.8 — Revisão de segurança**: auditoria focada nos cartões de crédito (cifra extra do CVV, exposição mínima no autofill, zero logging).
+7. **15.6 — Autofill SO iOS, fatia 2 (Sessão 176), fecha a 15.6 inteira**: decifra real dentro da
+   extensão, resolvendo o achado da fatia 1 (a extensão não pode delegar pro app principal e
+   receber o resultado de volta). Contrato próprio de compartilhamento entre `Runner` e
+   `AutofillExtension`, deliberadamente **não** dependente do schema interno do
+   `flutter_secure_storage` (não é contrato público): novo `SharedVaultAccess.swift`, duplicado
+   nos 2 targets (mesmo padrão de duplicação por canal que `sign_request.rs`/`sign_message.rs` já
+   seguem no Desktop) — o lado do app grava, o lado da extensão só lê. Chave do vault (32 bytes)
+   compartilhada via Keychain Access Group (`kSecAttrAccessGroup`); blob cifrado (`vault.enc`)
+   compartilhado via App Group (`FileManager.containerURL(forSecurityApplicationGroupIdentifier:)`).
+   Novos `Runner/Runner.entitlements` (não existia — só a extensão tinha entitlements até aqui) e
+   entitlements da extensão atualizados com as 2 capabilities novas, wiring do
+   `CODE_SIGN_ENTITLEMENTS`/frameworks/membership de arquivo no `.pbxproj` feito com o mesmo
+   script Ruby (`xcodeproj`) da fatia 1. Achado que simplificou a decifra: o layout do blob do
+   vault (`nonce(12) || ciphertext || tag(16)`, `vault_cipher_service.dart`, sem AAD) bate
+   byte a byte com o formato `combined` que `CryptoKit.AES.GCM.SealedBox` já espera — não precisa
+   fatiar nonce/tag manualmente em Swift, só `SealedBox(combined:)` + `AES.GCM.open(using:)`.
+   Novo canal `truthid/ios_autofill_vault_sync` (`AppDelegate.swift`, métodos `syncVaultKey`/
+   `syncVaultBlob`) + `IosAutofillVaultSyncService` (Dart, novo), chamado (fire-and-forget,
+   fail-silent) do mesmo ponto que já chama `syncIdentities` (`vault_screen.dart::_load()`),
+   reaproveitando `VaultRepository.readRawBlob()`/`VaultKeyService.deriveVaultKey()` — os dois já
+   existiam, nenhum getter novo precisou ser criado no repository.
+   `CredentialProviderViewController.swift`: `prepareInterfaceToProvideCredential` decifra e
+   preenche direto pelo `recordIdentifier` já registrado na fatia 1;
+   `prepareCredentialList` decifra e mostra um picker simples (`UITableView`, estilo
+   `.subtitle`) com todas as entradas tipo credencial (não filtra por `serviceIdentifiers`, mesmo
+   espírito do picker "1 de N" já usado em outras telas de aprovação do projeto);
+   `provideCredentialWithoutUserInteraction` continua cancelando de propósito — decisão
+   deliberada de não duplicar um gate de biometria próprio, já que o próprio iOS exige Face
+   ID/passcode do sistema antes de sequer invocar a extensão de autofill de senha. `Security.
+   framework`/`CryptoKit.framework` linkados no target da extensão (mesma referência
+   `SDKROOT`-relativa corrigida na fatia 1, evitando o caminho de SDK versionado que a gem gera
+   por padrão). `flutter analyze`/`flutter test` (lado Dart) verificados. **Nada do lado Swift
+   builda nem roda neste ambiente** (mesma limitação da fatia 1) — checklist de validação em Mac
+   real fundido com o da fatia 1 em P35 (`PENDING.md`); P36 fechado no código.
+8. **15.7 — Documentos, separação do blob único do vault (Sessão 177)**: achado real
+   levantado antes de codar (2 agentes Explore): o Vault inteiro (senhas + endereços + cartões +
+   documentos) virava **um único** JSON → um blob AES-256-GCM → um CID publicado on-chain — um
+   documento grande inflava esse blob único, e o `IpfsGatewayClient` do Mobile busca esse blob
+   inteiro de gateways públicos (`ipfs.io`/`dweb.link`) com timeout de só **15 segundos**. Ou
+   seja, um documento grande adicionado em qualquer entrada arriscava quebrar o sync de **todo
+   mundo**, mesmo quem nunca tocou em documentos. Decisão tomada com o dono do projeto
+   (`AskUserQuestion`): separar o conteúdo dos documentos do blob principal, em vez de só subir o
+   limite mantendo tudo junto. Achado que simplificou a implementação:
+   `ipfs.rs::pin_vault`/`ipfs_pin_client.dart::pinVault` já eram genéricos (`content: &[u8]`/
+   `Uint8List`), reaproveitados sem nenhuma mudança pra pinar o blob de um documento separadamente
+   do blob do vault.
+   
+   **Schema**: `DocumentData` perde `file_data` (base64 embutido) — vira campo legado privado ao
+   arquivo (`Rust`: privado + `skip_serializing`; `Dart`: `_legacyFileData`, populado só por
+   `fromJson`), usado exclusivamente pela migração automática. Ganha `cid`/`content_hash`
+   (`Option<String>`/`String?`) — CID do blob separado no IPFS e seu keccak256 (mesmo padrão de
+   verificação que o vault principal já usa antes de decifrar um blob baixado). `sdk/typescript`
+   não precisou de nenhuma mudança — não mirrora esse schema (só `desktop/src/types.ts` mirrorava,
+   já atualizado).
+   
+   **Cache local de documentos** (novo, mirror de `vault_path()`/`_vaultPath()`): guarda o blob
+   **cifrado** de cada documento à parte (`~/.truthid/vault_documents/<id>.enc` no Desktop,
+   `vault_documents/<id>.enc` nos Documents do app no Mobile), permitindo editar/ver offline sem
+   depender de rede. `read_document_blob`/`write_document_blob`/`cache_document_blob_raw` (Rust) e
+   equivalentes em `vault_repository.dart`.
+   
+   **Migração automática do formato antigo**: uma entrada com `file_data` ainda preenchido e `cid`
+   ausente (formato pré-15.7) tem o base64 decodificado, cifrado e escrito no cache local — dentro
+   de `vault::load()`/`VaultRepository._load()`, sem exigir nenhuma ação do usuário. Testada via
+   JSON literal no formato antigo (mesmo padrão de teste que a migração `profile`→`profiles` da
+   Fase 13 já usa), não só round-trip sintético.
+   
+   **Upload**: lê o arquivo (como antes), checa o novo limite (**50MB**, subiu de 10MB — generoso
+   agora que documentos não afetam mais o sync do resto do vault), cifra localmente, grava no
+   cache local por `entry_id` — só depois que a entrada existe de verdade com um id (o Desktop
+   grava via novo comando Tauri `vault_document_write` depois do `vault_upsert_entry` retornar; o
+   Mobile via `VaultRepository.writeDocumentBlob` depois de `addEntry`/`updateEntry`). O pin de
+   verdade no IPFS fica pendente até o próximo publish.
+   
+   **Publish**: antes de pinar o blob principal, cada `vault_publish` (Rust)/
+   `VaultPublishService.publish` (Dart) pina separadamente o conteúdo de cada documento cujo `cid`
+   seja nulo OU cujo hash local mudou desde o último pin (`document_needs_pin`/`documentNeedsPin`
+   — mesmo espírito do diff de conteúdo que `pending_changes`/`markPublished` já usam desde a
+   Sessão 138/139), grava `cid`/`content_hash` retornados na entrada, e só então segue o fluxo de
+   publish do vault principal exatamente como antes. Documentos sem mudança não são re-pinados a
+   cada publish — economiza rede numa publicação onde só outra entrada mudou.
+   
+   **Download/visualização**: cache local primeiro (rápido, offline); se ausente (documento
+   adicionado em outro device, nunca buscado neste), busca pelo `cid` num gateway IPFS público
+   (`ipfs::fetch_from_gateway` no Rust, novo — mesmos 2 gateways e timeout de 15s do
+   `IpfsGatewayClient` do Mobile; `VaultRepository.readDocumentContent` no Dart, reaproveita o
+   cliente já existente), confere `content_hash` antes de decifrar (mesmo padrão defensivo de
+   `VaultSyncService.sync()`), e grava no cache local pra próxima vez.
+   
+   **Achado no caminho, compilação Rust**: `MutexGuard` não é `Send` — não dá pra segurar
+   `vault::lock_vault()` através de um `.await` num comando Tauri assíncrono. `vault_publish`
+   nunca teve essa trava mesmo antes (só comandos síncronos usam `lock_vault()`); tentativa de
+   adicionar consistência aqui quebrou a compilação, revertida.
+   
+   **Fora de escopo, decisão registrada**: chunking literal (dividir um arquivo grande em N
+   pedaços com reassembly) não foi implementado — o problema real era o blob único poluindo *todo*
+   sync, já resolvido por separar os documentos. Multi-chunk agregaria complexidade real (ordem,
+   resumo de upload parcial, integridade por pedaço) por um ganho que hoje é só sobre pico de
+   memória de uma operação pontual (upload/download de 1 documento, não a cada sync) — tolerável
+   sem chunking no limite de 50MB escolhido.
+   
+   **Testes**: `cargo test --lib` 126/126 (10 novos em `vault.rs`: schema/migração via JSON,
+   `document_needs_pin`). `flutter analyze` limpo (1 achado no caminho: `prefer_initializing_formals`
+   sugerindo `this._legacyFileData` em vez de atribuição no initializer list, corrigido),
+   `flutter test` verde (novos testes de cache/migração/pin-condicional em
+   `vault_repository_test.dart` e `vault_publish_service_test.dart`, com I/O real de disco via o
+   mecanismo de `testPath` que já existia — diferente do Rust, que não tem infra de path override
+   em testes). `npx vitest run` 101/101 sem regressão, `tsc --noEmit` limpo.
+9. **15.8 — Revisão de segurança**: auditoria focada nos cartões de crédito (cifra extra do CVV, exposição mínima no autofill, zero logging).
 
 ---
 

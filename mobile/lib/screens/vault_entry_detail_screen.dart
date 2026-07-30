@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:math';
 
 import 'package:file_picker/file_picker.dart';
@@ -71,8 +70,26 @@ class _VaultEntryDetailScreenState extends State<VaultEntryDetailScreen> {
     return '${(n / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
+  // Cache local primeiro (rápido, offline); se ausente (documento
+  // adicionado em outro device e nunca buscado aqui),
+  // VaultRepository.readDocumentContent busca pelo cid num gateway IPFS
+  // público e confere o contentHash antes de decifrar.
   Future<void> _downloadDocument(DocumentData doc) async {
-    final bytes = base64Decode(doc.fileData);
+    Uint8List bytes;
+    try {
+      bytes = await _repository.readDocumentContent(
+        _entry.id,
+        cid: doc.cid,
+        contentHash: doc.contentHash,
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not load document: $e')),
+        );
+      }
+      return;
+    }
     final path = await FilePicker.platform.saveFile(
       fileName: doc.fileName,
       type: FileType.any,

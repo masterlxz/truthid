@@ -23,7 +23,6 @@ void main() {
     document: const DocumentData(
       name: 'RG',
       fileName: 'rg.pdf',
-      fileData: 'base64-fake-content',
       fileSizeBytes: 123,
       mimeType: 'application/pdf',
     ),

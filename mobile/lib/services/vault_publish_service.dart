@@ -50,6 +50,27 @@ class VaultPublishService {
       );
     }
 
+    // Fase 15.7: antes de pinar o blob principal, pina separadamente o
+    // conteúdo (cache local cifrado) de cada documento que ainda não tem
+    // cid ou cujo conteúdo local mudou desde o último pin — o blob do vault
+    // carrega só o ponteiro (cid/contentHash), nunca o conteúdo do
+    // documento em si, então documentos grandes não inflam o sync de
+    // edições não relacionadas (ver project/PHASE.md, 15.7).
+    for (final entry in await _repository.listEntries()) {
+      final doc = entry.document;
+      if (doc == null) continue;
+      final localBlob = await _repository.readDocumentBlob(entry.id);
+      if (localBlob == null) continue;
+      if (_repository.documentNeedsPin(localBlob, doc.contentHash)) {
+        final result = await _pinClient.pinVault(localBlob, providers);
+        await _repository.setDocumentPinInfo(
+          entry.id,
+          cid: result.cid,
+          contentHash: result.contentHash,
+        );
+      }
+    }
+
     final version = await _repository.currentVersion();
     final blob = await _repository.readRawBlob();
     // pinVault já lança se nenhum Kubo aceitar o upload — um PinResult

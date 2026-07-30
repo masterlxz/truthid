@@ -61,9 +61,19 @@ function truncate(s: string, n = 10) {
 type DocumentFormData = {
   name: string;
   file_name: string;
+  /** Base64 do arquivo escolhido nesta sessão de edição — só em memória local,
+   * nunca vai no payload de vault_upsert_entry (Fase 15.7: o conteúdo do
+   * documento vive cifrado à parte, gravado via vault_document_write depois
+   * que a entrada é salva e o id definitivo existe). Vazio numa edição que
+   * não troca o arquivo. */
   file_data: string;
   file_size_bytes: number;
   mime_type: string;
+  /** true se esta entrada (edição) já tinha um documento salvo antes —
+   * permite salvar sem re-escolher o arquivo. */
+  hasStoredContent: boolean;
+  cid?: string;
+  content_hash?: string;
 };
 
 type AddressFormData = {
@@ -122,10 +132,15 @@ const ENTRY_TYPE_ICON: Record<EntryType, string> = {
 
 const CARD_NETWORK_OPTIONS: CardNetwork[] = ["visa", "mastercard", "amex", "elo", "hipercard", "other"];
 
-const MAX_DOCUMENT_BYTES = 10 * 1024 * 1024; // 10MB — ver project/PHASE.md, Fase 15.7
+// 50MB — limite definitivo da Fase 15.7. Documentos agora vivem em blobs IPFS
+// separados do vault principal (ver vault_document_write/vault_document_read
+// em lib.rs), então um documento grande não infla mais o sync de senhas/
+// endereços/cartões — o antigo limite de 10MB era só provisório, escolhido
+// quando tudo ainda vivia embutido no mesmo blob.
+const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024;
 
 function emptyDocument(): DocumentFormData {
-  return { name: "", file_name: "", file_data: "", file_size_bytes: 0, mime_type: "" };
+  return { name: "", file_name: "", file_data: "", file_size_bytes: 0, mime_type: "", hasStoredContent: false };
 }
 
 function emptyAddress(): AddressFormData {
@@ -156,7 +171,11 @@ function formStateFromEntry(entry: VaultEntry): FormState {
     site: entry.site, url: entry.url, username: entry.username, password: entry.password,
     notes: entry.notes, profiles: entry.profiles, totp_secret: entry.totp_secret ?? "", passkey: entry.passkey,
     document: entry.document
-      ? { name: entry.document.name, file_name: entry.document.file_name, file_data: entry.document.file_data, file_size_bytes: entry.document.file_size_bytes, mime_type: entry.document.mime_type }
+      ? {
+          name: entry.document.name, file_name: entry.document.file_name, file_data: "",
+          file_size_bytes: entry.document.file_size_bytes, mime_type: entry.document.mime_type,
+          hasStoredContent: true, cid: entry.document.cid, content_hash: entry.document.content_hash,
+        }
       : emptyDocument(),
     address: entry.address
       ? { ...entry.address, complement: entry.address.complement ?? "", phone: entry.address.phone ?? "" }
@@ -183,7 +202,18 @@ function buildEntryPayload(form: FormState): Partial<VaultEntry> {
   };
   switch (form.type) {
     case "document":
-      return { ...base, site: "", url: "", username: "", password: "", totp_secret: undefined, passkey: undefined, document: { ...form.document } };
+      return {
+        ...base, site: "", url: "", username: "", password: "", totp_secret: undefined, passkey: undefined,
+        document: {
+          name: form.document.name, file_name: form.document.file_name,
+          file_size_bytes: form.document.file_size_bytes, mime_type: form.document.mime_type,
+          // cid/content_hash só sobrevivem se nenhum arquivo novo foi
+          // escolhido nesta edição — um arquivo novo invalida o pin antigo
+          // (o próximo publish repina o conteúdo novo, ver vault_publish).
+          cid: form.document.file_data ? undefined : form.document.cid,
+          content_hash: form.document.file_data ? undefined : form.document.content_hash,
+        },
+      };
     case "address":
       return {
         ...base, site: "", url: "", username: "", password: "", totp_secret: undefined, passkey: undefined,
@@ -206,7 +236,7 @@ function buildEntryPayload(form: FormState): Partial<VaultEntry> {
 function canSaveForm(form: FormState): boolean {
   switch (form.type) {
     case "document":
-      return !!form.document.name.trim() && !!form.document.file_data;
+      return !!form.document.name.trim() && (!!form.document.file_data || form.document.hasStoredContent);
     case "address": {
       const a = form.address;
       return !!a.label.trim() && !!a.full_name.trim() && !!a.street.trim() && !!a.number.trim()
@@ -906,12 +936,26 @@ export function VaultManagement() {
   } = useVaultPublish(pendingCount, () => setPendingCount(0));
 
   // ── CRUD de entradas ──────────────────────────────────────────────────────
+  // Grava o conteúdo do documento no cache local cifrado — só depois que a
+  // entrada existe de verdade com um id (o upload em si acontece antes disso
+  // no formulário, guardado como base64 em memória em form.document.file_data).
+  // O pin no IPFS de verdade só acontece no próximo "Enviar" (vault_publish).
+  async function persistDocumentContentIfNeeded(entryId: string, form: FormState) {
+    if (form.type === "document" && form.document.file_data) {
+      await invoke<void>("vault_document_write", {
+        entryId,
+        contentB64: form.document.file_data,
+      });
+    }
+  }
+
   async function handleAdd(form: FormState) {
     setMutating(true);
     setMutateError(null);
     try {
       const entry: Partial<VaultEntry> = { ...buildEntryPayload(form), id: "", created_at: 0, updated_at: 0 };
-      await invoke<VaultEntry>("vault_upsert_entry", { entry });
+      const saved = await invoke<VaultEntry>("vault_upsert_entry", { entry });
+      await persistDocumentContentIfNeeded(saved.id, form);
       await loadAll();
       setAddOpen(false);
     } catch (e) {
@@ -926,9 +970,10 @@ export function VaultManagement() {
     setMutating(true);
     setMutateError(null);
     try {
-      await invoke<VaultEntry>("vault_upsert_entry", {
+      const saved = await invoke<VaultEntry>("vault_upsert_entry", {
         entry: { ...original, ...buildEntryPayload(form) },
       });
+      await persistDocumentContentIfNeeded(saved.id, form);
       await loadAll();
       setEditingId(null);
     } catch (e) {
@@ -952,10 +997,22 @@ export function VaultManagement() {
   }
 
   // ── Documentos: baixar pra um arquivo local ──────────────────────────────
-  async function handleDownloadDocument(doc: DocumentData) {
+  // Cache local primeiro (rápido, offline); se ausente (documento adicionado
+  // em outro device e nunca buscado aqui), vault_document_read busca pelo
+  // cid num gateway IPFS público e confere o content_hash antes de decifrar.
+  async function handleDownloadDocument(entryId: string, doc: DocumentData) {
     const path = await save({ defaultPath: doc.file_name });
     if (!path) return;
-    await writeFile(path, base64ToBytes(doc.file_data));
+    try {
+      const contentB64 = await invoke<string>("vault_document_read", {
+        entryId,
+        cid: doc.cid,
+        contentHash: doc.content_hash,
+      });
+      await writeFile(path, base64ToBytes(contentB64));
+    } catch (e) {
+      setMutateError(String(e));
+    }
   }
 
   // ── Favoritos ────────────────────────────────────────────────────────────
@@ -1285,7 +1342,7 @@ export function VaultManagement() {
                       <div className="muted" style={{ fontSize: "0.87em", marginTop: "0.2rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
                         <span>{entry.document.file_name} · {formatBytes(entry.document.file_size_bytes)} · {entry.document.mime_type}</span>
                         <button
-                          onClick={() => handleDownloadDocument(entry.document!)}
+                          onClick={() => handleDownloadDocument(entry.id, entry.document!)}
                           style={{ padding: "0.2em 0.6em", fontSize: "0.82em" }}
                         >
                           💾 Baixar

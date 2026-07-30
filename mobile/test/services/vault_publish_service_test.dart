@@ -1,8 +1,10 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
+import 'package:web3dart/crypto.dart' show keccak256, bytesToHex;
 import 'package:web3dart/web3dart.dart' show EthereumAddress;
 
 import 'package:truthid_mobile/services/ipfs_pin_client.dart';
@@ -259,5 +261,89 @@ void main() {
     expect(await repo.pendingChanges(), 1,
         reason: 'a edição concorrente nunca foi publicada on-chain — tem '
             'que continuar pendente, não sumir por causa do markPublished');
+  });
+
+  group('Fase 15.7 (documentos pinados separadamente)', () {
+    setUp(() {
+      when(() => mockProviderService.load()).thenAnswer((_) async => [provider]);
+      when(() => mockSessionCreator.updateVault(
+            smartAccountAddress: any(named: 'smartAccountAddress'),
+            cid: any(named: 'cid'),
+            contentHashHex: any(named: 'contentHashHex'),
+          )).thenAnswer((_) async => const SessionCreationResult(userOpHash: '0xUserOpHash'));
+    });
+
+    test('pina o conteúdo local de um documento novo e grava cid/contentHash na entrada', () async {
+      final entry = await repo.addEntry(
+        site: '', username: '', password: '',
+        type: EntryType.document,
+        document: const DocumentData(
+          name: 'RG', fileName: 'rg.pdf', fileSizeBytes: 5, mimeType: 'application/pdf',
+        ),
+      );
+      await repo.writeDocumentBlob(entry.id, Uint8List.fromList(utf8.encode('conteudo do rg')));
+
+      when(() => mockPinClient.pinVault(any(), any())).thenAnswer((_) async => const PinResult(
+            cid: 'QmDocCid', contentHash: '0xdochash', providersOk: ['kubo'], providersFailed: [],
+          ));
+
+      await publishService.publish(smartAccountAddress);
+
+      // 1 pin pro documento + 1 pin pro blob principal do vault.
+      verify(() => mockPinClient.pinVault(any(), any())).called(2);
+      final entries = await repo.listEntries();
+      expect(entries.single.document?.cid, 'QmDocCid');
+      expect(entries.single.document?.contentHash, '0xdochash');
+    });
+
+    test('não repina um documento cujo conteúdo local não mudou', () async {
+      final entry = await repo.addEntry(
+        site: '', username: '', password: '',
+        type: EntryType.document,
+        document: const DocumentData(
+          name: 'RG', fileName: 'rg.pdf', fileSizeBytes: 5, mimeType: 'application/pdf',
+        ),
+      );
+      final docBlob = await repo.writeDocumentBlob(
+          entry.id, Uint8List.fromList(utf8.encode('conteudo do rg')));
+      final existingHash = bytesToHex(keccak256(docBlob), include0x: true);
+      await repo.setDocumentPinInfo(entry.id, cid: 'QmAlreadyPinned', contentHash: existingHash);
+
+      when(() => mockPinClient.pinVault(any(), any())).thenAnswer((_) async => const PinResult(
+            cid: 'QmVaultCid', contentHash: '0xvaulthash', providersOk: ['kubo'], providersFailed: [],
+          ));
+
+      await publishService.publish(smartAccountAddress);
+
+      // Só 1 pin (o blob principal do vault) — o documento não mudou desde
+      // o último pin, não deveria ser rechamado (economiza rede/upload).
+      verify(() => mockPinClient.pinVault(any(), any())).called(1);
+      final entries = await repo.listEntries();
+      expect(entries.single.document?.cid, 'QmAlreadyPinned',
+          reason: 'cid antigo deve ser preservado, não sobrescrito');
+    });
+
+    test('repina um documento cujo conteúdo local mudou desde o último pin', () async {
+      final entry = await repo.addEntry(
+        site: '', username: '', password: '',
+        type: EntryType.document,
+        document: const DocumentData(
+          name: 'RG', fileName: 'rg.pdf', fileSizeBytes: 5, mimeType: 'application/pdf',
+        ),
+      );
+      await repo.setDocumentPinInfo(entry.id, cid: 'QmOldPin', contentHash: '0xoldhash');
+      // Conteúdo local mudou depois do último pin (ex: usuário trocou o arquivo).
+      await repo.writeDocumentBlob(entry.id, Uint8List.fromList(utf8.encode('conteudo novo do rg')));
+
+      when(() => mockPinClient.pinVault(any(), any())).thenAnswer((_) async => const PinResult(
+            cid: 'QmNewPin', contentHash: '0xnewhash', providersOk: ['kubo'], providersFailed: [],
+          ));
+
+      await publishService.publish(smartAccountAddress);
+
+      verify(() => mockPinClient.pinVault(any(), any())).called(2);
+      final entries = await repo.listEntries();
+      expect(entries.single.document?.cid, 'QmNewPin');
+    });
   });
 }

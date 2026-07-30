@@ -63,9 +63,18 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
   // Fase 15.3 — documento (sem controller pros campos derivados do arquivo)
   final _docNameCtrl = TextEditingController();
   String? _docFileName;
+  /// Base64 do arquivo escolhido nesta sessão de edição (Fase 15.7) — só em
+  /// memória local, nunca vai no payload de addEntry/updateEntry. Vazio
+  /// numa edição que não troca o arquivo (o conteúdo já publicado continua
+  /// intocado, ver [_docCid]/[_docContentHash]).
   String? _docFileData;
   String? _docMimeType;
   int? _docFileSizeBytes;
+  /// true se esta entrada (edição) já tinha um documento salvo antes —
+  /// permite salvar sem re-escolher o arquivo.
+  bool _docHasStoredContent = false;
+  String? _docCid;
+  String? _docContentHash;
   String? _docError;
 
   List<String> _profileOptions = [];
@@ -100,9 +109,11 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
       if (document != null) {
         _docNameCtrl.text = document.name;
         _docFileName = document.fileName;
-        _docFileData = document.fileData;
         _docMimeType = document.mimeType;
         _docFileSizeBytes = document.fileSizeBytes;
+        _docHasStoredContent = true;
+        _docCid = document.cid;
+        _docContentHash = document.contentHash;
       }
 
       final address = entry.address;
@@ -388,7 +399,8 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
               _usernameCtrl.text.trim().isNotEmpty &&
               _passwordCtrl.text.trim().isNotEmpty,
         EntryType.document =>
-          _docNameCtrl.text.trim().isNotEmpty && _docFileData != null,
+          _docNameCtrl.text.trim().isNotEmpty &&
+              (_docFileData != null || _docHasStoredContent),
         EntryType.address =>
           _addrLabelCtrl.text.trim().isNotEmpty &&
               _addrFullNameCtrl.text.trim().isNotEmpty &&
@@ -408,7 +420,12 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
               _cardCvvCtrl.text.trim().isNotEmpty,
       };
 
-  static const _maxDocumentBytes = 10 * 1024 * 1024; // 10MB — mirror do Desktop (VaultManagement.tsx)
+  // 50MB — limite definitivo da Fase 15.7 (mirror de MAX_DOCUMENT_BYTES em
+  // VaultManagement.tsx). Documentos agora vivem em blobs IPFS separados do
+  // vault principal, então um documento grande não infla mais o sync de
+  // senhas/endereços/cartões — o antigo limite de 10MB era só provisório,
+  // escolhido quando tudo ainda vivia embutido no mesmo blob.
+  static const _maxDocumentBytes = 50 * 1024 * 1024;
 
   static const _mimeByExt = {
     'pdf': 'application/pdf', 'png': 'image/png', 'jpg': 'image/jpeg',
@@ -462,9 +479,13 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                 ? DocumentData(
                     name: _docNameCtrl.text.trim(),
                     fileName: _docFileName ?? '',
-                    fileData: _docFileData ?? '',
                     fileSizeBytes: _docFileSizeBytes ?? 0,
                     mimeType: _docMimeType ?? 'application/octet-stream',
+                    // Um arquivo novo invalida o pin antigo — o próximo
+                    // publish repina o conteúdo novo (ver
+                    // VaultPublishService.publish).
+                    cid: _docFileData != null ? null : _docCid,
+                    contentHash: _docFileData != null ? null : _docContentHash,
                   )
                 : null,
             address: _type == EntryType.address
@@ -598,8 +619,9 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
     setState(() { _saving = true; _error = null; });
     try {
       final groups = _dataGroups;
+      VaultEntry saved;
       if (_isEditing) {
-        await _repository.updateEntry(widget.entry!.copyWith(
+        saved = await _repository.updateEntry(widget.entry!.copyWith(
           site: isCredential ? _siteCtrl.text.trim() : '',
           url: isCredential ? _urlCtrl.text.trim() : '',
           username: isCredential ? _usernameCtrl.text.trim() : '',
@@ -614,7 +636,7 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
           creditCard: groups.creditCard,
         ));
       } else {
-        await _repository.addEntry(
+        saved = await _repository.addEntry(
           site: isCredential ? _siteCtrl.text.trim() : '',
           url: isCredential ? _urlCtrl.text.trim() : '',
           username: isCredential ? _usernameCtrl.text.trim() : '',
@@ -628,6 +650,13 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
           address: groups.address,
           creditCard: groups.creditCard,
         );
+      }
+      // Fase 15.7: o conteúdo do documento só é gravado no cache local
+      // cifrado depois que a entrada existe de verdade com um id — o pin
+      // de verdade no IPFS acontece no próximo publish
+      // (VaultPublishService), não aqui.
+      if (_type == EntryType.document && _docFileData != null) {
+        await _repository.writeDocumentBlob(saved.id, base64Decode(_docFileData!));
       }
       if (mounted) Navigator.of(context).pop(true);
     } catch (e) {

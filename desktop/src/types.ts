@@ -37,9 +37,12 @@ export type CardNetwork =
 export type DocumentData = {
   name: string;
   file_name: string;
-  file_data: string;
   file_size_bytes: number;
   mime_type: string;
+  /** CID do blob cifrado do documento no IPFS (Fase 15.7) — ausente até o próximo publish pinar o conteúdo. */
+  cid?: string;
+  /** keccak256 (hex, "0x"-prefixed) do blob cifrado — usado pra verificar integridade ao buscar por cid. */
+  content_hash?: string;
 };
 
 export type AddressData = {

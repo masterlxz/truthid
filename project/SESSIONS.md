@@ -6924,3 +6924,189 @@ testes automatizados e o build do APK.
 **Documentação**: `PHASE.md` — etapa 15.5 marcada concluída, status geral da Fase 15 atualizado.
 `PENDING.md` — P8/P9 atualizados, novo P34 registrado.
 
+### Sessão 175 — 2026-07-27: Fase 15.6, fatia 1 — Autofill de SO iOS (scaffold + registro de identidades)
+
+Entrada retroativa — esta sessão atualizou `PHASE.md`/`PENDING.md` mas não `SESSIONS.md`, quebrando
+a convenção de 1 entrada por sessão que as demais seguem. Resumo abaixo reconstruído a partir do
+texto já commitado em `PHASE.md` (item 6) e `PENDING.md` (P8/P9/P35/P36).
+
+Duas diferenças de arquitetura reais em relação ao Android (15.5), achadas ao investigar a API
+antes de codar, que fatiaram o escopo (`AskUserQuestion` com o dono do projeto nas duas).
+**Primeira**: a API pública de autofill do iOS (`ASCredentialProviderViewController`) só cobre
+credencial (senha/passkey, e código de verificação no iOS 18+) — não existe extension point pra
+terceiros preencherem endereço/cartão (isso fica restrito ao Contacts/Wallet da própria Apple);
+"mesma lógica do Android" (3 tipos) nunca foi possível. Escopo fechado em só credencial.
+**Segunda, mais séria**: diferente do Android, onde `TruthIdAutofillService` nunca toca no Vault e
+só abre a `MainActivity` via `PendingIntent` (resultado volta via `EXTRA_AUTHENTICATION_RESULT`),
+uma extensão iOS que chama `extensionContext.open(_:)` pra abrir o app principal **perde o
+controle** — a chamada original (Safari, por exemplo) só recebe cancelamento, sem jeito de receber
+de volta a credencial escolhida no app. A decifra do Vault precisa acontecer *dentro* da extensão,
+o que exigiria portar a cripto (AES-GCM/HKDF) pra Swift + Keychain/App Group compartilhado —
+trabalho grande e impossível de validar neste ambiente (Linux, sem Xcode, nem simulador). Fatiado:
+**fatia 1 (esta sessão)** só cria o scaffold da extensão e registra as identidades (sem decifrar
+nada); a decifra real fica pra uma fatia 2 futura (P36 no `PENDING.md`).
+
+**Implementação**: novo target `AutofillExtension` (app extension) no `Runner.xcodeproj`, criado
+**programaticamente via a gem Ruby `xcodeproj`** (não editado à mão — o formato do `.pbxproj` é
+frágil e não dá pra compilar/validar aqui pra conferir uma edição manual; o `xcodeproj` gerou
+target/build phases/configs consistentes e o resultado foi validado reabrindo o projeto e
+inspecionando cada peça — dependency, embed phase, bundle id, entitlements, deployment target —
+antes de seguir). Achado no caminho: o helper `add_system_framework` da gem gera caminho de
+framework fixado numa versão de SDK (`iPhoneOS26.0.sdk`) — frágil se a máquina de build tiver
+outra versão do Xcode; corrigido pra referência `SDKROOT`-relativa (o padrão atual dos templates do
+Xcode, igual o resto do projeto não usa nenhum caminho versionado).
+`CredentialProviderViewController.swift` (extensão) só mostra uma tela informativa e cancela —
+preenchimento de verdade ainda não existe. `AppDelegate.swift` ganhou o primeiro `MethodChannel`
+iOS do projeto (`truthid/ios_autofill_identities`), registrado no hook
+`didInitializeImplicitFlutterEngine` (mesmo padrão do `GeneratedPluginRegistrant`) — recebe a lista
+de credenciais do Dart e chama `ASCredentialIdentityStore.shared.replaceCredentialIdentities(...)`.
+Novo `ios_autofill_identity_service.dart` (`IosAutofillIdentityService`) filtra só
+`EntryType.credential` e deriva o hostname do `serviceIdentifier` com o mesmo critério de
+`_hostnameOf` (RP ID de passkey, `vault_entry_form_screen.dart`) — duplicado de propósito, esse
+helper é privado à tela de formulário. Chamado (fire-and-forget, fail-silent, mesmo padrão de
+`_resolveSmartAccount`) toda vez que `vault_screen.dart::_load()` recarrega as entradas.
+
+**Testes**: `flutter analyze` limpo, `flutter test` 475/475 (4 novos). **Não builda nem roda nada
+neste ambiente** — só confirmável abrindo o projeto no Xcode/macOS (P35).
+
+**Documentação**: `PHASE.md` — etapa 15.6 marcada como "fatia 1 concluída". `PENDING.md` — P8/P9
+atualizados, novos P35 (build/validação real em Mac) e P36 (fatia 2, decifra dentro da extensão)
+registrados.
+
+### Sessão 176 — 2026-07-30: Fase 15.6, fatia 2 — decifra real do Vault dentro da extensão iOS (fecha a 15.6 inteira)
+
+Escopo combinado com o dono do projeto: escrever o código real (Swift + Dart + wiring do Xcode),
+mesmo risco assumido pela fatia 1 — nada builda ou roda neste ambiente (Linux, sem Xcode/macOS/
+simulador), documentado como não-validado desde já (mesmo tratamento de P35).
+
+Contrato próprio de compartilhamento entre `Runner` e `AutofillExtension`, deliberadamente **não**
+dependente do schema interno do plugin `flutter_secure_storage` (não é contrato público): novo
+`SharedVaultAccess.swift`, arquivo duplicado nos 2 targets (mesmo padrão de duplicação por canal
+que `sign_request.rs`/`sign_message.rs` já seguem no Desktop) — o lado do app grava, o lado da
+extensão só lê. Chave do vault (32 bytes) compartilhada via Keychain Access Group
+(`kSecAttrAccessGroup`); blob cifrado (`vault.enc`) compartilhado via App Group
+(`FileManager.containerURL(forSecurityApplicationGroupIdentifier:)`). Novo
+`Runner/Runner.entitlements` (não existia — só a extensão tinha entitlements até aqui) com as 2
+capabilities novas (App Group + Keychain group), mesmas adicionadas em
+`AutofillExtension.entitlements`. Wiring do `.pbxproj` (CODE_SIGN_ENTITLEMENTS do Runner,
+membership dos 2 `SharedVaultAccess.swift` nos targets certos, `Security.framework`/
+`CryptoKit.framework` linkados na extensão) feito com o mesmo script Ruby ad-hoc (gem
+`xcodeproj`) da fatia 1 — diffs mínimos, revisados manualmente linha a linha.
+
+**Achado que simplificou a decifra**: o layout do blob do vault (`nonce(12) || ciphertext ||
+tag(16)`, `vault_cipher_service.dart`, sem AAD) bate byte a byte com o formato `combined` que
+`CryptoKit.AES.GCM.SealedBox` já espera — não precisa fatiar nonce/tag manualmente em Swift, só
+`SealedBox(combined:)` + `AES.GCM.open(using:)`.
+
+Novo canal `truthid/ios_autofill_vault_sync` (`AppDelegate.swift`, métodos `syncVaultKey`/
+`syncVaultBlob`) + `IosAutofillVaultSyncService` (Dart, novo), chamado (fire-and-forget,
+fail-silent, mesmo padrão de `IosAutofillIdentityService`) do mesmo ponto que já chama
+`syncIdentities` (`vault_screen.dart::_load()`). Reaproveita `VaultRepository.readRawBlob()`/
+`VaultKeyService.deriveVaultKey()`, ambos já existentes — nenhum getter novo precisou ser criado
+no repository (achado no caminho: o plano original previa um getter novo, descartado ao achar
+`readRawBlob()` já pronto, usado hoje pra publicar no IPFS).
+
+`CredentialProviderViewController.swift` — os 3 métodos:
+- `prepareInterfaceToProvideCredential`: decifra e preenche direto pelo `recordIdentifier` já
+  registrado na fatia 1 (`ASCredentialIdentityStore`).
+- `prepareCredentialList`: decifra e mostra um picker simples (`UITableView`, estilo `.subtitle`)
+  com todas as entradas tipo credencial — não filtra por `serviceIdentifiers`, mesmo espírito do
+  picker "1 de N" já usado nas telas de aprovação cross-device do Mobile.
+- `provideCredentialWithoutUserInteraction`: continua cancelando de propósito, decisão deliberada
+  de não duplicar um gate de biometria próprio — o próprio iOS já exige Face ID/passcode do
+  sistema antes de invocar a extensão de autofill de senha.
+
+**Testes**: `flutter analyze`/`flutter test` (lado Dart, novo serviço + wiring em
+`vault_screen.dart`) verificados, sem regressão. **Nada do lado Swift builda nem roda neste
+ambiente** — mesma limitação da fatia 1, checklist de validação em Mac real fundido com P35.
+
+**Documentação**: `PHASE.md` — etapa 15.6 fatia 2 documentada, Fase 15 marcada 15.1-15.6
+concluídas (só 15.7/15.8 restam). `PENDING.md` — P36 movido pra "Resolvidas" (código fechado),
+P35 expandido num checklist único cobrindo build + fatia 1 + fatia 2, P8/P9 atualizados.
+
+### Sessão 177 — 2026-07-30: Fase 15.7 — Documentos separados do blob único do vault + limite definitivo (50MB)
+
+2 agentes Explore levantaram a arquitetura antes de codar (nenhuma suposição): o Vault inteiro
+(senhas + endereços + cartões + documentos) virava **um único** JSON → um blob AES-256-GCM → um
+CID publicado on-chain (`VaultRegistry.updateVault`). Achado real que motivou a sessão: um
+documento grande infla esse blob único, e o `IpfsGatewayClient` do Mobile busca esse blob inteiro
+de gateways públicos (`ipfs.io`/`dweb.link`) com timeout de só **15 segundos** — um documento
+grande adicionado em qualquer entrada arriscava quebrar o sync de **todo mundo**, mesmo quem nunca
+tocou em documentos.
+
+**Decisão tomada com o dono do projeto** (`AskUserQuestion`, 2 opções apresentadas): separar o
+conteúdo dos documentos do blob principal do vault, em vez de só subir o limite mantendo tudo
+junto. Achado que simplificou bastante a implementação: `ipfs.rs::pin_vault`/
+`ipfs_pin_client.dart::pinVault` já eram genéricos (`content: &[u8]`/`Uint8List`) e já calculavam
+o `content_hash` (keccak256) internamente — reaproveitados sem nenhuma mudança pra pinar o blob de
+um documento separadamente do blob do vault, e sem precisar mexer no `VaultRegistry.sol` nem no
+fluxo on-chain (o ponteiro CID/hash do documento vive *dentro* do blob cifrado do vault, protegido
+transitivamente pelo `content_hash` on-chain do vault principal).
+
+**Schema**: `DocumentData` perde `file_data` (base64 embutido) — vira campo legado privado ao
+arquivo (Rust: privado + `skip_serializing`; Dart: `_legacyFileData`, populado só por `fromJson`),
+usado exclusivamente pela migração automática, nunca mais serializado. Ganha `cid`/`content_hash`.
+`sdk/typescript` não precisou de nenhuma mudança — checado e confirmado que não mirrora esse
+schema (só `desktop/src/types.ts` mirrorava, já atualizado).
+
+**Cache local de documentos** (novo, mirror de `vault_path()`/`_vaultPath()`): guarda o blob
+**cifrado** de cada documento à parte (`~/.truthid/vault_documents/<id>.enc` no Desktop,
+equivalente nos Documents do app no Mobile) — permite editar/ver offline sem depender de rede.
+
+**Migração automática**: uma entrada com `file_data` ainda preenchido e `cid` ausente (formato
+pré-15.7) tem o base64 decodificado, cifrado e escrito no cache local dentro de
+`vault::load()`/`VaultRepository._load()`, sem exigir nenhuma ação do usuário — testada via JSON
+literal no formato antigo, não só round-trip sintético.
+
+**Upload**: cifra localmente e grava no cache por `entry_id` só depois que a entrada existe de
+verdade com um id — o Desktop via novo comando Tauri `vault_document_write` chamado depois do
+`vault_upsert_entry` retornar (`persistDocumentContentIfNeeded` em `VaultManagement.tsx`); o
+Mobile via `VaultRepository.writeDocumentBlob` depois de `addEntry`/`updateEntry`. O pin de
+verdade no IPFS fica pendente até o próximo publish.
+
+**Publish**: antes de pinar o blob principal, `vault_publish` (Rust)/`VaultPublishService.publish`
+(Dart) pina separadamente o conteúdo de cada documento cujo `cid` seja nulo OU cujo hash local
+mudou desde o último pin (`document_needs_pin`/`documentNeedsPin` — mesmo espírito do diff de
+conteúdo que `pending_changes`/`markPublished` já usam desde a Sessão 138/139), grava
+`cid`/`content_hash` na entrada, e só então segue o fluxo de publish do vault principal
+exatamente como antes. Documentos sem mudança não são re-pinados a cada publish.
+
+**Download/visualização**: cache local primeiro (rápido, offline); se ausente (documento
+adicionado em outro device, nunca buscado neste), busca pelo `cid` num gateway IPFS público
+(`ipfs::fetch_from_gateway`, novo no Rust — mesmos 2 gateways e timeout de 15s do
+`IpfsGatewayClient` do Mobile; `VaultRepository.readDocumentContent` no Dart, reaproveita o
+cliente já existente), confere `content_hash` antes de decifrar (mesmo padrão defensivo de
+`VaultSyncService.sync()`), e grava no cache local pra próxima vez.
+
+**Limite**: subiu de 10MB (provisório, 15.2) pra **50MB definitivo** — generoso agora que
+documentos não afetam mais o sync do resto do vault, sem exigir streaming/chunking.
+
+**Fora de escopo, decisão registrada em `PENDING.md`/`PHASE.md`**: chunking literal (dividir um
+arquivo grande em N pedaços com reassembly) não foi implementado — o problema real era o blob
+único poluindo *todo* sync, já resolvido por separar os documentos. Multi-chunk agregaria
+complexidade real (ordem, resumo de upload parcial, integridade por pedaço) por um ganho que hoje
+é só sobre pico de memória de uma operação pontual, tolerável sem chunking no limite de 50MB
+escolhido.
+
+**Achado no caminho, compilação Rust**: `MutexGuard` não é `Send` — não dá pra segurar
+`vault::lock_vault()` através de um `.await` num comando Tauri assíncrono (`vault_publish` virou
+`async fn` que agora mutava+salvava documentos antes do pin principal). `vault_publish` nunca teve
+essa trava mesmo antes da sessão (só comandos síncronos usam `lock_vault()`) — tentativa de
+adicionar consistência aqui quebrou a compilação (`cargo check`), revertida sem prejuízo real
+(comportamento pré-existente preservado).
+
+**Testes**: `cargo check --lib` limpo, `cargo test --lib` 126/126 (10 novos em `vault.rs`:
+schema/migração via JSON, `document_needs_pin`, sem tocar disco real — mesma limitação já
+documentada de não ter infra de path override em testes Rust). `flutter analyze` limpo (1 achado
+no caminho: `prefer_initializing_formals` sugerindo `this._legacyFileData` em vez de atribuição no
+initializer list; ao corrigir, achado 2: o parâmetro nomeado correspondente a um campo privado via
+`this._field` continua se chamando pelo nome público sem underscore no callsite — sutileza real do
+Dart, não documentada antes neste projeto), `flutter test` verde (novos testes de cache/migração/
+pin-condicional em `vault_repository_test.dart` e `vault_publish_service_test.dart`, com I/O real
+de disco via o mecanismo de `testPath` que já existia — diferente do Rust). `npx vitest run`
+101/101 sem regressão, `tsc --noEmit` limpo.
+
+**Documentação**: `PHASE.md` — etapa 15.7 documentada por completo, Fase 15 marcada 15.1-15.7
+concluídas (só 15.8 resta). `PENDING.md` — P8 atualizado, novo P37 registrado (validação E2E real
+contra Kubo/gateway público, nunca exercitada fora de testes automatizados/blobs sintéticos).
+
