@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-07-30 (Sessão 177 — P8/Fase 15 FECHADA POR COMPLETO: 15.8, cifra individual de card_number/cvv, movido pra Resolvidas)
+> Última atualização: 2026-07-31 (Sessão 178 — P17/Social Recovery UI implementada: Desktop GuardianManagement + Mobile GuardianStatusScreen)
 
 ---
 
@@ -55,7 +55,6 @@
 
 | ID | Item | Onde se originou | Prioridade |
 |---|---|---|---|
-| P17 | **Social Recovery** — N-de-M guardiões com multisig/timelock. | `ROADMAP.md` (Expansão) | 💡 Ideia |
 | P18 | **Verifiable Credentials / Atestações ZK** — provar atributos sem revelar tudo (KYC descentralizado). | `ROADMAP.md` (Expansão) | 💡 Ideia |
 | P19 | **Delegação de acesso temporário** — sessões com escopo e prazo. | `ROADMAP.md` (Expansão) | 💡 Ideia |
 | P20 | **Reputação on-chain portátil** — histórico de confiança consultável. | `ROADMAP.md` (Expansão) | 💡 Ideia |
@@ -278,3 +277,9 @@
 | ~~F25~~ | ~~`/truthid/v1/pin` — núcleo Rust (fatia 1)~~ | **Sessão 119** |
 | ~~F26~~ | ~~`/truthid/v1/pin` — rota HTTP + tela (fatia 2)~~ | **Sessão 120** |
 | ~~F27~~ | ~~`/truthid/v1/pin` — Settings (fatia 3)~~ | **Sessão 121** |
+
+### P17 — Social Recovery UI (Sessão 178)
+
+| ID | Item | Resolvida em |
+|---|---|---|
+| ~~P17~~ | ~~**Social Recovery (UI)** — N-de-M guardiões com multisig/timelock. Contrato `RecoveryManager` já existia e estava deployado, mas sem interface de usuário. Implementado: `GuardianManagement.tsx` (Desktop) com configurar/propor/aprovar/executar/cancelar recovery + `GuardianStatusScreen.dart` (Mobile, só leitura). Aba "Recovery" adicionada ao Desktop App.tsx. ABI completo do RecoveryManager adicionado aos dois lados. `tsc --noEmit` limpo, 101/101 testes passando. Redeploy em cascata (P1/P2) não é pré-requisito — a UI funciona contra o contrato atual~~ | **Sessão 178** |

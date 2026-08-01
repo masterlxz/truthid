@@ -27,9 +27,10 @@ import { PinApprovalModal } from "./components/PinApprovalModal";
 import { VaultEditApprovalModal } from "./components/VaultEditApprovalModal";
 import { AutofillAddressApprovalModal } from "./components/AutofillAddressApprovalModal";
 import { AutofillCreditCardApprovalModal } from "./components/AutofillCreditCardApprovalModal";
+import { GuardianManagement } from "./components/GuardianManagement";
 import "./App.css";
 
-type Tab = "dashboard" | "devices" | "sessions" | "vault";
+type Tab = "dashboard" | "devices" | "sessions" | "vault" | "recovery";
 
 function LogoIcon() {
   return (
@@ -284,12 +285,19 @@ function App() {
                 >
                   Vault
                 </button>
+                <button
+                  onClick={() => setActiveTab("recovery")}
+                  disabled={activeTab === "recovery"}
+                >
+                  Recovery
+                </button>
               </nav>
 
               {activeTab === "dashboard" && <SmartAccountDashboard />}
               {activeTab === "devices" && <ManageDevices />}
               {activeTab === "sessions" && <ActiveSessions />}
               {activeTab === "vault" && <VaultManagement />}
+              {activeTab === "recovery" && <GuardianManagement />}
             </IdentityProvider>
           )}
         </main>

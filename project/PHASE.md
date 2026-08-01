@@ -1413,3 +1413,35 @@ type VaultEntry = VaultEntryCredential | VaultEntryDocument
 - Nenhum contrato novo necessário — `VaultRegistry` já serve
 
 ---
+
+### Fase 16 — Social Recovery (UI)
+
+**Objetivo**: Construir a interface de usuário para o Social Recovery (P17) — configuração de guardians, proposta, aprovação, execução e cancelamento de recovery — tanto no Desktop quanto no Mobile.
+
+**Contexto**: O contrato `RecoveryManager` já existe e está deployado na Mainnet com os 4 fluxos completos (`configureGuardians`, `proposeRecovery`, `approveRecovery`, `executeRecovery`, `cancelRecovery`) e os fixes de segurança C1/C3/C5-C9. Zero UI existia — a única forma de usar recovery era chamar o contrato diretamente pelo explorador de blocos.
+
+**O usuário não precisa de redeploy para usar a UI**: o contrato atual já suporta todas as funções. O redeploy em cascata (P1/P2) atualizará os endereços no futuro, mas a interface permanece a mesma.
+
+**Etapas**:
+- [x] 16.1 — ABI do `RecoveryManager` no Desktop (`contracts.ts`) — 10 funções + 5 eventos
+- [x] 16.2 — `GuardianManagement.tsx` (Desktop) — tela completa com:
+  - Configurar guardians (formulário de endereços + threshold)
+  - Visualizar lista atual
+  - Propor recovery (qualquer guardian, apontando novo controller)
+  - Aprovar recovery (votação)
+  - Executar recovery (após threshold + timelock de 7 dias)
+  - Cancelar recovery (controller original, dentro do timelock)
+  - Estados visuais: sem guardians (alerta laranja), proposta ativa (temporizador + votos), executada, cancelada
+- [x] 16.3 — Aba "Recovery" no `App.tsx` + CSS
+- [x] 16.4 — ABI do `RecoveryManager` no Mobile (`abis.dart`) — 4 funções de leitura
+- [x] 16.5 — Métodos de leitura no `BlockchainService` (Dart) — `getGuardianConfig`, `getProposal`, `getTimelock`
+- [x] 16.6 — `GuardianStatusScreen.dart` (Mobile) — tela de visualização com pull-to-refresh, integrada ao menu de configurações
+
+**Decisões de design**:
+- Desktop tem **escrita e leitura** — todas as operações de recovery passam por `TruthIDAccount.execute()` (exceto `proposeRecovery` e `approveRecovery`, que guardians chamam diretamente pois não são controllers). `cancelRecovery` usa `execute()` porque só o controller pode cancelar.
+- Mobile tem **só leitura** — `RecoveryManager` está em `blockedForDevices` na smart account. Recovery é operação de emergência que exige wallet (Ledger).
+- Nenhum contrato novo, nenhum deploy necessário — a UI funciona contra o `RecoveryManager` já deployado na Mainnet (`0x1d51daD35Bd3562f8B56B334a9B8637873fE40e9`).
+
+**Testes**: `tsc --noEmit` limpo, `vitest run` 101/101. Mobile depende de ambiente Flutter para análise.
+
+---

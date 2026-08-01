@@ -251,6 +251,155 @@ export const SESSION_REGISTRY_ABI = [
   },
 ] as const;
 
+// ─── RecoveryManager (Social Recovery) ──────────────────────────────────────
+
+// Endereço do RecoveryManager deployado na Base Mainnet.
+// Fonte: contracts/broadcast/Deploy.s.sol/8453/run-latest.json
+// O contrato fonte já contém os fixes C1 (reentrância), C3 (revogação de
+// devices), C5-C9 — mas o contrato on-chain ainda é a versão pré-fix.
+// O redeploy em cascata (P1/P2) atualizará este endereço no futuro.
+export const RECOVERY_MANAGER_ADDRESS =
+  "0x1d51daD35Bd3562f8B56B334a9B8637873fE40e9" as const;
+
+export const RECOVERY_MANAGER_ABI = [
+  {
+    type: "function",
+    name: "configureGuardians",
+    inputs: [
+      { name: "username", type: "string" },
+      { name: "guardians", type: "address[]" },
+      { name: "threshold", type: "uint256" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "proposeRecovery",
+    inputs: [
+      { name: "username", type: "string" },
+      { name: "newController", type: "address" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "approveRecovery",
+    inputs: [{ name: "username", type: "string" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "executeRecovery",
+    inputs: [{ name: "username", type: "string" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "cancelRecovery",
+    inputs: [{ name: "username", type: "string" }],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
+    type: "function",
+    name: "getGuardianConfig",
+    inputs: [{ name: "username", type: "string" }],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        components: [
+          { name: "guardians", type: "address[]" },
+          { name: "threshold", type: "uint256" },
+        ],
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "getProposal",
+    inputs: [{ name: "username", type: "string" }],
+    outputs: [
+      {
+        name: "",
+        type: "tuple",
+        components: [
+          { name: "proposedBy", type: "address" },
+          { name: "newController", type: "address" },
+          { name: "proposedAt", type: "uint256" },
+          { name: "approvalCount", type: "uint256" },
+          { name: "executed", type: "bool" },
+          { name: "cancelled", type: "bool" },
+          { name: "exists", type: "bool" },
+        ],
+      },
+    ],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "hasGuardianApproved",
+    inputs: [
+      { name: "username", type: "string" },
+      { name: "guardian", type: "address" },
+    ],
+    outputs: [{ name: "", type: "bool" }],
+    stateMutability: "view",
+  },
+  {
+    type: "function",
+    name: "TIMELOCK",
+    inputs: [],
+    outputs: [{ name: "", type: "uint256" }],
+    stateMutability: "view",
+  },
+  {
+    type: "event",
+    name: "GuardiansConfigured",
+    inputs: [
+      { name: "identityId", type: "uint256", indexed: true },
+      { name: "guardians", type: "address[]", indexed: false },
+      { name: "threshold", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "RecoveryProposed",
+    inputs: [
+      { name: "identityId", type: "uint256", indexed: true },
+      { name: "proposedBy", type: "address", indexed: true },
+      { name: "newController", type: "address", indexed: true },
+    ],
+  },
+  {
+    type: "event",
+    name: "RecoveryApproved",
+    inputs: [
+      { name: "identityId", type: "uint256", indexed: true },
+      { name: "guardian", type: "address", indexed: true },
+      { name: "approvalCount", type: "uint256", indexed: false },
+    ],
+  },
+  {
+    type: "event",
+    name: "RecoveryExecuted",
+    inputs: [
+      { name: "identityId", type: "uint256", indexed: true },
+      { name: "newController", type: "address", indexed: true },
+    ],
+  },
+  {
+    type: "event",
+    name: "RecoveryCancelled",
+    inputs: [{ name: "identityId", type: "uint256", indexed: true }],
+  },
+] as const;
+
 export const VAULT_REGISTRY_ADDRESS =
   "0x602Fa39611960e5ef17D95a5d7b16816eE0ff734" as const;
 

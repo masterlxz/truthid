@@ -108,6 +108,8 @@ class BlockchainService {
   // usado em desktop/src/config/contracts.ts.
   static const _vaultRegistryAddress =
       '0x602Fa39611960e5ef17D95a5d7b16816eE0ff734';
+  static const _recoveryManagerAddress =
+      '0x1d51daD35Bd3562f8B56B334a9B8637873fE40e9';
 
   // Exposto publicamente — a 14.9.5 (SessionCreator) precisa deste endereço
   // como `dest` da chamada `TruthIDAccount.execute`.
@@ -155,6 +157,11 @@ class BlockchainService {
   static final _entryPointContract = DeployedContract(
     ContractAbi.fromJson(entryPointAbi, 'EntryPoint'),
     EthereumAddress.fromHex(entryPointV07Address),
+  );
+
+  static final _recoveryContract = DeployedContract(
+    ContractAbi.fromJson(recoveryManagerAbi, 'RecoveryManager'),
+    EthereumAddress.fromHex(_recoveryManagerAddress),
   );
 
   // Faz uma leitura (eth_call) no contrato e retorna os valores decodificados.
@@ -674,6 +681,62 @@ class BlockchainService {
     final map = result as Map<String, dynamic>;
     return int.parse((map['timestamp'] as String).substring(2), radix: 16);
   }
+
+  // ── Social Recovery (RecoveryManager) — leituras ──────────────────────────
+
+  /// Retorna a config de guardians de uma identidade: lista de endereços +
+  /// threshold (M de N). Retorna null se nunca foi configurado (tupla vazia).
+  Future<({List<String> guardians, BigInt threshold})?> getGuardianConfig(
+      String username) async {
+    try {
+      final fn = _recoveryContract.function('getGuardianConfig');
+      final result = await _ethCall(
+          _recoveryManagerAddress, fn, [username]);
+      final tuple = result[0] as List<dynamic>;
+      final guardians = (tuple[0] as List<dynamic>)
+          .map((g) => (g as EthereumAddress).hex)
+          .toList();
+      if (guardians.isEmpty) return null;
+      return (guardians: guardians, threshold: tuple[1] as BigInt);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Retorna a proposta ativa (se houver). Retorna null se nunca houve
+  /// proposta, ou se a proposta foi executada/cancelada.
+  /// Usado pela UI pra mostrar status de recovery em andamento.
+  Future<RecoveryProposal?> getProposal(String username) async {
+    try {
+      final fn = _recoveryContract.function('getProposal');
+      final result = await _ethCall(
+          _recoveryManagerAddress, fn, [username]);
+      final tuple = result[0] as List<dynamic>;
+      final exists = tuple[6] as bool;
+      if (!exists) return null;
+      return RecoveryProposal(
+        proposedBy: (tuple[0] as EthereumAddress).hex,
+        newController: (tuple[1] as EthereumAddress).hex,
+        proposedAt: tuple[2] as BigInt,
+        approvalCount: tuple[3] as BigInt,
+        executed: tuple[4] as bool,
+        cancelled: tuple[5] as bool,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Retorna o timelock do RecoveryManager (em segundos, tipicamente 7 dias).
+  Future<BigInt?> getTimelock() async {
+    try {
+      final fn = _recoveryContract.function('TIMELOCK');
+      final result = await _ethCall(_recoveryManagerAddress, fn, []);
+      return result[0] as BigInt;
+    } catch (_) {
+      return null;
+    }
+  }
 }
 
 // Custo de uma transação (gasUsed * effectiveGasPrice) — usado pelo
@@ -683,4 +746,24 @@ class TxReceiptInfo {
   final BigInt effectiveGasPrice;
 
   const TxReceiptInfo({required this.gasUsed, required this.effectiveGasPrice});
+}
+
+// Proposta de recovery social lida do RecoveryManager. Só leitura — o Mobile
+// nunca escreve no RecoveryManager (blockedForDevices na smart account).
+class RecoveryProposal {
+  final String proposedBy;
+  final String newController;
+  final BigInt proposedAt;
+  final BigInt approvalCount;
+  final bool executed;
+  final bool cancelled;
+
+  const RecoveryProposal({
+    required this.proposedBy,
+    required this.newController,
+    required this.proposedAt,
+    required this.approvalCount,
+    required this.executed,
+    required this.cancelled,
+  });
 }

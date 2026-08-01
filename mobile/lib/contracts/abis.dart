@@ -169,3 +169,60 @@ const String deviceRegistryAbi = '''[
     "stateMutability": "view"
   }
 ]''';
+
+// RecoveryManager — só funções de leitura. O Mobile NUNCA escreve no
+// RecoveryManager: recovery é operação de emergência que exige wallet
+// (Ledger), e o RecoveryManager está em blockedForDevices na smart account.
+// Source: contracts/src/RecoveryManager.sol
+const String recoveryManagerAbi = '''[
+  {
+    "type": "function",
+    "name": "getGuardianConfig",
+    "inputs": [{"name": "username", "type": "string"}],
+    "outputs": [{
+      "name": "",
+      "type": "tuple",
+      "components": [
+        {"name": "guardians", "type": "address[]"},
+        {"name": "threshold", "type": "uint256"}
+      ]
+    }],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getProposal",
+    "inputs": [{"name": "username", "type": "string"}],
+    "outputs": [{
+      "name": "",
+      "type": "tuple",
+      "components": [
+        {"name": "proposedBy", "type": "address"},
+        {"name": "newController", "type": "address"},
+        {"name": "proposedAt", "type": "uint256"},
+        {"name": "approvalCount", "type": "uint256"},
+        {"name": "executed", "type": "bool"},
+        {"name": "cancelled", "type": "bool"},
+        {"name": "exists", "type": "bool"}
+      ]
+    }],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "hasGuardianApproved",
+    "inputs": [
+      {"name": "username", "type": "string"},
+      {"name": "guardian", "type": "address"}
+    ],
+    "outputs": [{"name": "", "type": "bool"}],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "TIMELOCK",
+    "inputs": [],
+    "outputs": [{"name": "", "type": "uint256"}],
+    "stateMutability": "view"
+  }
+]''';

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../services/bundler_config_service.dart';
 import '../theme.dart';
 import 'deeplink_self_test_screen.dart';
+import 'guardian_status_screen.dart';
 import 'security_screen.dart';
 
 // Tela de configuracao do bundler (Pimlico ou custom). Permite ao usuario
@@ -160,6 +161,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   const SizedBox(height: 32),
                   const Divider(),
+                  const SizedBox(height: 8),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.people_outline, color: AppColors.textMuted),
+                    title: const Text('Social Recovery'),
+                    subtitle: const Text(
+                      'View guardian status and active proposals',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const GuardianStatusScreen(),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   ListTile(
                     contentPadding: EdgeInsets.zero,
