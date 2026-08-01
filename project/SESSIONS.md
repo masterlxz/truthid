@@ -7535,3 +7535,70 @@ limpos. P46 rebaixado de Média pra Baixa (mecanismo funciona, só o alvo do cli
 mantido em aberto — fechamento de verdade só com clique físico real (mouse/trackpad) ou devtools
 acessíveis.
 
+### Sessão 182 (continuação) — P33 validado com Brave real: 2 bugs reais achados e corrigidos
+(gesto de permissão perdido + CORS ausente no loopback)
+
+Dono do projeto escolheu o P33 (autofill via Desktop loopback, 15.4 fatia 2) entre os itens
+self-executáveis — extensão + TruthID Desktop na mesma máquina, sem precisar do celular físico
+dele. Brave já estava instalado nesta máquina (usado antes na Sessão 116).
+
+**Setup**: `extension/.output/chrome-mv3` buildado (`npm run build`), carregado unpacked num
+profile isolado do Brave (`--user-data-dir` próprio, `--ozone-platform=x11` — Brave abre em Wayland
+nativo por padrão nesta máquina, invisível pro `xdotool`/X11, precisou forçar X11 pra conseguir
+automatizar). Formulário de teste HTML com `autocomplete="street-address"`/`cc-number` etc servido
+via `python3 -m http.server` local. Vault do Desktop ganhou um endereço (`Casa Teste`) e um cartão
+(`Nubank Teste`) de teste pra ter candidatos reais.
+
+**Achado #1 — gesto de usuário perdido no pedido de permissão**: clicar no ícone in-page mostrava
+sempre "Open the TruthID extension icon once to grant local network access, then try again.", em
+loop infinito, mesmo repetindo o passo várias vezes. Confirmado com `chrome.permissions.contains`
+retornando `false` mesmo com `brave://extensions` mostrando "Site access: On all sites" (essa UI não
+reflete permissões opcionais pedidas via `chrome.permissions.request`, são mecanismos diferentes).
+Rodando `chrome.permissions.request(...)` direto no console do service worker (via
+"Inspect views → service worker" em `brave://extensions` com Developer mode) reproduziu o erro
+exato: `"This function must be called during a user gesture"` — confirma que o relay
+`chrome.runtime.sendMessage` (content script → `background.ts`) perde a transient activation do
+clique original, exatamente como o comentário do próprio `background.ts` já previa (linha 227-232).
+O workaround documentado ali ("abrir o ícone da extensão uma vez... fluxo que já funciona hoje")
+também estava quebrado, mas por um motivo diferente: o handler do botão "I scanned it — look for my
+phone" (`popup/main.ts::findButton`) fazia `return` antecipado no check
+`!isNetworkDiscoverySupported()` — verdadeiro no Brave, que desativa `chrome.system.network` por
+privacidade (já documentado desde a Sessão 116) — **antes** de chegar na linha que chama
+`ensureHostPermission()`. Ou seja, no Brave especificamente, não existia nenhum caminho real de
+concessão dessa permissão. Corrigido invertendo a ordem das duas checagens em `findButton`: o pedido
+de permissão roda primeiro (aproveitando o gesto real do clique no botão), o check de LAN vem
+depois só pra decidir se vale tentar o `sweepLan`. Confirmado com o prompt nativo do Chrome/Brave
+aparecendo pela primeira vez nesta investigação inteira: "'TruthID Vault' has requested additional
+permissions... Allow/Deny".
+
+**Achado #2 — CORS ausente no servidor loopback**: mesmo depois de conceder a permissão de
+verdade, o fetch de `/truthid/v1/autofill-address` ainda falhava — desta vez com erro de CORS
+visível no Network tab do devtools (usado pela primeira vez nesta sessão contra um browser real,
+diferente do WebView do Tauri que não tem devtools acessível). Causa: esse fetch roda no content
+script, que herda a origem da PÁGINA pra fins de CORS (diferente de fetches feitos pelo background/
+service worker, que não são sujeitos a CORS) — e `local_signer_server.rs` nunca setava nenhum
+header `Access-Control-Allow-Origin` em nenhuma rota. Corrigido com `tower-http::cors::CorsLayer::
+permissive()` no router (`Cargo.toml` ganhou a dependência nova). Mesmo modelo de confiança da nota
+de segurança já existente no arquivo (localhost já é implicitamente confiável, sem autenticação em
+nenhuma rota) — abrir CORS pro navegador não amplia a superfície real de ataque, já que um `curl`/
+script local nunca foi bloqueado por CORS mesmo. Confirmado com `curl -i` mostrando
+`access-control-allow-origin: *`.
+
+**Resultado com os 2 fixes**: `ping` responde 200, a extensão acha a porta certa, o POST de
+autofill-address chega parqueado (visível como "Pending" no Network tab), e o
+`AutofillAddressApprovalModal` do Desktop aparece com o candidato certo do vault local ("Casa
+Teste") — confirma o protocolo inteiro (descoberta de porta → CORS → parqueamento → notificação via
+`app.emit`) funcionando de ponta a ponta pela primeira vez, reproduzido duas vezes de forma
+independente. **Não fechado**: o clique em "Use this address" e a confirmação visual do
+preenchimento de volta no formulário do navegador — bloqueado pela mesma flakiness de clique do
+mouse no WebView do Tauri já documentada investigando o P46 nesta mesma sessão (não um bug novo do
+autofill; o mecanismo de aprovação em si já foi provado funcionando quando o clique acerta). Achado
+colateral não investigado a fundo: depois de um reload do frontend do Desktop com uma requisição
+ainda parqueada no Rust lado servidor (confirmado via 409 Conflict de um pedido concorrente), o
+modal não voltou a aparecer — pode ser um bug real em `get_pending_autofill_address_request`/
+`useIncomingRequest`, registrado como observação em aberto, não como achado confirmado.
+
+`cargo test --lib` 135/135, `npx vitest run`/`tsc --noEmit` (extensão) limpos. Efeito colateral:
+2 entradas de teste (`Casa Teste`/endereço, `Nubank Teste`/cartão) ficaram no vault local do dono do
+projeto, não publicadas on-chain — ele pode removê-las quando quiser.
+

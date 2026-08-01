@@ -203,6 +203,20 @@ els.findButton.addEventListener('click', async () => {
     return;
   }
 
+  // Pedido de permissão vem primeiro, aproveitando o gesto de usuário real
+  // deste clique — achado real: com o check de LAN antes, browsers sem
+  // `chrome.system.network` (Brave/Firefox) nunca chegavam a pedir
+  // `http://*/*` nenhuma vez (early-return abaixo sempre disparava primeiro),
+  // deixando o ícone in-page de autofill (que depende só dessa permissão,
+  // não do sweep de LAN em si) preso pra sempre em "Open the extension icon
+  // once..." sem nenhum caminho real de concessão nesses browsers.
+  const granted = await ensureHostPermission();
+  if (!granted) {
+    els.statusText.textContent =
+      "Permission denied — enter your phone's IP manually below.";
+    return;
+  }
+
   // Checagem síncrona antes de tentar: Firefox nunca teve `system.network`,
   // e o Brave também não (desativa o namespace inteiro por privacidade,
   // mesmo com a permissão concedida — ver lanDiscovery.ts). Nesses casos
@@ -216,13 +230,6 @@ els.findButton.addEventListener('click', async () => {
   }
 
   els.statusText.textContent = 'Looking for your phone on the local network...';
-
-  const granted = await ensureHostPermission();
-  if (!granted) {
-    els.statusText.textContent =
-      "Permission denied — enter your phone's IP manually below.";
-    return;
-  }
 
   const blob = await sweepLan(currentState.sessionId);
   if (blob) {

@@ -6,6 +6,7 @@ use axum::{extract::Json, extract::State, http::StatusCode, routing::get, routin
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tokio::sync::{oneshot, Mutex};
+use tower_http::cors::CorsLayer;
 
 use crate::autofill_address::{self, AutofillAddressState};
 use crate::autofill_creditcard::{self, AutofillCreditCardState};
@@ -404,6 +405,18 @@ fn router(config: &ServerConfig) -> Router {
     // acesso já tem controle total da máquina). Rotas sensíveis têm proteção
     // adicional: /vault-edit valida pub_key + canWriteVault (bug #51),
     // /pin normaliza app_name (bug #44).
+    //
+    // CORS permissivo (Sessão 182, achado real validando o P33): sem isso,
+    // o fetch de /autofill-address|/autofill-creditcard feito pelo content
+    // script da extensão (roda no contexto de origem da página, não do
+    // background — permissões `host_permissions` não isentam esse fetch de
+    // CORS) sempre falhava com "CORS error", mesmo com a porta certa
+    // encontrada e a permissão de host concedida — nunca validado de ponta a
+    // ponta antes. Mesmo modelo de confiança da nota acima: qualquer origem
+    // já pode forjar o pedido de qualquer processo local mesmo sem CORS
+    // aberto (um `curl`/script local não é bloqueado por CORS, só o
+    // navegador é), então liberar CORS pro navegador não amplia a superfície
+    // real de ataque.
     Router::new()
         .route("/truthid/v1/ping", get(ping))
         .route("/truthid/v1/handshake", post(handshake))
@@ -419,6 +432,7 @@ fn router(config: &ServerConfig) -> Router {
             "/truthid/v1/autofill-creditcard",
             post(autofill_creditcard_handler),
         )
+        .layer(CorsLayer::permissive())
         .with_state(router_state)
 }
 
