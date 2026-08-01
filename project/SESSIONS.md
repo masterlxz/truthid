@@ -7172,3 +7172,41 @@ redigido, regressão da pendência fantasma). `flutter test` 496/496. `flutter a
 **concluída por completo** (15.1-15.8). `PENDING.md` — P8 movido pra "Resolvidas" (Fase 15
 fechada), P9 mantido (só falta validação em Mac real, P35).
 
+---
+
+### Sessão 178 — 2026-07-31: Fase 16 — Social Recovery (UI), Desktop + Mobile
+
+Contrato `RecoveryManager` já existia (deployado na Mainnet, com os fixes de segurança C1/C3/
+C5-C9 aplicados desde a Sessão 150), mas nunca teve UI — a única forma de configurar guardiões ou
+propor/aprovar/executar recovery era chamar o contrato direto pelo explorador de blocos. Zero
+contrato novo, zero deploy: a UI fala com o `RecoveryManager` já em produção
+(`0x1d51daD35Bd3562f8B56B334a9B8637873fE40e9`).
+
+**Desktop** (`GuardianManagement.tsx`, nova aba "Recovery" em `App.tsx`) — leitura e escrita
+completas: configurar guardiões (endereços + threshold M-de-N), propor recovery, aprovar
+(votação), executar (após threshold + timelock de 7 dias) e cancelar (controller original, dentro
+do timelock). Estados visuais dedicados pra sem-guardiões (alerta), proposta ativa (temporizador +
+contagem de votos), executada e cancelada. Todas as operações passam por
+`TruthIDAccount.execute()`, exceto `proposeRecovery`/`approveRecovery` (guardiões chamam
+diretamente — não são controllers da smart account). ABI completo (10 funções + 5 eventos) novo em
+`contracts.ts`.
+
+**Mobile** (`GuardianStatusScreen.dart`, integrada ao Settings) — **só leitura**, decisão de
+design: `RecoveryManager` está em `blockedForDevices` na smart account, e recovery é operação de
+emergência que exige a wallet raiz (Ledger), não uma device key do celular. Pull-to-refresh,
+resolve o username automaticamente via `PairedUsernameResolver`. ABI de leitura (`abis.dart`) +
+métodos novos em `BlockchainService` (`getGuardianConfig`/`getProposal`/timelock).
+
+**Gap fechado nesta sessão**: a sessão que implementou a Fase 16 só validou o lado Desktop
+(`tsc --noEmit` limpo, `vitest run` 101/101) — o lado Mobile nunca rodou `flutter analyze`/
+`flutter test` antes do commit, por falta de ambiente Flutter local (depende do container Docker
+em `mobile/dev.sh`). Rodado agora: `flutter analyze` limpo (1 único aviso `info`, pré-existente e
+não relacionado — `unnecessary_import` em `test/services/vault_repository_test.dart`); `flutter
+test` 496/496 (nenhum teste novo dedicado a `GuardianStatusScreen`, mas nada quebrou). Fase 16
+fecha validada nos dois lados.
+
+**Pendência real que continua em aberto**: nenhuma validação em hardware/clique real (Desktop
+nativo ou celular físico) foi feita pra nenhuma das duas telas novas — só compilação/análise
+estática. Registrar como pendência se o dono do projeto quiser fechar isso antes de seguir pra
+outra frente.
+
