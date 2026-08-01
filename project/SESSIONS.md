@@ -7255,3 +7255,46 @@ esta, fora de uma sessão registrada) e o device do Desktop (`This Desktop`, reg
 confirmado `Active` na tela Devices) já estavam prontos — só faltava mesmo o teste de ponta a
 ponta com o Ledger.
 
+---
+
+### Sessão 180 — 2026-08-01: `/code-review` da Fase 16 (Social Recovery UI) — P39-P45 registradas,
+achado bug de correção mais grave que a lacuna de hardware que motivou o review
+
+Depois de fechar o P4, a sequência natural era validar o P38 (Fase 16 nunca clicada em hardware
+real) — checado on-chain via `cast call` que `masterlxz` não tem guardiões configurados
+(`getGuardianConfig` devolve array vazio, threshold 0) e `TIMELOCK()` confirmado em 604800s (7
+dias, não dá pra testar `executeRecovery` de verdade numa sessão só). Configurar guardiões reais
+exigiria endereços de verdade — dono do projeto propôs usar as contas 2/3/4 do próprio Ledger
+(já enumeradas na Sessão 179), mas o formulário (`GuardianManagement.tsx`) só aceita texto livre
+colado, sem picker, e a UI do app trunca todo endereço exibido (sem `title=`/tooltip, sem devtools
+acessível neste ambiente) — sem forma de extrair os endereços completos sem o dono do projeto
+colar manualmente.
+
+**Dono do projeto perguntou se um `/code-review` não bastaria** em vez do teste completo em
+hardware, dado o alto atrito de juntar os endereços. Resposta dada: review pega bugs de lógica mas
+não o tipo de bug que o P4 desta mesma sessão só apareceu rodando de verdade (conta errada do
+Ledger conectada) — mas dado que a base já tem validação estática forte (`tsc`/`vitest`/`flutter
+analyze` desde a Sessão 178) mais a auditoria pesada que o `RecoveryManager.sol` já tinha (C1-C9,
+Sessões 140-150), um review focado seria proporcional. Dono do projeto concordou. Comando é
+`disable-model-invocation` — não dá pra disparar via `Skill()`, só o próprio dono do projeto
+digitando `/code-review` — orientado a rodar `/code-review desktop/src/components/
+GuardianManagement.tsx contracts/src/RecoveryManager.sol`.
+
+**Achado real do review, mais grave do que a lacuna de hardware original**: o fluxo de guardião
+(Propose/Approve) é código morto pro caso de uso real (multi-pessoa) — ver **P39** (🔴 Alta).
+`GuardianManagement.tsx` usa `username` do `IdentityContext`, que sempre resolve pra identidade de
+quem está conectado (`App.tsx:98-107`, `getUsernameByController(smartAccountAddress)`), sem
+nenhum campo pra buscar o username de quem está sendo guardado. Se a Alice configura o Bob como
+guardião, o Bob abrindo o próprio app nunca vê o recovery dela — a tela consulta o guardião do
+próprio Bob, não da Alice. Isso não é "falta validar em hardware", é a feature não funcionar como
+desenhada. Todos os 7 achados do review foram verificados linha a linha (não só aceito o relatório
+do agente) antes de registrar — 6 confirmados como reais, nenhum descartado. Os outros 6 (P40-P45)
+são menores: um com risco real de sobrescrever guardiões de verdade em silêncio se o usuário clicar
+num RPC lento (P40), dois protegidos por revert do contrato mas com UX confusa (P41/P42), um no-op
+silencioso sem feedback (P43), timelock duplicado hardcoded (P44), e invalidação de cache sem
+filtro (P45).
+
+**Nenhuma correção de código feita ainda nesta sessão** — dono do projeto pediu pra registrar tudo
+no projeto e commitar antes de decidir o que corrigir. P38 (validação em hardware) segue em aberto,
+sem tentativa de configurar guardiões reais.
+

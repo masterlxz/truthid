@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-08-01 (Sessão 179 — P4 fechado: validação E2E real em Mainnet do fluxo Approve com Ledger físico)
+> Última atualização: 2026-08-01 (Sessão 180 — `/code-review` da Fase 16, P39-P45 registradas: fluxo de guardião não funciona pro caso real de multi-pessoa)
 
 ---
 
@@ -34,6 +34,24 @@
 | P38 | **Validação em hardware real — Social Recovery UI (Fase 16)** — `GuardianManagement.tsx` (Desktop) e `GuardianStatusScreen.dart` (Mobile) nunca foram clicados de verdade, só `tsc --noEmit`/`flutter analyze`/testes automatizados (Sessões 178). Falta: configurar guardiões de verdade no Desktop nativo contra o `RecoveryManager` da Mainnet, propor/aprovar/executar/cancelar um recovery real (ou pelo menos até o timelock, sem esperar 7 dias), e confirmar que o `GuardianStatusScreen` do Mobile reflete o estado on-chain via pull-to-refresh. | `SESSIONS.md` (Sessão 178) | 🟠 Média |
 | P37 | **Validação E2E real — documentos separados do blob (15.7)** — publicar um documento de verdade (Desktop ou Mobile) contra um Kubo real, confirmar que o blob do documento pina separado do blob principal do vault, que o cache local funciona offline, e que buscar por `cid` num gateway público (`ipfs.io`/`dweb.link`) num 2º device (sem o cache local) resolve e decifra corretamente. Nunca exercitado fora dos testes automatizados (que usam blobs sintéticos em memória/disco local, não Kubo/gateway reais). | `PHASE.md` (Fase 15.7) | 🟠 Média |
 | P35 | **Build real — `AutofillExtension` (15.6, fatia 1 + fatia 2)** — target criado programaticamente (gem `xcodeproj`) e validado só por inspeção (dependency, embed phase, bundle id, entitlements, configs Debug/Release/Profile, frameworks linkados) — nunca compilado, este ambiente é Linux, sem Xcode/macOS/simulador. Checklist de validação num Mac real, fundindo fatia 1 e fatia 2 (ver P36, que foi fundido aqui): (1) abrir `Runner.xcodeproj`, confirmar que builda sem erro nos 2 targets; (2) habilitar "TruthID" em Ajustes → Senhas → Preencher senhas automaticamente; (3) confirmar que as identidades registradas via `ASCredentialIdentityStore` aparecem na lista/QuickType bar; (4) abrir o app, desbloquear o Vault (dispara `IosAutofillVaultSyncService.sync`) e confirmar que a chave/blob chegam no Keychain Access Group/App Group compartilhados; (5) num app ou site real com campo de senha, confirmar que o preenchimento de verdade funciona — Face ID/passcode do sistema, escolha na lista (`prepareCredentialList`) e auto-preenchimento direto (`prepareInterfaceToProvideCredential`); (6) forçar os caminhos de erro (Vault nunca sincronizado, entrada removida) e confirmar que cancela com mensagem sensata em vez de travar. | `PHASE.md` (Fase 15.6, fatias 1 e 2) | 🟠 Média |
+
+### Correções de UI — Social Recovery (`/code-review` Sessão 180)
+
+`/code-review desktop/src/components/GuardianManagement.tsx contracts/src/RecoveryManager.sol`
+rodado como alternativa mais barata à validação em hardware real do P38 (juntar endereços de
+guardião de verdade pra um teste ao vivo tinha fricção alta). Achou um bug de correção mais sério
+do que a lacuna de hardware que motivou o review — ver P39. Todos os 7 achados verificados linha a
+linha antes de registrar (não só o relatório do agente).
+
+| ID | Item | Onde se originou | Prioridade |
+|---|---|---|---|
+| P39 | **Fluxo de guardião (Propose/Approve) inalcançável na prática** — `GuardianManagement.tsx:38-49` usa `username` do `IdentityContext`, que sempre resolve pra identidade de quem está conectado (`App.tsx:98-107`, `getUsernameByController(smartAccountAddress)`). Não existe campo de busca de username na tela. Se a Alice configura o Bob como guardião, o Bob abre o próprio TruthID Desktop e o app consulta `getGuardianConfig`/`getProposal` do **próprio** username do Bob, nunca o da Alice — ele nunca vê nem consegue aprovar o recovery dela. Falta uma forma de o guardião indicar de quem é o recovery que está aprovando. | `/code-review` Sessão 180 | 🔴 Alta |
+| P40 | **Risco de sobrescrita silenciosa de guardiões reais** — `guardianConfig` fica `undefined` enquanto `getGuardianConfig` carrega, então `isConfigured` (`GuardianManagement.tsx:55`) fica falsamente `false` e mostra "No guardians configured" mesmo com guardiões já configurados. Num RPC lento, clicar em "Configure Guardians" nesse estado sobrescreve incondicionalmente a lista real com o que acabou de ser digitado. | `/code-review` Sessão 180 | 🟠 Média |
+| P41 | **`canExecute` corre à frente do `threshold` real** (`GuardianManagement.tsx:312-316`) — `getProposal` e `getGuardianConfig` carregam de forma independente; se a proposta resolver antes do threshold (que fica `0n` por padrão), "Execute Recovery Now" aparece disponível antes da hora. Contrato protege via revert (`ThresholdNotReached`), então é só UX ruim, não risco de segurança. | `/code-review` Sessão 180 | 🟡 Baixa |
+| P42 | **`hasApproved` indefinido mostra "Approve" pra quem já aprovou** (`GuardianManagement.tsx:77-83`) — mesmo padrão do P41 (query separada, estado de loading tratado como negativo). Contrato protege via revert (`AlreadyApproved`), só gera um prompt de transação falho confuso. | `/code-review` Sessão 180 | 🟡 Baixa |
+| P43 | **No-op silencioso quando `smartAccountAddress` é `null`** (`GuardianManagement.tsx:121`, `handleConfigure`/`handleCancel`) — diferente das outras validações nas mesmas funções, que chamam `setConfigError(...)`, esse branch só dá `return` sem nenhum feedback visual. | `/code-review` Sessão 180 | 🟡 Baixa |
+| P44 | **Timelock de 7 dias hardcoded 2x** (`GuardianManagement.tsx:24` e `:316`) em vez de reusar o `timelock` já lido do `TIMELOCK()` do contrato (usado só no texto descritivo, `:325`). Se o contrato for redeployado com timelock diferente, o contador regressivo e o gate do botão Execute ficariam dessincronizados do texto. | `/code-review` Sessão 180 | 🟡 Baixa |
+| P45 | **`queryClient.invalidateQueries()` sem filtro** (`GuardianManagement.tsx:114`, e os pontos equivalentes de proposeRecovery/approveRecovery/executeRecovery) — invalida o cache do app inteiro (vault, sessões, devices, saldos) a cada ação de guardião, não só as queries de recovery. Performance/UX, não correção. | `/code-review` Sessão 180 | 🟡 Baixa |
 
 ### Funcionalidades Não Implementadas
 
