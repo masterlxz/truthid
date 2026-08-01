@@ -67,4 +67,27 @@ void main() {
       throwsA(isA<FormatException>()),
     );
   });
+
+  // Vetor cruzado: o mesmo blob gerado por este teste (via
+  // tool/pin_content_cipher_fixture.dart) está hardcoded em
+  // desktop-src-tauri/src/pin_content_cipher.rs (Practice Valuation),
+  // provando que os dois lados derivam a mesma chave e usam o mesmo layout
+  // de blob (nonce||ciphertext+tag) sem precisar de um celular físico.
+  test('decifra o fixture cruzado usado no lado requisitante (Rust)',
+      () async {
+    final key = derivePinContentKey(sessionIdHex);
+    final blobHex =
+        'b23757d2e7de00df20298fa375385826e472958faa49cd2320c8694c7770'
+        'e7a6415cf7d6a6b72ae251e79001cb9b1dc4eb57f2b9fcdd2c';
+    final blob = Uint8List.fromList(
+      List<int>.generate(
+        blobHex.length ~/ 2,
+        (i) => int.parse(blobHex.substring(i * 2, i * 2 + 2), radix: 16),
+      ),
+    );
+
+    final decrypted = await decryptPinContent(blob, key);
+
+    expect(utf8.decode(decrypted), 'truthid-pin-content-fixture');
+  });
 }
