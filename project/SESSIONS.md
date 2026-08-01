@@ -7367,3 +7367,14 @@ resolver de verdade. `tsc --noEmit`/`vitest run` 101/101 limpos.
 
 P42 movido pra Resolvidas. P43-P45 seguem abertas.
 
+**Continuação, mesma sessão — P43 corrigido**: `handleConfigure`/`handleCancel` faziam `return`
+silencioso quando `smartAccountAddress` ainda era `null`, sem nenhum feedback — diferente das
+outras validações nas mesmas funções, que chamam `setConfigError(...)`. Corrigido: `handleConfigure`
+passa a chamar `setConfigError("Smart account not ready yet — try again in a moment.")` (reusa o
+estado/exibição de erro já existentes no formulário); `handleCancel` ganhou um `cancelError` local
+novo (não existia nenhum estado de erro pré-flight ali, só `isCancelError`/`cancelWriteError` do
+`useWriteContract`, que só cobre erro de transação já enviada), exibido junto do erro de transação
+já existente no card de "Active Proposal". `tsc --noEmit`/`vitest run` 101/101 limpos.
+
+P43 movido pra Resolvidas. P44-P45 seguem abertas.
+

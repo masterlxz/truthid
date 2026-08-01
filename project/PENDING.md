@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-08-01 (Sessão 181 — P39/P40/P41/P42 corrigidos, fila do `/code-review` da Fase 16 seguindo um a um)
+> Última atualização: 2026-08-01 (Sessão 181 — P39-P43 corrigidos, fila do `/code-review` da Fase 16 seguindo um a um)
 
 ---
 
@@ -45,7 +45,6 @@ linha antes de registrar (não só o relatório do agente).
 
 | ID | Item | Onde se originou | Prioridade |
 |---|---|---|---|
-| P43 | **No-op silencioso quando `smartAccountAddress` é `null`** (`GuardianManagement.tsx:121`, `handleConfigure`/`handleCancel`) — diferente das outras validações nas mesmas funções, que chamam `setConfigError(...)`, esse branch só dá `return` sem nenhum feedback visual. | `/code-review` Sessão 180 | 🟡 Baixa |
 | P44 | **Timelock de 7 dias hardcoded 2x** (`GuardianManagement.tsx:24` e `:316`) em vez de reusar o `timelock` já lido do `TIMELOCK()` do contrato (usado só no texto descritivo, `:325`). Se o contrato for redeployado com timelock diferente, o contador regressivo e o gate do botão Execute ficariam dessincronizados do texto. | `/code-review` Sessão 180 | 🟡 Baixa |
 | P45 | **`queryClient.invalidateQueries()` sem filtro** (`GuardianManagement.tsx:114`, e os pontos equivalentes de proposeRecovery/approveRecovery/executeRecovery) — invalida o cache do app inteiro (vault, sessões, devices, saldos) a cada ação de guardião, não só as queries de recovery. Performance/UX, não correção. | `/code-review` Sessão 180 | 🟡 Baixa |
 
@@ -297,6 +296,7 @@ linha antes de registrar (não só o relatório do agente).
 | ID | Item | Resolvida em |
 |---|---|---|
 | ~~P17~~ | ~~**Social Recovery (UI)** — N-de-M guardiões com multisig/timelock. Contrato `RecoveryManager` já existia e estava deployado, mas sem interface de usuário. Implementado: `GuardianManagement.tsx` (Desktop) com configurar/propor/aprovar/executar/cancelar recovery + `GuardianStatusScreen.dart` (Mobile, só leitura). Aba "Recovery" adicionada ao Desktop App.tsx. ABI completo do RecoveryManager adicionado aos dois lados. `tsc --noEmit` limpo, 101/101 testes passando. Redeploy em cascata (P1/P2) não é pré-requisito — a UI funciona contra o contrato atual~~ | **Sessão 178** |
+| ~~P43~~ | ~~**No-op silencioso quando `smartAccountAddress` é `null`** (`handleConfigure`/`handleCancel`) — diferente das outras validações nas mesmas funções, que chamam `setConfigError(...)`, esses branches só davam `return` sem nenhum feedback visual. Corrigido: `handleConfigure` chama `setConfigError(...)` (reusa o estado/exibição já existentes); `handleCancel` ganhou um `cancelError` local novo, exibido junto do erro de transação já existente.~~ | **Sessão 181** |
 | ~~P42~~ | ~~**`hasApproved` indefinido mostrava "Approve" pra quem já tinha aprovado** — mesmo padrão do P41 (query separada carregando à parte, estado de loading tratado como negativo). Contrato já protegia via revert (`AlreadyApproved`), só gerava um prompt de transação falho confuso. Corrigido com `isHasApprovedLoading`/`isTargetHasApprovedLoading` gateando os dois pontos (identidade própria e a nova seção "Act as Guardian" do P39, que nasceu com o mesmo padrão) — mostra "Checking approval status…" em vez do botão/badge até a leitura resolver.~~ | **Sessão 181** |
 | ~~P41~~ | ~~**`canExecute` corria à frente do `threshold` real** — `getProposal` e `getGuardianConfig` carregam de forma independente; se a proposta resolvesse antes do threshold (que ficava `0n` por padrão), "Execute Recovery Now" aparecia disponível antes da hora. Contrato já protegia via revert (`ThresholdNotReached`), então era só UX ruim, não risco de segurança. Corrigido reusando o mesmo `isGuardianConfigLoading` do P40 como guarda extra em `canExecute`.~~ | **Sessão 181** |
 | ~~P40~~ | ~~**Risco de sobrescrita silenciosa de guardiões reais** — `guardianConfig` ficava `undefined` enquanto `getGuardianConfig` carregava, então `isConfigured` caía no default `false` e mostrava "No guardians configured" mesmo com guardiões já configurados; num RPC lento, clicar em "Configure Guardians" nesse estado sobrescreveria a lista real. Corrigido: novo `isGuardianConfigLoading` (de `useReadContract`) gateia o aviso — enquanto carrega, mostra "Loading guardian configuration…" em vez do aviso; o aviso "No guardians configured" (e o botão que abre o form) só renderiza depois que a leitura resolve de verdade. `tsc --noEmit`/`vitest run` (101/101) limpos.~~ | **Sessão 181** |

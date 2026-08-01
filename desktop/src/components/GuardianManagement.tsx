@@ -118,7 +118,10 @@ export function GuardianManagement() {
 
   function handleConfigure() {
     if (!isConnected) { openConnectModal(); return; }
-    if (!smartAccountAddress) return;
+    if (!smartAccountAddress) {
+      setConfigError("Smart account not ready yet — try again in a moment.");
+      return;
+    }
     setConfigError(null);
 
     const validAddresses = guardianInputs
@@ -270,6 +273,8 @@ export function GuardianManagement() {
 
   // ── Cancel recovery ────────────────────────────────────────────────────────
 
+  const [cancelError, setCancelError] = useState<string | null>(null);
+
   const {
     writeContract: sendCancel,
     data: cancelTxHash,
@@ -290,7 +295,11 @@ export function GuardianManagement() {
 
   function handleCancel() {
     if (!isConnected) { openConnectModal(); return; }
-    if (!smartAccountAddress) return;
+    if (!smartAccountAddress) {
+      setCancelError("Smart account not ready yet — try again in a moment.");
+      return;
+    }
+    setCancelError(null);
     const { dest, value, func } = buildAccountCalls([
       {
         address: RECOVERY_MANAGER_ADDRESS,
@@ -771,6 +780,7 @@ export function GuardianManagement() {
             </button>
           </div>
 
+          {cancelError && <p className="error-text">{cancelError}</p>}
           {isCancelError && (
             <p className="error-text">
               {cancelWriteError?.message?.includes("rejected_by_user")
