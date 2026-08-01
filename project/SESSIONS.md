@@ -7391,3 +7391,18 @@ que nasceu na Sessão 181 (P39/P41) — agora as duas leem a mesma fonte de verd
 
 P44 movido pra Resolvidas. Só P45 (invalidateQueries sem filtro) segue aberta.
 
+**Continuação, mesma sessão — P45 fechado como não-bug**: antes de corrigir, grep no resto do
+`desktop/src/` achou que `queryClient.invalidateQueries()` sem filtro é o mesmo padrão usado em
+`App.tsx` (botão "Refresh" manual, de propósito), `ManageDevices.tsx`, `WithdrawModal.tsx`,
+`DesktopDevice.tsx` e `CreateIdentity.tsx` — convenção deliberada do projeto inteiro após qualquer
+escrita, não um descuido isolado do `GuardianManagement.tsx` (o `/code-review` da Sessão 180 só
+olhou 2 arquivos, sem visibilidade dos irmãos). Perguntado ao dono do projeto como tratar: opção
+de corrigir só aqui (ficaria inconsistente com os outros 5 arquivos, risco de saldo/devices
+pararem de atualizar sozinhos depois de uma ação de guardião) vs. fechar como não-bug vs. registrar
+como débito técnico maior (corrigir os 6 arquivos de uma vez, fora do escopo desta rodada). Dono do
+projeto escolheu fechar como não-bug — nenhuma mudança de código.
+
+**Fila do `/code-review` da Sessão 180 zerada**: P39-P44 corrigidos e validados (`tsc --noEmit`/
+`vitest run` 101/101 limpos em cada passo), P45 fechado por decisão consciente. Fase 16 segue com
+P38 (validação em hardware real, guardiões de verdade) como única pendência restante.
+

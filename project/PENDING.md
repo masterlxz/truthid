@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-08-01 (Sessão 181 — P39-P44 corrigidos, fila do `/code-review` da Fase 16 seguindo um a um)
+> Última atualização: 2026-08-01 (Sessão 181 — P39-P44 corrigidos, P45 fechado como não-bug: fila inteira do `/code-review` da Fase 16 zerada)
 
 ---
 
@@ -34,18 +34,6 @@
 | P38 | **Validação em hardware real — Social Recovery UI (Fase 16)** — `GuardianManagement.tsx` (Desktop) e `GuardianStatusScreen.dart` (Mobile) nunca foram clicados de verdade, só `tsc --noEmit`/`flutter analyze`/testes automatizados (Sessões 178). Falta: configurar guardiões de verdade no Desktop nativo contra o `RecoveryManager` da Mainnet, propor/aprovar/executar/cancelar um recovery real (ou pelo menos até o timelock, sem esperar 7 dias), e confirmar que o `GuardianStatusScreen` do Mobile reflete o estado on-chain via pull-to-refresh. | `SESSIONS.md` (Sessão 178) | 🟠 Média |
 | P37 | **Validação E2E real — documentos separados do blob (15.7)** — publicar um documento de verdade (Desktop ou Mobile) contra um Kubo real, confirmar que o blob do documento pina separado do blob principal do vault, que o cache local funciona offline, e que buscar por `cid` num gateway público (`ipfs.io`/`dweb.link`) num 2º device (sem o cache local) resolve e decifra corretamente. Nunca exercitado fora dos testes automatizados (que usam blobs sintéticos em memória/disco local, não Kubo/gateway reais). | `PHASE.md` (Fase 15.7) | 🟠 Média |
 | P35 | **Build real — `AutofillExtension` (15.6, fatia 1 + fatia 2)** — target criado programaticamente (gem `xcodeproj`) e validado só por inspeção (dependency, embed phase, bundle id, entitlements, configs Debug/Release/Profile, frameworks linkados) — nunca compilado, este ambiente é Linux, sem Xcode/macOS/simulador. Checklist de validação num Mac real, fundindo fatia 1 e fatia 2 (ver P36, que foi fundido aqui): (1) abrir `Runner.xcodeproj`, confirmar que builda sem erro nos 2 targets; (2) habilitar "TruthID" em Ajustes → Senhas → Preencher senhas automaticamente; (3) confirmar que as identidades registradas via `ASCredentialIdentityStore` aparecem na lista/QuickType bar; (4) abrir o app, desbloquear o Vault (dispara `IosAutofillVaultSyncService.sync`) e confirmar que a chave/blob chegam no Keychain Access Group/App Group compartilhados; (5) num app ou site real com campo de senha, confirmar que o preenchimento de verdade funciona — Face ID/passcode do sistema, escolha na lista (`prepareCredentialList`) e auto-preenchimento direto (`prepareInterfaceToProvideCredential`); (6) forçar os caminhos de erro (Vault nunca sincronizado, entrada removida) e confirmar que cancela com mensagem sensata em vez de travar. | `PHASE.md` (Fase 15.6, fatias 1 e 2) | 🟠 Média |
-
-### Correções de UI — Social Recovery (`/code-review` Sessão 180)
-
-`/code-review desktop/src/components/GuardianManagement.tsx contracts/src/RecoveryManager.sol`
-rodado como alternativa mais barata à validação em hardware real do P38 (juntar endereços de
-guardião de verdade pra um teste ao vivo tinha fricção alta). Achou um bug de correção mais sério
-do que a lacuna de hardware que motivou o review — ver P39. Todos os 7 achados verificados linha a
-linha antes de registrar (não só o relatório do agente).
-
-| ID | Item | Onde se originou | Prioridade |
-|---|---|---|---|
-| P45 | **`queryClient.invalidateQueries()` sem filtro** (`GuardianManagement.tsx:114`, e os pontos equivalentes de proposeRecovery/approveRecovery/executeRecovery) — invalida o cache do app inteiro (vault, sessões, devices, saldos) a cada ação de guardião, não só as queries de recovery. Performance/UX, não correção. | `/code-review` Sessão 180 | 🟡 Baixa |
 
 ### Funcionalidades Não Implementadas
 
@@ -295,6 +283,7 @@ linha antes de registrar (não só o relatório do agente).
 | ID | Item | Resolvida em |
 |---|---|---|
 | ~~P17~~ | ~~**Social Recovery (UI)** — N-de-M guardiões com multisig/timelock. Contrato `RecoveryManager` já existia e estava deployado, mas sem interface de usuário. Implementado: `GuardianManagement.tsx` (Desktop) com configurar/propor/aprovar/executar/cancelar recovery + `GuardianStatusScreen.dart` (Mobile, só leitura). Aba "Recovery" adicionada ao Desktop App.tsx. ABI completo do RecoveryManager adicionado aos dois lados. `tsc --noEmit` limpo, 101/101 testes passando. Redeploy em cascata (P1/P2) não é pré-requisito — a UI funciona contra o contrato atual~~ | **Sessão 178** |
+| ~~P45~~ | ~~**`queryClient.invalidateQueries()` sem filtro** (`GuardianManagement.tsx`, configureGuardians/propose/approve/execute) — invalida o cache do app inteiro (vault, sessões, devices, saldos) a cada ação de guardião, não só as queries de recovery. **Fechado como não-bug**: é o mesmo padrão usado em `App.tsx` (botão "Refresh" manual), `ManageDevices.tsx`, `WithdrawModal.tsx`, `DesktopDevice.tsx` e `CreateIdentity.tsx` — convenção deliberada do projeto (refetch amplo após qualquer escrita), não um descuido isolado do Recovery. Corrigir só aqui quebraria a consistência e arriscaria parar de atualizar saldo/devices depois de uma ação de guardião, que hoje dependem desse invalidate global. Dono do projeto escolheu não mexer.~~ | **Sessão 181** |
 | ~~P44~~ | ~~**Timelock de 7 dias hardcoded 2x** (`timeRemaining`/`canExecute`) em vez de reusar o `timelock` já lido do `TIMELOCK()` do contrato. Se o contrato fosse redeployado com timelock diferente, o contador regressivo e o gate do botão Execute ficariam dessincronizados do texto. Corrigido: `timeRemaining` ganhou um 2º parâmetro `timelockSecs` (default `7n * 86400n` só como fallback pra janela breve antes do `TIMELOCK()` carregar — default de parâmetro JS já cobre `timelock` chegando `undefined`), os 2 call sites (identidade própria e a seção do P39) passam o valor real; `canExecute` ganhou a mesma guarda `timelock !== undefined` que `canTargetExecute` (P39/P41) já tinha desde que nasceu.~~ | **Sessão 181** |
 | ~~P43~~ | ~~**No-op silencioso quando `smartAccountAddress` é `null`** (`handleConfigure`/`handleCancel`) — diferente das outras validações nas mesmas funções, que chamam `setConfigError(...)`, esses branches só davam `return` sem nenhum feedback visual. Corrigido: `handleConfigure` chama `setConfigError(...)` (reusa o estado/exibição já existentes); `handleCancel` ganhou um `cancelError` local novo, exibido junto do erro de transação já existente.~~ | **Sessão 181** |
 | ~~P42~~ | ~~**`hasApproved` indefinido mostrava "Approve" pra quem já tinha aprovado** — mesmo padrão do P41 (query separada carregando à parte, estado de loading tratado como negativo). Contrato já protegia via revert (`AlreadyApproved`), só gerava um prompt de transação falho confuso. Corrigido com `isHasApprovedLoading`/`isTargetHasApprovedLoading` gateando os dois pontos (identidade própria e a nova seção "Act as Guardian" do P39, que nasceu com o mesmo padrão) — mostra "Checking approval status…" em vez do botão/badge até a leitura resolver.~~ | **Sessão 181** |
