@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-07-31 (Sessão 178 — P17/Social Recovery UI implementada: Desktop GuardianManagement + Mobile GuardianStatusScreen)
+> Última atualização: 2026-08-01 (Sessão 179 — P4 fechado: validação E2E real em Mainnet do fluxo Approve com Ledger físico)
 
 ---
 
@@ -23,7 +23,6 @@
 | ID | Item | Onde se originou | Prioridade |
 |---|---|---|---|
 | P3 | **Validação E2E real — extensão (13.9)** — fluxo completo: extensão carregada unpacked + celular real na mesma Wi-Fi, scan → perfil → envio → confirmação das entradas na popup. LAN e dead-drop. | `PHASE.md` (Fase 13.9, pendências finais) | 🟠 Média |
-| P4 | **Validação E2E real — delegação de assinatura** — Desktop + Practice Valuation rodando juntos na mesma máquina, colisão de porta 1420 do Vite a resolver. | `ROADMAP.md` (Vault genérico, fatias futuras) | 🟠 Média |
 | P5 | **Validação E2E real — assinatura via device key no Mainnet** — device key do Desktop nunca foi registrada on-chain. Falta configurar bundler + parear o Desktop como device. | `ROADMAP.md` (Vault genérico, fatia 1) | 🟠 Média |
 | P6 | **Revalidar decifra da vault key de pareamento (ECIES)** em hardware real — corrigido na Sessão 92 (SHA-256 do shared secret) + 99 (Mac.empty no Dart), mas nunca confirmado ao vivo no celular. | `PHASE.md` (Fase 13.9, pendências finais) | 🟠 Média |
 | P7 | **Diálogo de Local Network Privacy do iOS** — mitigação aplicada (timing), não validada em device real. | `PHASE.md` (Fase 13.9, pendências finais) | 🟡 Baixa |
@@ -284,3 +283,4 @@
 | ID | Item | Resolvida em |
 |---|---|---|
 | ~~P17~~ | ~~**Social Recovery (UI)** — N-de-M guardiões com multisig/timelock. Contrato `RecoveryManager` já existia e estava deployado, mas sem interface de usuário. Implementado: `GuardianManagement.tsx` (Desktop) com configurar/propor/aprovar/executar/cancelar recovery + `GuardianStatusScreen.dart` (Mobile, só leitura). Aba "Recovery" adicionada ao Desktop App.tsx. ABI completo do RecoveryManager adicionado aos dois lados. `tsc --noEmit` limpo, 101/101 testes passando. Redeploy em cascata (P1/P2) não é pré-requisito — a UI funciona contra o contrato atual~~ | **Sessão 178** |
+| ~~P4~~ | ~~Validação E2E real — delegação de assinatura (Desktop + Practice Valuation). Colisão de porta 1420 já não existia mais (Practice Valuation fixou 1430/1431 permanentemente antes desta sessão). Achado real: primeira tentativa de Approve com o Ledger conectado na conta errada ("Account 0" do modal) devolveu `AA20 account not deployed` — `smartAccountAddress` é derivado do endereço conectado via `computeSmartAccountAddressSync`, então conectar a conta errada aponta pra um CREATE2 nunca implantado. Achado o endereço certo lendo `owner()` da smart account on-chain via `cast call` (bate com "Account 1" do Ledger). Reconectado, novo sign-request, Approve → `Status: executed`, `userOpHash`/`transactionHash` reais. **Confirmado on-chain via `cast receipt` num RPC público, independente do app**: bloco 49402374, `status: 1 (success)`, `to` é o EntryPoint v0.7. Primeira vez que o caminho completo (app terceiro → loopback → aprovação → Ledger → UserOp → bundler Pimlico → EntryPoint) roda de ponta a ponta contra a Mainnet de verdade~~ | **Sessão 179** |

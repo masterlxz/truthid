@@ -7210,3 +7210,48 @@ nativo ou celular físico) foi feita pra nenhuma das duas telas novas — só co
 estática. Registrar como pendência se o dono do projeto quiser fechar isso antes de seguir pra
 outra frente.
 
+---
+
+### Sessão 179 — 2026-08-01: P4 fechado — validação E2E real em Mainnet do fluxo Approve
+(delegação de assinatura), Ledger físico
+
+Retomando a pendência mais antiga desta frente (aberta desde a Sessão 105/117): o caminho
+Approve do `SignRequestModal.tsx`, que exige carteira conectada (`useAccount().address`, não a
+device key) porque `smartAccountAddress` é derivado dela via `computeSmartAccountAddressSync`,
+nunca tinha sido exercitado contra a Mainnet de verdade com Ledger físico — só até o ponto de abrir
+o `ConnectWallet`.
+
+**Subida dos 2 apps**: TruthID Desktop nativo (`GDK_BACKEND=x11` + `WEBKIT_DISABLE_DMABUF_RENDERER=1`/
+`WEBKIT_DISABLE_COMPOSITING_MODE=1`, achado da Sessão 105) e Practice Valuation via
+`docker compose up` (`network_mode: host`). **Achado no caminho, ambiente**: `desktop/node_modules/.vite`
+ficou dono de `root` (de um run anterior), bloqueando o `vite dev` nativo com `EACCES` — dono do
+projeto rodou `sudo rm -rf` pra destravar (Claude não tem sudo). **Achado separado, já resolvido
+antes desta sessão**: a colisão de porta 1420 que motivava parte do P4 já não existe mais — o
+Practice Valuation fixou a porta em 1430/1431 permanentemente (commit de 28/07), a solução
+temporária 1425 da Sessão 105 não é mais necessária.
+
+**Descoberta real, não um bug de código**: primeira tentativa de Approve (Ledger conectado via
+"Account 0" do modal) devolveu erro real do bundler — `AA20 account not deployed`. Investigado sem
+tocar segredos: `cast call` na `IdentityRegistry.getIdentity("masterlxz")` devolveu o controller
+(`0x66893828AcD221a7d19AE0721168D1DD961b4bE1`), e `owner()` desse mesmo contrato on-chain devolveu
+`0xB54fe9909D76d98e87a9fD76bDB5C69fABe10265` — batendo com a **Account 1** do Ledger, não a
+Account 0 que tinha sido selecionada por padrão no modal. `smartAccountAddress` no Desktop é
+`computeSmartAccountAddressSync(endereço conectado, ...)` — com o endereço errado conectado, o
+CREATE2 calculado aponta pra um endereço nunca implantado (por isso AA20), não pra smart account
+real da identidade. Nenhum gas foi gasto nessa tentativa (revert acontece na simulação, antes do
+broadcast).
+
+**Segunda tentativa, Account 1 conectada**: `Send test sign-request` → `SignRequestModal` real →
+Approve → `Status: executed`, `userOpHash: 0x4145afc...` `transactionHash: 0x67f6c910...`.
+**Confirmado on-chain via `cast receipt` num RPC público** (`base.drpc.org`): bloco 49402374,
+`status: 1 (success)`, `to` é o EntryPoint v0.7 (`0x0000000071727De22E5E9d8BAf0edAc6f37da032`), logs
+incluem a smart account da identidade nos topics. Fecha, com confirmação on-chain independente do
+que o app mostra, a pendência de Mainnet real aberta desde a Sessão 105/114/117 — primeira vez que
+o caminho completo (app terceiro → loopback → `SignRequestModal` → Ledger conectado → UserOp real
+→ bundler Pimlico → EntryPoint → execução) roda de ponta a ponta contra produção.
+
+**P4 fechado.** `~/.truthid/bundler_config.json` (configurado em algum momento entre a Sessão 105 e
+esta, fora de uma sessão registrada) e o device do Desktop (`This Desktop`, registrado em 20/07,
+confirmado `Active` na tela Devices) já estavam prontos — só faltava mesmo o teste de ponta a
+ponta com o Ledger.
+
