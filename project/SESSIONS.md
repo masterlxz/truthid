@@ -7298,3 +7298,33 @@ filtro (P45).
 no projeto e commitar antes de decidir o que corrigir. P38 (validação em hardware) segue em aberto,
 sem tentativa de configurar guardiões reais.
 
+---
+
+### Sessão 181 — 2026-08-01: P39 corrigido — guardião agora consegue buscar de quem é o recovery
+
+Dono do projeto pediu pra corrigir as pendências do `/code-review` (Sessão 180) uma de cada vez,
+começando pela mais grave. `GuardianManagement.tsx` ganhou uma nova seção "Act as Guardian",
+isolada das seções existentes (que continuam 100% intocadas — configurar/cancelar a própria
+identidade): input de texto pra digitar o username de quem está sendo guardado + botão "Look up",
+disparando um novo conjunto de `useReadContract` (`getGuardianConfig`/`getProposal`/
+`hasGuardianApproved`) escopados a esse username buscado (`guardianTarget`), em vez do `username`
+do `IdentityContext` (sempre a própria identidade). Handlers próprios pra
+`proposeRecovery`/`approveRecovery`/`executeRecovery` mirando `guardianTarget`, mesmo padrão de
+`useWriteContract`+`useWaitForTransactionReceipt` já usado no resto do arquivo. Achado no caminho:
+o `canTargetExecute` novo já nasceu sem a corrida de carregamento que o P41 documentou pro
+`canExecute` antigo (guarda explícita `targetThreshold > 0n`) — não é uma correção do P41 (que
+continua em aberto, arquivo intocado nesse trecho), só cuidado pra não introduzir o mesmo bug de
+novo em código novo.
+
+`tsc --noEmit` limpo, `npx vitest run` 101/101 (nenhum teste quebrou, nenhum teste novo — o arquivo
+não tinha suíte de testes de componente antes desta sessão). **Validado com clique real** no
+Desktop nativo (ainda rodando desde a Sessão 179/180, mesma instância): aba Recovery → seção "Act
+as Guardian" renderiza corretamente, digitar "masterlxz" (o próprio username, sem guardiões
+configurados) e clicar "Look up" mostra "You are not a guardian for @masterlxz" — confirma que o
+lookup lê `getGuardianConfig` pelo username **buscado**, não mais pelo da identidade logada (o
+comportamento que caracterizava o bug). Não validado o caminho positivo (ser guardião de verdade e
+aprovar) — exigiria configurar guardiões reais primeiro, que é justamente o P38/P40 ainda em
+aberto.
+
+P39 movido pra Resolvidas. P40-P45 seguem abertas, próxima da fila por prioridade.
+

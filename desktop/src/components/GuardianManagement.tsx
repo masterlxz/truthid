@@ -307,6 +307,158 @@ export function GuardianManagement() {
     });
   }
 
+  // ── Act as guardian (for another identity) ─────────────────────────────────
+  // P39: as seções acima sempre operam sobre `username` (a identidade de quem
+  // está conectado — `App.tsx` deriva de getUsernameByController do próprio
+  // smartAccountAddress). Um guardião de verdade é OUTRA pessoa, então
+  // precisa buscar explicitamente o username de quem ele está guardando —
+  // sem isso, Propose/Approve nunca eram alcançáveis na prática.
+
+  const [guardianTargetInput, setGuardianTargetInput] = useState("");
+  const [guardianTarget, setGuardianTarget] = useState<string | null>(null);
+
+  const { data: targetGuardianConfig } = useReadContract({
+    address: RECOVERY_MANAGER_ADDRESS,
+    abi: RECOVERY_MANAGER_ABI,
+    functionName: "getGuardianConfig",
+    args: guardianTarget ? [guardianTarget] : undefined,
+    query: { enabled: !!guardianTarget },
+  });
+  const targetGuardians = useMemo(() => targetGuardianConfig?.guardians ?? [], [targetGuardianConfig]);
+  const targetThreshold = targetGuardianConfig?.threshold ?? 0n;
+  const targetIsGuardian = useMemo(
+    () => !!connectedAddress && targetGuardians.some((g) => g.toLowerCase() === connectedAddress.toLowerCase()),
+    [connectedAddress, targetGuardians],
+  );
+
+  const { data: targetProposal, refetch: refetchTargetProposal } = useReadContract({
+    address: RECOVERY_MANAGER_ADDRESS,
+    abi: RECOVERY_MANAGER_ABI,
+    functionName: "getProposal",
+    args: guardianTarget ? [guardianTarget] : undefined,
+    query: { enabled: !!guardianTarget },
+  });
+  const targetProposalStatus: ProposalStatus = useMemo(() => {
+    if (!targetProposal || !targetProposal.exists) return "none";
+    if (targetProposal.executed) return "executed";
+    if (targetProposal.cancelled) return "cancelled";
+    return "active";
+  }, [targetProposal]);
+
+  const { data: targetHasApproved } = useReadContract({
+    address: RECOVERY_MANAGER_ADDRESS,
+    abi: RECOVERY_MANAGER_ABI,
+    functionName: "hasGuardianApproved",
+    args: targetProposalStatus === "active" && guardianTarget ? [guardianTarget, connectedAddress as Address] : undefined,
+    query: { enabled: targetProposalStatus === "active" && !!connectedAddress && targetIsGuardian && !!guardianTarget },
+  });
+
+  const [targetNewController, setTargetNewController] = useState("");
+  const [targetProposeError, setTargetProposeError] = useState<string | null>(null);
+
+  const {
+    writeContract: sendTargetPropose,
+    data: targetProposeTxHash,
+    isPending: isTargetProposePending,
+    isError: isTargetProposeError,
+    error: targetProposeWriteError,
+  } = useWriteContract();
+
+  const { isLoading: isTargetProposeConfirming, isSuccess: isTargetProposeSuccess } =
+    useWaitForTransactionReceipt({ hash: targetProposeTxHash });
+
+  useEffect(() => {
+    if (isTargetProposeSuccess) {
+      setTargetNewController("");
+      queryClient.invalidateQueries();
+      setTimeout(refetchTargetProposal, 3000);
+    }
+  }, [isTargetProposeSuccess]);
+
+  function handleTargetPropose() {
+    if (!isConnected) { openConnectModal(); return; }
+    if (!guardianTarget) return;
+    setTargetProposeError(null);
+    if (!isAddress(targetNewController.trim())) {
+      setTargetProposeError("Invalid controller address");
+      return;
+    }
+    sendTargetPropose({
+      address: RECOVERY_MANAGER_ADDRESS,
+      abi: RECOVERY_MANAGER_ABI,
+      functionName: "proposeRecovery",
+      args: [guardianTarget, targetNewController.trim() as Address],
+    });
+  }
+
+  const {
+    writeContract: sendTargetApprove,
+    data: targetApproveTxHash,
+    isPending: isTargetApprovePending,
+    isError: isTargetApproveError,
+    error: targetApproveWriteError,
+  } = useWriteContract();
+
+  const { isLoading: isTargetApproveConfirming, isSuccess: isTargetApproveSuccess } =
+    useWaitForTransactionReceipt({ hash: targetApproveTxHash });
+
+  useEffect(() => {
+    if (isTargetApproveSuccess) {
+      queryClient.invalidateQueries();
+      setTimeout(refetchTargetProposal, 3000);
+    }
+  }, [isTargetApproveSuccess]);
+
+  function handleTargetApprove() {
+    if (!isConnected) { openConnectModal(); return; }
+    if (!guardianTarget) return;
+    sendTargetApprove({
+      address: RECOVERY_MANAGER_ADDRESS,
+      abi: RECOVERY_MANAGER_ABI,
+      functionName: "approveRecovery",
+      args: [guardianTarget],
+    });
+  }
+
+  // targetThreshold > 0n evita executar antes do getGuardianConfig do alvo
+  // carregar (mesma classe de corrida do P41, evitada aqui desde o início).
+  const canTargetExecute =
+    targetProposalStatus === "active" &&
+    targetProposal &&
+    targetThreshold > 0n &&
+    targetProposal.approvalCount >= targetThreshold &&
+    timelock !== undefined &&
+    BigInt(Math.floor(Date.now() / 1000)) >= targetProposal.proposedAt + timelock;
+
+  const {
+    writeContract: sendTargetExecute,
+    data: targetExecuteTxHash,
+    isPending: isTargetExecutePending,
+    isError: isTargetExecuteError,
+    error: targetExecuteWriteError,
+  } = useWriteContract();
+
+  const { isLoading: isTargetExecuteConfirming, isSuccess: isTargetExecuteSuccess } =
+    useWaitForTransactionReceipt({ hash: targetExecuteTxHash });
+
+  useEffect(() => {
+    if (isTargetExecuteSuccess) {
+      queryClient.invalidateQueries();
+      setTimeout(refetchTargetProposal, 3000);
+    }
+  }, [isTargetExecuteSuccess]);
+
+  function handleTargetExecute() {
+    if (!isConnected) { openConnectModal(); return; }
+    if (!guardianTarget) return;
+    sendTargetExecute({
+      address: RECOVERY_MANAGER_ADDRESS,
+      abi: RECOVERY_MANAGER_ABI,
+      functionName: "executeRecovery",
+      args: [guardianTarget],
+    });
+  }
+
   // ── Render ─────────────────────────────────────────────────────────────────
 
   const canExecute =
@@ -418,6 +570,127 @@ export function GuardianManagement() {
           </div>
         </div>
       )}
+
+      {/* ── Act as guardian for another identity (P39) ── */}
+      <div className="card">
+        <h3 style={{ marginTop: 0 }}>Act as Guardian</h3>
+        <p className="muted">
+          If someone added you as a guardian, look up their username to help with their recovery.
+        </p>
+        <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.75rem" }}>
+          <input
+            type="text"
+            placeholder="Their username"
+            value={guardianTargetInput}
+            onChange={(e) => setGuardianTargetInput(e.target.value)}
+            style={{ flex: 1 }}
+          />
+          <button
+            onClick={() => setGuardianTarget(guardianTargetInput.trim())}
+            disabled={!guardianTargetInput.trim()}
+          >
+            Look up
+          </button>
+        </div>
+
+        {guardianTarget && (
+          <>
+            {!targetIsGuardian && (
+              <p className="muted">You are not a guardian for @{guardianTarget}.</p>
+            )}
+
+            {targetIsGuardian && targetProposalStatus === "none" && (
+              <>
+                <p className="muted">
+                  No active recovery. If @{guardianTarget} lost access, propose a new controller wallet.
+                </p>
+                <input
+                  type="text"
+                  placeholder="New controller address (0x...)"
+                  value={targetNewController}
+                  onChange={(e) => setTargetNewController(e.target.value)}
+                  style={{ width: "100%", fontFamily: "monospace", marginBottom: "0.5rem" }}
+                />
+                {targetProposeError && <p className="error-text">{targetProposeError}</p>}
+                {isTargetProposeError && (
+                  <p className="error-text">
+                    {targetProposeWriteError?.message?.includes("rejected_by_user")
+                      ? "Rejected on wallet"
+                      : `Error: ${targetProposeWriteError?.message?.split("\n")[0]}`}
+                  </p>
+                )}
+                <div className="actions-row">
+                  <button onClick={handleTargetPropose} disabled={isTargetProposePending || isTargetProposeConfirming}>
+                    {isTargetProposePending ? "Confirm in wallet..." : isTargetProposeConfirming ? "Waiting for network..." : "Propose Recovery"}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {targetProposalStatus === "active" && targetProposal && (
+              <div>
+                <p>
+                  <strong>Proposed by:</strong> {formatAddress(targetProposal.proposedBy)}<br />
+                  <strong>New controller:</strong> {formatAddress(targetProposal.newController)}<br />
+                  <strong>Approvals:</strong> {Number(targetProposal.approvalCount)} of {Number(targetThreshold)}<br />
+                  <strong>Timelock:</strong> {timeRemaining(targetProposal.proposedAt)}
+                </p>
+
+                {targetIsGuardian && !targetHasApproved && (
+                  <div className="actions-row">
+                    <button onClick={handleTargetApprove} disabled={isTargetApprovePending || isTargetApproveConfirming}>
+                      {isTargetApprovePending ? "Confirm in wallet..." : isTargetApproveConfirming ? "Waiting for network..." : "Approve Recovery"}
+                    </button>
+                  </div>
+                )}
+
+                {targetIsGuardian && targetHasApproved && (
+                  <p><span className="status-badge status-badge--active">✓ You approved</span></p>
+                )}
+
+                {isTargetApproveError && (
+                  <p className="error-text">
+                    {targetApproveWriteError?.message?.includes("rejected_by_user")
+                      ? "Rejected on wallet"
+                      : `Error: ${targetApproveWriteError?.message?.split("\n")[0]}`}
+                  </p>
+                )}
+
+                {canTargetExecute && (
+                  <div className="actions-row">
+                    <button
+                      onClick={handleTargetExecute}
+                      disabled={isTargetExecutePending || isTargetExecuteConfirming}
+                      style={{ background: "#d9534f", color: "#fff" }}
+                    >
+                      {isTargetExecutePending ? "Confirm in wallet..." : isTargetExecuteConfirming ? "Waiting for network..." : "▶ Execute Recovery Now"}
+                    </button>
+                  </div>
+                )}
+
+                {isTargetExecuteError && (
+                  <p className="error-text">
+                    {targetExecuteWriteError?.message?.includes("rejected_by_user")
+                      ? "Rejected on wallet"
+                      : `Error: ${targetExecuteWriteError?.message?.split("\n")[0]}`}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {targetProposalStatus === "executed" && targetProposal && (
+              <p>
+                <span className="status-badge status-badge--active">✓ Recovery executed</span>{" "}
+                New controller: {formatAddress(targetProposal.newController)}.
+              </p>
+            )}
+
+            {targetProposalStatus === "cancelled" && (
+              <p><span className="status-badge status-badge--revoked">✕ Recovery cancelled</span></p>
+            )}
+          </>
+        )}
+      </div>
 
       {/* ── Active Proposal ── */}
       {proposalStatus === "active" && proposal && (
