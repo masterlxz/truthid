@@ -7257,6 +7257,64 @@ ponta com o Ledger.
 
 ---
 
+### Sessão 181 (continuação) — P37 parcialmente validado, achado bug real (P46) nos botões de documento
+
+Dono do projeto pediu pra continuar com validações que eu conseguisse fazer sozinho, sem exigir
+teste manual dele. Escolhido o P37 (documentos separados do blob, Fase 15.7) — Desktop e Kubo
+local já estavam de pé.
+
+**Criação e publish reais**: adicionada uma entrada tipo Documento (`p37-test-doc.txt`, 64B) via
+`VaultManagement.tsx` → "Nova entrada" → "Documento" → "Escolher arquivo". Achado no caminho: o
+diálogo nativo GTK (`open()` do Tauri) corrompe ao digitar caminhos longos via `xdotool type` (o
+autocomplete inline do GTK intercala texto duplicado, ex: `claude-1000/ude-1000/...` em vez de
+`claude-1000/...`) — contornado copiando o arquivo de teste pra `$HOME` e selecionando direto na
+lista "Recent"/"Home" do diálogo, sem digitar caminho algum (arquivo removido da Home ao final da
+sessão). Publicado via "Publicar via device key (sem Ledger)" — vault foi de versão 9 pra 10.
+
+**Confirmado: documento pina separado do blob principal.** Adicionado um 2º documento
+(`p37-test-doc-2.txt`, 86B) pra isolar o CID por diff: capturado `ipfs pin ls --type=recursive`
+antes (14 pins) e depois (16 pins) desse publish isolado — exatamente 2 CIDs novos. Um bate
+exatamente com o CID do vault v11 lido via `cast call getVault(1)`
+(`QmPjjVrm1DQHEipf3AzZjj6gaY7Bmx4bJdNEm9ugVpGoGw`); o outro (`QmZ7wwKoSL5jFATxRYTMEdSpHA7y5DaZJKEfftyjni2mtx`)
+só pode ser o blob do documento — confirma estruturalmente (e não só por leitura do código-fonte)
+que `vault_publish` pina o documento como objeto IPFS separado do vault.
+
+**Confirmado: resolve num "2º device sem cache local".** `curl` direto no gateway público
+`ipfs.io` pro CID do documento (sem tocar o Kubo local) devolveu HTTP 200, 114 bytes; hash SHA-256
+bate exatamente com o mesmo conteúdo lido via `ipfs cat` local — prova que o conteúdo está
+realmente disponível na rede IPFS pública, não só no cache da máquina.
+
+**Não confirmado: cache local funciona offline — bloqueado por um bug real (P46).** Parado o Kubo
+(`systemctl --user stop ipfs`) e tentado clicar "Baixar" numa entrada de documento pra confirmar
+leitura offline — nada aconteceu (nenhum diálogo `save()` abriu, nenhum erro visível). Investigação
+extensa sem acesso a devtools neste ambiente (F12 não abre nada, botão direito não mostra
+"Inspecionar"):
+- Testado clicar ⭐ (favoritar) na mesma linha — também não responde.
+- Testado clicar fora do card do documento (accordion "Gerenciar perfis") — responde normalmente,
+  descartando erro sistemático de coordenada/janela.
+- Testado o `save()` irmão do Backup export (`useVaultBackup.ts`, mesmo plugin Tauri) — funciona
+  normalmente, abre o diálogo "Save File" de verdade. Isola o problema aos botões de ação dentro do
+  card de entradas tipo documento especificamente (`handleDownloadDocument`/`handleToggleFavorite`
+  em `VaultManagement.tsx`), não ao `save()`/dialog plugin em geral.
+- Reiniciado o processo do Desktop do zero (matando e resubindo `cargo run`) pra descartar estado
+  corrompido da sessão (ex: diálogos GTK órfãos fechados via `xdotool windowclose` em vez do botão
+  "Cancelar" — achado sujo próprio: isso deixou o export do Backup travado em "Exportando..." uma
+  vez, lição pra não usar windowclose em diálogos GTK do app de novo). Bug reproduziu igual no
+  processo limpo — não é artefato desta sessão.
+- Achado um falso alarme no caminho: uma janela órfã pequena (214x186, sem título) que parecia ser
+  o diálogo procurado era, na verdade, um popup do próprio `spectacle` (`-u`, seleção de janela)
+  que ficou pendurado — removido, sem relação com o bug.
+- O processo do Desktop chegou a fechar sozinho durante a investigação, sem panic no log (provável
+  esgotamento de recurso depois de tantos diálogos GTK abertos na sessão) — reiniciado, Vault v11
+  confirmado intacto on-chain via `cast call`, nenhuma perda de dado.
+
+Causa raiz não identificada com certeza (melhor hipótese descartada: `save()` do plugin
+`@tauri-apps/plugin-dialog` v2.7.2 é uma função trivial, `invoke('plugin:dialog|save', {options})`,
+sem lógica que dependa de `filters` estar presente — não deveria falhar sozinho). Registrado como
+**P46**, prioridade Média — é a única parte do P37 que não pôde ser fechada.
+
+---
+
 ### Sessão 180 — 2026-08-01: `/code-review` da Fase 16 (Social Recovery UI) — P39-P45 registradas,
 achado bug de correção mais grave que a lacuna de hardware que motivou o review
 
