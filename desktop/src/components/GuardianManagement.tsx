@@ -461,9 +461,13 @@ export function GuardianManagement() {
 
   // ── Render ─────────────────────────────────────────────────────────────────
 
+  // P41: getProposal e getGuardianConfig carregam de forma independente —
+  // sem a guarda !isGuardianConfigLoading, threshold ainda no default `0n`
+  // fazia approvalCount >= threshold passar antes da hora.
   const canExecute =
     proposalStatus === "active" &&
     proposal &&
+    !isGuardianConfigLoading &&
     proposal.approvalCount >= threshold &&
     BigInt(Math.floor(Date.now() / 1000)) >= proposal.proposedAt + 7n * 86400n;
 

@@ -7344,3 +7344,13 @@ continua renderizando corretamente, confirmando que a mudança não quebrou o ca
 
 P40 movido pra Resolvidas. P41-P45 seguem abertas.
 
+**Continuação, mesma sessão — P41 corrigido**: `canExecute` comparava `approvalCount >= threshold`
+sem considerar que `getProposal` e `getGuardianConfig` carregam de forma independente — se a
+proposta resolvesse antes do threshold (ainda `0n` no default), o botão "Execute Recovery Now"
+aparecia disponível antes da hora (o contrato já protegia via revert `ThresholdNotReached`, então
+era só UX ruim). Corrigido reusando o `isGuardianConfigLoading` que o fix do P40 já introduziu,
+como guarda extra em `canExecute` — mesma causa raiz das duas pendências, mesma variável resolve
+as duas. `tsc --noEmit`/`vitest run` 101/101 limpos.
+
+P41 movido pra Resolvidas. P42-P45 seguem abertas.
+
