@@ -7378,3 +7378,16 @@ já existente no card de "Active Proposal". `tsc --noEmit`/`vitest run` 101/101 
 
 P43 movido pra Resolvidas. P44-P45 seguem abertas.
 
+**Continuação, mesma sessão — P44 corrigido**: o timelock de 7 dias estava hardcoded em 2 lugares
+(`timeRemaining`/`canExecute`) além da leitura real via `TIMELOCK()` do contrato (usada só no
+texto descritivo) — duas fontes de verdade pra mesma constante. Corrigido: `timeRemaining` ganhou
+um 2º parâmetro `timelockSecs: bigint = 7n * 86400n` (default de parâmetro JS já cobre o caso de
+`timelock` chegar `undefined` explicitamente, então serve tanto de assinatura quanto de fallback
+pra janela breve antes do `TIMELOCK()` resolver — sem duplicar lógica de "ainda carregando"); os 2
+call sites (identidade própria e a seção "Act as Guardian" do P39) passam o `timelock` real.
+`canExecute` ganhou a mesma guarda `timelock !== undefined` que `canTargetExecute` já tinha desde
+que nasceu na Sessão 181 (P39/P41) — agora as duas leem a mesma fonte de verdade. `tsc --noEmit`/
+`vitest run` 101/101 limpos.
+
+P44 movido pra Resolvidas. Só P45 (invalidateQueries sem filtro) segue aberta.
+

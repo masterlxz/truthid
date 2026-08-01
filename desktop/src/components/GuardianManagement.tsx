@@ -20,10 +20,12 @@ function formatAddress(addr: string) {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
-function timeRemaining(proposedAt: bigint): string {
-  const TIMELOCK_SECS = 7n * 86400n;
+// P44: timelockSecs tem 7 dias como default só pra cobrir a janela breve
+// antes do TIMELOCK() do contrato carregar — assim que a leitura resolve,
+// os call sites passam o valor real, única fonte de verdade.
+function timeRemaining(proposedAt: bigint, timelockSecs: bigint = 7n * 86400n): string {
   const now = BigInt(Math.floor(Date.now() / 1000));
-  const deadline = proposedAt + TIMELOCK_SECS;
+  const deadline = proposedAt + timelockSecs;
   if (now >= deadline) return "Ready to execute";
   const diff = Number(deadline - now);
   const d = Math.floor(diff / 86400);
@@ -478,7 +480,8 @@ export function GuardianManagement() {
     proposal &&
     !isGuardianConfigLoading &&
     proposal.approvalCount >= threshold &&
-    BigInt(Math.floor(Date.now() / 1000)) >= proposal.proposedAt + 7n * 86400n;
+    timelock !== undefined &&
+    BigInt(Math.floor(Date.now() / 1000)) >= proposal.proposedAt + timelock;
 
   const isConfigBusy = isConfigPending || isConfigConfirming;
 
@@ -655,7 +658,7 @@ export function GuardianManagement() {
                   <strong>Proposed by:</strong> {formatAddress(targetProposal.proposedBy)}<br />
                   <strong>New controller:</strong> {formatAddress(targetProposal.newController)}<br />
                   <strong>Approvals:</strong> {Number(targetProposal.approvalCount)} of {Number(targetThreshold)}<br />
-                  <strong>Timelock:</strong> {timeRemaining(targetProposal.proposedAt)}
+                  <strong>Timelock:</strong> {timeRemaining(targetProposal.proposedAt, timelock)}
                 </p>
 
                 {targetIsGuardian && isTargetHasApprovedLoading && (
@@ -726,7 +729,7 @@ export function GuardianManagement() {
             <strong>Proposed by:</strong> {formatAddress(proposal.proposedBy)}<br />
             <strong>New controller:</strong> {formatAddress(proposal.newController)}<br />
             <strong>Approvals:</strong> {Number(proposal.approvalCount)} of {Number(threshold)}<br />
-            <strong>Timelock:</strong> {timeRemaining(proposal.proposedAt)}
+            <strong>Timelock:</strong> {timeRemaining(proposal.proposedAt, timelock)}
           </p>
 
           {isGuardian && isHasApprovedLoading && (
