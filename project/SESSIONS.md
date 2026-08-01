@@ -7354,3 +7354,16 @@ as duas. `tsc --noEmit`/`vitest run` 101/101 limpos.
 
 P41 movido pra Resolvidas. P42-P45 seguem abertas.
 
+**Continuação, mesma sessão — P42 corrigido**: `hasApproved` ficava `undefined` enquanto
+`hasGuardianApproved` carregava, e `!hasApproved` era tratado como "ainda não aprovou" — mesma
+classe de bug do P41, agora numa query diferente. Corrigido nos **dois** pontos que tinham o
+padrão: o original (identidade própria, `hasApproved`/`isHasApprovedLoading`) e a nova seção "Act
+as Guardian" do P39 (`targetHasApproved`/`isTargetHasApprovedLoading`) — essa segunda nasceu com o
+mesmo bug porque foi copiada do padrão original antes desta correção existir; achado ao revisar o
+arquivo pra aplicar o P42, não fazia parte do relatório original do `/code-review` (que só viu o
+código como estava na Sessão 180, antes do P39 introduzir a segunda instância). Os dois agora
+mostram "Checking approval status…" em vez do botão Approve/badge "You approved" até a leitura
+resolver de verdade. `tsc --noEmit`/`vitest run` 101/101 limpos.
+
+P42 movido pra Resolvidas. P43-P45 seguem abertas.
+

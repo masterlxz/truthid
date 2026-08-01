@@ -74,7 +74,7 @@ export function GuardianManagement() {
     [connectedAddress, guardians],
   );
 
-  const { data: hasApproved } = useReadContract({
+  const { data: hasApproved, isLoading: isHasApprovedLoading } = useReadContract({
     address: RECOVERY_MANAGER_ADDRESS,
     abi: RECOVERY_MANAGER_ABI,
     functionName: "hasGuardianApproved",
@@ -345,7 +345,7 @@ export function GuardianManagement() {
     return "active";
   }, [targetProposal]);
 
-  const { data: targetHasApproved } = useReadContract({
+  const { data: targetHasApproved, isLoading: isTargetHasApprovedLoading } = useReadContract({
     address: RECOVERY_MANAGER_ADDRESS,
     abi: RECOVERY_MANAGER_ABI,
     functionName: "hasGuardianApproved",
@@ -649,7 +649,11 @@ export function GuardianManagement() {
                   <strong>Timelock:</strong> {timeRemaining(targetProposal.proposedAt)}
                 </p>
 
-                {targetIsGuardian && !targetHasApproved && (
+                {targetIsGuardian && isTargetHasApprovedLoading && (
+                  <p className="muted">Checking approval status…</p>
+                )}
+
+                {targetIsGuardian && !isTargetHasApprovedLoading && !targetHasApproved && (
                   <div className="actions-row">
                     <button onClick={handleTargetApprove} disabled={isTargetApprovePending || isTargetApproveConfirming}>
                       {isTargetApprovePending ? "Confirm in wallet..." : isTargetApproveConfirming ? "Waiting for network..." : "Approve Recovery"}
@@ -657,7 +661,7 @@ export function GuardianManagement() {
                   </div>
                 )}
 
-                {targetIsGuardian && targetHasApproved && (
+                {targetIsGuardian && !isTargetHasApprovedLoading && targetHasApproved && (
                   <p><span className="status-badge status-badge--active">✓ You approved</span></p>
                 )}
 
@@ -716,7 +720,11 @@ export function GuardianManagement() {
             <strong>Timelock:</strong> {timeRemaining(proposal.proposedAt)}
           </p>
 
-          {isGuardian && !hasApproved && (
+          {isGuardian && isHasApprovedLoading && (
+            <p className="muted">Checking approval status…</p>
+          )}
+
+          {isGuardian && !isHasApprovedLoading && !hasApproved && (
             <div className="actions-row">
               <button onClick={handleApprove} disabled={isApprovePending || isApproveConfirming}>
                 {isApprovePending ? "Confirm in wallet..." : isApproveConfirming ? "Waiting for network..." : "Approve Recovery"}
@@ -724,7 +732,7 @@ export function GuardianManagement() {
             </div>
           )}
 
-          {isGuardian && hasApproved && (
+          {isGuardian && !isHasApprovedLoading && hasApproved && (
             <p><span className="status-badge status-badge--active">✓ You approved</span></p>
           )}
 
