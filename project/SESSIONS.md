@@ -7328,3 +7328,19 @@ aberto.
 
 P39 movido pra Resolvidas. P40-P45 seguem abertas, próxima da fila por prioridade.
 
+**Continuação, mesma sessão — P40 corrigido**: `guardianConfig` ficava `undefined` durante o
+`getGuardianConfig` inicial, fazendo `isConfigured` cair no default `false` e mostrar "No
+guardians configured" mesmo com guardiões já configurados — risco real de sobrescrita silenciosa
+se o usuário clicasse "Configure Guardians" nesse estado antes do dado real chegar. Corrigido
+extraindo `isLoading` do `useReadContract` (mesmo padrão que `App.tsx` já usa pra
+`isLoadingUsername`) e gateando o aviso: enquanto carrega, mostra "Loading guardian
+configuration…"; o aviso e o botão que abre o formulário de configuração só renderizam depois que
+a leitura resolve de verdade. Como consequência, a "Current guardian list" (que também dependia de
+`isConfigured`) naturalmente não aparece durante o loading, sem precisar de guarda extra. `tsc
+--noEmit`/`vitest run` 101/101 limpos. Validado no Desktop nativo já rodando: com o RPC local
+rápido, a janela de corrida dura milissegundos e não foi possível flagrar visualmente o estado de
+loading — mas o caso "confirmado vazio" (masterlxz sem guardiões, checado antes via `cast call`)
+continua renderizando corretamente, confirmando que a mudança não quebrou o caminho normal.
+
+P40 movido pra Resolvidas. P41-P45 seguem abertas.
+

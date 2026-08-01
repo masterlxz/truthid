@@ -42,7 +42,7 @@ export function GuardianManagement() {
 
   // ── Reads ──────────────────────────────────────────────────────────────────
 
-  const { data: guardianConfig, refetch: refetchConfig } = useReadContract({
+  const { data: guardianConfig, isLoading: isGuardianConfigLoading, refetch: refetchConfig } = useReadContract({
     address: RECOVERY_MANAGER_ADDRESS,
     abi: RECOVERY_MANAGER_ABI,
     functionName: "getGuardianConfig",
@@ -477,7 +477,16 @@ export function GuardianManagement() {
         {timelock && ` Recovery requires ${Number(threshold)} of ${guardians.length} approvals plus a ${Number(timelock / 86400n)}-day timelock.`}
       </p>
 
-      {!isConfigured && !showConfigForm && (
+      {/* P40: enquanto getGuardianConfig ainda carrega, guardianConfig é
+          undefined e isConfigured cai no default `false` — sem esta guarda,
+          o aviso "No guardians configured" aparecia mesmo com guardiões já
+          configurados, e clicar "Configure Guardians" nesse estado
+          sobrescreveria a lista real em silêncio. */}
+      {isGuardianConfigLoading && (
+        <p className="muted">Loading guardian configuration…</p>
+      )}
+
+      {!isGuardianConfigLoading && !isConfigured && !showConfigForm && (
         <div className="card" style={{ borderColor: "#f0ad4e" }}>
           <p><strong>⚠ No guardians configured.</strong> Without guardians, losing your wallet means permanent loss of identity.</p>
           <div className="actions-row">
