@@ -1027,9 +1027,9 @@ export function VaultManagement() {
   // em outro device e nunca buscado aqui), vault_document_read busca pelo
   // cid num gateway IPFS público e confere o content_hash antes de decifrar.
   async function handleDownloadDocument(entryId: string, doc: DocumentData) {
-    const path = await save({ defaultPath: doc.file_name });
-    if (!path) return;
     try {
+      const path = await save({ defaultPath: doc.file_name });
+      if (!path) return;
       const contentB64 = await invoke<string>("vault_document_read", {
         entryId,
         cid: doc.cid,
@@ -1320,7 +1320,9 @@ export function VaultManagement() {
                         onClick={() => handleToggleFavorite(entry.id, !entry.favorite)}
                         title={entry.favorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
                         style={{
-                          padding: "0 0.2em",
+                          padding: "0.25em",
+                          minWidth: "1.8em",
+                          minHeight: "1.8em",
                           fontSize: "1em",
                           lineHeight: 1,
                           border: "none",
@@ -1368,8 +1370,9 @@ export function VaultManagement() {
                       <div className="muted" style={{ fontSize: "0.87em", marginTop: "0.2rem", display: "flex", alignItems: "center", gap: "0.5rem" }}>
                         <span>{entry.document.file_name} · {formatBytes(entry.document.file_size_bytes)} · {entry.document.mime_type}</span>
                         <button
+                          type="button"
                           onClick={() => handleDownloadDocument(entry.id, entry.document!)}
-                          style={{ padding: "0.2em 0.6em", fontSize: "0.82em" }}
+                          style={{ padding: "0.35em 0.7em", fontSize: "0.82em", minHeight: "1.8em" }}
                         >
                           💾 Baixar
                         </button>

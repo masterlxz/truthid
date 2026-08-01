@@ -7486,3 +7486,52 @@ P5 fechado — mesma dupla confirmação (UI + leitura on-chain independente) qu
 `ipfs.service` deixado rodando (baixo custo, ~95MB de memória, útil pra testes futuros de
 vault/documentos que também dependem de Kubo local, ex. P37).
 
+### Sessão 182 — 2026-08-01: investigação profunda do P46 (botão ⭐ não responde), causa raiz não
+fechada por completo, 2 mitigações aplicadas + achado colateral (exclusão acidental)
+
+Dono do projeto pediu pra continuar. Escolhi investigar o P46 (achado na Sessão 181 validando o
+P37: botões "Baixar"/⭐ de entradas tipo documento não respondiam a clique) — self-executável, sem
+precisar de hardware do dono do projeto. Duas leituras de código (agentes `Explore`) descartaram
+causa no Rust (`vault_set_favorite` retorna `Err` explícito se o id não bate, sem no-op silencioso)
+e no CSS (sem overlay/z-index/stopPropagation/pointer-events cobrindo os botões) — o achado mais
+estranho: o botão ⭐ é o MESMO código pra todos os tipos de entrada (credential/address/creditCard/
+documento), não só documento, contradizendo a hipótese original de que fosse específico de
+documento.
+
+Testei ao vivo no Desktop rodando (`xdotool` + `spectacle`, já usados o resto da sessão). Primeiro
+achado: `xdotool click --window <id>` (evento sintético) é ignorado pelo WebKitGTK — só
+`xdotool mousemove --window` + `xdotool click` (sem `--window`, evento XTEST de verdade) chega no
+app. Isso invalidava boa parte da metodologia de teste usada na Sessão 181 pra validar o P46
+original — o app pode ter respondido normalmente e a técnica de clique que "confirmou" o bug estava
+ela mesma quebrada.
+
+Com o método corrigido, confirmei que cliques em geral funcionam (abrir edição, confirmar/cancelar
+exclusão, rolar a lista, digitar no filtro) — mas o clique no ⭐, mesmo em coordenada
+pixel-perfeita (conferida por crop/zoom da captura de tela), continuou falhando na maioria das
+tentativas. Prova decisiva de que o mecanismo por trás funciona quando o clique acerta: inseri
+temporariamente `document.body.style.border = "30px solid red"` no início de
+`handleToggleFavorite` — quando disparou, o toggle persistiu de verdade (sobreviveu a F5/reload,
+bateu com o valor recarregado do Rust). Ou seja: não é o handler que nunca dispara, nem falha
+silenciosa do backend — é especificamente o clique que falha em acertar o alvo na maioria das
+vezes. Aumentar a área clicável (`padding`/`minWidth`/`minHeight`) não resolveu sozinho, o que
+descarta a hipótese mais simples de "hit-box pequeno demais" — sobra como suspeita mais provável
+(não confirmável sem devtools reais, que não funcionam neste ambiente) uma discrepância entre a
+posição visual do glifo ★/☆ e a caixa de hit-test real, específica de como o WebKitGTK/Pango mede
+esse tipo de glifo misturado com emoji+texto numa linha flex com `flexWrap`.
+
+**Efeito colateral sério**: numa dessas rodadas de teste, um clique usando coordenadas calculadas
+pra um teste anterior (destinadas ao botão "Não" de uma confirmação de exclusão) na verdade acertou
+o botão "Sim" — confirmando a exclusão de uma entrada de teste (`github.com`/`teste@teste.com`,
+grupo "Test", usada ao longo da sessão pra testar TOTP/2FA). Parei imediatamente, não publiquei
+nada (a mudança ficou só local, "1 pendente"), e perguntei ao dono do projeto antes de qualquer
+ação — confirmou que era uma entrada descartável e decidiu não recriar. Vault on-chain (versão 12)
+nunca foi tocado.
+
+**Mitigações aplicadas** (`VaultManagement.tsx`), mesmo sem fechar a causa raiz: `handleDownloadDocument`
+teve o `save()` movido pra dentro do `try/catch` que já envolvia o resto da função (bug real e
+independente, achado por leitura de código — uma rejeição do diálogo nunca era capturada, silêncio
+puro); botão ⭐ e "💾 Baixar" ganharam área clicável maior. `tsc --noEmit`/`npx vitest run` (101/101)
+limpos. P46 rebaixado de Média pra Baixa (mecanismo funciona, só o alvo do clique é frágil) e
+mantido em aberto — fechamento de verdade só com clique físico real (mouse/trackpad) ou devtools
+acessíveis.
+
