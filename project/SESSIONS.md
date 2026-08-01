@@ -7406,3 +7406,25 @@ projeto escolheu fechar como não-bug — nenhuma mudança de código.
 `vitest run` 101/101 limpos em cada passo), P45 fechado por decisão consciente. Fase 16 segue com
 P38 (validação em hardware real, guardiões de verdade) como única pendência restante.
 
+---
+
+### Sessão 181 (continuação) — P5 fechado: assinatura via device key no Mainnet, publish real do vault
+
+Dono do projeto pediu um levantamento de tudo que ainda tá em aberto no projeto (visão completa de
+`PENDING.md`). Escolheu o P5 em seguida — a mesma classe de validação do P4 (assinatura via device
+key contra a Mainnet), mas pelo caminho dedicado: botão "Publicar via device key (sem Ledger)" na
+aba Vault (`useVaultPublish.ts::handleEnviarViaDeviceKey`), que já existia desde a fatia 1 da
+delegação de assinatura como prova do pipeline UserOp+bundler.
+
+Ambiente já estava pronto (Desktop rodando desde a Sessão 179/180, Ledger Account 1 conectado).
+Primeira tentativa falhou: "todos os providers Kubo falharam: error sending request for url
+(http://localhost:5001/api/v0/add)" — `ipfs.service` (systemd `--user`) está instalado nesta
+máquina mas ficava inativo por padrão. Perguntado ao dono do projeto antes de mexer no daemon;
+autorizado `systemctl --user start ipfs`. Segunda tentativa: sucesso, versão do vault foi de 8 pra
+9 na UI. **Confirmado on-chain via `cast call getVault(1)` num RPC público, independente do app**:
+`version=9`, `updatedAt=1785599131` (01/08/2026 15:45 UTC — bate com o horário real da sessão).
+
+P5 fechado — mesma dupla confirmação (UI + leitura on-chain independente) que fechou o P4.
+`ipfs.service` deixado rodando (baixo custo, ~95MB de memória, útil pra testes futuros de
+vault/documentos que também dependem de Kubo local, ex. P37).
+
