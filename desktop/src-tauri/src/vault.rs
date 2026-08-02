@@ -685,11 +685,34 @@ fn load_published_snapshot() -> Result<Option<Vault>, String> {
     Ok(Some(vault))
 }
 
+// Escreve `data` em `path` de forma atômica: grava num arquivo temporário
+// no mesmo diretório e troca pro destino com `rename` (atômico no mesmo
+// filesystem — a troca acontece inteira ou não acontece, nunca deixa
+// `path` truncado/corrompido no meio de uma escrita interrompida por
+// crash/disco cheio). Achado #8 do /code-review (Sessão 140): `mark_published`
+// usava `write_file`/`write_text` (escrita direta) tanto pro snapshot
+// quanto pro meta.json — um crash entre as duas escritas (ou uma escrita
+// parcial de qualquer uma delas) deixava `pending_changes()` reportando
+// número errado mesmo depois de um publish real bem-sucedido.
+fn write_file_atomic(path: &std::path::Path, data: &[u8]) -> Result<(), String> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let mut tmp_path = path.to_path_buf();
+    let tmp_name = format!(
+        "{}.tmp",
+        path.file_name().and_then(|n| n.to_str()).unwrap_or("vault-atomic")
+    );
+    tmp_path.set_file_name(tmp_name);
+    std::fs::write(&tmp_path, data).map_err(|e| e.to_string())?;
+    std::fs::rename(&tmp_path, path).map_err(|e| e.to_string())
+}
+
 fn save_published_snapshot(vault: &Vault) -> Result<(), String> {
     let json = serde_json::to_vec(vault).map_err(|e| e.to_string())?;
     let blob = encrypt(&json)?;
     let path = published_snapshot_path()?;
-    crate::config::write_file(&path, &blob)
+    write_file_atomic(&path, &blob)
 }
 
 /// Conta mudanças reais de conteúdo entre o vault atual e o último snapshot
@@ -798,16 +821,28 @@ fn content_signature(vault: &Vault) -> String {
 /// capturava qualquer edição feita nesse meio-tempo como se já tivesse sido
 /// publicada.
 pub(crate) fn mark_published(version: u64, published_vault: &Vault) -> Result<(), String> {
+    // Achado #8 do /code-review (Sessão 140): o snapshot vai primeiro, de
+    // propósito. `pending_changes_from` sempre prefere o snapshot quando ele
+    // existe (o meta.json só é olhado como fallback pra vaults sem snapshot
+    // ainda) — se o processo morrer entre as duas escritas, gravar o
+    // snapshot primeiro garante que o diff por entrada já reflete a
+    // publicação real mesmo com o meta.json ainda desatualizado (que nesse
+    // ponto já é irrelevante, o snapshot ganha). Na ordem antiga (meta
+    // primeiro), o mesmo crash deixava `pending_changes()` comparando contra
+    // um snapshot velho e superestimando o que ainda faltava publicar, com o
+    // meta.json (nunca mais olhado depois que um snapshot existe) mentindo
+    // "já publicado" sem efeito nenhum.
+    save_published_snapshot(published_vault)?;
+
     let path = meta_path()?;
     let meta = serde_json::json!({
         "last_published_version": version,
         "last_published_content_hash": content_signature(published_vault),
     });
-    crate::config::write_text(
+    write_file_atomic(
         &path,
-        &serde_json::to_string(&meta).map_err(|e| e.to_string())?,
-    )?;
-    save_published_snapshot(published_vault)
+        serde_json::to_string(&meta).map_err(|e| e.to_string())?.as_bytes(),
+    )
 }
 
 /// Retorna quantas mudanças de conteúdo o vault local tem em relação ao
@@ -823,16 +858,32 @@ pub(crate) fn pending_changes_from(vault: &Vault) -> Result<u64, String> {
     if let Some(snapshot) = load_published_snapshot()? {
         return Ok(diff_count(vault, &snapshot));
     }
-    // Fallback pra vaults publicados antes da Sessão 139 (sem snapshot local
-    // ainda) — mesmo comportamento de antes, até a próxima publicação gravar
-    // um snapshot novo e este branch nunca mais rodar pra esse vault.
     let path = meta_path()?;
     if !path.exists() {
-        return Ok(vault.version);
+        // Achado #1 do /code-review (Sessão 140): nunca publicado, nem no
+        // esquema antigo — não existe baseline nenhum, então `vault.version`
+        // cru reproduzia o mesmo bug que `diff_count` (Sessão 139) já tinha
+        // corrigido pro caso "já publicado ao menos uma vez": version é
+        // monotônica e não cancela um toggle (favoritar+desfavoritar, por
+        // exemplo) antes do primeiro publish. O baseline correto pra "nunca
+        // publicado" é um vault vazio — `diff_count` já sabe comparar contra
+        // isso sem depender de `version`.
+        return Ok(diff_count(vault, &Vault::default()));
     }
+    // Fallback pra vaults publicados entre as Sessões 138 e 139 (hash+version
+    // no meta.json, mas sem snapshot local ainda pra diff por entrada).
     let raw = crate::config::read_text(&path)?;
     let val: serde_json::Value = serde_json::from_str(&raw).map_err(|e| e.to_string())?;
     if val["last_published_content_hash"].as_str() == Some(content_signature(vault).as_str()) {
+        // Achado #4 do /code-review (Sessão 140): sem isto, este branch podia
+        // nunca migrar pro esquema novo até o próximo publish de verdade
+        // (que pode não acontecer tão cedo) — toda chamada repetia o mesmo
+        // fallback impreciso indefinidamente. O conteúdo atual bate byte a
+        // byte com o que foi publicado da última vez, então já sabemos
+        // exatamente o que gravar como snapshot — migra na hora. Best-effort
+        // (`let _`): uma falha de escrita aqui não pode quebrar uma leitura
+        // que já tem a resposta certa (0).
+        let _ = save_published_snapshot(vault);
         return Ok(0);
     }
     let last = val["last_published_version"].as_u64().unwrap_or(0);
@@ -846,6 +897,32 @@ pub(crate) fn pending_changes_from(vault: &Vault) -> Result<u64, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // --- write_file_atomic (achado #8 do /code-review, Sessão 140) ---
+    // Usa `std::env::temp_dir()`, nunca `$HOME` — `truthid_dir()`/
+    // `truthid_file_path()` leem `$HOME` de verdade e `cargo test` roda em
+    // paralelo, então mudar `$HOME` nos testes é fonte conhecida de
+    // flakiness cruzada com outros módulos do crate (lição da Sessão 119,
+    // `pin.rs`). Nome de arquivo único por teste evita colisão entre testes
+    // paralelos que compartilham o mesmo diretório temporário.
+
+    #[test]
+    fn write_file_atomic_creates_and_overwrites_without_a_stray_tmp_file() {
+        let dir = std::env::temp_dir().join("truthid_vault_write_file_atomic_test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path =
+            dir.join("write_file_atomic_creates_and_overwrites_without_a_stray_tmp_file.bin");
+
+        write_file_atomic(&path, b"first").unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"first");
+
+        write_file_atomic(&path, b"second").unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"second");
+
+        let tmp_path = dir
+            .join("write_file_atomic_creates_and_overwrites_without_a_stray_tmp_file.bin.tmp");
+        assert!(!tmp_path.exists());
+    }
 
     // --- testes de cifra (13.3) ---
 

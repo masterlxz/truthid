@@ -33,11 +33,6 @@ pub(crate) fn read_text(path: &Path) -> Result<String, String> {
     std::fs::read_to_string(path).map_err(|e| e.to_string())
 }
 
-/// Escreve uma string em um arquivo de texto.
-pub(crate) fn write_text(path: &Path, text: &str) -> Result<(), String> {
-    write_file(path, text.as_bytes())
-}
-
 /// Lê e desserializa um arquivo JSON. Retorna `T::default()` se o arquivo
 /// não existir ou estiver vazio/inválido — mesmo comportamento dos
 /// `unwrap_or_default` existentes em cada call site original.

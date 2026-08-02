@@ -326,8 +326,20 @@ struct VaultLoadAllResult {
 #[tauri::command]
 fn vault_load_all() -> Result<VaultLoadAllResult, String> {
     let vault = vault::load()?;
+    // Achado #2 do /code-review (Sessão 140): antes, uma falha em
+    // `pending_changes_from` (ex: `vault.published.enc` corrompido/truncado,
+    // ou cifrado com uma chave antiga) propagava com `?` e derrubava a
+    // resposta inteira — o catch genérico do `loadAll()` na UI ("sem vault
+    // ainda — tudo vazio é ok") escondia a lista de entradas real, mesmo com
+    // o vault principal já carregado com sucesso na linha acima. Contagem de
+    // pendências é só um dado auxiliar pra UI — nunca deve poder apagar o
+    // vault da tela.
+    let pending_changes = vault::pending_changes_from(&vault).unwrap_or_else(|e| {
+        eprintln!("vault_load_all: pending_changes_from falhou, usando 0: {e}");
+        0
+    });
     Ok(VaultLoadAllResult {
-        pending_changes: vault::pending_changes_from(&vault)?,
+        pending_changes,
         entries: vault.entries,
         permissions: vault.device_permissions,
         profiles: vault.profile_names,
