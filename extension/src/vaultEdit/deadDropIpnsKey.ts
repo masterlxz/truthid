@@ -1,11 +1,9 @@
 import { ed25519 } from '@noble/curves/ed25519';
 import { hkdf } from '@noble/hashes/hkdf';
 import { sha256 } from '@noble/hashes/sha256';
-import { base36 } from 'multiformats/bases/base36';
-import { CID } from 'multiformats/cid';
-import { create as createDigest } from 'multiformats/hashes/digest';
 
 import { hexToBytes } from '../util/bytes';
+import { computeIpnsNameFromPublicKeyProtobuf, marshalKeyProtobuf } from '../session/libp2pKey';
 
 /**
  * Deriva a chave IPNS pra dead-drop cross-network do vault-edit (item 6 do
@@ -25,33 +23,11 @@ import { hexToBytes } from '../util/bytes';
 const HKDF_SALT = new TextEncoder().encode('TruthID Vault Edit IPNS');
 const HKDF_INFO = new TextEncoder().encode('dead-drop-key-v1');
 
-const KEY_TYPE_ED25519 = 1;
-const MULTICODEC_LIBP2P_KEY = 0x72;
-const MULTIHASH_IDENTITY = 0x00;
-
 export interface DeadDropKeyMaterial {
   /** Protobuf `PrivateKey` do libp2p, formato `libp2p-protobuf-cleartext` que o `key/import` do Kubo espera. */
   privateKeyProtobuf: Uint8Array;
   /** Nome IPNS (`k51...`) onde essa chave publica — mesmo valor que `computeDeadDropIpnsName` recalcula do lado Mobile. */
   ipnsName: string;
-}
-
-// Mensagem protobuf de 2 campos (`Type` varint, `Data` bytes) do
-// `crypto.proto` do libp2p — igual pra PrivateKey e PublicKey. Só cobre o
-// caso concreto usado aqui (Data sempre < 128 bytes, tag/length cabem num
-// byte de varint cada), mesma limitação já aceita em
-// `ipns_key_service.dart::_marshalKeyProtobuf`.
-function marshalKeyProtobuf(data: Uint8Array): Uint8Array {
-  if (data.length >= 128) {
-    throw new Error('data too long for single-byte varint length');
-  }
-  return new Uint8Array([0x08, KEY_TYPE_ED25519, 0x12, data.length, ...data]);
-}
-
-function computeIpnsNameFromPublicKeyProtobuf(publicKeyProtobuf: Uint8Array): string {
-  const digest = createDigest(MULTIHASH_IDENTITY, publicKeyProtobuf);
-  const cid = CID.createV1(MULTICODEC_LIBP2P_KEY, digest);
-  return cid.toString(base36.encoder);
 }
 
 /**

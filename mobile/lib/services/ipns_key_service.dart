@@ -5,6 +5,7 @@ import 'package:cryptography/cryptography.dart' as crypt;
 import 'package:web3dart/crypto.dart' show hexToBytes;
 
 import 'hkdf_util.dart';
+import 'libp2p_key_util.dart' as libp2p;
 
 /// Derivação determinística de uma chave IPNS a partir do `sessionId` do QR
 /// de sessão da extensão de navegador — 13.9, fatia 2a (dead-drop
@@ -21,11 +22,6 @@ import 'hkdf_util.dart';
 /// em teste isolado, nunca validado ponta-a-ponta).
 const _ipnsHkdfSalt = 'TruthID Vault IPNS';
 const _ipnsHkdfInfo = 'dead-drop-key-v1';
-
-const int _keyTypeEd25519 = 1;
-const int _multicodecLibp2pKey = 0x72;
-const int _multihashIdentity = 0x00;
-const String _base36Alphabet = '0123456789abcdefghijklmnopqrstuvwxyz';
 
 class Ed25519KeyMaterial {
   final Uint8List seed;
@@ -72,84 +68,19 @@ Future<Ed25519KeyMaterial> deriveEd25519KeyPair(String sessionIdHex) async {
 /// `key/import` com `format=libp2p-protobuf-cleartext`).
 Uint8List marshalPrivateKeyProtobuf(Ed25519KeyMaterial key) {
   final data = Uint8List.fromList([...key.seed, ...key.publicKey]);
-  return _marshalKeyProtobuf(data);
+  return libp2p.marshalKeyProtobuf(data);
 }
 
 /// Protobuf `PublicKey` do libp2p — `Data` = só os 32 bytes da chave pública.
 Uint8List marshalPublicKeyProtobuf(Ed25519KeyMaterial key) {
-  return _marshalKeyProtobuf(key.publicKey);
+  return libp2p.marshalKeyProtobuf(key.publicKey);
 }
 
-// Mensagem protobuf de 2 campos (`Type` varint, `Data` bytes) — igual pra
-// PrivateKey e PublicKey no `crypto.proto` do libp2p. Não é um encoder
-// protobuf genérico: só cobre o caso concreto usado aqui (Type=Ed25519,
-// Data sempre < 128 bytes, então tag e length cabem num byte de varint cada).
-Uint8List _marshalKeyProtobuf(Uint8List data) {
-  if (data.length >= 128) {
-    throw ArgumentError('data too long for single-byte varint length');
-  }
-  return Uint8List.fromList([
-    0x08, _keyTypeEd25519, // field 1 (Type), varint
-    0x12, data.length, // field 2 (Data), length-delimited
-    ...data,
-  ]);
-}
-
-/// Nome IPNS (`k51...`) a partir do protobuf da chave pública: multihash
-/// "identity" (código 0x00, válido porque o protobuf de 36 bytes de uma
-/// chave pública Ed25519 sempre cabe no limite de 42 bytes da regra de
-/// peer-id do libp2p — https://github.com/libp2p/specs/blob/master/peer-ids/peer-ids.md)
-/// → CIDv1 com codec `libp2p-key` (0x72) → multibase base36-lower (prefixo
-/// `k`), formato que o Kubo usa hoje por padrão pra nomes IPNS.
-String computeIpnsName(Uint8List publicKeyProtobuf) {
-  if (publicKeyProtobuf.length > 42) {
-    throw ArgumentError(
-      'public key protobuf too long for identity multihash '
-      '(${publicKeyProtobuf.length} > 42)',
-    );
-  }
-
-  final multihash = Uint8List.fromList([
-    _multihashIdentity,
-    publicKeyProtobuf.length,
-    ...publicKeyProtobuf,
-  ]);
-
-  final cid = Uint8List.fromList([
-    0x01, // CID version 1
-    _multicodecLibp2pKey,
-    ...multihash,
-  ]);
-
-  return 'k${_base36Encode(cid)}';
-}
-
-// Codificação base36 "estilo base58" (mesma família de algoritmo do
-// `base-x`/multibase): trata os bytes como um inteiro big-endian e converte
-// pra base 36; bytes 0x00 à esquerda viram '0' à esquerda no resultado, em
-// vez de serem absorvidos pelo valor numérico.
-String _base36Encode(Uint8List bytes) {
-  if (bytes.isEmpty) return '';
-
-  var value = BigInt.zero;
-  for (final b in bytes) {
-    value = (value << 8) | BigInt.from(b);
-  }
-
-  const base = 36;
-  final digits = <String>[];
-  if (value == BigInt.zero) {
-    digits.add('0');
-  } else {
-    while (value > BigInt.zero) {
-      digits.add(_base36Alphabet[(value % BigInt.from(base)).toInt()]);
-      value = value ~/ BigInt.from(base);
-    }
-  }
-
-  final leadingZeroBytes = bytes.takeWhile((b) => b == 0).length;
-  return ('0' * leadingZeroBytes) + digits.reversed.join();
-}
+/// Nome IPNS (`k51...`) a partir do protobuf da chave pública — ver
+/// `libp2p_key_util.dart::computeIpnsNameFromPublicKeyProtobuf` pro desenho
+/// completo (multihash identity → CIDv1 libp2p-key → base36).
+String computeIpnsName(Uint8List publicKeyProtobuf) =>
+    libp2p.computeIpnsNameFromPublicKeyProtobuf(publicKeyProtobuf);
 
 /// Orquestra os passos acima: dado o `sessionId` do QR, devolve a chave
 /// privada pronta pra `IpfsPinClient.publishDeadDrop` importar no Kubo, e o
