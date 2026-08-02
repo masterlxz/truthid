@@ -72,6 +72,28 @@ describe('startMobileDelivery', () => {
     expect(a.qrPayload.sessionId).not.toBe(b.qrPayload.sessionId);
   });
 
+  it('dispara o publish do dead-drop via mensagem pro background, não chamando IPFS direto', async () => {
+    const sendMessage = vi.fn(async (_message: { type: string; sessionId: string; bodyBase64: string }) => undefined);
+    startMobileDelivery(proposals, { sendMessage: sendMessage as unknown as typeof chrome.runtime.sendMessage });
+
+    // A chamada acontece dentro de uma promise encadeada no corpo da função
+    // (fire-and-forget, `encryptedBody()` usa `crypto.subtle` por baixo) —
+    // `vi.waitFor` poll até resolver em vez de contar ticks de microtask a
+    // mão, que é frágil pra promises encadeadas via APIs assíncronas nativas.
+    await vi.waitFor(() => expect(sendMessage).toHaveBeenCalledTimes(1));
+
+    const [message] = sendMessage.mock.calls[0];
+    expect(message).toMatchObject({ type: 'truthid-vault-edit-start-dead-drop-publish' });
+    expect(typeof message.sessionId).toBe('string');
+    expect(typeof message.bodyBase64).toBe('string');
+  });
+
+  it('sem deps.sendMessage nem chrome global, não lança (ambiente de teste sem extensão)', async () => {
+    const session = startMobileDelivery(proposals);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(session.qrPayload.sessionId).toHaveLength(32);
+  });
+
   it('sync em lote (P29): send() cifra a lista inteira, não só o 1º item', async () => {
     const batch = [
       { site: 'one.com', url: '', username: 'alice', password: 'hunter2', notes: '' },

@@ -14,12 +14,15 @@ import {
   AUTOFILL_SWEEP_MESSAGE,
   GET_MATCHING_ENTRIES_MESSAGE,
   VAULT_EDIT_ENQUEUE_MESSAGE,
+  VAULT_EDIT_START_DEAD_DROP_PUBLISH_MESSAGE,
   WEBAUTHN_FIND_PASSKEY_MESSAGE,
   WEBAUTHN_SIGN_ASSERTION_MESSAGE,
 } from '../src/autofill/messages';
 import { fetchMobileBlobAt, sweepMobileForBlob } from '../src/autofill/lanPull';
 import { signAssertion } from '../src/webauthn';
 import { addPendingEdit, type VaultEditProposal } from '../src/vaultEdit/pendingEdits';
+import { publishDeadDrop } from '../src/vaultEdit/deadDropPublish';
+import { base64ToBytes } from '../src/util/bytes';
 
 // Único job do service worker: garantir que a sessão some do
 // `chrome.storage.session` quando o TTL expira, mesmo que a popup nunca
@@ -216,6 +219,28 @@ export default defineBackground(() => {
     (message: { type?: string; proposal?: Omit<VaultEditProposal, 'id' | 'createdAtMs'> } | undefined) => {
       if (message?.type !== VAULT_EDIT_ENQUEUE_MESSAGE || !message.proposal) return;
       void addPendingEdit(message.proposal);
+    },
+  );
+
+  // Achado do /code-review (Sessão 140): o publish do dead-drop cross-network
+  // do vault-edit (`deadDropPublish.ts`, sequência de ~4 fetches levando até
+  // ~60-90s) rodava dentro do script da popup (`mobileDelivery.ts`) — a
+  // popup fecha assim que o usuário olha pro celular pra escanear o QR, a
+  // ação normal deste fluxo, abortando o publish no meio quase sempre.
+  // Rodar aqui em vez disso sobrevive à popup fechada: os `fetch()`
+  // sequenciais de `publishDeadDrop` mantêm o service worker vivo enquanto
+  // estão em voo, mesma garantia que já vale pro resto dos canais fire-and-
+  // forget deste arquivo. Fire-and-forget de propósito — `publishDeadDrop`
+  // já é best-effort internamente (falha vira `null`, nunca lança).
+  chrome.runtime.onMessage.addListener(
+    (message: { type?: string; sessionId?: string; bodyBase64?: string } | undefined) => {
+      if (
+        message?.type !== VAULT_EDIT_START_DEAD_DROP_PUBLISH_MESSAGE ||
+        !message.sessionId ||
+        !message.bodyBase64
+      )
+        return;
+      void publishDeadDrop(message.sessionId, base64ToBytes(message.bodyBase64));
     },
   );
 

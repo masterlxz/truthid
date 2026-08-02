@@ -43,3 +43,13 @@ export const AUTOFILL_MANUAL_FETCH_MESSAGE = 'truthid-autofill-manual-fetch';
 // já está esperando.
 export const AUTOFILL_START_DEAD_DROP_POLL_MESSAGE = 'truthid-autofill-start-dead-drop-poll';
 export const AUTOFILL_DEAD_DROP_RESOLVED_MESSAGE = 'truthid-autofill-dead-drop-resolved';
+
+// Achado do `/code-review` (Sessão 140): o publish do dead-drop cross-network
+// do vault-edit (`deadDropPublish.ts`, sequência de ~4 fetches levando até
+// ~60-90s) rodava inteiro dentro do script da popup — que fecha assim que o
+// usuário olha pro celular pra escanear o QR, a ação normal deste fluxo,
+// abortando o publish no meio quase sempre. Mesmo padrão do
+// START_DEAD_DROP_POLL_MESSAGE (fluxo de leitura, `background.ts`): delega
+// pro background, que sobrevive à popup fechada.
+export const VAULT_EDIT_START_DEAD_DROP_PUBLISH_MESSAGE =
+  'truthid-vault-edit-start-dead-drop-publish';

@@ -24,7 +24,7 @@ import {
 } from '../../src/storage/sessionStore';
 import { renderEntries } from '../../src/ui/renderEntries';
 import { renderQrToCanvas } from '../../src/ui/renderQr';
-import { bytesToHex, hexToBytes } from '../../src/util/bytes';
+import { base64ToBytes, bytesToHex, hexToBytes } from '../../src/util/bytes';
 import {
   listPendingEdits,
   removePendingEdits,
@@ -40,10 +40,6 @@ const DEAD_DROP_RESOLVED_MESSAGE = 'truthid-dead-drop-resolved';
 const HOST_PERMISSION: chrome.permissions.Permissions = {
   origins: ['http://*/*'],
 };
-
-function base64ToBytes(base64: string): Uint8Array {
-  return Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
-}
 
 async function createNewSession(): Promise<SessionState> {
   const privKey = secp256k1.utils.randomPrivateKey();

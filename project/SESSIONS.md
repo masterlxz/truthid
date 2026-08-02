@@ -7602,3 +7602,37 @@ modal não voltou a aparecer — pode ser um bug real em `get_pending_autofill_a
 2 entradas de teste (`Casa Teste`/endereço, `Nubank Teste`/cartão) ficaram no vault local do dono do
 projeto, não publicadas on-chain — ele pode removê-las quando quiser.
 
+### Sessão 183 — 2026-08-02: achado #5 do `/code-review` da Sessão 140 corrigido — publish do
+dead-drop cross-network do vault-edit não roda mais dentro do popup
+
+Retomado o achado #5 registrado na Sessão 140 (nunca corrigido, só documentado): `startMobileDelivery()`
+(`extension/src/vaultEdit/mobileDelivery.ts`) disparava o publish do dead-drop cross-network
+(`deadDropPublish.ts`, sequência de 4 fetches sequenciais ao Kubo — add→key/import→name/publish→
+key/rm, ~60-90s até confirmar) inteiramente dentro do script da popup, sem o relay via
+`chrome.alarms`/`background.ts` que o fluxo irmão de leitura do vault já usa exatamente por essa
+razão (`popup/main.ts::createNewSession`, comentário "sobrevive à popup fechada"). A ação natural
+do usuário depois de ver o QR é fechar a popup pra olhar o celular — abortando o publish no meio
+quase sempre, silenciosamente (best-effort, nunca lançava erro visível).
+
+**Fix**: `startMobileDelivery` não chama mais `publishDeadDrop` direto — manda uma mensagem nova
+(`VAULT_EDIT_START_DEAD_DROP_PUBLISH_MESSAGE`, `messages.ts`) pro `background.ts`, que é quem
+executa `publishDeadDrop` de verdade. O service worker sobrevive à popup fechada e os `fetch()`
+sequenciais mantêm ele vivo enquanto estão em voo — mesma garantia que já vale pros outros canais
+fire-and-forget do arquivo (`VAULT_EDIT_ENQUEUE_MESSAGE`, sweep de LAN, etc). Timing preservado:
+o publish ainda dispara em paralelo assim que o QR existe, nunca depois (mesma decisão original).
+
+`deps.publish` (injeção de teste em `startMobileDelivery`) virou `deps.sendMessage` — acesso via
+`globalThis.chrome?.runtime?.sendMessage` (opcional) em vez de `chrome.runtime.sendMessage` direto,
+porque os testes rodam em `environment: 'node'` (`vitest.config.ts`) sem `chrome` no global, e a
+maioria dos testes chama `startMobileDelivery` sem passar essa dependência. `base64ToBytes`
+(antes só uma função local em `popup/main.ts`) extraída pra `util/bytes.ts`, ao lado do
+`bytesToBase64` já existente — reusada tanto pelo `main.ts` quanto pelo novo listener em
+`background.ts`.
+
+2 testes novos em `mobileDelivery.test.ts` (mensagem disparada com sessionId/bodyBase64 corretos,
+e que a ausência de `chrome`/`deps.sendMessage` não lança). `npx vitest run` 135/135, `tsc --noEmit`
+e `npm run build` limpos. **Não validado em hardware real** — mesma pendência de validação
+cross-network que já existia antes desta correção (precisa celular e PC em redes de fato diferentes
++ Kubo acessível por ambas); o achado #5 era justamente a razão mais provável pra essa validação
+falhar antes mesmo de chegar em rede/Kubo, então agora vale tentar de novo quando houver ambiente.
+

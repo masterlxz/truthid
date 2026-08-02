@@ -1,9 +1,9 @@
 import { secp256k1 } from '@noble/curves/secp256k1';
 
-import { bytesToHex } from '../util/bytes';
+import { VAULT_EDIT_START_DEAD_DROP_PUBLISH_MESSAGE } from '../autofill/messages';
+import { bytesToBase64, bytesToHex } from '../util/bytes';
 import { buildVaultEditQrPayload, randomSessionId, type VaultEditQrPayload } from '../session/qrPayload';
 import { deriveVaultEditContentKey, encryptVaultEditContent } from './cipher';
-import { publishDeadDrop } from './deadDropPublish';
 import { MOBILE_CANDIDATE_PORTS, pushToMobile, putSessionContent } from './lanDelivery';
 import type { VaultEditProposal } from './pendingEdits';
 
@@ -41,12 +41,17 @@ export function startMobileDelivery(
   deps: {
     push?: typeof pushToMobile;
     putAt?: typeof putSessionContent;
-    publish?: typeof publishDeadDrop;
+    sendMessage?: typeof chrome.runtime.sendMessage;
   } = {},
 ): MobileDeliverySession {
   const push = deps.push ?? pushToMobile;
   const putAt = deps.putAt ?? putSessionContent;
-  const publish = deps.publish ?? publishDeadDrop;
+  // Acesso opcional (não `chrome.runtime.sendMessage` direto): em teste
+  // (`environment: 'node'`, ver vitest.config.ts) `chrome` não existe no
+  // global, e `startMobileDelivery` é chamado sem `deps.sendMessage` na
+  // maioria dos testes — acessar a propriedade sem `?.` lançaria antes
+  // mesmo de qualquer QR ser montado.
+  const sendMessage = deps.sendMessage ?? globalThis.chrome?.runtime?.sendMessage;
   const sessionId = randomSessionId();
   const ephemeralPubKeyHex = bytesToHex(
     secp256k1.getPublicKey(secp256k1.utils.randomPrivateKey(), true),
@@ -62,11 +67,22 @@ export function startMobileDelivery(
   // Dead-drop cross-network (item 6 do backlog): dispara em paralelo com o
   // resto, assim que o QR existe — mesmo timing do Mobile no pareamento de
   // leitura (`vault_session_screen.dart`, publish roda junto com o serve
-  // LAN, não depois). Fire-and-forget: `publishDeadDrop` já é best-effort
-  // internamente (sem provider configurado ou qualquer falha vira `null`),
-  // uma falha aqui não pode atrapalhar `send()`/`sendTo()`.
+  // LAN, não depois). Delega o publish de verdade pro background via
+  // mensagem (achado do /code-review, Sessão 140) em vez de chamar
+  // `publishDeadDrop` aqui — a popup fecha assim que o usuário olha pro
+  // celular pra escanear o QR, o que abortava a sequência de ~4 fetches
+  // (~60-90s) no meio quase sempre; o background sobrevive à popup fechada.
+  // Fire-and-forget: `publishDeadDrop` já é best-effort internamente lá
+  // dentro (sem provider configurado ou qualquer falha vira `null`), uma
+  // falha aqui não pode atrapalhar `send()`/`sendTo()`.
   void encryptedBody()
-    .then((body) => publish(sessionId, body))
+    .then((body) =>
+      sendMessage?.({
+        type: VAULT_EDIT_START_DEAD_DROP_PUBLISH_MESSAGE,
+        sessionId,
+        bodyBase64: bytesToBase64(body),
+      }),
+    )
     .catch(() => {});
 
   async function send(): Promise<boolean> {
