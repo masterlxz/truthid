@@ -7636,3 +7636,70 @@ cross-network que já existia antes desta correção (precisa celular e PC em re
 + Kubo acessível por ambas); o achado #5 era justamente a razão mais provável pra essa validação
 falhar antes mesmo de chegar em rede/Kubo, então agora vale tentar de novo quando houver ambiente.
 
+### Sessão 183 (continuação) — 2026-08-02: os 9 achados restantes do `/code-review` da Sessão 140
+corrigidos (#1, #2, #3, #4, #6, #7, #8, #9) — fecha a rodada inteira, 10/10 achados endereçados
+
+Pedido explícito do dono do projeto: corrigir #1-4 e #6-9 (o #5 já tinha fechado antes, nesta mesma
+sessão). Cada achado verificado contra o código atual antes de corrigir (memória de 13+ dias pode
+estar desatualizada) — 2 já estavam resolvidos por trabalho não-relacionado de sessões
+intermediárias, os outros 7 corrigidos de verdade.
+
+**#1 e #4 (mesma função, corrigidos juntos)** — `pending_changes_from` (`desktop/src-tauri/src/
+vault.rs`) e `pendingChanges()` (`mobile/lib/services/vault_repository.dart`): o caso "nunca
+publicado" usava `version` cru como contagem de pendências (não cancela um toggle de favorito antes
+do 1º publish, mesmo bug que `diff_count` já tinha corrigido pro caso "já publicado", Sessão 139) —
+agora diffa contra um vault vazio, igual ao caminho já publicado. O fallback pra vaults publicados
+entre as Sessões 138/139 (hash+version sem snapshot) só migrava pro esquema novo no próximo publish
+real, que podia nunca acontecer — agora migra na hora (grava o snapshot direto) assim que confirma
+que o hash bate. `cargo test` 136/136 (Desktop), `flutter test` 83/83 no arquivo (2 testes novos +
+1 do #8).
+
+**#2** — `vault_load_all` (`desktop/src-tauri/src/lib.rs`) propagava qualquer falha de
+`pending_changes_from` (ex: `vault.published.enc` corrompido) com `?`, derrubando a resposta inteira
+— o `catch` genérico do `loadAll()` na UI ("sem vault ainda") escondia a lista de entradas real,
+mesmo com o vault principal carregado com sucesso. Isola a falha com `unwrap_or_else` (loga via
+`eprintln!`, usa 0) — pending_changes nunca mais pode apagar o vault da tela.
+
+**#3** — `_receiveViaAnyChannel` (`mobile/lib/screens/vault_edit_approval_screen.dart`) não tinha
+`catchError` em nenhum dos 2 canais da corrida (LAN/dead-drop) — uma exceção do lado LAN (`StateError`
+quando as 5 portas candidatas já estavam ocupadas por outra tela) nunca chamava `handle`, travando o
+completer pra sempre se o dead-drop também desse `null`. Trata exceção igual a `null` agora (mesmo
+contrato de timeout limpo). 2 testes novos simulando o `StateError` real.
+
+**#6 — já estava corrigido**, achado ao investigar: `mark_published`/`markPublished` já recebem o
+blob que foi de fato publicado como parâmetro (não relêem do disco) desde a Sessão 153 (M3, achado
+do `/code-review high` do Mobile aplicado nos dois lados) — conferido lendo `vault_publish()`
+(`lib.rs:467-501`) e o call site do `VaultPublishService` (`vault_publish_service.dart:75-86`): os
+dois capturam o blob ANTES do `.await` de rede e marcam esse blob específico como publicado, nunca
+relendo depois. Nenhuma mudança de código necessária.
+
+**#7** — `VaultEditApprovalScreen` não tinha `dispose()`: o canal perdedor da corrida LAN vs
+dead-drop continuava rodando depois da tela fechar (porta LAN presa até seu próprio timeout, ou
+`pollUntil` do dead-drop batendo no gateway público a cada ~15s pelo TTL da sessão inteira). Novo
+`dispose()` chama `_lanServer.stop()` (libera a porta na hora — não cancela o `Future` pendente de
+`receiveOnce` em si, que resolveria pelo próprio timeout de qualquer jeito, mas devolve a porta pro
+sistema, o efeito colateral real do achado #3) e `pollUntil` (`vault_edit_dead_drop_polling_service.
+dart`) ganhou um `isCancelled` opcional, checado antes/depois de cada tentativa. `flutter test`
+25/25 (approval screen) + 7/7 (dead-drop polling).
+
+**#8** — `mark_published()`/`markPublished()` gravavam meta + snapshot como 2 escritas
+diretas não-atômicas, em ordem que podia deixar `pending_changes()` superestimando o pendente depois
+de um crash no meio (meta.json dizendo "versão N publicada" com o snapshot ainda na versão anterior).
+Novo `write_file_atomic` (Rust, temp+rename no mesmo diretório) e `_writeFileAtomic` (Dart, mesmo
+padrão) + snapshot escrito **antes** do meta.json/storage keys (que só são fallback quando o
+snapshot não existe — inverte a ordem original). `config::write_text` (Rust) ficou órfã depois da
+troca, removida. 1 teste novo em cada lado confirmando que não sobra `.tmp`.
+
+**#9 (cleanup)** — `session/ipnsKey.ts`/`vaultEdit/deadDropIpnsKey.ts` (extensão) e o mirror
+`ipns_key_service.dart`/`vault_edit_dead_drop_ipns_key_service.dart` (mobile) duplicavam byte a byte
+a montagem do protobuf de chave libp2p e a codificação CID/multihash/base36 — só a derivação HKDF
+(salt/info, domain-separada por namespace) precisa mesmo ficar distinta. Extraído pra
+`libp2pKey.ts`/`libp2p_key_util.dart` compartilhados, API pública dos 4 arquivos originais
+inalterada. Vetores cruzados TS↔Dart↔Kubo continuam batendo depois do refactor.
+
+`cargo test` 136/136, `npx vitest run` 135/135, `flutter test` 504/504 (suite inteira), `tsc
+--noEmit`/`npm run build`/`flutter analyze` limpos em cada um dos 4 commits desta rodada (mais o
+commit do #5, feito antes nesta mesma sessão — total 5 commits, 1 por achado ou grupo de achados
+relacionados). **Fecha os 10 achados da Sessão 140 — nenhuma pendência de código restante dessa
+rodada de review.**
+
