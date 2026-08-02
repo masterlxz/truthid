@@ -1297,4 +1297,74 @@ void main() {
       expect(json.containsKey('totp_secret'), isFalse);
     });
   });
+
+  group('VaultRepository pendingChanges() — achados #1/#4 do /code-review (Sessão 140)', () {
+    test(
+        'achado #1: nunca publicado (sem markPublished nenhuma vez) — um '
+        'toggle de favorito cancela, não usa version cru', () async {
+      final entry = await repo.addEntry(site: 'a.com', username: 'u', password: 'p');
+
+      await repo.setFavorite(entry.id, true);
+      await repo.setFavorite(entry.id, false);
+
+      // Se a baseline fosse `data.version` cru (bug original), isto contaria
+      // os 3 bumps de version (add + 2 toggles) em vez do diff real contra o
+      // vault vazio (1 entrada adicionada, favorite não afeta o diff de
+      // conteúdo já que volta ao valor original).
+      expect(await repo.pendingChanges(), 1);
+    });
+
+    test(
+        'achado #4: meta antigo (hash+version, sem snapshot) com conteúdo '
+        'idêntico ao publicado migra pro esquema novo em vez de repetir o '
+        'fallback impreciso pra sempre', () async {
+      final entry = await repo.addEntry(site: 'a.com', username: 'u', password: 'p');
+      final blob = await repo.readRawBlob();
+      await repo.markPublished(await repo.currentVersion(), blob);
+
+      // Simula um vault publicado antes da Sessão 139: meta (hash/version)
+      // existe, mas o snapshot local não — apaga só o snapshot que
+      // markPublished acabou de criar, preservando as chaves de storage.
+      final snapshotFile = File('$vaultPath.published');
+      expect(await snapshotFile.exists(), isTrue);
+      await snapshotFile.delete();
+
+      expect(await repo.pendingChanges(), 0);
+      // Migração automática: a próxima leitura já recriou o snapshot sem
+      // esperar um publish novo.
+      expect(await snapshotFile.exists(), isTrue);
+
+      // Prova que a migração é real (não só o fallback antigo acertando por
+      // acaso): um toggle de favorito só cancela via diff por entrada
+      // (snapshot), nunca via diff de version cru.
+      await repo.setFavorite(entry.id, true);
+      await repo.setFavorite(entry.id, false);
+      expect(await repo.pendingChanges(), 0);
+    });
+
+    test(
+        'achado #8: markPublished grava o snapshot via arquivo temporário + '
+        'rename, sem deixar .tmp sobrando', () async {
+      await repo.addEntry(site: 'a.com', username: 'u', password: 'p');
+      final blob = await repo.readRawBlob();
+
+      await repo.markPublished(await repo.currentVersion(), blob);
+
+      expect(await File('$vaultPath.published').exists(), isTrue);
+      expect(await File('$vaultPath.published.tmp').exists(), isFalse);
+
+      // markPublished de novo (ex: 2ª publicação) precisa continuar
+      // funcionando com o snapshot já existente (rename sobrescrevendo).
+      await repo.setFavorite(
+        (await repo.listEntries()).single.id,
+        true,
+      );
+      final secondBlob = await repo.readRawBlob();
+      await repo.markPublished(await repo.currentVersion(), secondBlob);
+
+      expect(await File('$vaultPath.published').exists(), isTrue);
+      expect(await File('$vaultPath.published.tmp').exists(), isFalse);
+      expect(await repo.pendingChanges(), 0);
+    });
+  });
 }

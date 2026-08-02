@@ -848,11 +848,23 @@ class VaultRepository {
     return _parseVaultJson(json);
   }
 
+  // Escreve `data` num arquivo temporário no mesmo diretório e troca pro
+  // destino com `rename` (atômico no mesmo filesystem) — mirror de
+  // `write_file_atomic` (desktop/src-tauri/src/vault.rs). Achado #8 do
+  // /code-review (Sessão 140): uma escrita direta interrompida por crash/
+  // disco cheio no meio do snapshot deixava `vault.published.enc` truncado/
+  // corrompido, o que faz `_loadPublishedSnapshot` lançar na próxima leitura.
+  Future<void> _writeFileAtomic(String path, Uint8List data) async {
+    final tmpPath = '$path.tmp';
+    await File(tmpPath).writeAsBytes(data);
+    await File(tmpPath).rename(path);
+  }
+
   Future<void> _savePublishedSnapshot(_VaultData data) async {
     final json = _serializeVaultData(data);
     final blob = await _cipherService.encrypt(json);
     final path = await _publishedSnapshotPath();
-    await File(path).writeAsBytes(blob);
+    await _writeFileAtomic(path, blob);
   }
 
   // Conta mudanças reais de conteúdo entre o vault atual e o último snapshot
@@ -925,6 +937,18 @@ class VaultRepository {
       profileNames: parsed.profileNames,
       devicePermissions: parsed.devicePermissions,
     );
+    // Achado #8 do /code-review (Sessão 140), mirror do Desktop
+    // (vault.rs::mark_published): o snapshot vai primeiro, de propósito.
+    // `pendingChanges()` sempre prefere o snapshot quando ele existe (as
+    // chaves de storage só são olhadas como fallback pra vaults sem
+    // snapshot ainda) — se o app morrer entre as duas escritas, gravar o
+    // snapshot primeiro garante que o diff por entrada já reflete a
+    // publicação real mesmo com as chaves ainda desatualizadas (que nesse
+    // ponto já são irrelevantes, o snapshot ganha). Na ordem antiga
+    // (storage primeiro), o mesmo crash deixava pendingChanges() comparando
+    // contra um snapshot velho e superestimando o que ainda faltava
+    // publicar.
+    await _savePublishedSnapshot(data);
     await _storage.write(
       key: _publishedVersionKey,
       value: version.toString(),
@@ -933,7 +957,6 @@ class VaultRepository {
       key: _publishedContentHashKey,
       value: _contentSignature(data),
     );
-    await _savePublishedSnapshot(data);
   }
 
   // Quantas mudanças de conteúdo o vault local tem em relação ao último
@@ -944,11 +967,32 @@ class VaultRepository {
     if (snapshot != null) {
       return _diffCount(data, snapshot);
     }
-    // Fallback pra vaults publicados antes da Sessão 139 (sem snapshot local
-    // ainda) — mesmo comportamento de antes, até a próxima publicação gravar
-    // um snapshot novo e este branch nunca mais rodar pra esse vault.
     final lastHash = await _storage.read(key: _publishedContentHashKey);
-    if (lastHash != null && lastHash == _contentSignature(data)) {
+    if (lastHash == null) {
+      // Achado #1 do /code-review (Sessão 140), mirror do Desktop
+      // (vault.rs::pending_changes_from): nunca publicado, nem no esquema
+      // antigo — não existe baseline nenhum, então `data.version` cru
+      // reproduzia o mesmo bug que `_diffCount` (Sessão 139) já tinha
+      // corrigido pro caso "já publicado ao menos uma vez": version é
+      // monotônica e não cancela um toggle (favoritar+desfavoritar, por
+      // exemplo) antes do primeiro publish. O baseline correto pra "nunca
+      // publicado" é um vault vazio.
+      return _diffCount(data, const _VaultData(version: 0, entries: []));
+    }
+    if (lastHash == _contentSignature(data)) {
+      // Achado #4 do /code-review (Sessão 140), mirror do Desktop: sem
+      // isto, este branch podia nunca migrar pro esquema novo até o
+      // próximo publish de verdade — toda chamada repetia o mesmo fallback
+      // impreciso indefinidamente. O conteúdo atual bate byte a byte com o
+      // que foi publicado da última vez, então já sabemos exatamente o que
+      // gravar como snapshot — migra na hora. Best-effort: uma falha de
+      // escrita aqui não pode quebrar uma leitura que já tem a resposta
+      // certa (0).
+      try {
+        await _savePublishedSnapshot(data);
+      } catch (_) {
+        // ignora — não impede a leitura, que já tem a resposta certa
+      }
       return 0;
     }
     final raw = await _storage.read(key: _publishedVersionKey);
