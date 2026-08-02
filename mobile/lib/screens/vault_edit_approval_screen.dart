@@ -146,6 +146,26 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
     unawaited(_receiveContent());
   }
 
+  // Achado #7 do /code-review (Sessão 140): sem isto, o canal perdedor da
+  // corrida LAN vs dead-drop (_receiveViaAnyChannel) continuava rodando
+  // depois da tela fechar — se o dead-drop vencesse, o listener LAN ficava
+  // ligado (porta ocupada) até seu próprio timeout; se a LAN vencesse, o
+  // `pollUntil` do dead-drop continuava batendo no gateway público a cada
+  // ~15s pelo TTL da sessão inteiro. `_disposed` corta o polling do
+  // dead-drop na próxima checagem; `_lanServer.stop()` libera a porta na
+  // hora (não cancela o `Future` pendente de `receiveOnce` em si — ele seria
+  // resolvido pelo próprio timeout interno de qualquer forma — mas devolve
+  // a porta pro sistema, que é o efeito colateral real observado no achado
+  // #3: 5 portas candidatas presas por telas antigas nunca liberadas).
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    unawaited(_lanServer.stop());
+    super.dispose();
+  }
+
   _Status? _validatePayload() {
     final v = widget.payload['v'];
     if (v != 1) {
@@ -253,13 +273,25 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
       if (pending == 0) completer.complete(null);
     }
 
+    // Achado #3 do /code-review (Sessão 140): sem `.catchError`, uma exceção
+    // de qualquer um dos dois lados (ex: `StateError` do `_lanServer` quando
+    // as 5 portas candidatas já estão todas ligadas por outra tela) nunca
+    // chamava `handle` — `pending` ficava travado em 1 pra sempre e, se o
+    // outro canal também desse `null`, `completer.future` nunca resolvia
+    // (spinner "receiving" infinito, sem erro visível). Trata uma exceção
+    // igual a um resultado `null` — "esse canal não entregou", mesmo
+    // contrato de um timeout limpo.
     unawaited(
       _lanServer
           .receiveOnce(sessionId: _sessionId!, expiresAt: _expiresAt!)
-          .then(handle),
+          .then(handle)
+          .catchError((_) => handle(null)),
     );
     unawaited(
-      _deadDropPollingService.pollUntil(_sessionId!, _expiresAt!).then(handle),
+      _deadDropPollingService
+          .pollUntil(_sessionId!, _expiresAt!, isCancelled: () => _disposed)
+          .then(handle)
+          .catchError((_) => handle(null)),
     );
 
     return completer.future;

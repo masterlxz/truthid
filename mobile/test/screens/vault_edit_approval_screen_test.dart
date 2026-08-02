@@ -82,13 +82,21 @@ void main() {
     mockBlockchain = MockBlockchainService();
     mockPublishService = MockVaultPublishService();
 
+    // `dispose()` (achado #7) chama `_lanServer.stop()` incondicionalmente
+    // em toda desmontagem da tela — inclusive a que o próprio binding de
+    // teste faz entre um `testWidgets` e o outro. Precisa de stub global
+    // (não só nos testes que checam o comportamento de dispose de propósito),
+    // senão qualquer teste quebra com "Null is not a subtype of Future<void>"
+    // (mocktail: método sem stub configurado devolve null por padrão).
+    when(() => mockLanServer.stop()).thenAnswer((_) async {});
+
     // Por padrão o dead-drop nunca acha nada (resolve `null` de cara) — os
     // testes que exercitam a fase 1 (recebimento) continuam controlando o
     // resultado via `mockLanServer`, como já faziam antes deste canal
     // existir. Precisa resolver (não travar pra sempre) pro cenário de
     // timeout continuar funcionando: `_receiveViaAnyChannel` só decide
     // "nada chegou" quando os DOIS canais dizem `null`.
-    when(() => mockDeadDropPollingService.pollUntil(any(), any()))
+    when(() => mockDeadDropPollingService.pollUntil(any(), any(), isCancelled: any(named: 'isCancelled')))
         .thenAnswer((_) async => null);
 
     when(() => mockStorage.getPairedIdentityId())
@@ -276,7 +284,7 @@ void main() {
             sessionId: any(named: 'sessionId'),
             expiresAt: any(named: 'expiresAt'),
           )).thenAnswer((_) => Completer<Uint8List?>().future);
-      when(() => mockDeadDropPollingService.pollUntil(any(), any()))
+      when(() => mockDeadDropPollingService.pollUntil(any(), any(), isCancelled: any(named: 'isCancelled')))
           .thenAnswer((_) async => encrypted);
 
       await pumpAndOpen(tester, validPayload());
@@ -284,6 +292,88 @@ void main() {
       expect(find.text('TruthID Extension wants to save a new credential'),
           findsOneWidget);
       expect(find.text('example.com'), findsOneWidget);
+    });
+
+    testWidgets(
+        'achado #7 do /code-review (S140): sair da tela libera a porta LAN '
+        'e cancela o polling do dead-drop', (tester) async {
+      bool Function()? capturedIsCancelled;
+      when(() => mockLanServer.receiveOnce(
+            sessionId: any(named: 'sessionId'),
+            expiresAt: any(named: 'expiresAt'),
+          )).thenAnswer((_) => Completer<Uint8List?>().future);
+      when(() => mockLanServer.stop()).thenAnswer((_) async {});
+      when(() => mockDeadDropPollingService.pollUntil(any(), any(),
+              isCancelled: any(named: 'isCancelled')))
+          .thenAnswer((invocation) {
+        capturedIsCancelled = invocation.namedArguments[#isCancelled]
+            as bool Function()?;
+        return Completer<Uint8List?>().future;
+      });
+
+      // Não usa pumpAndOpen/pumpAndSettle aqui de propósito: a tela fica
+      // travada em receivingContent (os dois canais nunca resolvem, por
+      // desenho deste teste) — o `CircularProgressIndicator` indeterminado
+      // dessa tela nunca "assenta", então `pumpAndSettle()` nunca convergiria
+      // e o teste travaria. `pump()`/`pump(duration)` bastam pra abrir a
+      // rota e completar a transição de push/pop sem esperar o spinner parar.
+      await tester.pumpWidget(buildScreen(validPayload()));
+      await tester.tap(find.text('Home'));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(capturedIsCancelled, isNotNull);
+      expect(capturedIsCancelled!(), isFalse);
+
+      await tester.pageBack();
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+
+      verify(() => mockLanServer.stop()).called(1);
+      expect(capturedIsCancelled!(), isTrue);
+    });
+
+    testWidgets(
+        'achado #3 do /code-review (S140): LAN lançando exceção não trava '
+        'pra sempre — dead-drop ainda entrega', (tester) async {
+      final encrypted = await encryptProposal({
+        'id': 'proposal-1',
+        'site': 'example.com',
+        'url': 'https://example.com',
+        'username': 'alice',
+        'password': 'hunter2',
+        'notes': '',
+        'createdAtMs': 0,
+      });
+      // Mesmo StateError real que `RemoteSignerLanServer.receiveOnce` lança
+      // quando as 5 portas candidatas já estão todas ligadas por outra tela.
+      when(() => mockLanServer.receiveOnce(
+            sessionId: any(named: 'sessionId'),
+            expiresAt: any(named: 'expiresAt'),
+          )).thenAnswer((_) async => throw StateError('nenhuma porta disponível'));
+      when(() => mockDeadDropPollingService.pollUntil(any(), any(), isCancelled: any(named: 'isCancelled')))
+          .thenAnswer((_) async => encrypted);
+
+      await pumpAndOpen(tester, validPayload());
+
+      expect(find.text('TruthID Extension wants to save a new credential'),
+          findsOneWidget);
+    });
+
+    testWidgets(
+        'achado #3 do /code-review (S140): LAN lançando exceção e dead-drop '
+        'dando null resolve como timeout, não trava pra sempre',
+        (tester) async {
+      when(() => mockLanServer.receiveOnce(
+            sessionId: any(named: 'sessionId'),
+            expiresAt: any(named: 'expiresAt'),
+          )).thenAnswer((_) async => throw StateError('nenhuma porta disponível'));
+      when(() => mockDeadDropPollingService.pollUntil(any(), any(), isCancelled: any(named: 'isCancelled')))
+          .thenAnswer((_) async => null);
+
+      await pumpAndOpen(tester, validPayload());
+
+      expect(find.text('Nothing arrived'), findsOneWidget);
     });
 
     testWidgets('conteúdo cifrado com sessionId errado mostra erro',

@@ -58,10 +58,22 @@ class VaultEditDeadDropPollingService {
   /// está esperando o QR), então não precisa do mecanismo de
   /// `chrome.alarms` que a extensão usa só pra sobreviver popup fechado/
   /// service worker suspenso.
-  Future<Uint8List?> pollUntil(String sessionIdHex, DateTime expiresAt) async {
+  ///
+  /// [isCancelled], se passado, é checado antes de cada tentativa e depois
+  /// de cada espera — achado #7 do /code-review (Sessão 140): sem isto, o
+  /// canal perdedor de uma corrida contra o LAN (`VaultEditApprovalScreen`)
+  /// continuava batendo no gateway público a cada [pollInterval] até
+  /// [expiresAt] mesmo depois da tela fechar, sem nenhum jeito de parar.
+  Future<Uint8List?> pollUntil(
+    String sessionIdHex,
+    DateTime expiresAt, {
+    bool Function()? isCancelled,
+  }) async {
     while (DateTime.now().isBefore(expiresAt)) {
+      if (isCancelled?.call() ?? false) return null;
       final result = await tryFetch(sessionIdHex);
       if (result != null) return result;
+      if (isCancelled?.call() ?? false) return null;
 
       final remaining = expiresAt.difference(DateTime.now());
       if (remaining <= Duration.zero) break;

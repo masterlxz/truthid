@@ -133,5 +133,43 @@ void main() {
 
       await server.close(force: true);
     });
+
+    test(
+        'achado #7 do /code-review (S140): isCancelled interrompe o '
+        'polling antes de expirar', () async {
+      var requestCount = 0;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((request) async {
+        requestCount++;
+        request.response.statusCode = 500;
+        await request.response.close();
+      });
+
+      final service = VaultEditDeadDropPollingService(
+        gatewayUrl: 'http://${server.address.address}:${server.port}',
+        pollInterval: const Duration(milliseconds: 20),
+      );
+
+      var cancelled = false;
+      Future<void>.delayed(const Duration(milliseconds: 50), () {
+        cancelled = true;
+      });
+
+      final result = await service.pollUntil(
+        sessionIdHex,
+        // TTL bem maior que a janela de cancelamento — se isCancelled
+        // fosse ignorado, o poll continuaria até aqui em vez de parar cedo.
+        DateTime.now().add(const Duration(seconds: 5)),
+        isCancelled: () => cancelled,
+      );
+
+      expect(result, isNull);
+      // Não é uma contagem exata (depende de timing), só confirma que parou
+      // bem antes do TTL de 5s — a maior parte das ~250 tentativas possíveis
+      // nesse intervalo nunca aconteceu.
+      expect(requestCount, lessThan(10));
+
+      await server.close(force: true);
+    });
   });
 }
