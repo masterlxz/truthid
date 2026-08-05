@@ -517,6 +517,118 @@ qualidade técnica e visão; doações diretas, mantidas como complemento de bai
 
 ---
 
+### Migração de storage (Filebase/Pinata → Storacha) + Tier facilitado (pago) — desenho completo
+(registrado 2026-08-05, Sessão 184)
+
+**Fonte**: `truthid-storacha-tier-facilitado.md` (raiz do repo), substitui o rascunho anterior
+`migracao-storacha.md`. Continuação direta do brainstorm de Monetização acima — este documento
+destrava o item 7 do roadmap de prioridade (ver `PENDING.md`/histórico de sessões: itens 1-6 pós-
+Fase 14 fechados na Sessão 129) com decisões concretas, mas **nada foi implementado ainda** — só
+desenho. Duas frentes independentes, ambas dependendo da mesma base `DeviceRegistry`/
+`SessionRegistry`. **Instrução do dono do projeto**: antes de codar, estudar a doc oficial da
+Storacha/SDK `w3up`/auth UCAN vigentes e perguntar antes de assumir decisão de arquitetura.
+
+**Épico 1 — migração de storage.** Decisão: sair completamente de Filebase/Pinata e migrar pra
+**Storacha** (ex-web3.storage), que faz deals reais na rede Filecoin com múltiplos storage
+providers via SDK `w3up` (cliente calcula CID localmente, empacota em CAR file, sobe — se a
+Storacha como empresa sumir, os deals Filecoin já feitos continuam existindo com os storage
+providers). Self-hosting puro (nó IPFS no homelab) descartado por ora — trocaria dependência de
+terceiro por single point of failure do próprio dono do projeto + trabalho operacional que não
+compensa no estágio atual; pode voltar depois como redundância extra, nunca como espinha dorsal.
+Billing da Storacha é por conta única (sem billing nativo por usuário final) — decisão: manter
+conta única do TruthID + construir camada de metering interna (rastrear uso por usuário) em vez de
+cada usuário abrir conta própria na Storacha (fricção de cadastro de cartão em serviço terceiro).
+Escopo: (1) trocar client de upload pelo `w3up` no fluxo de escrita do Vault; (2) validar latência
+real do gateway de retrieval da Storacha; (3) migrar CIDs já commitados on-chain pra também
+ficarem persistidos via Storacha, sem alterar CID nem contrato; (4) double-write temporário
+(Filebase/Pinata + Storacha em paralelo) até reads via Storacha ficarem 100% confiáveis, só então
+cortar os antigos; (5) validar custo real considerando que vault entries são arquivos pequenos
+(KBs) — avaliar batching. Pinning continua tendo que acontecer antes da assinatura do commit do
+CID on-chain — isso não muda.
+
+**Perguntas em aberto que o documento original deixou pro Claude Code investigar antes de
+implementar**: forma de autenticação/identidade da Storacha hoje (UCAN, DID, API key?) e como
+integra com a identidade que o usuário já tem no TruthID; granularidade de cobrança/free tier
+atual e como escala com número de usuários e frequência de writes pequenos; onde exatamente no
+código atual (Tauri/Rust desktop, extensão) a chamada de API do Filebase/Pinata acontece, pra
+mapear o escopo real da troca.
+
+**Épico 2 — tier facilitado (pago), opt-in.** Princípio: core continua 100% self-sovereign e
+grátis, cancelar o tier pago nunca quebra o core (vault continua acessível). Só entra no tier pago
+o que exige custo/envolvimento contínuo do dono do projeto (servidor, gas sponsorship, custódia
+temporária no bootstrap) — UX que roda 100% no client fica grátis pra sempre. Peças:
+- **2.1 Onboarding sem Ledger** — "celular como Ledger": chave gerada localmente no device,
+  protegida por passkey (WebAuthn PRF)/biometria no secure enclave, nunca trafega em claro nem vai
+  pro servidor do dono do projeto; servidor só paga o gas do deploy da smart account via
+  Paymaster, usando só o endereço público. Trade-off a documentar na UI: não é air-gapped como
+  Ledger.
+- **2.2 Gas sponsorship** — usuária paga por Pix/cartão, dono do projeto mantém pool de ETH na
+  Base, Paymaster consulta assinatura ativa antes de sponsorizar. Proteções obrigatórias desde o
+  MVP: rate limit de UserOps/dia/mês, cap de gas por transação, log de reconciliação custo real vs.
+  cobrado. Risco não-técnico: receber fiat de terceiros e converter pra cripto por conta deles pode
+  se aproximar de money transmission dependendo de jurisdição/volume — mapear antes de escalar.
+- **2.3 Backup em nuvem opcional** — backup local já é independente; cancelar só remove a cópia
+  extra, com grace period de retenção antes de apagar e path de "mover pro seu storage" oferecido
+  antes de expirar.
+- **2.4 Transição sponsorship → self-funded** — aviso proativo antes de expirar + on-ramp
+  integrado (Coinbase Onramp/Transak) pra depositar ETH na Base sem sair pra exchange externa;
+  nunca deixar transação falhar silenciosamente por falta de gas.
+- **2.5 Rotação de device genérica** — celular↔celular, celular↔Ledger é sempre a mesma operação,
+  já que a identidade gira em torno do endereço da smart account + `DeviceRegistry`, não da chave
+  que assina: novo device registrado (autorizado pelo antigo) → gera chave própria → handoff
+  deliberado com confirmação explícita + possível timelock antes de promover a signer primário →
+  antigo revogado ou mantido como secundário, à escolha da usuária. Nenhum CID muda.
+- **2.6 Recovery por perda de device** — reaproveita 100% o guardian recovery M-of-N já
+  implementado (Fase 16, `SessionRegistry`/`DeviceRegistry`); dono do projeto pode ser guardião
+  opcional no tier pago pra quem não tem outros guardiões configurados.
+- **2.7 PROBLEMA EM ABERTO, único ponto que exige contrato novo — guardian-on-cancel**: quando
+  alguém com o dono do projeto como guardião M-of-N cancela o tier pago, precisa de evento
+  on-chain que (a) remova ativamente o dono do projeto do guardian set via
+  `DeviceRegistry`/`SessionRegistry`, (b) dispare notificação in-app clara ("guardião X saiu,
+  escolha outro ou continue com M-1 de N"). Sem isso, usuário fica com guardião "morto" no quórum
+  sem saber, descoberto só na hora real de recuperar — pior momento possível. Sem desenho de
+  contrato feito ainda.
+
+**Resumo do que exige desenho/código novo**: camada de metering Storacha por usuário, bootstrap
+sem Ledger, backend de sponsorship (rate limit + cap + verificação de assinatura), evento de
+guardian-on-cancel, UX de aviso + on-ramp. **O resto é composição do que já existe**: rotação de
+device (`DeviceRegistry`), recovery (guardian recovery da Fase 16), backup em nuvem (mesma
+criptografia E2E já existente, só muda o destino do upload).
+
+**Nada implementado — documento é plano, ainda vai ser debatido com o dono do projeto antes de
+qualquer `/plan` ou código.**
+
+**Discussão logo após o registro (mesma Sessão 184) — 3 pontos de risco levantados e a resposta do
+dono do projeto a cada um:**
+
+1. **Risco regulatório do 2.2 (money transmission)** é o maior risco não-técnico do documento
+   inteiro, agravado pelo dono do projeto ser menor de idade — mapear isso vem antes de construir
+   o backend de sponsorship, não em paralelo. Dono do projeto confirmou o ponto ("beleza"), sem
+   mudança de plano ainda — fica registrado como prioridade de pesquisa antes do 2.2 virar código.
+
+2. **Mecanismo de "Paymaster consulta assinatura ativa" (2.2) precisa decidir fail-open vs.
+   fail-closed** quando o backend de sponsorship cair ou a assinatura expirar. **Resposta do dono
+   do projeto, que resolve a dúvida**: o software continua 100% usável sem o plano — quem tem ETH
+   próprio depositado na smart account sempre pode pagar o próprio gas (caminho self-funded da
+   Fase 14, já implementado e grátis pra sempre). Isso torna **fail-closed seguro por padrão**: se
+   a sponsorship falhar, a pior consequência é "essa transação específica não foi patrocinada", não
+   "vault inacessível". **Ressalva a manter no design**: quem entrou justamente pelo onboarding sem
+   Ledger (2.1) pode não ter ETH nenhum depositado — pra essa pessoa, cair pro self-funded não é
+   imediato, precisa primeiro passar pelo on-ramp do 2.4. A UX de "nunca deixar transação falhar
+   silenciosamente por falta de gas" (já prevista no 2.4 pra expiração planejada) deve valer
+   **também** pra qualquer falha de sponsorship não-planejada (backend fora do ar, rate limit
+   estourado, etc.), não só pro caso de expiração.
+
+3. **Risco de vendor lock-in na Storacha (Épico 1)**: dono do projeto confirmou que não é um risco
+   real da forma que foi levantado — como o `VaultRegistry` só guarda o CID on-chain e nunca sabe
+   quem serve o conteúdo, trocar de Storacha pra outro provider no futuro (outro serviço, deal
+   Filecoin direto, self-host) é só trocar o client de upload/leitura, **sem tocar em contrato nem
+   migrar nenhum CID existente**. Confirma o desenho original do documento (`VaultRegistry`
+   storage-agnostic por design) — não é uma mudança de plano, é uma confirmação de que o risco já
+   estava mitigado pela arquitetura.
+
+---
+
 ### Interface e identidade visual (UI/UX)
 
 **Quando**: após Fase 4 (Mobile App completo) — pode ser uma Fase 5.5 intercalada com SDKs, ou uma Fase 8 dedicada pós-lançamento. A definir pelo dono do projeto.
