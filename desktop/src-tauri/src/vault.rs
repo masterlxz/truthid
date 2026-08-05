@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use crate::{derive_vault_key_legacy, get_vault_key};
+use crate::{derive_vault_key_legacy, get_vault_key, set_vault_key};
 
 // ---------------------------------------------------------------------------
 // Tipos de dados
@@ -564,9 +564,11 @@ pub(crate) fn save(vault: &Vault) -> Result<(), String> {
 // Cifra / decifra — formato: nonce(12) || ciphertext+tag(n+16)
 // ---------------------------------------------------------------------------
 
-pub(crate) fn encrypt(plaintext: &[u8]) -> Result<Vec<u8>, String> {
-    let key_bytes = get_vault_key()?;
-    let key = Key::<Aes256Gcm>::from_slice(&key_bytes);
+// Núcleo puro (sem keyring) — extraído pra rotação de DEK poder cifrar sob
+// uma chave que ainda não é a ativa, e pra ser testável sem tocar em
+// keyring/filesystem (mesmo motivo de encrypt_bytes_for_device em lib.rs).
+fn encrypt_with_key(plaintext: &[u8], key_bytes: &[u8; 32]) -> Result<Vec<u8>, String> {
+    let key = Key::<Aes256Gcm>::from_slice(key_bytes);
     let cipher = Aes256Gcm::new(key);
 
     let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
@@ -580,18 +582,99 @@ pub(crate) fn encrypt(plaintext: &[u8]) -> Result<Vec<u8>, String> {
     Ok(blob)
 }
 
-pub(crate) fn decrypt(blob: &[u8]) -> Result<Vec<u8>, String> {
+fn decrypt_with_key(blob: &[u8], key_bytes: &[u8; 32]) -> Result<Vec<u8>, String> {
     if blob.len() < 28 {
         return Err("vault blob too short".to_string());
     }
-    let key_bytes = get_vault_key()?;
-    let key = Key::<Aes256Gcm>::from_slice(&key_bytes);
+    let key = Key::<Aes256Gcm>::from_slice(key_bytes);
     let cipher = Aes256Gcm::new(key);
 
     let nonce = Nonce::from_slice(&blob[..12]);
     cipher
         .decrypt(nonce, &blob[12..])
         .map_err(|_| "vault decrypt failed — blob corrupted or wrong key".to_string())
+}
+
+pub(crate) fn encrypt(plaintext: &[u8]) -> Result<Vec<u8>, String> {
+    encrypt_with_key(plaintext, &get_vault_key()?)
+}
+
+pub(crate) fn decrypt(blob: &[u8]) -> Result<Vec<u8>, String> {
+    decrypt_with_key(blob, &get_vault_key()?)
+}
+
+// ---------------------------------------------------------------------------
+// Rotação de DEK — chamada a partir de uma revogação de device (lib.rs)
+// ---------------------------------------------------------------------------
+
+/// Gera uma DEK nova (32 bytes aleatórios), pra rotação. Só gera — não troca
+/// a chave ativa nem re-cifra nada (isso é `rotate_vault_key`, que recebe o
+/// resultado desta função como parâmetro).
+pub(crate) fn generate_vault_key() -> [u8; 32] {
+    let mut key = [0u8; 32];
+    rand::rngs::OsRng.fill_bytes(&mut key);
+    key
+}
+
+/// Núcleo puro da rotação: recebe o vault já carregado (campos de cartão em
+/// claro, como `load()` sempre devolve) e os documentos já decifrados,
+/// devolve os bytes já cifrados sob a chave nova — vault.enc pronto pra
+/// gravar e cada documento pronto pra gravar. Não toca em keyring nem
+/// filesystem, só transforma bytes — testável sem tocar no vault de verdade
+/// em disco (mesmo motivo de `vault_with_encrypted_card_fields` ser pura).
+fn rotate_vault_key_bytes(
+    vault: &Vault,
+    documents: &[(String, Vec<u8>)],
+    new_key: &[u8; 32],
+) -> Result<(Vec<u8>, Vec<(String, Vec<u8>)>), String> {
+    let for_disk = vault_with_encrypted_card_fields_with_key(vault, new_key)?;
+    let json = serde_json::to_vec(&for_disk).map_err(|e| e.to_string())?;
+    let vault_blob = encrypt_with_key(&json, new_key)?;
+
+    let mut new_documents = Vec::with_capacity(documents.len());
+    for (entry_id, plaintext) in documents {
+        new_documents.push((entry_id.clone(), encrypt_with_key(plaintext, new_key)?));
+    }
+
+    Ok((vault_blob, new_documents))
+}
+
+/// Gera uma DEK nova e re-cifra tudo que hoje usa `get_vault_key()` sob ela:
+/// o vault principal, campos de cartão e cada blob de documento por
+/// entrada. Não publica nada on-chain nem distribui a chave pra outros
+/// devices — isso é responsabilidade de quem chama (ver `lib.rs`, disparado
+/// depois de uma `revokeDevice` bem-sucedida).
+///
+/// Ordem importa: lê e decifra tudo com a chave ATUAL (`load()`/`decrypt()`,
+/// que usam `get_vault_key()`) e só troca a chave ativa (`set_vault_key`)
+/// depois que a transformação pura (`rotate_vault_key_bytes`) já calculou os
+/// bytes novos — trocar cedo demais faria qualquer leitura concorrente da
+/// chave tentar decifrar dados antigos com a chave nova.
+pub(crate) fn rotate_vault_key(new_key: &[u8; 32]) -> Result<(), String> {
+    let vault = load()?; // decifra vault + campos de cartão com a chave atual
+
+    let mut documents: Vec<(String, Vec<u8>)> = Vec::new();
+    for entry in &vault.entries {
+        if entry.document.is_some() {
+            if let Some(blob) = read_document_blob(&entry.id)? {
+                documents.push((entry.id.clone(), decrypt(&blob)?));
+            }
+        }
+    }
+
+    let (vault_blob, new_documents) = rotate_vault_key_bytes(&vault, &documents, new_key)?;
+
+    set_vault_key(new_key)?;
+
+    let path = vault_path()?;
+    crate::config::write_file(&path, &vault_blob)?;
+
+    for (entry_id, blob) in new_documents {
+        let doc_path = document_path(&entry_id)?;
+        crate::config::write_file(&doc_path, &blob)?;
+    }
+
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------
@@ -611,6 +694,13 @@ pub(crate) fn decrypt(blob: &[u8]) -> Result<Vec<u8>, String> {
 fn encrypt_card_field(value: &str) -> Result<String, String> {
     use base64::{engine::general_purpose::STANDARD, Engine as _};
     Ok(STANDARD.encode(encrypt(value.as_bytes())?))
+}
+
+// Variante pura (chave explícita) — usada pela rotação de DEK pra cifrar sob
+// a chave nova antes dela virar a chave ativa.
+fn encrypt_card_field_with_key(value: &str, key: &[u8; 32]) -> Result<String, String> {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    Ok(STANDARD.encode(encrypt_with_key(value.as_bytes(), key)?))
 }
 
 /// Tenta decifrar um campo individualmente cifrado. Se falhar por qualquer
@@ -653,6 +743,18 @@ pub(crate) fn vault_with_encrypted_card_fields(vault: &Vault) -> Result<Vault, S
         if let Some(card) = &mut entry.credit_card {
             card.card_number = encrypt_card_field(&card.card_number)?;
             card.cvv = encrypt_card_field(&card.cvv)?;
+        }
+    }
+    Ok(copy)
+}
+
+// Variante pura (chave explícita) — mesmo motivo de encrypt_card_field_with_key.
+fn vault_with_encrypted_card_fields_with_key(vault: &Vault, key: &[u8; 32]) -> Result<Vault, String> {
+    let mut copy = vault.clone();
+    for entry in &mut copy.entries {
+        if let Some(card) = &mut entry.credit_card {
+            card.card_number = encrypt_card_field_with_key(&card.card_number, key)?;
+            card.cvv = encrypt_card_field_with_key(&card.cvv, key)?;
         }
     }
     Ok(copy)
@@ -960,6 +1062,71 @@ mod tests {
     #[test]
     fn blob_too_short_fails() {
         assert!(decrypt(&[0u8; 10]).is_err());
+    }
+
+    // --- testes de rotação de DEK (núcleo puro, sem tocar em disco/keyring
+    // real — rotate_vault_key_bytes existe justamente pra isso ser possível.
+    // rotate_vault_key em si, que chama load()/save() de verdade, não é
+    // testada aqui de propósito: tocaria o vault real do dev machine, mesma
+    // razão de load()/save() não terem teste unitário direto hoje) ---
+
+    #[test]
+    fn rotate_vault_key_bytes_new_key_decrypts_to_same_vault() {
+        let mut vault = Vault::default();
+        vault.entries.push(make_entry("id1", "github.com"));
+        let old_key = [1u8; 32];
+        let new_key = [2u8; 32];
+
+        let (vault_blob, _docs) = rotate_vault_key_bytes(&vault, &[], &new_key).unwrap();
+
+        let plain = decrypt_with_key(&vault_blob, &new_key).unwrap();
+        let roundtripped: Vault = serde_json::from_slice(&plain).unwrap();
+        assert_eq!(roundtripped.entries.len(), 1);
+        assert_eq!(roundtripped.entries[0].site, "github.com");
+
+        // A chave antiga não decifra mais o blob novo.
+        assert!(decrypt_with_key(&vault_blob, &old_key).is_err());
+    }
+
+    #[test]
+    fn rotate_vault_key_bytes_reencrypts_documents() {
+        let vault = Vault::default();
+        let new_key = [3u8; 32];
+        let documents = vec![("doc1".to_string(), b"conteudo do documento".to_vec())];
+
+        let (_vault_blob, new_documents) =
+            rotate_vault_key_bytes(&vault, &documents, &new_key).unwrap();
+
+        assert_eq!(new_documents.len(), 1);
+        assert_eq!(new_documents[0].0, "doc1");
+        let plain = decrypt_with_key(&new_documents[0].1, &new_key).unwrap();
+        assert_eq!(plain, b"conteudo do documento");
+    }
+
+    #[test]
+    fn rotate_vault_key_bytes_reencrypts_card_fields_under_new_key() {
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+
+        let mut vault = Vault::default();
+        vault.entries.push(make_credit_card_entry("id1"));
+        let new_key = [4u8; 32];
+
+        let (vault_blob, _docs) = rotate_vault_key_bytes(&vault, &[], &new_key).unwrap();
+
+        let plain = decrypt_with_key(&vault_blob, &new_key).unwrap();
+        let roundtripped: Vault = serde_json::from_slice(&plain).unwrap();
+        let stored_number = &roundtripped.entries[0].credit_card.as_ref().unwrap().card_number;
+        // No disco, card_number fica cifrado individualmente sob a chave
+        // nova — não em claro.
+        assert_ne!(stored_number, "4111111111111111");
+
+        // E decifra de volta corretamente só com a chave nova (não com
+        // qualquer outra) — prova que a rotação também cobriu os campos de
+        // cartão, não só o corpo principal do vault.
+        let field_blob = STANDARD.decode(stored_number).unwrap();
+        let field_plain = decrypt_with_key(&field_blob, &new_key).unwrap();
+        assert_eq!(String::from_utf8(field_plain).unwrap(), "4111111111111111");
+        assert!(decrypt_with_key(&field_blob, &[9u8; 32]).is_err());
     }
 
     // --- testes de CRUD in-memory (13.4) ---

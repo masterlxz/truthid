@@ -643,6 +643,77 @@ contract DeviceRegistryTest is Test, IdentityConsentHelper {
         deviceRegistry.registerDevice(devicePubKey, label, SALT, encryptedVaultKey);
     }
 
+    // -----------------------------------------------------------------
+    // updateDeviceVaultKey — rotação de DEK
+    // -----------------------------------------------------------------
+
+    function test_UpdateDeviceVaultKey_Success() public {
+        bytes memory oldKey = hex"aabbccdd";
+        bytes memory newKey = hex"11223344";
+        _registerDevice(alice, aliceDevice1, "iPhone 15 Pro", oldKey);
+
+        vm.prank(alice);
+        deviceRegistry.updateDeviceVaultKey(aliceDevice1, newKey);
+
+        assertEq(deviceRegistry.deviceVaultKeys(aliceDevice1), newKey);
+    }
+
+    function test_UpdateDeviceVaultKey_EmitsEvent() public {
+        _registerDevice(alice, aliceDevice1, "iPhone 15 Pro", hex"aabb");
+
+        vm.prank(alice);
+        vm.expectEmit(true, true, false, false);
+        emit DeviceRegistry.DeviceVaultKeyUpdated(1, aliceDevice1);
+        deviceRegistry.updateDeviceVaultKey(aliceDevice1, hex"ccdd");
+    }
+
+    function test_UpdateDeviceVaultKey_DoesNotAffectOtherDevices() public {
+        bytes memory key1 = hex"aabb";
+        bytes memory key2 = hex"ccdd";
+        _registerDevice(alice, aliceDevice1, "iPhone 15 Pro", key1);
+        _registerDevice(alice, aliceDevice2, "MacBook Pro", key2);
+
+        vm.prank(alice);
+        deviceRegistry.updateDeviceVaultKey(aliceDevice1, hex"eeff");
+
+        assertEq(deviceRegistry.deviceVaultKeys(aliceDevice1), hex"eeff");
+        assertEq(deviceRegistry.deviceVaultKeys(aliceDevice2), key2);
+    }
+
+    function test_Revert_UpdateDeviceVaultKey_NotFound() public {
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(DeviceRegistry.DeviceNotFound.selector, aliceDevice1));
+        deviceRegistry.updateDeviceVaultKey(aliceDevice1, hex"aabb");
+    }
+
+    function test_Revert_UpdateDeviceVaultKey_Revoked() public {
+        _registerDevice(alice, aliceDevice1, "iPhone 15 Pro", hex"aabb");
+
+        vm.prank(alice);
+        deviceRegistry.revokeDevice(aliceDevice1);
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(DeviceRegistry.DeviceAlreadyRevoked.selector, aliceDevice1));
+        deviceRegistry.updateDeviceVaultKey(aliceDevice1, hex"ccdd");
+    }
+
+    function test_Revert_UpdateDeviceVaultKey_NotController() public {
+        _registerDevice(alice, aliceDevice1, "iPhone 15 Pro", hex"aabb");
+
+        // Bob tenta atualizar a vault key de um device da Alice
+        vm.prank(bob);
+        vm.expectRevert(IdentityResolver.NotIdentityController.selector);
+        deviceRegistry.updateDeviceVaultKey(aliceDevice1, hex"ccdd");
+    }
+
+    function test_Revert_UpdateDeviceVaultKey_EmptyKey() public {
+        _registerDevice(alice, aliceDevice1, "iPhone 15 Pro", hex"aabb");
+
+        vm.prank(alice);
+        vm.expectRevert(DeviceRegistry.InvalidVaultKey.selector);
+        deviceRegistry.updateDeviceVaultKey(aliceDevice1, "");
+    }
+
     // -------------------------------------------------------------------------
     // C6 — Limite de devices por identidade
     // -------------------------------------------------------------------------

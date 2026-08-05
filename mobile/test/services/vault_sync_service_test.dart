@@ -15,6 +15,12 @@ import 'package:truthid_mobile/services/vault_sync_service.dart';
 
 class MockBlockchainService extends Mock implements BlockchainService {}
 
+// Fallback pra `any()`/`captureAny()` sobre parâmetro do tipo
+// BlockchainService (usado por `verifyNever(() =>
+// mockKeyService.tryRecoverFromChain(any()))`) — nunca é interagido de
+// verdade, só precisa existir pro mocktail registrar o tipo.
+class _FakeBlockchainService extends Fake implements BlockchainService {}
+
 class MockIpfsGatewayClient extends Mock implements IpfsGatewayClient {}
 
 class MockVaultKeyService extends Mock implements VaultKeyService {}
@@ -71,6 +77,7 @@ void main() {
 
   setUpAll(() {
     registerFallbackValue(BigInt.one);
+    registerFallbackValue(_FakeBlockchainService());
   });
 
   setUp(() async {
@@ -121,6 +128,40 @@ void main() {
     expect(outcome.entries, isEmpty);
     verifyNever(() => mockBlockchain.hasVault(any()));
     verifyNever(() => mockGateway.fetch(any()));
+  });
+
+  test(
+      'já tem vault key — reconsulta deviceVaultKeys pra pegar rotação de '
+      'DEK feita por outro device (achado do /plan de rotação)', () async {
+    when(() => mockKeyService.tryRecoverFromChain(mockBlockchain))
+        .thenAnswer((_) async => true);
+    when(() => mockBlockchain.hasVault(identityId))
+        .thenAnswer((_) async => false);
+
+    await syncService.sync(identityId);
+
+    verify(() => mockKeyService.tryRecoverFromChain(mockBlockchain)).called(1);
+  });
+
+  test(
+      'reconsulta de deviceVaultKeys falha (offline) — sync segue com a '
+      'chave já cacheada, não propaga o erro', () async {
+    when(() => mockKeyService.tryRecoverFromChain(mockBlockchain))
+        .thenThrow(Exception('network down'));
+    when(() => mockBlockchain.hasVault(identityId))
+        .thenAnswer((_) async => false);
+
+    final outcome = await syncService.sync(identityId);
+
+    expect(outcome.status, VaultSyncStatus.noVaultPublished);
+  });
+
+  test('sem vault key — não tenta reconsultar deviceVaultKeys', () async {
+    when(() => mockKeyService.hasVaultKey()).thenAnswer((_) async => false);
+
+    await syncService.sync(identityId);
+
+    verifyNever(() => mockKeyService.tryRecoverFromChain(any()));
   });
 
   test('hasVault == false — retorna noVaultPublished', () async {

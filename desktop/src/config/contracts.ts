@@ -127,6 +127,16 @@ export const DEVICE_REGISTRY_ABI = [
     stateMutability: "view",
   },
   {
+    type: "function",
+    name: "updateDeviceVaultKey",
+    inputs: [
+      { name: "devicePubKey", type: "address" },
+      { name: "newEncryptedVaultKey", type: "bytes" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
+  {
     type: "event",
     name: "DeviceRegistered",
     inputs: [
@@ -139,6 +149,14 @@ export const DEVICE_REGISTRY_ABI = [
   {
     type: "event",
     name: "DeviceRevoked",
+    inputs: [
+      { name: "identityId", type: "uint256", indexed: true },
+      { name: "pubKey", type: "address", indexed: true },
+    ],
+  },
+  {
+    type: "event",
+    name: "DeviceVaultKeyUpdated",
     inputs: [
       { name: "identityId", type: "uint256", indexed: true },
       { name: "pubKey", type: "address", indexed: true },

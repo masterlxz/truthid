@@ -627,6 +627,147 @@ dono do projeto a cada um:**
    storage-agnostic por design) — não é uma mudança de plano, é uma confirmação de que o risco já
    estava mitigado pela arquitetura.
 
+**Investigação aprofundada, mesma Sessão 184 — a preocupação do ponto 3 acima se confirmou na
+prática, e destravou um `/plan` de pesquisa só sobre storage decentralizado.** Antes de codar,
+seguindo a instrução do documento original ("estudar a doc oficial da Storacha antes de
+implementar"), fomos verificar o estado atual da Storacha — e o que achamos invalida a premissa
+central do Épico 1 como estava escrito.
+
+**Achado que muda tudo: `storacha.network`, `docs.storacha.network` e `web3.storage` redirecionam
+(301) inteiros pra `fil.one`** — um produto diferente, S3-compatible, centralizado, sem nenhuma
+menção a UCAN/w3up/deals Filecoin multi-provider (exatamente o que justificou escolher a Storacha).
+`console.storacha.network` (onde se criaria a conta/Space) nem resolve mais via DNS. A org no
+GitHub segue ativa (atividade em maio/2026) e o pacote npm atual `@storacha/client` (v2.1.4) não
+está deprecated — mas nenhuma issue pública documenta esse redirect, e a incerteza é grande demais
+pra apostar a arquitetura nisso agora.
+
+**Comparação de alternativas investigadas (cada uma com pesquisa ao vivo, não memória de
+treino — preços, funding, maturidade, atividade real de repositório):**
+
+| Candidato | Achado real | Veredito |
+|---|---|---|
+| Storacha | Ver acima — domínio/docs/console redirecionando pra outro produto | Status incerto demais |
+| Lighthouse.storage | ~US$100k levantados (seed único, 2022, 1 investidor), ~9 funcionários. Gateway grátis já foi restringido pra usuários premium. Auth por API key simples, não mais soberano que Filebase/Pinata hoje. Escopo diluído (Filecoin + Walrus + S3-compatible) | Mesmo padrão de risco, financiamento pior |
+| Crust Network | PSA parcial (`pin.crustcode.com/psa`), histórico de falhar compliance checks; paga em token próprio (CRU), 3º token além de ETH | Descartado por ora |
+| QuickNode | Empresa estabelecida: US$106M levantados, avaliação US$800M, 117 funcionários, fundada 2017, 99,99% uptime, receita +300%. Pinning é feature secundária pra eles, não o core business | **Bom pra reforço de redundância PSA imediato** |
+| Arweave (base layer) | Mainnet desde nov/2018, 24+ bilhões de tx até 2025, nenhum outage real confirmado em 7+ anos. Preço ~US$0,0000037/KB (AR≈US$1,84, ago/2026), sem piso de taxa mínima encontrado. Modelo de endowment: garantia formal de 200 anos, estendendo-se enquanto custo de storage em hardware cair ≥0,5%/ano (histórico real ~38%/ano) | **Candidato mais forte encontrado** |
+| Irys (ex-Bundlr) | Deixou de ser bundling sobre o Arweave maduro — lançou como **L1 própria em 2025**, consenso novo (uPoW/S), ~1 ano de idade. Grátis até 100KiB/upload, US$0,01 mínimo acima disso — economia ótima, mas reintroduz risco de chain nova/não testada | Economia boa, maturidade não bate — não usar por ora |
+
+**Recomendação**: QuickNode como reforço de redundância PSA de curto prazo (config, zero
+engenharia nova, resolve o risco imediato de "só Filebase+Pinata" do Épico 1) + Arweave puro (sem
+Irys) como a aposta de storage genuinamente decentralizado e resistente a qualquer empresa sumir.
+
+**Desenho de duas trilhas pro storage Arweave, resolvendo uma contradição real levantada na
+discussão** ("não precisa ser sempre grátis, mas o usuário precisa conseguir não depender de mim"):
+
+- **Storage core do Vault** (o CID que vai pro `VaultRegistry` a cada publish) continua **sempre
+  grátis**, sem taxa nenhuma, não importa o backend — inegociável, é o que já garante
+  self-sovereignty hoje. Confirmado no código: `desktop/src-tauri/src/lib.rs:467`
+  (`vault_publish`) → `desktop/src/hooks/useVaultPublish.ts:88-105` (`execute` único, `value: 0n`,
+  só `updateVault`) — nada aqui precisa mudar, o storage core já é isolado de qualquer taxa por
+  desenho.
+- **Trilha self-sovereign**: usuário gera/importa uma chave Arweave (JWK) local no device, financia
+  sozinho (exchange ou on-ramp), zero dependência do dono do projeto. É o que garante que storage
+  decentralizado continua disponível **sem exigir o tier pago** — não é "grátis de custo", é "não
+  depende de mim".
+- **Trilha facilitada (tier pago)**: dono do projeto mantém carteira Arweave própria (pool), paga
+  por trás; usuário paga uma **taxa em ETH** (nunca em AR) dentro de uma UserOperation de uma ação
+  **separada e específica** do tier pago — nunca dentro do `updateVault` core.
+
+**Mecanismo de taxa via `execBatch` — achado importante, corrige suposição errada da conversa**:
+`executeBatch` existe (`contracts/src/TruthIDAccount.sol:208`) e funciona, mas **nunca foi usado
+via UserOperation/device key/bundler** — só em transações diretas assinadas pelo Ledger (owner),
+nos fluxos de pareamento/revogação de device (`PairDevice.tsx`, `ManageDevices.tsx`,
+`DesktopDevice.tsx`, sempre `value: 0n`). A Sessão 166 já tinha registrado que bundling de
+valor/fee dentro de UserOperation nunca foi construído nem validado — foi cogitado e descartado por
+escopo antes. **Não é reaproveitamento de algo provado em hardware — é infraestrutura nova**, ainda
+que usando peças que já existem (`executeBatch`, `desktop/src/utils/buildAccountCalls.ts:12-30`).
+Nenhum padrão de "taxa/treasury" existe hoje em nenhuma parte do código (grep vazio).
+
+**Sincronização da chave Arweave entre devices — desenho com precedente real**: o canal ECIES que
+já sincroniza a chave simétrica do Vault no pareamento (`encrypt_bytes_for_device`,
+`desktop/src-tauri/src/lib.rs:393-445`) é genérico sobre `&[u8]`, e o
+`CrossDeviceDeliveryChannel` (`mobile/lib/services/cross_device_delivery_channel.dart:32-64`) já
+cifra payload arbitrário pela mesma técnica — prova que o canal já serve segredo arbitrário, não só
+a chave do vault. Desenho proposto: gerar a chave Arweave uma vez (bootstrap ou primeiro uso) e
+distribuir pra cada device novo pelo mesmo canal — reaproveita a **primitiva** já validada em
+hardware real (bugs históricos documentados em comentário no código, Sessões 92/76/99), não código
+pronto (nada de Arweave existe no repo hoje).
+
+**Dois gaps técnicos identificados nesta pesquisa — decisões tomadas logo depois (mesma Sessão
+184), pesquisando soluções concretas pra cada um:**
+
+**1. Revogação não gira segredo compartilhado — decisão: corrigir já, valendo pra Vault key E
+Arweave key juntas.** Pesquisa de precedente (Signal/WhatsApp multi-device): esses sistemas evitam
+o problema por completo porque não usam chave simétrica compartilhada — cada device tem identidade
+própria, conteúdo cifrado por device (fan-out). Copiar isso 1:1 seria reformular o Vault inteiro,
+fora de escopo. **Padrão adotado em vez disso: rotação de DEK (data encryption key) com
+re-criptografia**, o modelo de envelope encryption (S3 KMS e similares) — ao revogar um device:
+gerar uma DEK nova, re-cifrar o conteúdo sob ela, redistribuir só pros devices que restaram, via o
+mesmo canal ECIES já usado hoje (`encrypt_bytes_for_device`/`EciesService`). **Decisão do dono do
+projeto**: implementar o quanto antes, mesmo sendo mudança grande — "quebra e faz aos poucos"
+(iterativo, não tenta entregar tudo de uma vez). Cobre as duas chaves com o mesmo mecanismo:
+`deviceVaultKeys` (`contracts/src/DeviceRegistry.sol:49`, já existente) e a chave Arweave nova
+(ainda não implementada). Fica pra um `/plan` de implementação dedicado, por causa do tamanho.
+
+**2. `PinningProvider` não encaixa o modelo pay-per-upload do Arweave — decisão: remover o
+pinning por completo, não coexistir.** Em vez de manter Kubo/PSA rodando ao lado do Arweave (o que
+exigiria o design de "escolha de backend com prefixo de esquema" que foi cogitado), o dono do
+projeto decidiu **cortar o sistema de pinning inteiro** (`ipfs.rs`, `PinningProvider`,
+Kubo/Filebase/Pinata) e ir 100% Arweave. **Escopo confirmado**: não é só desligar escrita nova —
+o conteúdo **já publicado** via Kubo/PSA também será **re-publicado no Arweave**, fechando de vez
+a dependência de qualquer gateway IPFS (`GATEWAYS` em `ipfs.rs:201`, `fetch_from_gateway`)
+daqui pra frente. Isso é migração de dado real, não só troca de client — fica pra um `/plan` de
+implementação dedicado (mesmo aviso do item 1: mudança grande, feita aos poucos).
+
+**Validações reais pendentes antes de qualquer implementação (ainda não resolvidas):**
+1. Teste de upload+retrieval+custo real via `arweave-js`, com números precisos de latência (não
+   deu pra medir isso só com ferramentas de busca/fetch — confirmado que `arweave.net/info`
+   responde saudável, mas sem timing preciso).
+2. **Adiado, sem urgência** — confirmar se Transak (ou outro on-ramp) atende Pix/BRL pra compra de
+   AR. Pesquisa já mostrou que hoje só achamos caminho manual via exchange completa (Bitget aceita
+   Pix + lista AR, mas exige cadastro/KYC, não é widget embutido) — mais fricção que o on-ramp de
+   ETH já planejado, mas não bloqueia o resto.
+3. Prototipar `execBatch` pelo caminho UserOp+bundler+paymaster de verdade — **esclarecido**: a
+   ação que carrega a taxa é uma ação paga (a própria smart account paga o próprio gas), então
+   **Paymaster não entra nessa ação específica** — a dúvida original não se aplica mais.
+
+**Nada implementado ainda — os dois itens acima (rotação de DEK unificada, remoção total do
+pinning + migração pro Arweave) estão priorizados pelo dono do projeto pra implementação em
+`/plan`s dedicados, tratados como mudanças grandes feitas de forma incremental.**
+
+**Item 1 (rotação de DEK) implementado, mesma Sessão 184, em 5 etapas — `/plan` dedicado rodado
+logo em seguida.** Escopo real corrigido no meio do caminho: `DeviceRegistry` está em
+`blockedForDevices` (`TruthIDAccount.sol`) por desenho de segurança deliberado — device-tier
+signers nunca podem chamar nada lá, então o Mobile **nunca pode iniciar** revogação/rotação, só
+recebê-la. Só o Desktop (Ledger, owner-tier) inicia.
+
+- **Contrato**: `updateDeviceVaultKey(address, bytes)` nova em `DeviceRegistry.sol`, aditiva,
+  mesmo controle de acesso do `revokeDevice`. 7 testes novos, `forge test` 276/276.
+- **Desktop**: `decrypt_bytes_for_device` novo (Desktop passa a saber *receber* chave via ECIES,
+  não só enviar); `rotate_vault_key`/`rotate_vault_key_bytes` (núcleo puro separado de I/O,
+  re-cifra vault + campos de cartão + documentos); `ManageDevices.tsx` dispara tudo automaticamente
+  depois de um `revokeDevice` confirmado — `executeBatch` via Ledger (caminho já provado) com
+  `updateDeviceVaultKey` por device restante + `updateVault` da republicação, numa transação só.
+  `cargo test` 141/141, `tsc`/`vitest` limpos.
+- **Mobile**: escopo original ("botão Revogar") descartado pela restrição acima. Escopo real:
+  `VaultSyncService.sync()` passou a chamar `VaultKeyService.tryRecoverFromChain` (que já existia,
+  só nunca era invocada fora do pareamento) a cada sync, se já há chave cacheada — detecta e adota
+  a chave rotacionada sem nenhuma função nova. `flutter test` 507/507, `flutter analyze` limpo.
+- **Validação (Etapa 5)**: sem hardware físico disponível, rodada contra `anvil` local real — deploy
+  real, identidade real (assinatura via `cast wallet sign --no-hash`), 2 devices registrados com
+  ECIES real (`encrypt_bytes_for_device` de produção), revoga A, redistribui a chave nova só pra B,
+  lê de volta on-chain e decifra com `decrypt_bytes_for_device` de produção. B decifra pra chave
+  nova, A continua só com a antiga, atualizar chave de device revogado reverte. Achado no caminho:
+  `forge script --broadcast` tem inconsistência entre simulação local e verificação contra RPC real
+  em fluxos commit-reveal (`vm.roll` não se aplica na segunda fase) — contornado com `cast
+  send`/`cast call` diretos.
+
+**Fora de escopo, decisão explícita**: deploy em Mainnet (validado só em Anvil/local) e integração
+com guardian recovery (`revokeAllDevices` via `RecoveryManager` — depende de entender como o device
+recuperado obtém a vault key hoje, não investigado). Falta só validação em hardware físico (celular
+real + Ledger real) pra fechar de vez — mesmo padrão de pendência do resto do projeto.
+
 ---
 
 ### Interface e identidade visual (UI/UX)

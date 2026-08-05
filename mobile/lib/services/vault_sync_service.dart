@@ -73,6 +73,19 @@ class VaultSyncService {
       );
     }
 
+    // Fecha o gap de rotação de DEK: se outro device revogou alguém e
+    // redistribuiu uma chave nova (ver ManageDevices.tsx no Desktop), este
+    // device só descobre reconsultando `deviceVaultKeys` — nada além do
+    // fluxo de pareamento fazia isso antes. Best-effort, reaproveitando o
+    // ciclo de sync já existente em vez de um polling dedicado: se falhar
+    // (offline, etc.) segue com a chave já cacheada, que continua válida
+    // até aqui.
+    try {
+      await _vaultKeyService.tryRecoverFromChain(_blockchain);
+    } catch (_) {
+      // Não crítico — mesmo raciocínio do fallback de cache mais abaixo.
+    }
+
     bool hasVault;
     try {
       hasVault = await _blockchain.hasVault(identityId);

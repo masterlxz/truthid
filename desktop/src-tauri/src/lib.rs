@@ -125,7 +125,7 @@ fn vault_key_path() -> Result<std::path::PathBuf, String> {
     crate::config::truthid_file_path("vault.key")
 }
 
-fn set_vault_key(key: &[u8; 32]) -> Result<(), String> {
+pub(crate) fn set_vault_key(key: &[u8; 32]) -> Result<(), String> {
     let hex_key = hex::encode(key);
 
     // Salva no keyring do SO
@@ -443,6 +443,79 @@ fn encrypt_bytes_for_device(vault_key: &[u8], device_pubkey_hex: &str) -> Result
 
     Ok(STANDARD.encode(blob))
 }
+
+// Lado inverso de `encrypt_bytes_for_device` — decifra um blob ECIES
+// endereçado a este device com a própria chave privada. Extraído do que já
+// era reimplementado inline nos testes de round-trip (ver `mod tests`) pra
+// virar uma função de verdade: a rotação de DEK precisa que um device que
+// NÃO iniciou a revogação consiga receber a chave nova redistribuída por
+// quem revogou (antes desta função, o Desktop só sabia enviar, nunca
+// receber — o mobile já tinha essa capacidade via
+// `EciesService.decrypt`/`decryptVaultKeyFromPairing`).
+fn decrypt_bytes_for_device(blob_b64: &str, device_priv_hex: &str) -> Result<Vec<u8>, String> {
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
+    use k256::elliptic_curve::sec1::FromEncodedPoint;
+
+    let blob = STANDARD.decode(blob_b64).map_err(|e| e.to_string())?;
+    if blob.len() < 33 + 12 + 16 {
+        return Err("blob too short for ECIES format".to_string());
+    }
+
+    let ephemeral_pub_bytes = &blob[0..33];
+    let nonce_bytes = &blob[33..45];
+    let ciphertext = &blob[45..];
+
+    let priv_bytes = hex::decode(device_priv_hex.trim_start_matches("0x")).map_err(|e| e.to_string())?;
+    let device_priv = SigningKey::from_bytes(priv_bytes.as_slice().into())
+        .map_err(|e| e.to_string())?;
+
+    let point = k256::EncodedPoint::from_bytes(ephemeral_pub_bytes).map_err(|e| e.to_string())?;
+    let ephemeral_pub = PublicKey::from_encoded_point(&point)
+        .into_option()
+        .ok_or_else(|| "invalid ephemeral public key".to_string())?;
+
+    let shared = diffie_hellman(device_priv.as_nonzero_scalar(), ephemeral_pub.as_affine());
+    let aes_key_bytes = Sha256::digest(shared.raw_secret_bytes());
+    let aes_key = Key::<Aes256Gcm>::from_slice(&aes_key_bytes);
+    let cipher = Aes256Gcm::new(aes_key);
+
+    cipher
+        .decrypt(nonce_bytes.into(), ciphertext)
+        .map_err(|_| "ECIES decrypt failed".to_string())
+}
+
+/// Decifra um blob ECIES endereçado a este device (chave privada via
+/// `get_device_key_hex()`) e substitui a vault key local pela decifrada.
+/// Usado quando outro device redistribui uma DEK nova depois de revogar
+/// alguém — mesmo formato de blob que `encrypt_vault_key_for_device` produz,
+/// só no sentido inverso. Não re-lê nada on-chain: quem chama já obteve o
+/// blob (ex: de `deviceVaultKeys` via leitura pública, gratuita).
+#[tauri::command]
+fn decrypt_and_set_vault_key(blob_b64: String) -> Result<(), String> {
+    let priv_hex = get_device_key_hex()?;
+    let plaintext = decrypt_bytes_for_device(&blob_b64, &priv_hex)?;
+    if plaintext.len() != 32 {
+        return Err("decrypted vault key must be 32 bytes".to_string());
+    }
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&plaintext);
+    set_vault_key(&key)
+}
+
+/// Gera uma DEK nova, re-cifra o vault local inteiro sob ela
+/// (`vault::rotate_vault_key` — vault principal, campos de cartão e blobs de
+/// documento) e devolve a chave nova em hex. Quem chama (frontend) usa esse
+/// valor pra cifrar via `encrypt_vault_key_for_device` para cada device que
+/// permanece ativo, chama `updateDeviceVaultKey` on-chain pra cada um, e só
+/// então publica o vault re-cifrado (`vault_publish`) — esta função só cuida
+/// da parte local, não toca em rede nem em contrato.
+#[tauri::command]
+fn rotate_vault_key() -> Result<String, String> {
+    let new_key = vault::generate_vault_key();
+    vault::rotate_vault_key(&new_key)?;
+    Ok(hex::encode(new_key))
+}
+
 /// Cifra dados com AES-256-GCM usando a chave do vault.
 /// Entrada: plaintext em Base64. Saída: blob cifrado em Base64 (nonce+cipher+tag).
 #[tauri::command]
@@ -1070,6 +1143,8 @@ pub fn run() {
             vault_key_exists,
             derive_vault_key_from_wallet,
             encrypt_vault_key_for_device,
+            decrypt_and_set_vault_key,
+            rotate_vault_key,
             vault_list_entries,
             vault_upsert_entry,
             vault_delete_entry,
@@ -1221,6 +1296,43 @@ mod tests {
         let plaintext = cipher
             .decrypt(nonce_bytes.into(), ciphertext)
             .expect("Rust should decrypt a blob produced by the real Dart EciesService.encrypt");
+
+        assert_eq!(hex::encode(&plaintext), expected_plaintext_hex);
+    }
+
+    // decrypt_bytes_for_device é o lado inverso de encrypt_bytes_for_device,
+    // extraído pra rotação de DEK (device que não iniciou a revogação
+    // precisa conseguir receber a chave nova redistribuída). Round-trip
+    // completo: cifra e decifra com a mesma primitiva, os dois lados agora
+    // são funções reais, não reimplementação inline de teste.
+    #[test]
+    fn decrypt_bytes_for_device_round_trips_with_encrypt_bytes_for_device() {
+        let device_priv = SigningKey::random(&mut OsRng);
+        let device_priv_hex = hex::encode(device_priv.to_bytes());
+        let device_pub_hex = hex::encode(device_priv.verifying_key().to_encoded_point(false).as_bytes());
+
+        let vault_key = b"0123456789abcdef0123456789abcdef"; // 32 bytes fake vault key
+        let blob_b64 = encrypt_bytes_for_device(vault_key, &format!("0x{device_pub_hex}"))
+            .expect("encryption should succeed");
+
+        let plaintext = decrypt_bytes_for_device(&blob_b64, &device_priv_hex)
+            .expect("decryption should succeed with matching private key");
+
+        assert_eq!(plaintext, vault_key);
+    }
+
+    // Mesmo vetor cruzado do teste dart_produced_blob_decrypts_correctly
+    // acima, agora contra a função real (não a reimplementação inline) —
+    // prova que decrypt_bytes_for_device também decifra corretamente um
+    // blob produzido pelo EciesService.encrypt real do Dart.
+    #[test]
+    fn decrypt_bytes_for_device_decrypts_dart_produced_blob() {
+        let recipient_priv_hex = "ebea44b99557c83965e6152a1393a5c6d74fe114f0a626f51bb2349e815136b2";
+        let blob_b64 = "AqQAXxG3rw53DVihUXbTzqHcENoLZGbHFsnNHPFvZduk0FF00QwiZMLWLCs8q19CzAj4kYiWXr1jUTn0tUxh1ibNVbwPQiCSBZAJdH1eqE86qT1Na5ytsA==";
+        let expected_plaintext_hex = "747275746869642d7661756c742d656e7472792d66697874757265";
+
+        let plaintext = decrypt_bytes_for_device(blob_b64, recipient_priv_hex)
+            .expect("should decrypt a blob produced by the real Dart EciesService.encrypt");
 
         assert_eq!(hex::encode(&plaintext), expected_plaintext_hex);
     }

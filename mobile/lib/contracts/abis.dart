@@ -167,6 +167,23 @@ const String deviceRegistryAbi = '''[
     "inputs": [{"name": "identityId", "type": "uint256"}],
     "outputs": [{"name": "", "type": "address[]"}],
     "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "revokeDevice",
+    "inputs": [{"name": "devicePubKey", "type": "address"}],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "updateDeviceVaultKey",
+    "inputs": [
+      {"name": "devicePubKey", "type": "address"},
+      {"name": "newEncryptedVaultKey", "type": "bytes"}
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
   }
 ]''';
 

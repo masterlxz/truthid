@@ -64,6 +64,7 @@ contract DeviceRegistry is IdentityResolver {
 
     event DeviceRegistered(uint256 indexed identityId, address indexed pubKey, string label, bytes encryptedVaultKey);
     event DeviceRevoked(uint256 indexed identityId, address indexed pubKey);
+    event DeviceVaultKeyUpdated(uint256 indexed identityId, address indexed pubKey);
     event RecoveryManagerSet(address indexed recoveryManager);
 
     // -------------------------------------------------------------------------
@@ -85,6 +86,7 @@ contract DeviceRegistry is IdentityResolver {
     error DeviceAlreadyRevoked(address pubKey);
     error DeviceBelongsToAnotherIdentity(address pubKey);
     error InvalidPubKey();
+    error InvalidVaultKey();
     error NoCommitmentFound();
     error RevealTooEarly();
     error NotRecoveryManager();
@@ -184,6 +186,33 @@ contract DeviceRegistry is IdentityResolver {
         _devices[devicePubKey].revoked = true;
 
         emit DeviceRevoked(callerIdentityId, devicePubKey);
+    }
+
+    /// Atualiza a vault key cifrada de um device já registrado e ativo.
+    /// Usado pela rotação de DEK: ao revogar um device, uma chave nova é
+    /// gerada e redistribuída (cifrada via ECIES) para cada device que
+    /// permanece ativo, substituindo o valor antigo em `deviceVaultKeys`.
+    /// Diferente de `registerDevice`, que só escreve `deviceVaultKeys` uma
+    /// vez (no registro), esta função existe justamente para sobrescrever
+    /// depois — sem ela não havia jeito de invalidar a cópia da chave que
+    /// um device revogado já tinha decifrado.
+    ///
+    /// Mesmo controle de acesso de `revokeDevice`: só o controller da
+    /// identidade dona do device pode chamar. Reverte se o device não
+    /// existir, já estiver revogado (não faz sentido atualizar a chave de
+    /// um device sem acesso) ou se `newEncryptedVaultKey` vier vazio (usar
+    /// `registerDevice` para o caso de "nenhuma chave compartilhada").
+    function updateDeviceVaultKey(address devicePubKey, bytes calldata newEncryptedVaultKey) external {
+        if (!_devices[devicePubKey].exists) revert DeviceNotFound(devicePubKey);
+        if (_devices[devicePubKey].revoked) revert DeviceAlreadyRevoked(devicePubKey);
+        if (newEncryptedVaultKey.length == 0) revert InvalidVaultKey();
+
+        uint256 callerIdentityId = _getCallerIdentityId();
+        if (_devices[devicePubKey].identityId != callerIdentityId) revert NotIdentityController();
+
+        deviceVaultKeys[devicePubKey] = newEncryptedVaultKey;
+
+        emit DeviceVaultKeyUpdated(callerIdentityId, devicePubKey);
     }
 
     /// Define o endereço do RecoveryManager. Só pode ser chamado uma vez
