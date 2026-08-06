@@ -40,6 +40,7 @@ axum = "0.8"
 tower-http = { version = "0.6", features = ["cors"] }
 tokio = { version = "1", features = ["macros", "sync", "time", "net", "rt"] }
 futures = "0.3"
+rsa = "0.9.10"
 
 # Só pra registrar o handler do sinal `permission-request` do WebKitGTK e
 # aprovar getUserMedia (scan de QR via webcam) — sem isso, todo pedido de

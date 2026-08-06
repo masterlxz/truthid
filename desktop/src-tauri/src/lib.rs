@@ -10,6 +10,7 @@ use serde::Serialize;
 use sha2::Sha256;
 use sha3::{Digest, Keccak256};
 
+mod arweave;
 mod autofill_address;
 mod autofill_creditcard;
 mod backup;
@@ -137,6 +138,44 @@ pub(crate) fn set_vault_key(key: &[u8; 32]) -> Result<(), String> {
     if !saved {
         let path = vault_key_path()?;
         crate::config::write_file(&path, hex_key.as_bytes())?;
+    }
+
+    Ok(())
+}
+
+const ARWEAVE_WALLET_ACCOUNT: &str = "arweave-wallet";
+
+fn arweave_wallet_path() -> Result<std::path::PathBuf, String> {
+    crate::config::truthid_file_path("arweave_wallet.json")
+}
+
+/// Lê a wallet Arweave (JWK JSON) do keyring do SO, com fallback em arquivo
+/// — mesmo padrão de `get_vault_key`. Diferente da vault key, não há
+/// fallback legado: erro explícito se nenhuma wallet foi gerada/importada
+/// ainda (`arweave_wallet_exists`/`arweave_publish` checam isso antes de agir).
+pub(crate) fn get_arweave_wallet() -> Result<String, String> {
+    if let Ok(entry) = Entry::new(SERVICE, ARWEAVE_WALLET_ACCOUNT) {
+        if let Ok(json) = entry.get_password() {
+            return Ok(json);
+        }
+    }
+
+    let path = arweave_wallet_path()?;
+    if path.exists() {
+        return crate::config::read_text(&path);
+    }
+
+    Err("nenhuma wallet Arweave encontrada — gere ou importe uma primeiro".to_string())
+}
+
+pub(crate) fn set_arweave_wallet(jwk_json: &str) -> Result<(), String> {
+    let saved = Entry::new(SERVICE, ARWEAVE_WALLET_ACCOUNT)
+        .and_then(|e| e.set_password(jwk_json))
+        .is_ok();
+
+    if !saved {
+        let path = arweave_wallet_path()?;
+        crate::config::write_file(&path, jwk_json.as_bytes())?;
     }
 
     Ok(())
@@ -1188,7 +1227,14 @@ pub fn run() {
             ledger::is_ledger_connected,
             ledger::get_ledger_address,
             ledger::sign_ledger_transaction,
-            ledger::sign_ledger_personal_message
+            ledger::sign_ledger_personal_message,
+            arweave::arweave_generate_wallet,
+            arweave::arweave_import_wallet,
+            arweave::arweave_wallet_exists,
+            arweave::arweave_wallet_address,
+            arweave::arweave_publish,
+            arweave::arweave_get_status,
+            arweave::arweave_fetch
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

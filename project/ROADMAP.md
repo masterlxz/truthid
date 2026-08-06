@@ -768,6 +768,52 @@ com guardian recovery (`revokeAllDevices` via `RecoveryManager` — depende de e
 recuperado obtém a vault key hoje, não investigado). Falta só validação em hardware físico (celular
 real + Ledger real) pra fechar de vez — mesmo padrão de pendência do resto do projeto.
 
+**Item 2 (remoção do pinning + migração pro Arweave) — Etapa 1 implementada (Sessão 185,
+2026-08-06): núcleo do cliente Arweave em Rust no Desktop, standalone, sem integração com
+`vault_publish`/`VaultRegistry` ainda (fica pra próximas etapas, junto com `deviceArweaveKeys` +
+sync ECIES entre devices, trilha self-sovereign vs facilitada, Mobile, migração do conteúdo já
+pinned e remoção do `PinningProvider`/Kubo/PSA).**
+
+- **Decisão de arquitetura**: transação Arweave formato 2 direta contra qualquer node/gateway
+  (permissionless), não ANS-104 via bundler — pesquisa ao vivo achou que a única lib Rust mantida
+  pra Arweave (`permaweb/bundles-rs`, org oficial do ecossistema) só faz ANS-104/bundler, que
+  reintroduziria dependência de empresa terceira no caminho de escrita, o mesmo risco já rejeitado
+  pra Storacha/Lighthouse/Crust e incompatível com a trilha self-sovereign.
+- **Módulo novo**: `desktop/src-tauri/src/arweave/{mod,wallet,deep_hash,merkle,transaction}.rs` —
+  gera/importa wallet JWK RSA-4096, monta e assina tx formato 2 (deep hash SHA-384 + RSA-PSS/
+  SHA-256, merkle `data_root` SHA-256 sobre chunks de 256 KiB), submete (`POST /tx`), lê status e
+  conteúdo de volta. 7 commands Tauri novos (`arweave_generate_wallet`, `arweave_import_wallet`,
+  `arweave_wallet_exists`, `arweave_wallet_address`, `arweave_publish`, `arweave_get_status`,
+  `arweave_fetch`) só pra validação manual isolada — nenhum integrado ainda no fluxo do Vault.
+  Wallet armazenada local via keyring do SO + fallback arquivo, mesmo padrão de `get_vault_key`.
+- **Sem vetores de teste oficiais pra deep hash/merkle/assinatura** — mitigado gerando vetores
+  cross-checados contra `arweave-js` real (rodado localmente via Node, scripts descartáveis) pra
+  blob hash, list hash, merkle root (1 chunk e multi-chunk) e a montagem completa dos campos da tx
+  (`getSignatureData()`) — todos batem exatamente com a implementação Rust. `cargo test` 201/201
+  (171 pré-existentes + 30 novos, 2 ignorados: keygen RSA-4096 real e o teste de integração
+  ArLocal), `cargo clippy` limpo, `cargo build` (lib+bin) limpo.
+- **Achado real durante a implementação, não estava no plano original**: o crate `rsa`
+  (RustCrypto) faz verificação PSS **estrita** de salt length — ao contrário do OpenSSL/Node.js
+  (que auto-detectam o salt a partir do padding na hora de verificar), duas assinaturas com salt
+  length diferente falham verificação cruzada entre si nessa lib. Mitigado usando consistentemente
+  os wrappers tipados `SigningKey<Sha256>`/`VerifyingKey<Sha256>` (salt = 32 bytes, tamanho do
+  digest) dos dois lados — resolve a auto-consistência interna (`verify_transaction_signature`),
+  mas **não prova que um node Arweave real aceita essa assinatura** (Node.js/arweave-js assina por
+  padrão com salt bem maior, `RSA_PSS_SALTLEN_MAX_SIGN`) — só uma submissão real confirma.
+- **`cargo audit`**: crate `rsa` 0.9.10 carrega RUSTSEC-2023-0071 (Marvin Attack, timing
+  sidechannel) sem correção disponível ainda na crate inteira ("No fixed upgrade is available").
+  Uso aqui é só assinatura PSS (não decrypt), o que reduz a exposição descrita no advisory, mas é
+  um risco em aberto, não resolvido — registrado, não ignorado.
+- **Validação contra ArLocal NÃO rodou de fato nesta sessão** — o pacote `arlocal` depende
+  transitivamente de um fork via git (`avsc`), bloqueado pela política de rede do sandbox usado
+  pra implementar (`npm error code EALLOWGIT`). O teste de integração
+  (`arweave::arlocal_tests::publish_and_fetch_round_trip_against_arlocal`, `#[ignore]`) foi escrito
+  e compila, mas só validado por leitura — não por execução real. **Isso deixa em aberto justamente
+  o ponto mais importante: se a rede Arweave de verdade aceita a assinatura RSA-PSS produzida por
+  este código.** Rodar manualmente numa rede sem essa restrição (`npx arlocal` +
+  `cargo test --lib arweave::arlocal_tests -- --ignored --nocapture`) é o próximo passo antes de
+  confiar nisso pra qualquer integração real.
+
 ---
 
 ### Interface e identidade visual (UI/UX)
