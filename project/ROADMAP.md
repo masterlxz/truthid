@@ -893,6 +893,78 @@ em chunks fica pra uma etapa futura dedicada.
   ArLocal) só se resolve com uma publicação real, ainda não feita — precisa de uma wallet financiada
   com AR de verdade, ação do dono do projeto.
 
+**Item 1 (upload em chunks) implementado (Sessão 188, 2026-08-08): cliente Arweave agora publica
+conteúdo de qualquer tamanho via `POST /chunk` real, não só inline (≤256KB).** Escopo confirmado
+com o dono do projeto antes de implementar: só a capacidade no cliente — documentos do Vault
+continuam no IPFS por enquanto, trocar o call site (`vault_publish`/`vault_document_read`/
+`VaultManagement.tsx`) fica pra uma etapa própria depois.
+
+- **Design validado contra o código-fonte real de `arweave-js`** (`merkle.ts`, `transaction.ts`,
+  `transaction-uploader.ts`, `chunks.ts`) e `arlocal` (`routes/chunk.ts`, `routes/data.ts`,
+  `db/chunks.ts`), não só a doc prosa (que diverge do código em pelo menos um ponto: direção do
+  walk em `downloadChunkedData`). Achados que mudaram o design ingênuo:
+  1. `chunk_data()` produz um chunk vazio à direita quando o conteúdo é múltiplo exato de
+     `MAX_CHUNK_SIZE` — precisa ser descartado antes de decidir inline-vs-chunked e antes do loop de
+     upload, senão o dispatch erra e/ou tenta `POST /chunk` um chunk de 0 bytes. Novo helper
+     `merkle::chunk_data_for_upload` centraliza esse descarte.
+  2. ArLocal ignora o campo `offset` que o cliente envia e deriva a ordem de chegada globalmente
+     (sem filtrar por `data_root`) — upload precisa ser sequencial, não concorrente, ou a
+     remontagem de uma tx pode corromper (não é limitação de node real, só do ArLocal).
+  3. `GET /{id}` (`fetch_data`, sem mudança) já remonta dados publicados via chunk tanto no ArLocal
+     quanto em gateway real — não trocar pra `GET /tx/{id}/data`, que no ArLocal não tem fallback
+     de remontagem e retorna 500 pra conteúdo só-em-chunks.
+  4. `POST /chunk` responde texto puro `"OK"` no sucesso, não JSON.
+- **`merkle.rs`**: `Node` virou `MerkleNode` (enum `Leaf`/`Branch`, retém a árvore inteira, não só
+  a raiz) — `compute_data_root` mantém assinatura/comportamento idênticos, todos os testes
+  existentes passaram sem alteração. Novo `generate_proofs` (prova de inclusão por chunk,
+  `data_path`) e `validate_path` (verificação local da prova antes de cada `POST /chunk` — mesmo
+  padrão que `verify_transaction_signature` já usa antes de `submit_transaction`; ArLocal não
+  valida a prova que o cliente manda, então essa checagem local é a única rede de segurança contra
+  um bug sutil de merkle antes de mainnet). `validate_path` portado de `validatePath` real de
+  `arweave-js` (fonte buscado ao vivo, não recriado de memória).
+- **Cross-check real contra `arweave-js`**: pacote `arweave` (não `arlocal`) instalado limpo num
+  scratchpad descartável (sem bloqueio de git/EALLOWGIT dessa vez) e usado pra gerar `data_root` +
+  `data_path` reais de `generateTransactionChunks()` sobre o mesmo vetor multi-chunk já usado em
+  `cross_checked_multi_chunk_root`. Teste novo `cross_checked_proofs_match_arweave_js` compara os
+  bytes de `data_path` produzidos por `generate_proofs` byte-a-byte contra esse vetor — não só que
+  a árvore reassembla localmente, mas que a prova é a mesma que o cliente de referência produziria.
+- **`transaction.rs`**: `to_wire_json_no_data()` (mesmo corpo de `to_wire_json`, `data` vazio —
+  usado quando o conteúdo vai por chunks separados, `data_size`/`data_root` continuam reais).
+  `b64url_encode`/`b64url_decode` viraram `pub(crate)` pra uso cross-módulo.
+- **`mod.rs`**: `submit_transaction_no_data` + `submit_chunk` (`POST /chunk`, campos `offset`/
+  `data_size` sempre string JSON, nunca número). `publish()` decide o caminho via
+  `chunk_data_for_upload`: ≤1 chunk real usa o `POST /tx` inline de sempre; caso contrário,
+  `submit_transaction_no_data` + loop sequencial de `submit_chunk` (sem concorrência — achado #2
+  acima), validando localmente cada prova antes de gastar a requisição, sem retry automático (erro
+  já carrega `tx.id` + índice do chunk que falhou, pra diagnóstico/retomada manual). Sem mudança de
+  assinatura em `publish()` nem nos wrappers existentes (`publish_vault_blob*`) — qualquer chamador
+  passa a suportar qualquer tamanho de conteúdo automaticamente.
+- **Testes**: Rust 178/178 (`cargo test --lib`, 5 ignorados: 3 pré-existentes + 2 novos de ArLocal).
+  `cargo clippy` limpo (mesmo aviso pré-existente de `vault.rs:629`, não relacionado). Validado de
+  fato contra ArLocal 1.1.20 (mesma receita — `overrides: {"arbundles": "0.6.12"}`): os 4 testes de
+  `arlocal_tests` passaram, incluindo os 2 novos —
+  `publish_multi_chunk_content_round_trip_against_arlocal` (conteúdo real de ~512KB, 3 chunks,
+  exercita de fato `submit_transaction_no_data` + loop de `submit_chunk` pela primeira vez) e
+  `publish_exact_double_max_chunk_size_round_trip_against_arlocal` (2×`MAX_CHUNK_SIZE` exatos —
+  confirma contra um node real que o descarte do chunk final vazio funciona mesmo quando ainda
+  sobra mais de 1 chunk de verdade).
+- **Flakiness de rede conhecida, não nova**: os 2 testes pré-existentes (`publish_and_fetch...`,
+  `publish_vault_blob...`) falharam algumas vezes com "error sending request" bem no `mint()` do
+  faucet, mesmo rodando isolados (`--test-threads=1`, um de cada vez). Investigado a fundo desta
+  vez: `curl` direto na mesma URL funcionou e ficou registrado no log do ArLocal; a requisição que
+  falhou no lado do Rust **nunca apareceu no log do servidor** — confirma que é uma falha
+  client-side/sandbox de rede (não do ArLocal, não do código novo), mesmo padrão já documentado na
+  Sessão 186/187. Retry resolveu todas — os 4 testes têm pelo menos uma passagem limpa confirmada
+  nesta sessão.
+- **Ainda em aberto**: documentos do Vault ainda não migraram pra Arweave — a capacidade existe
+  agora no cliente, mas o call site (`vault_publish`/`vault_document_read`/`VaultManagement.tsx`)
+  continua no IPFS até uma etapa própria (decisão explícita desta sessão). Fallback de fetch via
+  `GET /tx/{id}/offset` + `GET /chunk/{offset}` (pra gateways/nodes sem a remontagem automática de
+  `GET /{id}`) não implementado — não testável contra ArLocal (offset ali é por ordem de chegada,
+  não absoluto-no-weave, ver achado #2) e não é bloqueante hoje (`GET /{id}` já cobre ArLocal e
+  gateways reais). Retry automático por chunk (com backoff, como `arweave-js` faz) não implementado
+  — escopo deliberadamente reduzido pra v1, erro já carrega contexto suficiente pra retomada manual.
+
 ---
 
 ### Interface e identidade visual (UI/UX)

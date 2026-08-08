@@ -81,6 +81,64 @@ pub(crate) async fn submit_transaction(
     Ok(())
 }
 
+/// `POST /tx` sem `data` inline (`to_wire_json_no_data`) — usado quando o
+/// conteúdo é maior que 1 chunk e será enviado via `POST /chunk` separados.
+pub(crate) async fn submit_transaction_no_data(
+    client: &reqwest::Client,
+    node_url: &str,
+    tx: &ArweaveTransaction,
+) -> Result<(), String> {
+    let url = format!("{}/tx", node_url.trim_end_matches('/'));
+    let body = tx.to_wire_json_no_data();
+    let res = client
+        .post(&url)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !res.status().is_success() {
+        let status = res.status();
+        let text = res.text().await.unwrap_or_default();
+        return Err(format!("POST /tx (sem data inline) retornou {status}: {text}"));
+    }
+    Ok(())
+}
+
+/// `POST /chunk` — submete um chunk de conteúdo + sua prova de inclusão
+/// (`data_path`) na árvore de merkle da tx. `offset`/`data_size` sempre como
+/// string JSON (nunca número), confirmado contra a doc oficial e
+/// `Transaction.getChunk()` de `arweave-js`. Resposta de sucesso é texto
+/// puro `"OK"`, não JSON — só lê o corpo no caminho de erro.
+pub(crate) async fn submit_chunk(
+    client: &reqwest::Client,
+    node_url: &str,
+    data_root: &str,
+    data_size: &str,
+    proof: &merkle::Proof,
+    chunk_bytes: &[u8],
+) -> Result<(), String> {
+    let url = format!("{}/chunk", node_url.trim_end_matches('/'));
+    let body = serde_json::json!({
+        "data_root": data_root,
+        "data_size": data_size,
+        "data_path": transaction::b64url_encode(&proof.proof),
+        "chunk": transaction::b64url_encode(chunk_bytes),
+        "offset": proof.offset.to_string(),
+    });
+    let res = client
+        .post(&url)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !res.status().is_success() {
+        let status = res.status();
+        let text = res.text().await.unwrap_or_default();
+        return Err(format!("POST /chunk retornou {status}: {text}"));
+    }
+    Ok(())
+}
+
 /// `GET /tx/{id}/status` — 200 = confirmada (corpo tem `block_height` e
 /// `number_of_confirmations`); 202/404 = ainda pendente/não encontrada.
 pub(crate) async fn get_tx_status(
@@ -125,7 +183,12 @@ pub(crate) async fn fetch_data(
 }
 
 /// Orquestrador de ponta a ponta — preço, anchor, monta, assina, submete.
-/// Devolve o tx_id. Equivalente ao `pin_vault` de `ipfs.rs`.
+/// Devolve o tx_id. Equivalente ao `pin_vault` de `ipfs.rs`. Publica inline
+/// (`POST /tx` com `data`) se o conteúdo cabe em 1 chunk (≤256KiB); caso
+/// contrário, submete a tx sem `data` e faz upload em chunks reais via
+/// `POST /chunk`, sequencialmente (ver `arlocal_tests` — upload concorrente
+/// corrompe a ordem de remontagem no ArLocal, que deriva o offset por ordem
+/// de chegada em vez de usar o `offset` que o cliente envia).
 pub(crate) async fn publish(
     client: &reqwest::Client,
     node_url: &str,
@@ -146,7 +209,36 @@ pub(crate) async fn publish(
         return Err("assinatura da tx falhou na verificação local antes do submit".to_string());
     }
 
-    submit_transaction(client, node_url, &tx).await?;
+    let (chunks, proofs) = merkle::chunk_data_for_upload(content);
+
+    if chunks.len() <= 1 {
+        submit_transaction(client, node_url, &tx).await?;
+        return Ok(tx.id.clone());
+    }
+
+    submit_transaction_no_data(client, node_url, &tx).await?;
+
+    let data_root_bytes = transaction::b64url_decode(&tx.data_root)?;
+    let total = chunks.len();
+    for (i, (chunk, proof)) in chunks.iter().zip(proofs.iter()).enumerate() {
+        // Sanity check local antes de gastar a requisição — ArLocal não
+        // valida a prova que o cliente manda, então esse é o único jeito de
+        // pegar um bug sutil em `generate_proofs` antes de mainnet (mesmo
+        // padrão de `verify_transaction_signature` acima).
+        if merkle::validate_path(&data_root_bytes, proof.offset as i64, 0, content.len(), &proof.proof)
+            .is_none()
+        {
+            return Err(format!(
+                "tx {} publicada, prova de merkle inválida localmente pro chunk {i}/{total} — não enviado",
+                tx.id
+            ));
+        }
+
+        let bytes = &content[chunk.min_byte_range..chunk.max_byte_range];
+        submit_chunk(client, node_url, &tx.data_root, &tx.data_size, proof, bytes)
+            .await
+            .map_err(|e| format!("tx {} publicada, chunk {i}/{total} falhou: {e}", tx.id))?;
+    }
 
     Ok(tx.id.clone())
 }
@@ -448,6 +540,101 @@ mod arlocal_tests {
         assert!(status.confirmed, "tx deveria estar confirmada após minerar");
 
         let fetched = fetch_data(&client, ARLOCAL_URL, tx_id)
+            .await
+            .expect("fetch_data deve suceder");
+        assert_eq!(fetched, content);
+    }
+
+    /// Conteúdo real >256KiB — só isso exercita o caminho novo
+    /// (`submit_transaction_no_data` + loop sequencial de `submit_chunk`).
+    /// Os dois testes acima só cobrem o caminho inline (`POST /tx` com
+    /// `data`), que continua existindo pra conteúdo pequeno. `GET /{id}`
+    /// (`fetch_data`, sem mudança) precisa remontar os chunks corretamente
+    /// no ArLocal — não é garantido a priori, é o que este teste prova.
+    #[tokio::test]
+    #[ignore]
+    async fn publish_multi_chunk_content_round_trip_against_arlocal() {
+        let client = http_client();
+        wait_for_arlocal(&client).await.expect("ArLocal deve estar rodando");
+
+        let jwk = generate_jwk().expect("keygen deve funcionar");
+        let address = wallet_address(&jwk).expect("endereço deve ser derivável");
+
+        mint(&client, &address, 100_000_000_000_000)
+            .await
+            .expect("faucet deve fundar a wallet de teste");
+
+        // Mesmo tamanho de cross_checked_multi_chunk_root em merkle.rs: 3
+        // chunks reais (256KiB + ~128KiB + ~128KiB rebalanceados), sem
+        // trailing vazio. Conteúdo não-uniforme (não é só um byte repetido)
+        // pra parecer mais com um documento real.
+        let size = merkle::MAX_CHUNK_SIZE * 2 + 500;
+        let content: Vec<u8> = (0..size).map(|i| (i % 251) as u8).collect();
+
+        let tx_id = publish(
+            &client,
+            ARLOCAL_URL,
+            &jwk,
+            &content,
+            &[("Test".to_string(), "arweave-multi-chunk".to_string())],
+        )
+        .await
+        .expect("publish multi-chunk deve suceder contra ArLocal");
+
+        mine(&client).await.expect("mineração manual deve suceder");
+
+        let status = get_tx_status(&client, ARLOCAL_URL, &tx_id)
+            .await
+            .expect("get_tx_status não deve falhar");
+        assert!(status.confirmed, "tx deveria estar confirmada após minerar");
+
+        let fetched = fetch_data(&client, ARLOCAL_URL, &tx_id)
+            .await
+            .expect("fetch_data deve suceder");
+        assert_eq!(fetched.len(), content.len());
+        assert_eq!(fetched, content);
+    }
+
+    /// Conteúdo múltiplo exato de `MAX_CHUNK_SIZE` (2x) — depois do descarte
+    /// do chunk final vazio (achado #1 do plano), sobram exatamente 2 chunks
+    /// reais, ainda `> 1` (então ainda toma o caminho em chunks, diferente
+    /// do caso de 1x MAX_CHUNK_SIZE que cai no caminho inline). Prova contra
+    /// um node real que o descarte não deixa nenhum chunk vazio na fila de
+    /// upload nesse caso combinado.
+    #[tokio::test]
+    #[ignore]
+    async fn publish_exact_double_max_chunk_size_round_trip_against_arlocal() {
+        let client = http_client();
+        wait_for_arlocal(&client).await.expect("ArLocal deve estar rodando");
+
+        let jwk = generate_jwk().expect("keygen deve funcionar");
+        let address = wallet_address(&jwk).expect("endereço deve ser derivável");
+
+        mint(&client, &address, 100_000_000_000_000)
+            .await
+            .expect("faucet deve fundar a wallet de teste");
+
+        let size = merkle::MAX_CHUNK_SIZE * 2;
+        let content: Vec<u8> = (0..size).map(|i| (i % 199) as u8).collect();
+
+        let tx_id = publish(
+            &client,
+            ARLOCAL_URL,
+            &jwk,
+            &content,
+            &[("Test".to_string(), "arweave-exact-double-chunk".to_string())],
+        )
+        .await
+        .expect("publish deve suceder contra ArLocal");
+
+        mine(&client).await.expect("mineração manual deve suceder");
+
+        let status = get_tx_status(&client, ARLOCAL_URL, &tx_id)
+            .await
+            .expect("get_tx_status não deve falhar");
+        assert!(status.confirmed, "tx deveria estar confirmada após minerar");
+
+        let fetched = fetch_data(&client, ARLOCAL_URL, &tx_id)
             .await
             .expect("fetch_data deve suceder");
         assert_eq!(fetched, content);

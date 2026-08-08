@@ -5,12 +5,12 @@ use rsa::signature::{RandomizedSigner, SignatureEncoding, Verifier};
 use rsa::{BigUint, RsaPrivateKey, RsaPublicKey};
 use sha2::{Digest, Sha256};
 
-fn b64url_encode(bytes: &[u8]) -> String {
+pub(crate) fn b64url_encode(bytes: &[u8]) -> String {
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
     URL_SAFE_NO_PAD.encode(bytes)
 }
 
-fn b64url_decode(s: &str) -> Result<Vec<u8>, String> {
+pub(crate) fn b64url_decode(s: &str) -> Result<Vec<u8>, String> {
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
     URL_SAFE_NO_PAD.decode(s).map_err(|e| e.to_string())
 }
@@ -170,10 +170,9 @@ pub(crate) fn verify_transaction_signature(tx: &ArweaveTransaction) -> Result<bo
 }
 
 impl ArweaveTransaction {
-    /// Corpo JSON pro `POST /tx` — mesmo formato de `Transaction.toJSON()`
-    /// em `arweave-js`: tudo em base64url (inclusive `data` e cada
-    /// nome/valor de tag), `tags` como lista de `{name, value}`.
-    pub(crate) fn to_wire_json(&self) -> serde_json::Value {
+    /// Corpo JSON compartilhado por `to_wire_json`/`to_wire_json_no_data` —
+    /// só o campo `data` muda entre as duas variantes, o resto é idêntico.
+    fn to_wire_json_impl(&self, data_b64: String) -> serde_json::Value {
         let tags: Vec<serde_json::Value> = self
             .tags
             .iter()
@@ -193,12 +192,30 @@ impl ArweaveTransaction {
             "tags": tags,
             "target": self.target,
             "quantity": self.quantity,
-            "data": b64url_encode(&self.data),
+            "data": data_b64,
             "data_size": self.data_size,
             "data_root": self.data_root,
             "reward": self.reward,
             "signature": self.signature,
         })
+    }
+
+    /// Corpo JSON pro `POST /tx` — mesmo formato de `Transaction.toJSON()`
+    /// em `arweave-js`: tudo em base64url (inclusive `data` e cada
+    /// nome/valor de tag), `tags` como lista de `{name, value}`. Só cobre
+    /// conteúdo que caiba em 1 chunk (`data` inline) — pra conteúdo maior,
+    /// ver `to_wire_json_no_data`.
+    pub(crate) fn to_wire_json(&self) -> serde_json::Value {
+        self.to_wire_json_impl(b64url_encode(&self.data))
+    }
+
+    /// Mesmo corpo de `to_wire_json`, mas com `data` vazio — usado quando o
+    /// conteúdo é publicado via `POST /chunk` em vez de inline (upload em
+    /// chunks). `data_size`/`data_root` continuam os valores reais; só o
+    /// campo `data` é zerado, espelhando o que `TransactionUploader` faz em
+    /// `arweave-js` antes do `POST /tx` de uma tx grande.
+    pub(crate) fn to_wire_json_no_data(&self) -> serde_json::Value {
+        self.to_wire_json_impl(String::new())
     }
 }
 

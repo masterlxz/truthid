@@ -10,17 +10,31 @@ const NOTE_SIZE: usize = 32;
 
 pub(crate) struct Chunk {
     pub data_hash: [u8; 32],
-    // Não lido nesta etapa (só `data_root` é usado) — necessário pro upload
-    // em chunks via `POST /chunk` de documentos grandes, fora de escopo (ver
-    // risco #5 do plano). Mantido pra não recalcular o chunking depois.
-    #[allow(dead_code)]
     pub min_byte_range: usize,
     pub max_byte_range: usize,
 }
 
-struct Node {
+/// Árvore de merkle completa (não só a raiz) — necessário pra derivar a
+/// prova de inclusão (`data_path`) de cada folha via `generate_proofs`, não
+/// só o `data_root`. `compute_data_root` usa a mesma árvore e só lê `.id`
+/// da raiz, comportamento inalterado.
+enum NodeKind {
+    Leaf { data_hash: [u8; 32] },
+    Branch { left: Box<MerkleNode>, right: Box<MerkleNode> },
+}
+
+struct MerkleNode {
     id: [u8; 32],
     max_byte_range: usize,
+    kind: NodeKind,
+}
+
+/// Prova de inclusão de um chunk na árvore (`data_path` do protocolo
+/// Arweave) — usada no corpo do `POST /chunk`. `offset` é relativo à tx
+/// (`0..data_size`), não ao weave inteiro.
+pub(crate) struct Proof {
+    pub offset: usize,
+    pub proof: Vec<u8>,
 }
 
 fn sha256(data: &[u8]) -> [u8; 32] {
@@ -80,15 +94,16 @@ pub(crate) fn chunk_data(data: &[u8]) -> Vec<Chunk> {
     chunks
 }
 
-fn generate_leaves(chunks: &[Chunk]) -> Vec<Node> {
+fn generate_leaves(chunks: &[Chunk]) -> Vec<MerkleNode> {
     chunks
         .iter()
-        .map(|c| Node {
+        .map(|c| MerkleNode {
             id: sha256_concat(&[
                 &sha256(&c.data_hash),
                 &sha256(&int_to_buffer(c.max_byte_range)),
             ]),
             max_byte_range: c.max_byte_range,
+            kind: NodeKind::Leaf { data_hash: c.data_hash },
         })
         .collect()
 }
@@ -96,7 +111,7 @@ fn generate_leaves(chunks: &[Chunk]) -> Vec<Node> {
 /// Combina pares de nós adjacentes até restar só a raiz. Um nó ímpar sem
 /// par (`right` ausente) sobe direto pro próximo nível sem ser re-hasheado
 /// — mesmo comportamento de `hashBranch`/`buildLayers` em `arweave-js`.
-fn build_layers(mut nodes: Vec<Node>) -> Node {
+fn build_layers(mut nodes: Vec<MerkleNode>) -> MerkleNode {
     while nodes.len() > 1 {
         let mut next_layer = Vec::with_capacity(nodes.len().div_ceil(2));
         let mut iter = nodes.into_iter();
@@ -108,9 +123,11 @@ fn build_layers(mut nodes: Vec<Node>) -> Node {
                         &sha256(&right.id),
                         &sha256(&int_to_buffer(left.max_byte_range)),
                     ]);
-                    next_layer.push(Node {
+                    let max_byte_range = right.max_byte_range;
+                    next_layer.push(MerkleNode {
                         id,
-                        max_byte_range: right.max_byte_range,
+                        max_byte_range,
+                        kind: NodeKind::Branch { left: Box::new(left), right: Box::new(right) },
                     });
                 }
                 None => next_layer.push(left),
@@ -125,6 +142,127 @@ fn build_layers(mut nodes: Vec<Node>) -> Node {
 pub(crate) fn compute_data_root(chunks: &[Chunk]) -> [u8; 32] {
     let leaves = generate_leaves(chunks);
     build_layers(leaves).id
+}
+
+/// Prova de inclusão (`data_path`) de cada chunk na árvore, na mesma ordem
+/// de `chunks` (esquerda-pra-direita). Espelha `resolveBranchProofs` de
+/// `arweave-js` (`lib/merkle.ts`): a prova de um branch concatena os ids
+/// **crus** de 32 bytes dos filhos (sem re-hashear — o duplo-sha256 já
+/// aplicado em `generate_leaves`/`build_layers` é só pra computar o id de
+/// cada nó, nunca reaplicado ao serializar esse id numa prova ancestral) +
+/// `int_to_buffer` do `max_byte_range` do filho esquerdo; a folha finaliza
+/// esse prefixo herdado com `data_hash` cru + `int_to_buffer(max_byte_range)`.
+pub(crate) fn generate_proofs(chunks: &[Chunk]) -> Vec<Proof> {
+    let root = build_layers(generate_leaves(chunks));
+    let mut out = Vec::with_capacity(chunks.len());
+    resolve_branch_proofs(&root, Vec::new(), &mut out);
+    out
+}
+
+fn resolve_branch_proofs(node: &MerkleNode, proof: Vec<u8>, out: &mut Vec<Proof>) {
+    match &node.kind {
+        NodeKind::Leaf { data_hash } => {
+            let mut p = proof;
+            p.extend_from_slice(data_hash);
+            p.extend_from_slice(&int_to_buffer(node.max_byte_range));
+            out.push(Proof { offset: node.max_byte_range.saturating_sub(1), proof: p });
+        }
+        NodeKind::Branch { left, right } => {
+            let mut p = proof;
+            p.extend_from_slice(&left.id);
+            p.extend_from_slice(&right.id);
+            p.extend_from_slice(&int_to_buffer(left.max_byte_range));
+            resolve_branch_proofs(left, p.clone(), out);
+            resolve_branch_proofs(right, p, out);
+        }
+    }
+}
+
+/// `chunk_data` + `generate_proofs`, já descartando o par (chunk, prova)
+/// final se o último chunk tiver 0 bytes (conteúdo múltiplo exato de
+/// `MAX_CHUNK_SIZE` — ver `exactly_max_chunk_size_produces_two_chunks`).
+/// Mesmo splice que `generateTransactionChunks` faz em `arweave-js`: esse
+/// chunk vazio existe só pra fechar a árvore de merkle corretamente, nunca
+/// deve ser upado via `POST /chunk`.
+pub(crate) fn chunk_data_for_upload(data: &[u8]) -> (Vec<Chunk>, Vec<Proof>) {
+    let mut chunks = chunk_data(data);
+    let mut proofs = generate_proofs(&chunks);
+    if chunks.len() > 1 {
+        if let Some(last) = chunks.last() {
+            if last.min_byte_range == last.max_byte_range {
+                chunks.pop();
+                proofs.pop();
+            }
+        }
+    }
+    (chunks, proofs)
+}
+
+fn buffer_to_usize(buffer: &[u8]) -> usize {
+    let mut value: usize = 0;
+    for &b in buffer {
+        value = value.wrapping_mul(256).wrapping_add(b as usize);
+    }
+    value
+}
+
+/// Verificação local de uma prova de merkle (`data_path`) contra um
+/// `data_root` — espelha `validatePath` de `arweave-js` (`lib/merkle.ts`).
+/// Usado como sanity check antes de cada `POST /chunk` (mesmo padrão que
+/// `verify_transaction_signature` já usa antes de `submit_transaction`):
+/// ArLocal não valida a prova que o cliente manda, então esse é o único jeito
+/// de pegar um bug sutil na construção de `generate_proofs` antes de mainnet.
+/// Devolve `Some((offset, left_bound, right_bound))` do chunk provado se a
+/// prova for válida pro destino `dest`.
+pub(crate) fn validate_path(
+    id: &[u8],
+    dest: i64,
+    left_bound: usize,
+    right_bound: usize,
+    path: &[u8],
+) -> Option<(usize, usize, usize)> {
+    if right_bound == 0 {
+        return None;
+    }
+
+    if dest >= right_bound as i64 {
+        return validate_path(id, 0, right_bound - 1, right_bound, path);
+    }
+
+    if dest < 0 {
+        return validate_path(id, 0, 0, right_bound, path);
+    }
+
+    if path.len() == NOTE_SIZE * 2 {
+        let path_data_hash = &path[0..NOTE_SIZE];
+        let end_offset_buffer = &path[NOTE_SIZE..NOTE_SIZE * 2];
+        let computed = sha256_concat(&[&sha256(path_data_hash), &sha256(end_offset_buffer)]);
+        if computed.as_slice() == id {
+            return Some((right_bound - 1, left_bound, right_bound));
+        }
+        return None;
+    }
+
+    if path.len() < NOTE_SIZE * 3 {
+        return None;
+    }
+
+    let left = &path[0..NOTE_SIZE];
+    let right = &path[NOTE_SIZE..NOTE_SIZE * 2];
+    let offset_buffer = &path[NOTE_SIZE * 2..NOTE_SIZE * 3];
+    let offset = buffer_to_usize(offset_buffer);
+    let remainder = &path[NOTE_SIZE * 3..];
+
+    let path_hash = sha256_concat(&[&sha256(left), &sha256(right), &sha256(offset_buffer)]);
+
+    if path_hash.as_slice() == id {
+        if dest < offset as i64 {
+            return validate_path(left, dest, left_bound, right_bound.min(offset), remainder);
+        }
+        return validate_path(right, dest, left_bound.max(offset), right_bound, remainder);
+    }
+
+    None
 }
 
 #[cfg(test)]
@@ -222,4 +360,78 @@ mod tests {
         "27780e22e3b3f356e8aba78732ce3217ce1f312874cafaca16a39c9d740c2fdd";
     const CROSS_CHECKED_MULTI_CHUNK_ROOT_HEX: &str =
         "fb70bd611bd95db03ae5e779316bc16940493b636908d7e4b9a90d837dcfa947";
+
+    // Vetor cross-checado contra `arweave-js` real (`generateTransactionChunks`,
+    // pacote `arweave` instalado num scratchpad descartável) — mesmo conteúdo
+    // de `cross_checked_multi_chunk_root` (3 chunks reais, sem trailing vazio:
+    // 256KiB + ~128KiB rebalanceado + ~128KiB). Prova que `generate_proofs`
+    // produz os mesmos bytes de `data_path` que o cliente de referência, não
+    // só que a árvore reassembla localmente.
+    #[test]
+    fn cross_checked_proofs_match_arweave_js() {
+        let data = vec![0xABu8; MAX_CHUNK_SIZE * 2 + 500];
+        let (chunks, proofs) = chunk_data_for_upload(&data);
+        assert_eq!(chunks.len(), 3, "conteúdo não é múltiplo exato — não deve descartar nada");
+        assert_eq!(proofs.len(), 3);
+
+        assert_eq!(proofs[0].offset, 262_143);
+        assert_eq!(hex::encode(&proofs[0].proof), CROSS_CHECKED_PROOF_0_HEX);
+        assert_eq!(proofs[1].offset, 393_465);
+        assert_eq!(hex::encode(&proofs[1].proof), CROSS_CHECKED_PROOF_1_HEX);
+        assert_eq!(proofs[2].offset, 524_787);
+        assert_eq!(hex::encode(&proofs[2].proof), CROSS_CHECKED_PROOF_2_HEX);
+    }
+
+    #[test]
+    fn chunk_data_for_upload_discards_trailing_empty_chunk() {
+        // Múltiplo exato de MAX_CHUNK_SIZE: chunk_data() cru produz 2 chunks
+        // (o segundo vazio, ver exactly_max_chunk_size_produces_two_chunks).
+        // chunk_data_for_upload deve descartar esse par, sobrando 1 — mesmo
+        // resultado que `generateTransactionChunks` real (confirmado via
+        // node: num_chunks_after_discard: 1 pro mesmo tamanho de conteúdo).
+        let data = vec![0x11u8; MAX_CHUNK_SIZE];
+        let (chunks, proofs) = chunk_data_for_upload(&data);
+        assert_eq!(chunks.len(), 1);
+        assert_eq!(proofs.len(), 1);
+        assert_eq!(chunks[0].max_byte_range, MAX_CHUNK_SIZE);
+    }
+
+    #[test]
+    fn chunk_data_for_upload_keeps_non_exact_multiple_chunks() {
+        let data = vec![0xABu8; MAX_CHUNK_SIZE * 2 + 500];
+        let (chunks, proofs) = chunk_data_for_upload(&data);
+        assert_eq!(chunks.len(), 3);
+        assert_eq!(proofs.len(), 3);
+    }
+
+    #[test]
+    fn validate_path_accepts_proof_generated_by_this_module() {
+        let data = vec![0xABu8; MAX_CHUNK_SIZE * 2 + 500];
+        let (chunks, proofs) = chunk_data_for_upload(&data);
+        let root = compute_data_root(&chunk_data(&data));
+
+        for (chunk, proof) in chunks.iter().zip(proofs.iter()) {
+            let result = validate_path(&root, proof.offset as i64, 0, data.len(), &proof.proof);
+            let (offset, left_bound, right_bound) =
+                result.expect("prova gerada por generate_proofs deveria validar");
+            assert_eq!(offset, chunk.max_byte_range - 1);
+            assert_eq!(left_bound, chunk.min_byte_range);
+            assert_eq!(right_bound, chunk.max_byte_range);
+        }
+    }
+
+    #[test]
+    fn validate_path_rejects_tampered_proof() {
+        let data = vec![0xABu8; MAX_CHUNK_SIZE * 2 + 500];
+        let (_chunks, proofs) = chunk_data_for_upload(&data);
+        let root = compute_data_root(&chunk_data(&data));
+
+        let mut tampered = proofs[0].proof.clone();
+        tampered[0] ^= 0xFF;
+        assert!(validate_path(&root, proofs[0].offset as i64, 0, data.len(), &tampered).is_none());
+    }
+
+    const CROSS_CHECKED_PROOF_0_HEX: &str = "84634a0e6f233db7ba81986591e0e82d3878b7b8e373f8d92d00242508410f1d47be080793f0f5d282566f7af072a8b58dec3e111551fffa7eb8733ac9df7cd800000000000000000000000000000000000000000000000000000000000600fa021304c16b5b3b0ac94b52784caf6c0f6f7fa76eacb9b4295087edc9da297b01bbf5dd864466f45523652fe3d6051cea17a669d863936d26f170964da1a47ffc0000000000000000000000000000000000000000000000000000000000040000c6a68609e7e9bf598a7e12a826337bd08f29200bc8c37f0c4ebe26b7dfc8c4be0000000000000000000000000000000000000000000000000000000000040000";
+    const CROSS_CHECKED_PROOF_1_HEX: &str = "84634a0e6f233db7ba81986591e0e82d3878b7b8e373f8d92d00242508410f1d47be080793f0f5d282566f7af072a8b58dec3e111551fffa7eb8733ac9df7cd800000000000000000000000000000000000000000000000000000000000600fa021304c16b5b3b0ac94b52784caf6c0f6f7fa76eacb9b4295087edc9da297b01bbf5dd864466f45523652fe3d6051cea17a669d863936d26f170964da1a47ffc00000000000000000000000000000000000000000000000000000000000400003ccde55fefef16e9aed69a5af49173818df5f730f6c08f0ee74c7217cdb96f4500000000000000000000000000000000000000000000000000000000000600fa";
+    const CROSS_CHECKED_PROOF_2_HEX: &str = "84634a0e6f233db7ba81986591e0e82d3878b7b8e373f8d92d00242508410f1d47be080793f0f5d282566f7af072a8b58dec3e111551fffa7eb8733ac9df7cd800000000000000000000000000000000000000000000000000000000000600fa3ccde55fefef16e9aed69a5af49173818df5f730f6c08f0ee74c7217cdb96f4500000000000000000000000000000000000000000000000000000000000801f4";
 }
