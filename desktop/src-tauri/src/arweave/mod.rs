@@ -237,13 +237,30 @@ mod tests {
 // alcançáveis por um binário de teste externo de qualquer forma.
 //
 // Como rodar manualmente:
-//   1. Instalar e iniciar `arlocal` numa rede sem restrição de fetch git
-//      (o pacote `arlocal` depende de um fork via git de `avsc` — bloqueado
-//      no sandbox usado nesta sessão de implementação, então estes testes
-//      não foram executados de fato aqui, só escritos e revisados por
-//      leitura):
-//        npx arlocal
+//   1. Instalar e iniciar `arlocal@1.1.20` — a versão mais recente do pacote
+//      depende de um fork via git de `avsc`, bloqueado por política
+//      anti-supply-chain do npm neste ambiente (`EALLOWGIT`); 1.1.20 é a
+//      última faixa que ainda resolve `arbundles` numa versão (`0.6.12`) sem
+//      esse fork. Como o range `^0.6.12` do próprio `arlocal` inclui versões
+//      mais novas de `arbundles` que reintroduzem o fork, é preciso fixar a
+//      versão via override do npm (`overrides: { "arbundles": "0.6.12" }`
+//      num `package.json` descartável) — só apontar `arlocal@1.1.20` não
+//      basta.
+//        npx arlocal@1.1.20
 //   2. cargo test --lib arweave::arlocal_tests -- --ignored --nocapture
+//
+// Validado de fato contra essa versão (Sessão 185): publish + mine + status +
+// fetch round-trip passou, prova que a assinatura RSA-PSS de
+// `sign_transaction` é aceita por uma implementação real de node Arweave, não
+// só pela verificação local. Achado real no caminho: o `last_tx`/anchor
+// devolvido pelo ArLocal não é uma codificação base64url canônica (bits
+// residuais não-zero no último símbolo) — por isso `signature_data` decodifica
+// esse campo especificamente com `b64url_decode_lenient`, não com o decoder
+// estrito usado nos campos que o próprio cliente codifica. Risco de salt
+// length (PSS estrito da crate `rsa` vs. auto-detect do OpenSSL/Node)
+// permanece não totalmente descartado pra mainnet: ArLocal reimplementa a
+// validação de assinatura em JS, então não é garantia bit-a-bit do
+// comportamento do node oficial escrito em Erlang.
 #[cfg(test)]
 mod arlocal_tests {
     use super::*;

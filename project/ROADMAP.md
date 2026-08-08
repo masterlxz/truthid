@@ -814,6 +814,33 @@ pinned e remoção do `PinningProvider`/Kubo/PSA).**
   `cargo test --lib arweave::arlocal_tests -- --ignored --nocapture`) é o próximo passo antes de
   confiar nisso pra qualquer integração real.
 
+**Validação contra ArLocal rodou de fato (Sessão 186, 2026-08-08) — passou.** O bloqueio de rede
+persistia neste ambiente também, mas era contornável sem violar a política: `arlocal@1.1.20` (fixando
+`arbundles` em `0.6.12` via `overrides` do npm, já que o range `^0.6.12` do próprio pacote inclui
+versões que reintroduzem o fork) resolve todas as dependências pela registry normal, sem git. O
+único outro bloqueio (`sqlite3`/`secp256k1`/etc. precisando compilar bindings nativos, barrados pela
+allowlist de install scripts do npm) foi liberado com aprovação explícita do dono do projeto, restrito
+à pasta descartável do scratchpad — nunca tocou o repositório real.
+
+- **Resultado**: `publish_and_fetch_round_trip_against_arlocal` passou (publish → mine → status →
+  fetch, bytes idênticos). Confirma que a assinatura RSA-PSS de `sign_transaction` é aceita por uma
+  implementação real de node Arweave, não só pela verificação local (`verify_transaction_signature`).
+  Risco de salt length ainda não é 100% descartado pra mainnet (ArLocal reimplementa a validação de
+  assinatura em JS, não é o node oficial em Erlang) — mas é a evidência mais forte disponível até
+  agora sem gastar AR real.
+- **Achado real no caminho, corrigido**: o `last_tx`/anchor devolvido pelo ArLocal usa alfabeto
+  base64url válido mas não é uma codificação canônica (bits residuais != 0 no último símbolo) — o
+  decoder estrito usado no resto do módulo rejeitava isso (`base64::DecodeError`). Como esse campo
+  vem de fora (do node, não codificado por nós), criado `b64url_decode_lenient` em `transaction.rs`
+  só pra ele, mantendo estrito nos campos que o próprio cliente codifica (`owner`/`data_root`, onde
+  qualquer desvio indicaria bug real). 2 testes novos cobrindo o decoder permissivo. `cargo test`
+  173/173 (2 ignorados: keygen RSA-4096 real e o round-trip ArLocal, que só roda com o node local no
+  ar), `cargo clippy` limpo no módulo `arweave` (aviso pré-existente em `vault.rs:629`, não
+  relacionado, confirmado via `git stash`).
+- **Ainda em aberto**: risco de salt length contra um node Arweave oficial de verdade (não ArLocal) —
+  só testnet/mainnet real resolve isso por completo. Integração em `vault_publish`/`VaultRegistry`
+  (Etapa 2) continua não implementada.
+
 ---
 
 ### Interface e identidade visual (UI/UX)

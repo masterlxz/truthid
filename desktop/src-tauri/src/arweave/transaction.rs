@@ -15,6 +15,30 @@ fn b64url_decode(s: &str) -> Result<Vec<u8>, String> {
     URL_SAFE_NO_PAD.decode(s).map_err(|e| e.to_string())
 }
 
+/// Decodifica campos que vêm de fora (ex.: `last_tx`/anchor, respondido pelo
+/// node) de forma permissiva quanto a bits residuais no último símbolo.
+/// Diferente de `b64url_decode` (usado nos campos que nós mesmos codificamos,
+/// onde qualquer desvio indica bug real), aqui a origem é opaca — um anchor
+/// tecnicamente só precisa ser um blob base64url válido nos *caracteres*, não
+/// necessariamente canônico bit-a-bit. Achado validando contra ArLocal: o
+/// anchor que ele gera usa alfabeto base64url válido mas não é uma codificação
+/// canônica (bits residuais != 0), o que o decoder estrito rejeita.
+fn b64url_decode_lenient(s: &str) -> Result<Vec<u8>, String> {
+    use base64::{
+        alphabet,
+        engine::{DecodePaddingMode, GeneralPurpose, GeneralPurposeConfig},
+        Engine as _,
+    };
+    let engine = GeneralPurpose::new(
+        &alphabet::URL_SAFE,
+        GeneralPurposeConfig::new()
+            .with_encode_padding(false)
+            .with_decode_padding_mode(DecodePaddingMode::Indifferent)
+            .with_decode_allow_trailing_bits(true),
+    );
+    engine.decode(s).map_err(|e| e.to_string())
+}
+
 /// Transação Arweave formato 2. Espelha `Transaction` de `arweave-js`
 /// (`lib/transaction.ts`) — mesmos nomes de campo, mesmo encoding
 /// (base64url sem padding pra tudo exceto `data`, que fica em bytes crus até
@@ -79,7 +103,7 @@ pub(crate) fn build_transaction(
 fn signature_data(tx: &ArweaveTransaction) -> Result<[u8; 48], String> {
     let owner_bytes = b64url_decode(&tx.owner)?;
     let target_bytes = b64url_decode(&tx.target)?;
-    let last_tx_bytes = b64url_decode(&tx.last_tx)?;
+    let last_tx_bytes = b64url_decode_lenient(&tx.last_tx)?;
     let data_root_bytes = b64url_decode(&tx.data_root)?;
 
     let tag_list = DeepHashChunk::List(
@@ -187,6 +211,25 @@ mod tests {
         let jwk = parse_jwk(TEST_WALLET_JWK_JSON).unwrap();
         let key = jwk_to_private_key(&jwk).unwrap();
         (jwk, key)
+    }
+
+    #[test]
+    fn lenient_decode_accepts_non_canonical_trailing_bits() {
+        // 44 chars, alfabeto base64url válido, mas o último símbolo carrega
+        // bits residuais != 0 — mesmo padrão do anchor gerado pelo ArLocal
+        // que expôs a necessidade desse decoder (o estrito rejeita).
+        let non_canonical = "vq1pzfxj6ba96uc9cyn3qj4hdspa0tlj5s04tfyi1w5";
+        assert!(b64url_decode(non_canonical).is_err());
+        assert!(b64url_decode_lenient(non_canonical).is_ok());
+    }
+
+    #[test]
+    fn lenient_decode_matches_strict_decode_for_canonical_input() {
+        let canonical = TEST_ANCHOR;
+        assert_eq!(
+            b64url_decode(canonical).unwrap(),
+            b64url_decode_lenient(canonical).unwrap()
+        );
     }
 
     #[test]
