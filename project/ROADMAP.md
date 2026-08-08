@@ -841,6 +841,58 @@ allowlist de install scripts do npm) foi liberado com aprovação explícita do 
   só testnet/mainnet real resolve isso por completo. Integração em `vault_publish`/`VaultRegistry`
   (Etapa 2) continua não implementada.
 
+**Item 2 — Etapa 2 implementada (Sessão 187, 2026-08-08): blob principal do vault integrado de
+verdade no `vault_publish`, publicando no Arweave em vez do IPFS.** Escopo deliberadamente mais
+estreito que a intenção original registrada acima ("ir 100% Arweave, remover `PinningProvider` por
+completo, re-publicar conteúdo já pinado") — aquilo continua trabalho futuro, não foi abandonado,
+só não é esta etapa. Confirmado com o dono do projeto antes de implementar: corte direto sem
+feature flag/fallback (mesmo padrão da rotação de DEK), inclusão do shim de leitura no Mobile nesta
+mesma etapa, e só o blob principal do vault (não documentos anexados) — o cliente Arweave da Etapa
+1 só sobe até 256KB (chunk único), e documentos podem chegar a 50MB (`VaultManagement.tsx`); upload
+em chunks fica pra uma etapa futura dedicada.
+
+- **Design**: ponteiro auto-descritivo `"ar://" + tx_id` gravado como `cid` no `VaultRegistry`
+  (`updateVault(string cid, bytes32 contentHash)` só valida `bytes(cid).length != 0` — string opaca
+  por design, confirmado lendo o contrato). Um `cid` sem esse prefixo continua significando "busca
+  no IPFS", exatamente como antes — zero migração de dado, zero mudança de contrato, compatível com
+  qualquer conteúdo já publicado e com qualquer outro escritor (Mobile, Extension) que continue
+  publicando no IPFS.
+- **Rust** (`arweave/mod.rs`): `publish_vault_blob_with_jwk` (core, sem I/O de wallet — testável
+  direto contra ArLocal com um JWK gerado na hora) + `publish_vault_blob` (carrega a wallet local,
+  erro claro e sem fallback se ausente) + `get_wallet_balance`/comando `arweave_wallet_balance`
+  (saldo em winston, pra dar erro acionável antes de gastar uma requisição de publish fadada a
+  falhar). `lib.rs::vault_publish` troca só a chamada do blob principal
+  (`ipfs::pin_vault` → `arweave::publish_vault_blob`); documentos por-documento e o comando
+  `pin_content` de terceiros (`/truthid/v1/pin`, usado pelo SDK) continuam intocados no IPFS.
+  `vault_document_read` ganha dispatch por prefixo (`ar://` → `arweave::fetch_data`, sem wallet
+  necessária pra ler — GET público).
+- **Mobile** (`ipfs_gateway_client.dart`): mesmo dispatch por prefixo, centralizado no único ponto
+  que `vault_sync_service.dart` e `vault_repository.dart` já usam pra buscar conteúdo — nenhum dos
+  dois precisou mudar. Sem carteira/cripto nova no Dart, é só GET HTTP contra `arweave.net`.
+- **UI nova no Desktop** (`VaultSettings.tsx`, `ArweaveWalletSection`): antes desta etapa não
+  existia nenhuma referência a Arweave em `desktop/src` — sem UI, o corte direto deixaria o dono do
+  projeto sem jeito de gerar/financiar a wallet. Mostra endereço (copiável), saldo em AR, botão de
+  gerar wallet nova.
+- **Testes**: Rust 173/173 (`cargo test --lib`, 3 ignorados: 2 de keygen RSA-4096 real, 1 novo —
+  `publish_vault_blob_round_trip_against_arlocal` — validado de fato rodando manualmente contra
+  ArLocal, mesma receita da Etapa 1: publish → mine → status → fetch, `cid` prefixado `ar://`,
+  `content_hash` batendo com `ipfs::keccak256_hex`). `cargo clippy` limpo (mesmo aviso pré-existente
+  de `vault.rs:629`, não relacionado). `tsc --noEmit` limpo. Dart: 5/5 em
+  `ipfs_gateway_client_test.dart` (3 existentes sem regressão + 2 novos cobrindo o dispatch
+  `ar://`, rodado via `./dev.sh flutter test` no Docker).
+- **Achado no caminho, sem relação com o código**: rodar os dois testes ArLocal (antigo + novo) em
+  paralelo ou logo em sequência produziu falhas de rede intermitentes ("error sending request",
+  sem chegar a bater no servidor — confirmado via log do ArLocal e um `curl` direto na mesma URL,
+  que funcionou normalmente). Ambiente lento pra 2 keygens RSA-4096 + round-trips HTTP seguidos, não
+  bug de lógica — rodando de novo com tempo suficiente (`--test-threads=1`, ~400s), os dois passam
+  limpo.
+- **Ainda em aberto**: documentos anexados continuam no IPFS (upload em chunks do Arweave é etapa
+  futura); sync de wallet Arweave entre devices não implementado (não bloqueia nada agora — ler não
+  precisa de wallet, só quem publica); remoção do `PinningProvider`/Kubo/PSA e re-publicação do
+  conteúdo já pinado continuam trabalho futuro; risco de salt length contra mainnet real (não
+  ArLocal) só se resolve com uma publicação real, ainda não feita — precisa de uma wallet financiada
+  com AR de verdade, ação do dono do projeto.
+
 ---
 
 ### Interface e identidade visual (UI/UX)

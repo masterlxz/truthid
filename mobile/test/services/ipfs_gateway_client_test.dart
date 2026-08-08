@@ -70,5 +70,51 @@ void main() {
 
       await server.close(force: true);
     });
+
+    test('usa o gateway Arweave quando o cid começa com ar://', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final bytes = Uint8List.fromList([5, 6, 7, 8]);
+      String? requestedPath;
+      server.listen((request) async {
+        requestedPath = request.uri.path;
+        request.response.statusCode = 200;
+        request.response.add(bytes);
+        await request.response.close();
+      });
+
+      final client = IpfsGatewayClient(
+        arweaveGateway: 'http://${server.address.address}:${server.port}/',
+      );
+
+      final result = await client.fetch('ar://sometxid');
+      expect(result, equals(bytes));
+      expect(requestedPath, equals('/sometxid'));
+
+      await server.close(force: true);
+    });
+
+    test('não tenta gateways IPFS quando o cid é ar://', () async {
+      final arweaveServer =
+          await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final bytes = Uint8List.fromList([1]);
+      arweaveServer.listen((request) async {
+        request.response.statusCode = 200;
+        request.response.add(bytes);
+        await request.response.close();
+      });
+
+      // Lista de gateways IPFS deliberadamente quebrada — se o dispatch
+      // tentasse cair nela, o fetch falharia.
+      final client = IpfsGatewayClient(
+        gateways: ['http://127.0.0.1:1/ipfs/'],
+        arweaveGateway:
+            'http://${arweaveServer.address.address}:${arweaveServer.port}/',
+      );
+
+      final result = await client.fetch('ar://sometxid');
+      expect(result, equals(bytes));
+
+      await arweaveServer.close(force: true);
+    });
   });
 }

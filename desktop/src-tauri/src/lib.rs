@@ -565,16 +565,26 @@ fn vault_encrypt(plaintext_b64: String) -> Result<String, String> {
     Ok(STANDARD.encode(blob))
 }
 
-/// Publica o vault local no IPFS (upload multi-pin) e retorna o CID e o
-/// content hash (keccak256) para o frontend registrar no VaultRegistry.
-/// Requer ao menos um provider `kind = "kubo"` configurado.
+/// Publica o vault local e retorna o CID (ponteiro) e o content hash
+/// (keccak256) para o frontend registrar no VaultRegistry.
 ///
-/// Fase 15.7: antes de pinar o blob principal, pina separadamente o
-/// conteúdo (cache local cifrado) de cada documento que ainda não tem `cid`
-/// ou cujo conteúdo local mudou desde o último pin — o blob do vault carrega
-/// só o ponteiro (`cid`/`content_hash`), nunca o conteúdo do documento em
-/// si, então documentos grandes não inflam o sync de edições não
-/// relacionadas (ver project/PHASE.md, 15.7).
+/// Fase 15.7: antes de publicar o blob principal, pina separadamente no IPFS
+/// o conteúdo (cache local cifrado) de cada documento que ainda não tem
+/// `cid` ou cujo conteúdo local mudou desde o último pin — o blob do vault
+/// carrega só o ponteiro (`cid`/`content_hash`), nunca o conteúdo do
+/// documento em si, então documentos grandes não inflam o sync de edições
+/// não relacionadas (ver project/PHASE.md, 15.7). Requer ao menos um
+/// provider `kind = "kubo"` configurado, mesmo que nenhum documento precise
+/// de (re)pin nesta chamada.
+///
+/// Etapa 2 da migração de storage (ver `project/ROADMAP.md`): o blob
+/// principal do vault vai pro Arweave via `arweave::publish_vault_blob`
+/// (exige wallet Arweave configurada e financiada — sem fallback pro IPFS,
+/// corte direto). Documentos anexados continuam no IPFS por enquanto — o
+/// cliente Arweave só sobe até 256KB (chunk único), e documentos podem
+/// chegar a 50MB. `cid`s Arweave saem prefixados `"ar://"`; `cid`s IPFS
+/// (documentos, ou vaults publicados antes desta etapa) continuam sem
+/// prefixo — ver dispatch em `vault_document_read`.
 #[tauri::command]
 async fn vault_publish() -> Result<ipfs::PinResult, String> {
     let path = vault::vault_path()?;
@@ -611,7 +621,7 @@ async fn vault_publish() -> Result<ipfs::PinResult, String> {
     }
 
     let encrypted_blob = crate::config::read_file(&path)?;
-    let result = ipfs::pin_vault(&encrypted_blob, &providers).await?;
+    let result = arweave::publish_vault_blob(&encrypted_blob).await?;
     // Decripta do blob já em memória em vez de read()+load() de novo
     let decrypted = vault::decrypt(&encrypted_blob)?;
     let mut v: vault::Vault = serde_json::from_slice(&decrypted).map_err(|e| e.to_string())?;
@@ -639,10 +649,11 @@ fn vault_document_write(entry_id: String, content_b64: String) -> Result<(), Str
 
 /// Lê o conteúdo (em claro, Base64) do documento de uma entrada — cache
 /// local primeiro (rápido, offline); se ausente (documento adicionado em
-/// outro device e nunca buscado aqui), busca pelo `cid` num gateway IPFS
-/// público, confere `content_hash` antes de decifrar (mesmo padrão
-/// defensivo do `VaultSyncService.sync()` no Mobile), e grava no cache local
-/// pra próxima vez.
+/// outro device e nunca buscado aqui), busca pelo `cid` — Arweave se
+/// prefixado `"ar://"` (Etapa 2), IPFS caso contrário (gateway público) —,
+/// confere `content_hash` antes de decifrar (mesmo padrão defensivo do
+/// `VaultSyncService.sync()` no Mobile), e grava no cache local pra próxima
+/// vez.
 #[tauri::command]
 async fn vault_document_read(
     entry_id: String,
@@ -657,7 +668,12 @@ async fn vault_document_read(
             let cid = cid.ok_or_else(|| {
                 "documento sem conteúdo local e sem cid — nunca foi publicado".to_string()
             })?;
-            let fetched = ipfs::fetch_from_gateway(&cid).await?;
+            let fetched = if let Some(txid) = cid.strip_prefix("ar://") {
+                arweave::fetch_data(&reqwest::Client::new(), arweave::ARWEAVE_DEFAULT_NODE, txid)
+                    .await?
+            } else {
+                ipfs::fetch_from_gateway(&cid).await?
+            };
             if let Some(expected) = &content_hash {
                 let actual = ipfs::keccak256_hex(&fetched);
                 if &actual != expected {
@@ -1232,6 +1248,7 @@ pub fn run() {
             arweave::arweave_import_wallet,
             arweave::arweave_wallet_exists,
             arweave::arweave_wallet_address,
+            arweave::arweave_wallet_balance,
             arweave::arweave_publish,
             arweave::arweave_get_status,
             arweave::arweave_fetch

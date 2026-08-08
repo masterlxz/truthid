@@ -7,22 +7,39 @@ import 'package:flutter/foundation.dart' show consolidateHttpClientResponseBytes
 // Só gateways HTTP públicos de leitura, sem autenticação — os provedores de
 // pin configurados pelo usuário (Pinata/Filebase/Kubo, etc.) são escopo do
 // Desktop (VaultSettings), não precisam ser consultados aqui pra ler.
+//
+// Etapa 2 da migração de storage (ver project/ROADMAP.md): o Desktop pode
+// publicar o blob principal do vault no Arweave em vez do IPFS — o ponteiro
+// vem prefixado "ar://<txid>" (auto-descritivo, VaultRegistry.cid é uma
+// string opaca, sem mudança de schema). Ler do Arweave não exige
+// carteira/cripto nova aqui, é só um GET público contra o gateway — por
+// isso o dispatch mora inteiro neste client, sem tocar VaultSyncService nem
+// VaultRepository (os dois só chamam fetch(cid)).
 class IpfsGatewayClient {
   IpfsGatewayClient({
     this.gateways = const [
       'https://ipfs.io/ipfs/',
       'https://dweb.link/ipfs/',
     ],
+    this.arweaveGateway = 'https://arweave.net/',
     this.timeout = const Duration(seconds: 15),
   });
 
   final List<String> gateways;
+  final String arweaveGateway;
   final Duration timeout;
+
+  static const _arweavePrefix = 'ar://';
 
   // Tenta cada gateway em ordem, a primeira resposta 200 vence. Lança se
   // todos falharem (rede, timeout, ou status != 200), com um resumo do que
   // cada gateway retornou.
   Future<Uint8List> fetch(String cid) async {
+    if (cid.startsWith(_arweavePrefix)) {
+      final txid = cid.substring(_arweavePrefix.length);
+      return await _fetchFromGateway('$arweaveGateway$txid').timeout(timeout);
+    }
+
     final errors = <String>[];
     for (final gateway in gateways) {
       try {

@@ -2,9 +2,10 @@
 //! ver `project/ROADMAP.md`) — gera/importa wallet, monta e assina
 //! transações formato 2, submete e lê de volta contra qualquer node/gateway
 //! Arweave via HTTP direto (sem bundler/serviço terceiro, ver decisão de
-//! arquitetura no plano da Etapa 1). Ainda não integrado em
-//! `vault_publish`/`VaultRegistry` — os commands aqui existem só pra
-//! permitir validação manual isolada.
+//! arquitetura no plano da Etapa 1). Etapa 2: `publish_vault_blob` integra
+//! o blob principal do vault (`vault_publish` em `lib.rs`) — documentos
+//! anexados continuam no IPFS por enquanto (limite de 256KB, sem upload em
+//! chunks aqui ainda).
 
 mod deep_hash;
 mod merkle;
@@ -150,6 +151,66 @@ pub(crate) async fn publish(
     Ok(tx.id.clone())
 }
 
+/// `GET /wallet/{address}/balance` — saldo em winston. Usado antes de
+/// publicar de verdade pra dar um erro claro de saldo insuficiente em vez de
+/// deixar isso aparecer só como um "POST /tx retornou 400" cru lá na frente
+/// (ver `arweave_wallet_balance`, comando exposto à UI).
+pub(crate) async fn get_wallet_balance(
+    client: &reqwest::Client,
+    node_url: &str,
+    address: &str,
+) -> Result<String, String> {
+    let url = format!(
+        "{}/wallet/{}/balance",
+        node_url.trim_end_matches('/'),
+        address
+    );
+    let res = client.get(&url).send().await.map_err(|e| e.to_string())?;
+    if !res.status().is_success() {
+        return Err(format!("GET /wallet/{{address}}/balance retornou {}", res.status()));
+    }
+    res.text().await.map_err(|e| e.to_string())
+}
+
+/// Publica `content` no Arweave já com um JWK em mãos — sem tocar o
+/// keyring/arquivo local, então é diretamente testável (ex.: contra ArLocal
+/// com um JWK gerado na hora, ver `arlocal_tests`). Devolve o mesmo formato
+/// que `ipfs::pin_vault`: `cid` prefixado `"ar://"` (ponteiro
+/// auto-descritivo — um `cid` sem esse prefixo continua significando "busca
+/// no IPFS", sem exigir migração de dado nem mudança no `VaultRegistry`,
+/// que só guarda uma string opaca), `content_hash` calculado igual
+/// (`keccak256`, independente de backend).
+pub(crate) async fn publish_vault_blob_with_jwk(
+    client: &reqwest::Client,
+    node_url: &str,
+    jwk: &ArweaveJwk,
+    content: &[u8],
+) -> Result<crate::ipfs::PinResult, String> {
+    let tags = vec![
+        ("Content-Type".to_string(), "application/octet-stream".to_string()),
+        ("App-Name".to_string(), "TruthID".to_string()),
+    ];
+    let tx_id = publish(client, node_url, jwk, content, &tags).await?;
+    Ok(crate::ipfs::PinResult {
+        cid: format!("ar://{tx_id}"),
+        content_hash: crate::ipfs::keccak256_hex(content),
+        providers_ok: vec!["arweave".to_string()],
+        providers_failed: vec![],
+    })
+}
+
+/// Ponto de entrada real do `vault_publish` (Etapa 2) — carrega a wallet
+/// local (erro claro se ausente, sem fallback pro IPFS: corte direto,
+/// mesmo padrão já usado na rotação de DEK) e delega pro core acima.
+pub(crate) async fn publish_vault_blob(content: &[u8]) -> Result<crate::ipfs::PinResult, String> {
+    let json = crate::get_arweave_wallet().map_err(|_| {
+        "nenhuma wallet Arweave configurada — gere ou importe uma antes de publicar o vault"
+            .to_string()
+    })?;
+    let jwk = wallet::parse_jwk(&json)?;
+    publish_vault_blob_with_jwk(&http_client(), ARWEAVE_DEFAULT_NODE, &jwk, content).await
+}
+
 // ---------------------------------------------------------------------------
 // Tauri commands — validação manual isolada (sem integração com o Vault)
 // ---------------------------------------------------------------------------
@@ -181,6 +242,16 @@ pub fn arweave_wallet_address() -> Result<String, String> {
     let json = crate::get_arweave_wallet()?;
     let jwk = wallet::parse_jwk(&json)?;
     wallet::wallet_address(&jwk)
+}
+
+/// Saldo em winston da wallet local, contra `ARWEAVE_DEFAULT_NODE`. Usado
+/// pela UI (Etapa 2) pra mostrar se dá pra publicar antes do usuário tentar.
+#[tauri::command]
+pub async fn arweave_wallet_balance() -> Result<String, String> {
+    let json = crate::get_arweave_wallet()?;
+    let jwk = wallet::parse_jwk(&json)?;
+    let address = wallet::wallet_address(&jwk)?;
+    get_wallet_balance(&http_client(), ARWEAVE_DEFAULT_NODE, &address).await
 }
 
 /// `node_url` vazio usa `ARWEAVE_DEFAULT_NODE` — o caller (devtools/UI de
@@ -336,6 +407,47 @@ mod arlocal_tests {
         assert!(status.confirmed, "tx deveria estar confirmada após minerar");
 
         let fetched = fetch_data(&client, ARLOCAL_URL, &tx_id)
+            .await
+            .expect("fetch_data deve suceder");
+        assert_eq!(fetched, content);
+    }
+
+    /// Mesma validação de ponta a ponta, mas passando pelo wrapper de Etapa 2
+    /// (`publish_vault_blob_with_jwk`) em vez de `publish` cru — confere o
+    /// formato do `PinResult` (prefixo `ar://`, `content_hash` batendo com
+    /// `ipfs::keccak256_hex`) além do round-trip de bytes.
+    #[tokio::test]
+    #[ignore]
+    async fn publish_vault_blob_round_trip_against_arlocal() {
+        let client = http_client();
+        wait_for_arlocal(&client).await.expect("ArLocal deve estar rodando");
+
+        let jwk = generate_jwk().expect("keygen deve funcionar");
+        let address = wallet_address(&jwk).expect("endereço deve ser derivável");
+
+        mint(&client, &address, 1_000_000_000_000)
+            .await
+            .expect("faucet deve fundar a wallet de teste");
+
+        let content = b"vault blob de teste contra ArLocal".to_vec();
+        let result = publish_vault_blob_with_jwk(&client, ARLOCAL_URL, &jwk, &content)
+            .await
+            .expect("publish_vault_blob_with_jwk deve suceder contra ArLocal");
+
+        assert!(result.cid.starts_with("ar://"), "cid deveria vir prefixado ar://, veio: {}", result.cid);
+        assert_eq!(result.content_hash, crate::ipfs::keccak256_hex(&content));
+        assert_eq!(result.providers_ok, vec!["arweave".to_string()]);
+        assert!(result.providers_failed.is_empty());
+
+        mine(&client).await.expect("mineração manual deve suceder");
+
+        let tx_id = result.cid.strip_prefix("ar://").unwrap();
+        let status = get_tx_status(&client, ARLOCAL_URL, tx_id)
+            .await
+            .expect("get_tx_status não deve falhar");
+        assert!(status.confirmed, "tx deveria estar confirmada após minerar");
+
+        let fetched = fetch_data(&client, ARLOCAL_URL, tx_id)
             .await
             .expect("fetch_data deve suceder");
         assert_eq!(fetched, content);
