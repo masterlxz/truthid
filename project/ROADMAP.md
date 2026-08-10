@@ -1091,6 +1091,78 @@ clippy` / `tsc` limpos. **Não tocado**: `pin_content`, `/truthid/v1/pin`, `Pinn
 `ipfs::pin_vault` (nome da função), e todos os espelhos em Mobile/extensão/SDKs — permanecem "pin"
 de propósito, aguardando o item de generalização pro Arweave já registrado acima.
 
+**Sessão 190 (2026-08-10): Etapa 1 do porte do cliente Arweave pro Mobile (Dart) — fechada e
+validada contra ArLocal real.** Fecha o gap descoberto na Sessão 189: o Mobile nunca recebeu a
+Etapa 2 do Desktop (blob principal do vault ainda publicava só via IPFS) porque não existia nenhum
+cliente Arweave em Dart. Escopo desta etapa, confirmado com o dono do projeto: só o núcleo do
+cliente (wallet, deep hash, merkle, transação, HTTP), validado isoladamente — integrar no
+`VaultPublishService` (Etapa 2) e UI de wallet (Etapa 3) ficam pra depois, mesmo padrão de
+estagiamento que o Desktop usou.
+
+- **Arquivos novos, todos em `mobile/lib/services/`** (flat, mesma convenção já existente no
+  diretório, sem subpasta nova): `arweave_b64url.dart`, `arweave_deep_hash.dart`,
+  `arweave_merkle.dart`, `arweave_jwk.dart`, `arweave_transaction.dart`, `arweave_client.dart`,
+  `arweave_wallet_service.dart`, `arweave_isolate.dart` — espelham 1:1 os módulos Rust
+  equivalentes (`desktop/src-tauri/src/arweave/`), sem pacote pronto (único candidato no pub.dev,
+  `CDDelta/arweave-dart`, abandonado desde 2023). Todo o RSA-PSS/BigInt roda em cima do
+  `pointycastle` já presente no `pubspec.yaml` — não precisou de dependência nova.
+- **Achado real corrigindo a suposição do plano**: o `base64Url` nativo do Dart é **tão estrito
+  quanto o do Rust** (não permissivo, como o plano supôs) — rejeita o mesmo anchor não-canônico do
+  ArLocal. Precisou de um decoder permissivo hand-rolled (`b64UrlDecodeLenient`, bit-packing manual,
+  já que `dart:convert` não expõe a opção "allow trailing bits" que a crate `base64` do Rust tem) —
+  validado byte-a-byte contra o vetor cross-checado do Rust.
+- **Módulo de maior risco (`arweave_merkle.dart`, achado real de porte)**: `resolve_branch_proofs`
+  em Rust é seguro contra aliasing por ownership de `Vec<u8>` (`p.clone()` pra esquerda, `p` movido
+  pra direita); em Dart, `Uint8List` é mutável/compartilhável por referência — mitigado construindo
+  sempre uma cópia nova via spread a cada nível (nunca mutando o prefixo recebido in-place), com
+  teste de não-aliasing dedicado. Os 3 vetores de prova cross-checados contra `arweave-js`
+  (`merkle.rs:434-436`) bateram byte-a-byte, confirmando que não há bug de aliasing.
+- **Cross-check em duas camadas antes do ArLocal** (mesmo princípio do Rust — não confiar só em
+  auto-consistência): Camada A reaproveitou literalmente os vetores hex já provados corretos contra
+  `arweave-js` real nas sessões do Desktop (deep hash, merkle, `signatureData`) — todos bateram.
+  Camada B fechou **dois gaps que o próprio Rust nunca tinha fechado**: (1) `wallet_address` nunca
+  fora cross-checado contra `arweave.wallets.jwkToAddress` real (só contra si mesmo) — rodou e bateu
+  exatamente; (2) a assinatura RSA-PSS gerada pelo `pointycastle` foi verificada por um verificador
+  **genuinamente independente** (`crypto.verify('RSA-PSS', ..., {saltLength:32, mgf1Hash:'sha256'})`
+  nativo do Node/OpenSSL — nem pointycastle, nem a reimplementação de verificação em JS do ArLocal) —
+  passou, e rejeitou corretamente uma mensagem adulterada. Essa validação é mais forte do que a que
+  o Rust tem hoje.
+- **Achado incidental relevante pro Rust também**: pesquisa no código-fonte real do node Arweave
+  (Erlang, `rsa_pss.erl`) mostrou que o hash usado *dentro* do RSA-PSS é sempre SHA-256 (SHA-384 é só
+  do deep hash) — conferido que `transaction.rs:147` já usa `SigningKey::<Sha256>` corretamente, sem
+  bug. Achado extra (menor confiança — leitura de código por um agente de pesquisa, não linha a linha
+  por mim): o `verify/4` do node real parece extrair o salt do próprio bloco decodificado em vez de
+  exigir um comprimento fixo, o que sugeriria que o risco "salt length estrito" (aberto desde a
+  Sessão 186) pode ser menor do que se pensava — não decisivo sozinho, mas a Camada B acima (OpenSSL
+  aceitando salt length 32 de verdade) é evidência real na mesma direção.
+- **`arweave_client.dart`**: mesma API de `mod.rs` (`getPrice`/`getTxAnchor`/`submitTransaction`/
+  `submitTransactionNoData`/`submitChunk`/`getTxStatus`/`fetchData`/`getWalletBalance`/`publish()`),
+  `dart:io HttpClient` puro (não `package:http`, que não é dependência do projeto). Teste dedicado
+  provou a sequencialidade do upload de chunks (nunca concorrente, mesmo motivo do Rust) contra um
+  `HttpServer` local instrumentado pra detectar concorrência real.
+- **`arweave_isolate.dart`**: `signTransaction`/`generateJwk` sempre rodam em isolate dedicado
+  (`Isolate.run`), nunca inline — confirmado empiricamente que `ArweaveJwk` (classe simples de
+  strings) atravessa a fronteira do isolate sem problema; nenhum objeto `pointycastle`
+  (`RSAPrivateKey`/`RSAPublicKey`) cruza a fronteira, só é reconstruído dentro do isolate a partir
+  dos campos do JWK.
+- **Testes**: 8 arquivos novos, ~571 testes na suíte inteira do Mobile passando (nenhuma regressão),
+  `flutter analyze` limpo (mesmos 6 avisos pré-existentes, não relacionados). Testes de integração
+  contra ArLocal (`arweave_arlocal_integration_test.dart`, tag `arlocal` — primeira vez que o Mobile
+  ganha esse padrão, via `dart_test.yaml` com `skip:` + `flutter test --tags arlocal --run-skipped`,
+  equivalente ao `#[ignore]`/`-- --ignored` do Rust) rodaram de fato contra ArLocal 1.1.20 real: os 3
+  cenários (inline pequeno, multi-chunk, múltiplo exato de `maxChunkSize`) passaram, incluindo um
+  retry pela mesma flakiness client-side já documentada (Sessões 186-188) — não é bug. **Achado de
+  ambiente**: o container Docker do Mobile não alcança serviços do host via IP do gateway da bridge
+  (firewall do host bloqueando, não limitação do ArLocal — o `.listen()` dele já bind em todas as
+  interfaces) — validado com `network_mode: host` temporário no `docker-compose.yml`, revertido
+  depois (não é mudança permanente).
+- **Ainda em aberto, registrado explicitamente**: (1) micro-benchmark de `signTransaction` em
+  hardware físico real, modo release — dono do projeto optou por adiar (sem celular conectado nesta
+  sessão), UI de progresso (Etapa 3) só seria afetada se o tempo for alto, não bloqueia o resto; (2)
+  Etapa 2 (integrar no `VaultPublishService`, cobrindo tanto blob principal quanto documentos — Mobile
+  não tem hoje o equivalente de `document_needs_pin` sendo usado com Arweave) e Etapa 3 (UI de wallet,
+  mesmo papel de `ArweaveWalletSection` no Desktop) — nenhuma das duas desenhada ainda.
+
 ---
 
 ### Interface e identidade visual (UI/UX)
