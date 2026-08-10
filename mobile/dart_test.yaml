@@ -1,0 +1,3 @@
+tags:
+  arlocal:
+    skip: "requer ArLocal local rodando (npx arlocal@1.1.20), ver docstring do teste"
