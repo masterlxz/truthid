@@ -965,6 +965,114 @@ continuam no IPFS por enquanto, trocar o call site (`vault_publish`/`vault_docum
   gateways reais). Retry automático por chunk (com backoff, como `arweave-js` faz) não implementado
   — escopo deliberadamente reduzido pra v1, erro já carrega contexto suficiente pra retomada manual.
 
+**Item "documentos do Vault" fechado (Sessão 189, 2026-08-10): cutover completo, IPFS → Arweave,
+mesmo padrão de corte direto (sem feature flag, sem fallback) já usado no blob principal.**
+
+- `arweave::publish_document_with_jwk`/`publish_document` (mod.rs) — mesmo par de camadas de
+  `publish_vault_blob*`, mas com tags reais do documento (`Content-Type` = `doc.mime_type`,
+  `File-Name` = `doc.file_name`, em vez das tags genéricas hardcoded do blob principal).
+- `vault_publish` (lib.rs): loop de documentos pendentes trocou `ipfs::pin_vault` por
+  `arweave::publish_document`; guard de `providers.is_empty()` removido (não sobrou nenhum uso de
+  IPFS nesta função). `vault_document_read` não mudou — o dispatch por prefixo `ar://` já tinha
+  sido escrito pensando nisso na Etapa 2.
+- Frontend: `pinWarning`/`providers_failed` virou código morto em todo lugar que consumia o retorno
+  de `vault_publish` (Arweave nunca populua `providers_failed`, nem pro blob nem pra documento) —
+  removido de `useVaultPublish.ts`, `vaultPublishViaDeviceKey.ts`, `rotateVaultKeyOnRevoke.ts`,
+  `ManageDevices.tsx`, `VaultEditApprovalModal.tsx`, `VaultManagement.tsx`. `tsc` limpo.
+- Teste novo `publish_vault_document_round_trip_against_arlocal` (mod.rs, `arlocal_tests`) — mesmo
+  padrão de `publish_multi_chunk_content_round_trip_against_arlocal` (conteúdo >256KB, exercita
+  chunking de verdade), mas via `publish_document_with_jwk` com `file_name`/`mime_type` de teste.
+  Rust 178/178 (+1 ignorado, total 6), `cargo clippy` limpo (mesmo aviso pré-existente de
+  `vault.rs:629`). Validado contra ArLocal 1.1.20 de fato — mesma flakiness client-side já
+  documentada (Sessões 186-188) apareceu de novo na primeira rodada em lote (4 de 5 falharam no
+  `mint()`, confirmado de novo que a requisição nunca chegou no log do servidor); rodando cada teste
+  isolado (`--test-threads=1`, um por vez), **os 5 testes de `arlocal_tests` passaram**, incluindo o
+  novo — confirma round-trip real do documento (chunked, tags incluídas) contra um node Arweave de
+  verdade, não só localmente.
+- Escopo confirmado com o dono do projeto antes de implementar: Mobile ficou de fora (o blob
+  principal do vault no Mobile ainda publica via IPFS — `VaultPublishService.publish()` nunca
+  recebeu a Etapa 2 — gap real, registrado como próxima etapa própria, vai precisar de um cliente
+  Arweave inteiro em Dart, não tem hoje).
+
+**Novo item de backlog registrado (Sessão 189, não implementado, dono do projeto pediu explicitamente
+pra guardar pra depois): permitir que apps terceiros integrados via TruthID armazenem conteúdo no
+Arweave usando a conta TruthID da pessoa, com a TruthID pagando o custo.** Contexto: já existe hoje
+um canal genérico pra apps terceiros pedirem storage via identidade TruthID (`pin_content`/canal
+`/pin`, ver Sessão 106) — mas ele **continua só no IPFS**, não foi tocado por nenhuma etapa desta
+migração (só o Vault foi migrado). Generalizar esse canal pro Arweave é o próximo passo natural, mas
+reabre a mesma pergunta de billing/metering já levantada na avaliação da Storacha (ver acima nesta
+seção): quem paga e como? Casos de uso citados pelo dono do projeto envolvem payloads bem maiores
+que o Vault (ex.: mundos de Minecraft, ~2GB, com upload novo a cada sessão de jogo).
+
+Estimativa de custo dada nesta sessão (preço de referência já levantado acima nesta seção,
+~US$0,0000037/KB, AR≈US$1,84, ago/2026 — **volátil**, não é cotação ao vivo): 2GB ≈ **US$7,76 por
+upload**, pagamento único e permanente (sem reembolso, sem deleção — modelo de endowment).
+
+**Correção registrada na mesma sessão**: a preocupação inicial de "billing/metering entre múltiplos
+usuários" (por analogia com a conta única compartilhada da Storacha) **não se aplica aqui** — checado
+no código (`pin_content`, `lib.rs:846-862`), o canal `/pin` já existente usa
+`ipfs::load_providers()`, a configuração **local da própria pessoa**, não uma conta central da
+TruthID (que nem existe — o projeto é self-sovereign por instalação, sem backend compartilhado).
+Generalizar `pin_content` pro Arweave usaria naturalmente a wallet Arweave que a própria pessoa já
+configura (mesma `get_arweave_wallet()` usada pelo Vault) — cada instalação paga pelo próprio uso,
+sem problema de billing entre usuários.
+
+O ponto real não é quem paga, é **não reenviar o payload inteiro a cada sessão**. Caso de uso citado
+(mundo de Minecraft) tem uma saída natural: o save do Minecraft já é dividido em arquivos de região
+(`.mca`), uma sessão de jogo normal só altera uma fração pequena do mapa — um "commit" estilo git
+(árvore de hashes por arquivo de região, sobe só o que mudou) fica bem mais perto de
+~US$0,40-0,80/sessão do que US$7,76, reaproveitando a mesma forma que git já usa pra objetos
+(blob+tree), só trocando o content store local do git por Arweave. Fica registrado como direção de
+design pra quando isso for desenhado de verdade — nada implementado ainda.
+
+**Refinamento decidido na mesma conversa (ainda 2026-08-10, sem código)**: o "MCGit" (nome de
+trabalho — interface amigável de versionamento de mundos de Minecraft via git, integrada ao TruthID)
+**não vai ser desenvolvido neste repo**, dono do projeto só quer o TruthID preparado pra suportar.
+Direção escolhida: **não reinventar um sistema de árvore de hashes customizado — usar o modelo de
+objetos do git de verdade** (blob/tree/commit, já content-addressed, já com compartilhamento
+estrutural nativo — arquivo que não mudou não duplica). Existe precedente real de "git sobre storage
+descentralizado" pra referência de interface (Radicle é o mais maduro; git-remote-ipfs é mais
+simples), sem compromisso de usar nenhum dos dois.
+
+O que cabe ao TruthID, quando isso for implementado: só generalizar `pin_content`/`/pin` (item já
+registrado acima) pra virar um content store genérico endereçado por hash, pago pela wallet local da
+pessoa, assinado pela identidade dela — sem saber nada sobre git especificamente. O app externo
+(MCGit) que rodaria um repo git local normal e, no "push", percorreria os objetos git novos da sessão
+mandando cada um pro `/pin` do TruthID em vez de pra um remote git tradicional. Checado no código
+nesta sessão: os **documentos do Vault já têm o primitivo equivalente ao "não reenviar o que não
+mudou"** — `document_needs_pin` (`vault.rs`) compara hash do conteúdo atual contra o já publicado e
+pula o upload se bateu, mesmo princípio de content-addressing que o git usa. O blob principal do
+vault **não** tem esse mecanismo (sempre republica inteiro — aceitável só porque é ~3KB); não serve
+de modelo pra payloads grandes.
+
+**Decisão registrada (mesma sessão): não adotar git (nem `libgit2`/binário `git`) como camada geral
+de storage do TruthID — descartado deliberadamente, não é lacuna a fechar depois.** Raciocínio: um
+blob git é o hash do conteúdo — comparar hash (`document_needs_pin`) já é o mecanismo interno do
+git, não um substituto inferior dele; a estrutura extra do git (árvore, commit, merge) só compra algo
+quando existem muitos arquivos inter-relacionados com mudança incremental real e histórico útil —
+nenhum dos dois workloads atuais do TruthID (vault principal ~3KB sempre-recifra-inteiro, documentos
+individuais grandes raramente revisados em pedaços pequenos) tem essa forma. Risco concreto adicional
+contra adotar git de verdade: não existe binário `git` nem binding maduro de `libgit2` viável no
+Mobile (Flutter/Dart, sandbox iOS/Android) — bloquearia paridade de plataforma. Caso apareça no
+futuro um caso de uso *dentro* do TruthID com a forma do MCGit (muitos arquivos, incremental de
+verdade), reabrir a discussão; até lá, manter conteúdo endereçado por hash como já é hoje.
+
+**Correção sobre o quanto o MCGit precisaria do TruthID (mesma sessão)**: a lógica de git em si
+(objetos, árvore, commits) fica inteiramente no MCGit, fora deste repo — nisso o dono do projeto
+estava certo. Duas ressalvas concretas, checadas no código desta sessão, que valem quando isso for
+retomado:
+1. **Leitura não passa pelo TruthID de jeito nenhum, e isso é bom** — Arweave é rede pública, `GET
+   https://arweave.net/{tx_id}` funciona de qualquer lugar sem TruthID no meio (mesmo padrão que
+   apps terceiros já usam hoje pra ler do IPFS via gateway público). `/truthid/v1/pin`
+   (`local_signer_server.rs:425`) é a única rota do canal genérico hoje — write-only, não existe
+   rota de leitura, e não vai precisar existir, a menos que o conteúdo seja cifrado (aí a "leitura"
+   vira problema de gestão de chave, não de fetch).
+2. **A cota diária atual (`pin.rs:19`, `DEFAULT_DAILY_LIMIT = 50`/dia) foi calibrada pra uso tipo
+   "salvar a cada edição"**, não pra "commitar dezenas/centenas de objetos git numa sessão só" — um
+   MCGit real provavelmente estoura essa cota num único push. Isso é trabalho genuinamente do lado
+   do TruthID (ajustar o modelo de cota, ex. por operação em lote em vez de por chamada), não algo
+   que o MCGit consiga contornar sozinho.
+
 ---
 
 ### Interface e identidade visual (UI/UX)
