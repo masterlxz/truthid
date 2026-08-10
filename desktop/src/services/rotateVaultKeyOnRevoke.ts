@@ -8,7 +8,7 @@ import {
 } from "../config/contracts";
 import { buildAccountCalls } from "../utils/buildAccountCalls";
 import { base64ToBytes } from "../utils/base64";
-import type { PinResult } from "../types";
+import type { PublishResult } from "../types";
 
 /**
  * Roda depois que um `revokeDevice` já confirmou on-chain: gera uma DEK
@@ -30,7 +30,7 @@ export async function buildRotationBatch(
 ): Promise<{ dest: Address[]; value: bigint[]; func: Hex[] }> {
   await invoke<string>("rotate_vault_key");
 
-  const pinResult = await invoke<PinResult>("vault_publish");
+  const publishResult = await invoke<PublishResult>("vault_publish");
 
   const keyUpdateCalls = await Promise.all(
     remainingActiveDevicePubKeys.map(async (pubKey) => {
@@ -53,7 +53,7 @@ export async function buildRotationBatch(
       address: VAULT_REGISTRY_ADDRESS,
       abi: VAULT_REGISTRY_ABI,
       functionName: "updateVault",
-      args: [pinResult.cid, pinResult.content_hash as Hex],
+      args: [publishResult.cid, publishResult.content_hash as Hex],
     },
   ]);
 

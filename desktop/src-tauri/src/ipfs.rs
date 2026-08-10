@@ -21,17 +21,6 @@ pub(crate) struct PinningProvider {
     pub api_key: String,
 }
 
-/// Resultado de `pin_vault`: CID retornado pelo provider, hash do conteúdo (para o contrato)
-/// e listas de providers que tiveram sucesso ou falha.
-#[derive(Serialize, Deserialize, Debug)]
-pub(crate) struct PinResult {
-    pub cid: String,
-    /// keccak256 do blob cifrado, prefixado com "0x" — usado diretamente pelo VaultRegistry.
-    pub content_hash: String,
-    pub providers_ok: Vec<String>,
-    pub providers_failed: Vec<String>,
-}
-
 // ---------------------------------------------------------------------------
 // Lógica de upload / pin
 // ---------------------------------------------------------------------------
@@ -45,12 +34,12 @@ pub(crate) fn keccak256_hex(content: &[u8]) -> String {
 }
 
 /// Faz upload do `content` para todos os Kubo providers e depois pina o CID
-/// em todos os PSA providers. Retorna `PinResult` com o CID obtido e o hash
+/// em todos os PSA providers. Retorna `PublishResult` com o CID obtido e o hash
 /// do conteúdo para o contrato VaultRegistry.
 pub(crate) async fn pin_vault(
     content: &[u8],
     providers: &[PinningProvider],
-) -> Result<PinResult, String> {
+) -> Result<crate::PublishResult, String> {
     let content_hash = keccak256_hex(content);
 
     let kubo: Vec<_> = providers.iter().filter(|p| p.kind == "kubo").collect();
@@ -105,7 +94,7 @@ pub(crate) async fn pin_vault(
         }
     }
 
-    Ok(PinResult {
+    Ok(crate::PublishResult {
         cid,
         content_hash,
         providers_ok,

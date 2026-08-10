@@ -10,7 +10,7 @@ import {
   TRUTHID_ACCOUNT_ABI,
 } from "../config/contracts";
 import { publishVaultViaDeviceKey } from "../services/vaultPublishViaDeviceKey";
-import type { PinResult } from "../types";
+import type { PublishResult } from "../types";
 
 // Débito #43: máquina de estados de "publicar o vault" (vault_publish local +
 // updateVault on-chain) extraída do VaultManagement.tsx, mesmo padrão já usado
@@ -122,7 +122,7 @@ export function useVaultPublish(
     setPublishError(null);
     setPublishState("publishing");
     try {
-      const result = await invoke<PinResult>("vault_publish");
+      const result = await invoke<PublishResult>("vault_publish");
       setPendingUpdate({ cid: result.cid, contentHash: result.content_hash as `0x${string}` });
       setPublishState("idle");
     } catch (e) {

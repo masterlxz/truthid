@@ -565,17 +565,28 @@ fn vault_encrypt(plaintext_b64: String) -> Result<String, String> {
     Ok(STANDARD.encode(blob))
 }
 
+/// Resultado de uma publicação de storage (Arweave ou IPFS legado): CID/ponteiro
+/// obtido, hash do conteúdo (pro contrato) e listas de providers que tiveram
+/// sucesso ou falha — nome/campos genéricos porque hoje é compartilhado por
+/// `arweave::publish_vault_blob*`/`publish_document*` e pelo `ipfs::pin_vault`
+/// ainda usado pelo canal `/pin` de apps terceiros.
+#[derive(Serialize, serde::Deserialize, Debug)]
+pub(crate) struct PublishResult {
+    pub cid: String,
+    pub content_hash: String,
+    pub providers_ok: Vec<String>,
+    pub providers_failed: Vec<String>,
+}
+
 /// Publica o vault local e retorna o CID (ponteiro) e o content hash
 /// (keccak256) para o frontend registrar no VaultRegistry.
 ///
-/// Fase 15.7: antes de publicar o blob principal, pina separadamente no IPFS
-/// o conteúdo (cache local cifrado) de cada documento que ainda não tem
-/// `cid` ou cujo conteúdo local mudou desde o último pin — o blob do vault
-/// carrega só o ponteiro (`cid`/`content_hash`), nunca o conteúdo do
-/// documento em si, então documentos grandes não inflam o sync de edições
-/// não relacionadas (ver project/PHASE.md, 15.7). Requer ao menos um
-/// provider `kind = "kubo"` configurado, mesmo que nenhum documento precise
-/// de (re)pin nesta chamada.
+/// Fase 15.7: antes de publicar o blob principal, publica separadamente cada
+/// documento (cache local cifrado) que ainda não tem `cid` ou cujo conteúdo
+/// local mudou desde a última publicação — o blob do vault carrega só o
+/// ponteiro (`cid`/`content_hash`), nunca o conteúdo do documento em si,
+/// então documentos grandes não inflam o sync de edições não relacionadas
+/// (ver project/PHASE.md, 15.7).
 ///
 /// Etapa 2 da migração de storage (ver `project/ROADMAP.md`): o blob
 /// principal do vault vai pro Arweave via `arweave::publish_vault_blob`.
@@ -586,7 +597,7 @@ fn vault_encrypt(plaintext_b64: String) -> Result<String, String> {
 /// publicados antes desta migração) continuam sem prefixo — ver dispatch em
 /// `vault_document_read`.
 #[tauri::command]
-async fn vault_publish() -> Result<ipfs::PinResult, String> {
+async fn vault_publish() -> Result<PublishResult, String> {
     let path = vault::vault_path()?;
     if !path.exists() {
         return Err(

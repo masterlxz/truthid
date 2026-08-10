@@ -94,7 +94,7 @@ export type VaultEntry = {
   updated_at: number;
 };
 
-export type PinResult = {
+export type PublishResult = {
   cid: string;
   content_hash: string;
   providers_ok: string[];

@@ -278,13 +278,13 @@ pub(crate) async fn publish_vault_blob_with_jwk(
     node_url: &str,
     jwk: &ArweaveJwk,
     content: &[u8],
-) -> Result<crate::ipfs::PinResult, String> {
+) -> Result<crate::PublishResult, String> {
     let tags = vec![
         ("Content-Type".to_string(), "application/octet-stream".to_string()),
         ("App-Name".to_string(), "TruthID".to_string()),
     ];
     let tx_id = publish(client, node_url, jwk, content, &tags).await?;
-    Ok(crate::ipfs::PinResult {
+    Ok(crate::PublishResult {
         cid: format!("ar://{tx_id}"),
         content_hash: crate::ipfs::keccak256_hex(content),
         providers_ok: vec!["arweave".to_string()],
@@ -295,7 +295,7 @@ pub(crate) async fn publish_vault_blob_with_jwk(
 /// Ponto de entrada real do `vault_publish` (Etapa 2) — carrega a wallet
 /// local (erro claro se ausente, sem fallback pro IPFS: corte direto,
 /// mesmo padrão já usado na rotação de DEK) e delega pro core acima.
-pub(crate) async fn publish_vault_blob(content: &[u8]) -> Result<crate::ipfs::PinResult, String> {
+pub(crate) async fn publish_vault_blob(content: &[u8]) -> Result<crate::PublishResult, String> {
     let json = crate::get_arweave_wallet().map_err(|_| {
         "nenhuma wallet Arweave configurada — gere ou importe uma antes de publicar o vault"
             .to_string()
@@ -315,14 +315,14 @@ pub(crate) async fn publish_document_with_jwk(
     content: &[u8],
     file_name: &str,
     mime_type: &str,
-) -> Result<crate::ipfs::PinResult, String> {
+) -> Result<crate::PublishResult, String> {
     let tags = vec![
         ("Content-Type".to_string(), mime_type.to_string()),
         ("App-Name".to_string(), "TruthID".to_string()),
         ("File-Name".to_string(), file_name.to_string()),
     ];
     let tx_id = publish(client, node_url, jwk, content, &tags).await?;
-    Ok(crate::ipfs::PinResult {
+    Ok(crate::PublishResult {
         cid: format!("ar://{tx_id}"),
         content_hash: crate::ipfs::keccak256_hex(content),
         providers_ok: vec!["arweave".to_string()],
@@ -337,7 +337,7 @@ pub(crate) async fn publish_document(
     content: &[u8],
     file_name: &str,
     mime_type: &str,
-) -> Result<crate::ipfs::PinResult, String> {
+) -> Result<crate::PublishResult, String> {
     let json = crate::get_arweave_wallet().map_err(|_| {
         "nenhuma wallet Arweave configurada — gere ou importe uma antes de publicar documentos"
             .to_string()
@@ -549,7 +549,7 @@ mod arlocal_tests {
 
     /// Mesma validação de ponta a ponta, mas passando pelo wrapper de Etapa 2
     /// (`publish_vault_blob_with_jwk`) em vez de `publish` cru — confere o
-    /// formato do `PinResult` (prefixo `ar://`, `content_hash` batendo com
+    /// formato do `PublishResult` (prefixo `ar://`, `content_hash` batendo com
     /// `ipfs::keccak256_hex`) além do round-trip de bytes.
     #[tokio::test]
     #[ignore]
@@ -686,7 +686,7 @@ mod arlocal_tests {
     /// Mesma validação de `publish_multi_chunk_content_round_trip_against_arlocal`
     /// (conteúdo real >256KiB, exercita o upload em chunks), mas passando pelo
     /// wrapper de documentos (`publish_document_with_jwk`) em vez de `publish`
-    /// cru — confere o `PinResult` (mesmo shape de `publish_vault_blob_with_jwk`)
+    /// cru — confere o `PublishResult` (mesmo shape de `publish_vault_blob_with_jwk`)
     /// além do round-trip de bytes. É o caminho que `vault_publish` agora usa
     /// pra documentos anexados do vault.
     #[tokio::test]

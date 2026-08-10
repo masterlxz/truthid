@@ -3,7 +3,7 @@ import type { Address, Hex } from "viem";
 import { encodeFunctionData } from "viem";
 import { VAULT_REGISTRY_ADDRESS, VAULT_REGISTRY_ABI } from "../config/contracts";
 import { executeViaUserOp } from "./userOpExecutor";
-import type { PinResult } from "../types";
+import type { PublishResult } from "../types";
 
 /**
  * Extraído de `useVaultPublish.ts::handleEnviarViaDeviceKey` — mesma cadeia
@@ -17,7 +17,7 @@ import type { PinResult } from "../types";
 export async function publishVaultViaDeviceKey(
   smartAccountAddress: Address
 ): Promise<{ transactionHash: Hex | null }> {
-  const result = await invoke<PinResult>("vault_publish");
+  const result = await invoke<PublishResult>("vault_publish");
 
   const callData = encodeFunctionData({
     abi: VAULT_REGISTRY_ABI,
