@@ -950,7 +950,6 @@ export function VaultManagement() {
     hasVault,
     vaultRef,
     publishError,
-    pinWarning,
     txErrorMessage,
     buttonLabel,
     buttonDisabled,
@@ -1025,7 +1024,8 @@ export function VaultManagement() {
   // ── Documentos: baixar pra um arquivo local ──────────────────────────────
   // Cache local primeiro (rápido, offline); se ausente (documento adicionado
   // em outro device e nunca buscado aqui), vault_document_read busca pelo
-  // cid num gateway IPFS público e confere o content_hash antes de decifrar.
+  // cid (Arweave ou gateway IPFS público, dependendo do prefixo) e confere
+  // o content_hash antes de decifrar.
   async function handleDownloadDocument(entryId: string, doc: DocumentData) {
     try {
       const path = await save({ defaultPath: doc.file_name });
@@ -1262,11 +1262,6 @@ export function VaultManagement() {
         {deviceKeyError && (
           <p className="error-text" style={{ marginBottom: 0, marginTop: "0.5rem" }}>
             {deviceKeyError}
-          </p>
-        )}
-        {pinWarning && (
-          <p style={{ color: "#d9a441", marginBottom: 0, marginTop: "0.5rem", fontSize: "0.9em" }}>
-            ⚠ {pinWarning}
           </p>
         )}
         {txErrorMessage && (

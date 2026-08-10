@@ -22,7 +22,6 @@ export function useVaultPublish(
   hasVault: boolean | undefined;
   vaultRef: unknown;
   publishError: string | null;
-  pinWarning: string | null;
   txErrorMessage: string | null;
   buttonLabel: string;
   buttonDisabled: boolean;
@@ -38,7 +37,6 @@ export function useVaultPublish(
 
   const [publishState, setPublishState] = useState<"idle" | "publishing" | "error">("idle");
   const [publishError, setPublishError] = useState<string | null>(null);
-  const [pinWarning, setPinWarning] = useState<string | null>(null);
   const [pendingUpdate, setPendingUpdate] = useState<{
     cid: string;
     contentHash: `0x${string}`;
@@ -122,19 +120,9 @@ export function useVaultPublish(
 
   async function handleEnviar() {
     setPublishError(null);
-    setPinWarning(null);
     setPublishState("publishing");
     try {
       const result = await invoke<PinResult>("vault_publish");
-      if (result.providers_failed.length > 0 && result.providers_ok.length === 0) {
-        throw new Error(`Todos os providers falharam: ${result.providers_failed.join(", ")}`);
-      }
-      if (result.providers_failed.length > 0) {
-        setPinWarning(
-          `Redundância parcial: falhou em ${result.providers_failed.join(", ")} ` +
-          `(ok em ${result.providers_ok.join(", ")}). O vault foi publicado, mas sem a redundância configurada.`
-        );
-      }
       setPendingUpdate({ cid: result.cid, contentHash: result.content_hash as `0x${string}` });
       setPublishState("idle");
     } catch (e) {
@@ -145,21 +133,13 @@ export function useVaultPublish(
 
   async function handleEnviarViaDeviceKey() {
     setDeviceKeyError(null);
-    setPinWarning(null);
     setDeviceKeyPublishState("publishing");
     try {
       if (!smartAccountAddress) {
         throw new Error("Nenhuma identidade carregada.");
       }
 
-      const { transactionHash, providersFailed } = await publishVaultViaDeviceKey(smartAccountAddress);
-
-      if (providersFailed.length > 0) {
-        setPinWarning(
-          `Redundância parcial: falhou em ${providersFailed.join(", ")} ` +
-          `(ok no restante). O vault foi publicado, mas sem a redundância configurada.`
-        );
-      }
+      const { transactionHash } = await publishVaultViaDeviceKey(smartAccountAddress);
 
       if (!transactionHash) {
         throw new Error(
@@ -196,7 +176,6 @@ export function useVaultPublish(
     hasVault,
     vaultRef,
     publishError,
-    pinWarning,
     txErrorMessage: isTxError && txError ? txError.message?.split("\n")[0] ?? null : null,
     buttonLabel: buttonLabel(),
     buttonDisabled: publishState === "publishing" || isTxPending || isConfirming || justPublished

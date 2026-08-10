@@ -3,9 +3,10 @@
 //! transações formato 2, submete e lê de volta contra qualquer node/gateway
 //! Arweave via HTTP direto (sem bundler/serviço terceiro, ver decisão de
 //! arquitetura no plano da Etapa 1). Etapa 2: `publish_vault_blob` integra
-//! o blob principal do vault (`vault_publish` em `lib.rs`) — documentos
-//! anexados continuam no IPFS por enquanto (limite de 256KB, sem upload em
-//! chunks aqui ainda).
+//! o blob principal do vault (`vault_publish` em `lib.rs`). Documentos
+//! anexados também publicam aqui via `publish_document` — o upload em
+//! chunks (`submit_chunk`, `POST /chunk`) cobre conteúdo de qualquer
+//! tamanho, não só o blob principal.
 
 mod deep_hash;
 mod merkle;
@@ -301,6 +302,48 @@ pub(crate) async fn publish_vault_blob(content: &[u8]) -> Result<crate::ipfs::Pi
     })?;
     let jwk = wallet::parse_jwk(&json)?;
     publish_vault_blob_with_jwk(&http_client(), ARWEAVE_DEFAULT_NODE, &jwk, content).await
+}
+
+/// Mesmo papel que `publish_vault_blob_with_jwk`, mas para documentos
+/// anexados — carrega `file_name`/`mime_type` reais (`DocumentData` em
+/// `vault.rs`) como tags Arweave em vez das tags genéricas do blob
+/// principal (facilita indexação externa via GraphQL, sem custo extra).
+pub(crate) async fn publish_document_with_jwk(
+    client: &reqwest::Client,
+    node_url: &str,
+    jwk: &ArweaveJwk,
+    content: &[u8],
+    file_name: &str,
+    mime_type: &str,
+) -> Result<crate::ipfs::PinResult, String> {
+    let tags = vec![
+        ("Content-Type".to_string(), mime_type.to_string()),
+        ("App-Name".to_string(), "TruthID".to_string()),
+        ("File-Name".to_string(), file_name.to_string()),
+    ];
+    let tx_id = publish(client, node_url, jwk, content, &tags).await?;
+    Ok(crate::ipfs::PinResult {
+        cid: format!("ar://{tx_id}"),
+        content_hash: crate::ipfs::keccak256_hex(content),
+        providers_ok: vec!["arweave".to_string()],
+        providers_failed: vec![],
+    })
+}
+
+/// Ponto de entrada real do `vault_publish` para documentos anexados —
+/// mesmo padrão de `publish_vault_blob` (carrega a wallet local, erro claro
+/// se ausente, sem fallback pro IPFS).
+pub(crate) async fn publish_document(
+    content: &[u8],
+    file_name: &str,
+    mime_type: &str,
+) -> Result<crate::ipfs::PinResult, String> {
+    let json = crate::get_arweave_wallet().map_err(|_| {
+        "nenhuma wallet Arweave configurada — gere ou importe uma antes de publicar documentos"
+            .to_string()
+    })?;
+    let jwk = wallet::parse_jwk(&json)?;
+    publish_document_with_jwk(&http_client(), ARWEAVE_DEFAULT_NODE, &jwk, content, file_name, mime_type).await
 }
 
 // ---------------------------------------------------------------------------
@@ -637,6 +680,59 @@ mod arlocal_tests {
         let fetched = fetch_data(&client, ARLOCAL_URL, &tx_id)
             .await
             .expect("fetch_data deve suceder");
+        assert_eq!(fetched, content);
+    }
+
+    /// Mesma validação de `publish_multi_chunk_content_round_trip_against_arlocal`
+    /// (conteúdo real >256KiB, exercita o upload em chunks), mas passando pelo
+    /// wrapper de documentos (`publish_document_with_jwk`) em vez de `publish`
+    /// cru — confere o `PinResult` (mesmo shape de `publish_vault_blob_with_jwk`)
+    /// além do round-trip de bytes. É o caminho que `vault_publish` agora usa
+    /// pra documentos anexados do vault.
+    #[tokio::test]
+    #[ignore]
+    async fn publish_vault_document_round_trip_against_arlocal() {
+        let client = http_client();
+        wait_for_arlocal(&client).await.expect("ArLocal deve estar rodando");
+
+        let jwk = generate_jwk().expect("keygen deve funcionar");
+        let address = wallet_address(&jwk).expect("endereço deve ser derivável");
+
+        mint(&client, &address, 100_000_000_000_000)
+            .await
+            .expect("faucet deve fundar a wallet de teste");
+
+        let size = merkle::MAX_CHUNK_SIZE * 2 + 500;
+        let content: Vec<u8> = (0..size).map(|i| (i % 233) as u8).collect();
+
+        let result = publish_document_with_jwk(
+            &client,
+            ARLOCAL_URL,
+            &jwk,
+            &content,
+            "comprovante.pdf",
+            "application/pdf",
+        )
+        .await
+        .expect("publish_document_with_jwk deve suceder contra ArLocal");
+
+        assert!(result.cid.starts_with("ar://"), "cid deveria vir prefixado ar://, veio: {}", result.cid);
+        assert_eq!(result.content_hash, crate::ipfs::keccak256_hex(&content));
+        assert_eq!(result.providers_ok, vec!["arweave".to_string()]);
+        assert!(result.providers_failed.is_empty());
+
+        mine(&client).await.expect("mineração manual deve suceder");
+
+        let tx_id = result.cid.strip_prefix("ar://").unwrap();
+        let status = get_tx_status(&client, ARLOCAL_URL, tx_id)
+            .await
+            .expect("get_tx_status não deve falhar");
+        assert!(status.confirmed, "tx deveria estar confirmada após minerar");
+
+        let fetched = fetch_data(&client, ARLOCAL_URL, tx_id)
+            .await
+            .expect("fetch_data deve suceder");
+        assert_eq!(fetched.len(), content.len());
         assert_eq!(fetched, content);
     }
 }

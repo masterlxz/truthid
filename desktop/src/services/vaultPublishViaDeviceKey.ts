@@ -7,7 +7,7 @@ import type { PinResult } from "../types";
 
 /**
  * Extraído de `useVaultPublish.ts::handleEnviarViaDeviceKey` — mesma cadeia
- * (pin local no IPFS via `vault_publish`, depois assina/envia a
+ * (publica no Arweave via `vault_publish`, depois assina/envia a
  * UserOperation `updateVault` via device key), agora reaproveitável por
  * quem precisa publicar sem estar dentro do hook React (ex:
  * `VaultEditApprovalModal.tsx`, que já chamou `vault_upsert_entry` antes de
@@ -16,11 +16,8 @@ import type { PinResult } from "../types";
  */
 export async function publishVaultViaDeviceKey(
   smartAccountAddress: Address
-): Promise<{ transactionHash: Hex | null; providersFailed: string[] }> {
+): Promise<{ transactionHash: Hex | null }> {
   const result = await invoke<PinResult>("vault_publish");
-  if (result.providers_failed.length > 0 && result.providers_ok.length === 0) {
-    throw new Error(`Todos os providers falharam: ${result.providers_failed.join(", ")}`);
-  }
 
   const callData = encodeFunctionData({
     abi: VAULT_REGISTRY_ABI,
@@ -36,5 +33,5 @@ export async function publishVaultViaDeviceKey(
   });
 
   if (!success) throw new Error("Failed to publish vault: on-chain transaction reverted");
-  return { transactionHash, providersFailed: result.providers_failed };
+  return { transactionHash };
 }

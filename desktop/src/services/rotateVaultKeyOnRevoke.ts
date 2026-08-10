@@ -27,13 +27,10 @@ import type { PinResult } from "../types";
  */
 export async function buildRotationBatch(
   remainingActiveDevicePubKeys: Address[]
-): Promise<{ dest: Address[]; value: bigint[]; func: Hex[]; providersFailed: string[] }> {
+): Promise<{ dest: Address[]; value: bigint[]; func: Hex[] }> {
   await invoke<string>("rotate_vault_key");
 
   const pinResult = await invoke<PinResult>("vault_publish");
-  if (pinResult.providers_failed.length > 0 && pinResult.providers_ok.length === 0) {
-    throw new Error(`Todos os providers falharam: ${pinResult.providers_failed.join(", ")}`);
-  }
 
   const keyUpdateCalls = await Promise.all(
     remainingActiveDevicePubKeys.map(async (pubKey) => {
@@ -60,5 +57,5 @@ export async function buildRotationBatch(
     },
   ]);
 
-  return { dest, value, func, providersFailed: pinResult.providers_failed };
+  return { dest, value, func };
 }

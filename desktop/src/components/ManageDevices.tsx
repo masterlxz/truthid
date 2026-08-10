@@ -101,7 +101,6 @@ export function ManageDevices() {
   // vault sob ela, e redistribui só pros devices que restaram ativos.
   const [rotationPhase, setRotationPhase] = useState<"idle" | "rotating" | "confirming">("idle");
   const [rotationError, setRotationError] = useState<string | null>(null);
-  const [rotationWarning, setRotationWarning] = useState<string | null>(null);
 
   const { writeContract: sendRotation, data: rotationTxHash } = useWriteContract();
   const { isSuccess: isRotationSuccess } = useWaitForTransactionReceipt({ hash: rotationTxHash });
@@ -126,14 +125,8 @@ export function ManageDevices() {
 
     setRotationPhase("rotating");
     setRotationError(null);
-    setRotationWarning(null);
     buildRotationBatch(remaining as `0x${string}`[])
-      .then(({ dest, value, func, providersFailed }) => {
-        if (providersFailed.length > 0) {
-          setRotationWarning(
-            `Redundância parcial ao republicar o vault: falhou em ${providersFailed.join(", ")}.`
-          );
-        }
+      .then(({ dest, value, func }) => {
         setRotationPhase("confirming");
         sendRotation({
           address: smartAccountAddress,
@@ -179,11 +172,6 @@ export function ManageDevices() {
       )}
       {rotationPhase === "confirming" && (
         <p className="muted">Confirmar na carteira e distribuir a chave nova pros devices restantes...</p>
-      )}
-      {rotationWarning && (
-        <p style={{ color: "#d9a441", marginBottom: 0, marginTop: "0.5rem", fontSize: "0.9em" }}>
-          ⚠ {rotationWarning}
-        </p>
       )}
       {rotationError && <p className="error-text">{rotationError}</p>}
 

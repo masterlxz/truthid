@@ -578,25 +578,19 @@ fn vault_encrypt(plaintext_b64: String) -> Result<String, String> {
 /// de (re)pin nesta chamada.
 ///
 /// Etapa 2 da migração de storage (ver `project/ROADMAP.md`): o blob
-/// principal do vault vai pro Arweave via `arweave::publish_vault_blob`
-/// (exige wallet Arweave configurada e financiada — sem fallback pro IPFS,
-/// corte direto). Documentos anexados continuam no IPFS por enquanto — o
-/// cliente Arweave só sobe até 256KB (chunk único), e documentos podem
-/// chegar a 50MB. `cid`s Arweave saem prefixados `"ar://"`; `cid`s IPFS
-/// (documentos, ou vaults publicados antes desta etapa) continuam sem
-/// prefixo — ver dispatch em `vault_document_read`.
+/// principal do vault vai pro Arweave via `arweave::publish_vault_blob`.
+/// Documentos anexados também vão pro Arweave, via `arweave::publish_document`
+/// (upload em chunks cobre os até 50MB permitidos). Ambos exigem wallet
+/// Arweave configurada e financiada — sem fallback pro IPFS, corte direto.
+/// `cid`s Arweave saem prefixados `"ar://"`; `cid`s IPFS (vaults/documentos
+/// publicados antes desta migração) continuam sem prefixo — ver dispatch em
+/// `vault_document_read`.
 #[tauri::command]
 async fn vault_publish() -> Result<ipfs::PinResult, String> {
     let path = vault::vault_path()?;
     if !path.exists() {
         return Err(
             "vault ainda não existe — adicione ao menos uma entrada antes de publicar".to_string(),
-        );
-    }
-    let providers = ipfs::load_providers();
-    if providers.is_empty() {
-        return Err(
-            "nenhum provider de pinning configurado — use vault_set_providers primeiro".to_string(),
         );
     }
 
@@ -610,7 +604,8 @@ async fn vault_publish() -> Result<ipfs::PinResult, String> {
             continue;
         };
         if vault::document_needs_pin(&local_blob, doc.content_hash.as_deref()) {
-            let result = ipfs::pin_vault(&local_blob, &providers).await?;
+            let result =
+                arweave::publish_document(&local_blob, &doc.file_name, &doc.mime_type).await?;
             doc.cid = Some(result.cid);
             doc.content_hash = Some(result.content_hash);
             documents_changed = true;

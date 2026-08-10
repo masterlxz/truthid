@@ -73,7 +73,7 @@ export function VaultEditApprovalModal({
         };
         await invoke<VaultEntry>("vault_upsert_entry", { entry });
       }
-      const { providersFailed } = await publishVaultViaDeviceKey(smartAccountAddress);
+      await publishVaultViaDeviceKey(smartAccountAddress);
 
       // Só responde ao Rust depois que o vault foi salvo e publicado.
       // Se algo falhar aqui, o slot do Rust continua pendente — o
@@ -83,12 +83,6 @@ export function VaultEditApprovalModal({
         id: request.id,
         decision: { outcome: "approved" },
       });
-
-      if (providersFailed.length > 0) {
-        console.warn(
-          `Vault published with partial pinning redundancy: ${providersFailed.join(", ")} failed.`
-        );
-      }
 
       clear();
     } catch (e) {
