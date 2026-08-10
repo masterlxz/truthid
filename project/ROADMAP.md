@@ -1073,6 +1073,24 @@ retomado:
    do TruthID (ajustar o modelo de cota, ex. por operação em lote em vez de por chamada), não algo
    que o MCGit consiga contornar sozinho.
 
+**Rename parcial feito na mesma sessão: `PinResult` → `PublishResult`, movido de `ipfs.rs` pra
+`lib.rs`.** Escopo decidido explicitamente com o dono do projeto depois de mapear ~80 arquivos com
+"pin" no monorepo (Rust, TS, Dart, Python) — o nome "pin" não fazia mais sentido pro que virou o tipo
+de retorno de `vault_publish` (hoje sempre Arweave), mas a maior parte do que apareceu na busca é o
+canal `pin_content`/`/truthid/v1/pin` — genuinamente ainda IPFS, "pin" ainda correto ali, e é rota
+HTTP pública já consumida por fora deste repo (Practice Valuation, SDKs) — renomear isso agora seria
+breaking change espalhado em 5 linguagens, sem necessidade (só faria sentido no dia que esse canal
+for de fato generalizado pro Arweave, item já registrado acima). Decisão: só o rename interno e
+seguro agora. `PublishResult` (struct compartilhada, usada tanto por `ipfs::pin_vault` quanto por
+`arweave::publish_vault_blob*`/`publish_document*`) — `PinResult` morava em `ipfs.rs` mas já não era
+IPFS-específico; movido pra `lib.rs` (módulo raiz que já une os dois backends). TS: `PinResult` →
+`PublishResult` em `types.ts` + 3 consumidores (`useVaultPublish.ts`,
+`vaultPublishViaDeviceKey.ts`, `rotateVaultKeyOnRevoke.ts`, incluindo a variável local
+`pinResult`→`publishResult` neste último). `cargo build`/`cargo test --lib` (178/178) / `cargo
+clippy` / `tsc` limpos. **Não tocado**: `pin_content`, `/truthid/v1/pin`, `PinningProvider`,
+`ipfs::pin_vault` (nome da função), e todos os espelhos em Mobile/extensão/SDKs — permanecem "pin"
+de propósito, aguardando o item de generalização pro Arweave já registrado acima.
+
 ---
 
 ### Interface e identidade visual (UI/UX)
