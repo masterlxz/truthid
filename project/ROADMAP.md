@@ -1163,6 +1163,47 @@ estagiamento que o Desktop usou.
   não tem hoje o equivalente de `document_needs_pin` sendo usado com Arweave) e Etapa 3 (UI de wallet,
   mesmo papel de `ArweaveWalletSection` no Desktop) — nenhuma das duas desenhada ainda.
 
+**Sessão 191 (2026-08-11): Etapa 2 do porte Mobile — `VaultPublishService` migrado do IPFS pro
+Arweave, mesmo corte direto sem fallback do Desktop.** Fecha o gap descoberto na Sessão 189 por
+completo (blob principal + documentos anexados do Mobile agora publicam no Arweave de verdade).
+
+- **`ArweaveVaultPublisher`/`ArweavePublishResult` novos em `arweave_client.dart`** — mirror direto
+  de `arweave::publish_vault_blob(_with_jwk)`/`publish_document(_with_jwk)` (Rust): combina
+  `ArweaveWalletService.load()` (já existia da Etapa 1, sem fallback, mesma mensagem de erro do
+  Rust) + o orquestrador `publish()` já existente + tags certas por tipo de conteúdo (`Content-Type`
+  genérico + `App-Name` pro blob; `Content-Type`=mimeType + `App-Name` + `File-Name` pro documento) +
+  `contentHash` via `keccak256`. Sem conceito de "providers" — Arweave não tem, mesma simplificação
+  que o Rust já tinha feito.
+- **`VaultPublishService`**: troca `IpfsPinClient`/`PinningProviderService` por
+  `ArweaveVaultPublisher` injetado (nenhum call site em `vault_screen.dart`/
+  `vault_edit_approval_screen.dart` passava esses parâmetros explicitamente — usavam o default, não
+  precisaram de edição). `documentNeedsPin` mantido sem renomear (Rust também não renomeou
+  `document_needs_pin` ao migrar). `VaultPublishResult` perdeu `providersOk`/`providersFailed` —
+  já eram código morto mesmo do lado IPFS (nenhum caller lia, achado nesta sessão), mesma limpeza já
+  feita no TS/Desktop (Sessão 189). `IpfsPinClient`/`PinningProviderService` continuam existindo,
+  intocados — servem o dead-drop LAN e o canal `/pin` de apps terceiros, fora de escopo.
+- **Achado incidental**: dois testes de widget (`vault_edit_approval_screen_test.dart`) também
+  instanciavam `VaultPublishResult` com os campos removidos — corrigidos junto.
+- **Testes**: mocks reescritos (`MockArweaveVaultPublisher` no lugar de `MockIpfsPinClient`/
+  `MockPinningProviderService`), mesma cobertura de antes (pending changes, TOCTOU do
+  `markPublished`, Fase 15.7 de documentos) + teste novo de integração contra ArLocal real
+  (`arweave_vault_publisher_arlocal_test.dart`, tag `arlocal`) validando `publishVaultBlob` e
+  `publishDocument` ponta a ponta (wallet → publish → mine → status confirmado → fetch com bytes
+  idênticos). Suíte completa: 571 testes, `flutter analyze` limpo.
+- **Achado de test infra**: `TestWidgetsFlutterBinding.ensureInitialized()` instala um
+  `HttpOverrides` que faz todo `HttpClient` devolver 400 sem tocar rede (proteção padrão contra
+  testes de integração acidentais) — mas esse teste precisa de rede real (ArLocal) E do mock do
+  canal `flutter_secure_storage` (que exige o binding). Resolvido com `HttpOverrides.global = null;`
+  logo depois do `ensureInitialized()`. **A mesma flakiness client-side de sempre (Sessões 186-188)
+  apareceu de novo**, confirmada desta vez também no teste já existente e já validado da Etapa 1
+  (`arweave_arlocal_integration_test.dart`, rodado de novo aqui só pra isolar a causa) — não é
+  regressão do código novo, é ambiental; resolvido com retry até uma rodada limpa, mesmo padrão de
+  sempre. `network_mode: host` usado de novo temporariamente no `docker-compose.yml` pra validar,
+  revertido depois.
+
+**Em aberto**: Etapa 3 (UI de wallet Arweave no Mobile, mesmo papel de `ArweaveWalletSection` do
+Desktop) — única peça que falta pra fechar 100% a paridade Desktop/Mobile do Arweave.
+
 ---
 
 ### Interface e identidade visual (UI/UX)
