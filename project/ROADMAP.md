@@ -1204,6 +1204,35 @@ completo (blob principal + documentos anexados do Mobile agora publicam no Arwea
 **Em aberto**: Etapa 3 (UI de wallet Arweave no Mobile, mesmo papel de `ArweaveWalletSection` do
 Desktop) — única peça que falta pra fechar 100% a paridade Desktop/Mobile do Arweave.
 
+**Sessão 192 (2026-08-11): Etapa 3 fechada — UI de wallet Arweave no Mobile, paridade 100% com o
+Desktop.** Fecha por completo o épico de migração de storage no lado Mobile (Etapas 1-3, Sessões
+190-192).
+
+- **Nova tela `mobile/lib/screens/arweave_wallet_screen.dart`**, mirror direto de
+  `ArweaveWalletSection` (`desktop/src/components/VaultSettings.tsx:399-503`), mesmo padrão de
+  UI já usado em `pinning_providers_screen.dart` (`StatefulWidget`/`setState`, sem
+  `FutureBuilder`/Provider/Riverpod/Bloc). Reaproveita 100% da camada de serviço já existente
+  (`ArweaveWalletService.exists/address/generate`, `getWalletBalance` de `arweave_client.dart`) —
+  nenhum código novo de serviço, só UI.
+- Fluxo idêntico ao Desktop: carrega existência/endereço/saldo no `initState` (saldo é
+  best-effort, endereço aparece mesmo se a consulta de saldo falhar); botão "Gerar wallet Arweave"
+  (desabilitado + "Gerando..." durante o keygen RSA-4096, que já roda em isolate no service);
+  endereço em `SelectableText` monospace + botão copiar (`Clipboard.setData`, feedback "✓
+  Copiado!" por 2s, mesmo padrão de `wallet_screen.dart`); saldo convertido de winston pra AR
+  (`/1e12`, 6 casas decimais); dica extra se saldo == 0.
+- **Escopo deliberadamente igual ao Desktop, sem ir além**: sem import/export de chave na UI
+  (mesmo `ArweaveWalletService.import()` já existindo em Dart desde a Etapa 1) e sem QR code
+  (embora `wallet_screen.dart` já use `QrImageView` pro endereço ETH) — ambos ficaram de fora por
+  não fazerem parte do papel documentado da tela ("mesmo papel de `ArweaveWalletSection`").
+- Novo `IconButton` (`Icons.account_balance_wallet_outlined`, tooltip "Arweave wallet") em
+  `vault_screen.dart`, ao lado do de "Pinning providers", dentro do mesmo bloco `if (_canWrite)`.
+- **Sem teste de widget novo**: `pinning_providers_screen.dart` (mirror mais próximo, também com
+  chamada HTTP real não-injetada) não tinha teste de widget antes desta sessão — mesmo padrão
+  seguido aqui; a lógica de negócio já é coberta por `arweave_wallet_service_test.dart` e
+  `arweave_client_test.dart`. 571 testes Mobile continuam passando, `flutter analyze` limpo.
+- **Não validado em hardware físico** (sem celular conectado nesta sessão, mesma limitação já
+  registrada nas Sessões 190/191) — só revisão de código + `flutter analyze`/`flutter test`.
+
 ---
 
 ### Interface e identidade visual (UI/UX)
