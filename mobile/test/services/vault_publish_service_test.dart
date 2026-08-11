@@ -7,16 +7,13 @@ import 'package:mocktail/mocktail.dart';
 import 'package:web3dart/crypto.dart' show keccak256, bytesToHex;
 import 'package:web3dart/web3dart.dart' show EthereumAddress;
 
-import 'package:truthid_mobile/services/ipfs_pin_client.dart';
-import 'package:truthid_mobile/services/pinning_provider_service.dart';
+import 'package:truthid_mobile/services/arweave_client.dart';
 import 'package:truthid_mobile/services/session_creator.dart';
 import 'package:truthid_mobile/services/vault_cipher_service.dart';
 import 'package:truthid_mobile/services/vault_publish_service.dart';
 import 'package:truthid_mobile/services/vault_repository.dart';
 
-class MockIpfsPinClient extends Mock implements IpfsPinClient {}
-
-class MockPinningProviderService extends Mock implements PinningProviderService {}
+class MockArweaveVaultPublisher extends Mock implements ArweaveVaultPublisher {}
 
 class MockSessionCreator extends Mock implements SessionCreator {}
 
@@ -34,18 +31,12 @@ void main() {
 
   late Directory tempDir;
   late VaultRepository repo;
-  late MockIpfsPinClient mockPinClient;
-  late MockPinningProviderService mockProviderService;
+  late MockArweaveVaultPublisher mockArweavePublisher;
   late MockSessionCreator mockSessionCreator;
   late VaultPublishService publishService;
 
   final smartAccountAddress =
       EthereumAddress.fromHex('0xabababababababababababababababababababab');
-  const provider = PinningProvider(
-    name: 'kubo',
-    kind: 'kubo',
-    endpointUrl: 'http://localhost:5001',
-  );
 
   // markPublished()/pendingChanges() do VaultRepository usam
   // FlutterSecureStorage real (campo estático, não injetável) — mockar o
@@ -81,15 +72,13 @@ void main() {
       cipherService: _FakeCipherService(),
       testPath: '${tempDir.path}/vault.enc',
     );
-    mockPinClient = MockIpfsPinClient();
-    mockProviderService = MockPinningProviderService();
+    mockArweavePublisher = MockArweaveVaultPublisher();
     mockSessionCreator = MockSessionCreator();
 
     publishService = VaultPublishService(
       sessionCreator: mockSessionCreator,
       repository: repo,
-      pinClient: mockPinClient,
-      providerService: mockProviderService,
+      arweavePublisher: mockArweavePublisher,
     );
   });
 
@@ -99,8 +88,9 @@ void main() {
     await tempDir.delete(recursive: true);
   });
 
-  test('lança quando não há provider de pin configurado', () async {
-    when(() => mockProviderService.load()).thenAnswer((_) async => []);
+  test('lança quando a wallet Arweave não está configurada', () async {
+    when(() => mockArweavePublisher.publishVaultBlob(any()))
+        .thenThrow(Exception('nenhuma wallet Arweave configurada — gere ou importe uma antes de publicar'));
 
     await expectLater(
       publishService.publish(smartAccountAddress),
@@ -108,17 +98,12 @@ void main() {
     );
   });
 
-  test('pina, publica on-chain e marca a versão como publicada', () async {
+  test('publica no Arweave, publica on-chain e marca a versão como publicada', () async {
     await repo.addEntry(site: 'github.com', username: 'fab', password: 'x');
     final versionBefore = await repo.currentVersion();
 
-    when(() => mockProviderService.load()).thenAnswer((_) async => [provider]);
-    when(() => mockPinClient.pinVault(any(), any())).thenAnswer((_) async => const PinResult(
-          cid: 'QmTestCid',
-          contentHash: '0xabc123',
-          providersOk: ['kubo'],
-          providersFailed: [],
-        ));
+    when(() => mockArweavePublisher.publishVaultBlob(any())).thenAnswer((_) async =>
+        const ArweavePublishResult(cid: 'ar://TestTxId', contentHash: '0xabc123'));
     when(() => mockSessionCreator.updateVault(
           smartAccountAddress: any(named: 'smartAccountAddress'),
           cid: any(named: 'cid'),
@@ -130,12 +115,12 @@ void main() {
 
     final result = await publishService.publish(smartAccountAddress);
 
-    expect(result.cid, 'QmTestCid');
+    expect(result.cid, 'ar://TestTxId');
     expect(result.transactionHash, '0xTxHash');
 
     verify(() => mockSessionCreator.updateVault(
           smartAccountAddress: smartAccountAddress,
-          cid: 'QmTestCid',
+          cid: 'ar://TestTxId',
           contentHashHex: '0xabc123',
         )).called(1);
 
@@ -145,13 +130,8 @@ void main() {
 
   test('pendingChanges reflete edições feitas depois da última publicação',
       () async {
-    when(() => mockProviderService.load()).thenAnswer((_) async => [provider]);
-    when(() => mockPinClient.pinVault(any(), any())).thenAnswer((_) async => const PinResult(
-          cid: 'QmTestCid',
-          contentHash: '0xabc123',
-          providersOk: ['kubo'],
-          providersFailed: [],
-        ));
+    when(() => mockArweavePublisher.publishVaultBlob(any())).thenAnswer((_) async =>
+        const ArweavePublishResult(cid: 'ar://TestTxId', contentHash: '0xabc123'));
     when(() => mockSessionCreator.updateVault(
           smartAccountAddress: any(named: 'smartAccountAddress'),
           cid: any(named: 'cid'),
@@ -170,13 +150,8 @@ void main() {
       'pendingChanges volta a 0 depois de favoritar e desfavoritar de volta '
       '(achado da Sessão 136: version bumpa duas vezes mas o conteúdo final '
       'é idêntico ao publicado)', () async {
-    when(() => mockProviderService.load()).thenAnswer((_) async => [provider]);
-    when(() => mockPinClient.pinVault(any(), any())).thenAnswer((_) async => const PinResult(
-          cid: 'QmTestCid',
-          contentHash: '0xabc123',
-          providersOk: ['kubo'],
-          providersFailed: [],
-        ));
+    when(() => mockArweavePublisher.publishVaultBlob(any())).thenAnswer((_) async =>
+        const ArweavePublishResult(cid: 'ar://TestTxId', contentHash: '0xabc123'));
     when(() => mockSessionCreator.updateVault(
           smartAccountAddress: any(named: 'smartAccountAddress'),
           cid: any(named: 'cid'),
@@ -199,13 +174,8 @@ void main() {
       '(achado da Sessão 139: fix da S138 só cancelava se o vault inteiro '
       'voltasse a bater com o publicado — com qualquer outra pendência real '
       'junto, caía no diff de version, que nunca cancela)', () async {
-    when(() => mockProviderService.load()).thenAnswer((_) async => [provider]);
-    when(() => mockPinClient.pinVault(any(), any())).thenAnswer((_) async => const PinResult(
-          cid: 'QmTestCid',
-          contentHash: '0xabc123',
-          providersOk: ['kubo'],
-          providersFailed: [],
-        ));
+    when(() => mockArweavePublisher.publishVaultBlob(any())).thenAnswer((_) async =>
+        const ArweavePublishResult(cid: 'ar://TestTxId', contentHash: '0xabc123'));
     when(() => mockSessionCreator.updateVault(
           smartAccountAddress: any(named: 'smartAccountAddress'),
           cid: any(named: 'cid'),
@@ -229,18 +199,13 @@ void main() {
   });
 
   test(
-      'edição feita durante a janela de publish (pin+on-chain) continua '
+      'edição feita durante a janela de publish (publish+on-chain) continua '
       'pendente depois — não é marcada como publicada por engano (M3, '
       'achado do /code-review high: markPublished tinha TOCTOU relendo o '
       'vault atual do disco em vez de usar o conteúdo que foi de fato '
       'publicado)', () async {
-    when(() => mockProviderService.load()).thenAnswer((_) async => [provider]);
-    when(() => mockPinClient.pinVault(any(), any())).thenAnswer((_) async => const PinResult(
-          cid: 'QmTestCid',
-          contentHash: '0xabc123',
-          providersOk: ['kubo'],
-          providersFailed: [],
-        ));
+    when(() => mockArweavePublisher.publishVaultBlob(any())).thenAnswer((_) async =>
+        const ArweavePublishResult(cid: 'ar://TestTxId', contentHash: '0xabc123'));
 
     await repo.addEntry(site: 'a.com', username: 'u', password: 'p');
 
@@ -263,9 +228,8 @@ void main() {
             'que continuar pendente, não sumir por causa do markPublished');
   });
 
-  group('Fase 15.7 (documentos pinados separadamente)', () {
+  group('Fase 15.7 (documentos publicados separadamente)', () {
     setUp(() {
-      when(() => mockProviderService.load()).thenAnswer((_) async => [provider]);
       when(() => mockSessionCreator.updateVault(
             smartAccountAddress: any(named: 'smartAccountAddress'),
             cid: any(named: 'cid'),
@@ -273,7 +237,7 @@ void main() {
           )).thenAnswer((_) async => const SessionCreationResult(userOpHash: '0xUserOpHash'));
     });
 
-    test('pina o conteúdo local de um documento novo e grava cid/contentHash na entrada', () async {
+    test('publica o conteúdo local de um documento novo e grava cid/contentHash na entrada', () async {
       final entry = await repo.addEntry(
         site: '', username: '', password: '',
         type: EntryType.document,
@@ -283,20 +247,22 @@ void main() {
       );
       await repo.writeDocumentBlob(entry.id, Uint8List.fromList(utf8.encode('conteudo do rg')));
 
-      when(() => mockPinClient.pinVault(any(), any())).thenAnswer((_) async => const PinResult(
-            cid: 'QmDocCid', contentHash: '0xdochash', providersOk: ['kubo'], providersFailed: [],
-          ));
+      when(() => mockArweavePublisher.publishDocument(any(), any(), any())).thenAnswer((_) async =>
+          const ArweavePublishResult(cid: 'ar://DocTxId', contentHash: '0xdochash'));
+      when(() => mockArweavePublisher.publishVaultBlob(any())).thenAnswer((_) async =>
+          const ArweavePublishResult(cid: 'ar://VaultTxId', contentHash: '0xvaulthash'));
 
       await publishService.publish(smartAccountAddress);
 
-      // 1 pin pro documento + 1 pin pro blob principal do vault.
-      verify(() => mockPinClient.pinVault(any(), any())).called(2);
+      verify(() => mockArweavePublisher.publishDocument(any(), 'rg.pdf', 'application/pdf'))
+          .called(1);
+      verify(() => mockArweavePublisher.publishVaultBlob(any())).called(1);
       final entries = await repo.listEntries();
-      expect(entries.single.document?.cid, 'QmDocCid');
+      expect(entries.single.document?.cid, 'ar://DocTxId');
       expect(entries.single.document?.contentHash, '0xdochash');
     });
 
-    test('não repina um documento cujo conteúdo local não mudou', () async {
+    test('não republica um documento cujo conteúdo local não mudou', () async {
       final entry = await repo.addEntry(
         site: '', username: '', password: '',
         type: EntryType.document,
@@ -307,23 +273,23 @@ void main() {
       final docBlob = await repo.writeDocumentBlob(
           entry.id, Uint8List.fromList(utf8.encode('conteudo do rg')));
       final existingHash = bytesToHex(keccak256(docBlob), include0x: true);
-      await repo.setDocumentPinInfo(entry.id, cid: 'QmAlreadyPinned', contentHash: existingHash);
+      await repo.setDocumentPinInfo(entry.id, cid: 'ar://AlreadyPublished', contentHash: existingHash);
 
-      when(() => mockPinClient.pinVault(any(), any())).thenAnswer((_) async => const PinResult(
-            cid: 'QmVaultCid', contentHash: '0xvaulthash', providersOk: ['kubo'], providersFailed: [],
-          ));
+      when(() => mockArweavePublisher.publishVaultBlob(any())).thenAnswer((_) async =>
+          const ArweavePublishResult(cid: 'ar://VaultTxId', contentHash: '0xvaulthash'));
 
       await publishService.publish(smartAccountAddress);
 
-      // Só 1 pin (o blob principal do vault) — o documento não mudou desde
-      // o último pin, não deveria ser rechamado (economiza rede/upload).
-      verify(() => mockPinClient.pinVault(any(), any())).called(1);
+      // Só publica o blob principal — o documento não mudou desde a última
+      // publicação, não deveria ser rechamado (economiza rede/upload).
+      verifyNever(() => mockArweavePublisher.publishDocument(any(), any(), any()));
+      verify(() => mockArweavePublisher.publishVaultBlob(any())).called(1);
       final entries = await repo.listEntries();
-      expect(entries.single.document?.cid, 'QmAlreadyPinned',
+      expect(entries.single.document?.cid, 'ar://AlreadyPublished',
           reason: 'cid antigo deve ser preservado, não sobrescrito');
     });
 
-    test('repina um documento cujo conteúdo local mudou desde o último pin', () async {
+    test('republica um documento cujo conteúdo local mudou desde a última publicação', () async {
       final entry = await repo.addEntry(
         site: '', username: '', password: '',
         type: EntryType.document,
@@ -331,19 +297,20 @@ void main() {
           name: 'RG', fileName: 'rg.pdf', fileSizeBytes: 5, mimeType: 'application/pdf',
         ),
       );
-      await repo.setDocumentPinInfo(entry.id, cid: 'QmOldPin', contentHash: '0xoldhash');
-      // Conteúdo local mudou depois do último pin (ex: usuário trocou o arquivo).
+      await repo.setDocumentPinInfo(entry.id, cid: 'ar://OldTxId', contentHash: '0xoldhash');
+      // Conteúdo local mudou depois da última publicação (ex: usuário trocou o arquivo).
       await repo.writeDocumentBlob(entry.id, Uint8List.fromList(utf8.encode('conteudo novo do rg')));
 
-      when(() => mockPinClient.pinVault(any(), any())).thenAnswer((_) async => const PinResult(
-            cid: 'QmNewPin', contentHash: '0xnewhash', providersOk: ['kubo'], providersFailed: [],
-          ));
+      when(() => mockArweavePublisher.publishDocument(any(), any(), any())).thenAnswer((_) async =>
+          const ArweavePublishResult(cid: 'ar://NewTxId', contentHash: '0xnewhash'));
+      when(() => mockArweavePublisher.publishVaultBlob(any())).thenAnswer((_) async =>
+          const ArweavePublishResult(cid: 'ar://VaultTxId', contentHash: '0xvaulthash'));
 
       await publishService.publish(smartAccountAddress);
 
-      verify(() => mockPinClient.pinVault(any(), any())).called(2);
+      verify(() => mockArweavePublisher.publishDocument(any(), 'rg.pdf', 'application/pdf')).called(1);
       final entries = await repo.listEntries();
-      expect(entries.single.document?.cid, 'QmNewPin');
+      expect(entries.single.document?.cid, 'ar://NewTxId');
     });
   });
 }

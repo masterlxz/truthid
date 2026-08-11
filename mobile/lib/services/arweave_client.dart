@@ -3,12 +3,14 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show consolidateHttpClientResponseBytes;
+import 'package:web3dart/crypto.dart' show keccak256, bytesToHex;
 
 import 'arweave_b64url.dart';
 import 'arweave_isolate.dart';
 import 'arweave_jwk.dart';
 import 'arweave_merkle.dart';
 import 'arweave_transaction.dart';
+import 'arweave_wallet_service.dart';
 
 // Camada HTTP simples contra qualquer node/gateway Arweave — espelha
 // mod.rs do cliente Rust (desktop/src-tauri/src/arweave/mod.rs). dart:io
@@ -233,4 +235,58 @@ Future<String> publish(
   }
 
   return tx.id;
+}
+
+// Resultado de um publish de alto nível pro Vault — mirror de `PublishResult`
+// (Rust, lib.rs:574), sem `providersOk`/`providersFailed`: esses campos já
+// eram código morto do lado IPFS (nenhum caller lia) e o Arweave não tem
+// conceito de múltiplos providers.
+class ArweavePublishResult {
+  final String cid; // "ar://" + tx_id
+  final String contentHash; // keccak256 hex, prefixo "0x"
+
+  const ArweavePublishResult({required this.cid, required this.contentHash});
+}
+
+// Mirror de `arweave::publish_vault_blob(_with_jwk)`/`publish_document(_with_jwk)`
+// (desktop/src-tauri/src/arweave/mod.rs) — combina a wallet local + o
+// orquestrador `publish()` acima + as tags certas pra cada tipo de conteúdo.
+// Corte direto sem fallback pro IPFS: se a wallet não estiver configurada,
+// `ArweaveWalletService.load()` já lança um erro claro (mesma mensagem do
+// Rust) e a exceção sobe sem tratamento especial aqui.
+class ArweaveVaultPublisher {
+  ArweaveVaultPublisher({ArweaveWalletService? walletService, this.nodeUrl = arweaveDefaultNode})
+      : _walletService = walletService ?? ArweaveWalletService();
+
+  final ArweaveWalletService _walletService;
+  final String nodeUrl;
+
+  Future<ArweavePublishResult> publishVaultBlob(Uint8List content) async {
+    final jwk = await _walletService.load();
+    final txId = await publish(nodeUrl, jwk, content, const [
+      ('Content-Type', 'application/octet-stream'),
+      ('App-Name', 'TruthID'),
+    ]);
+    return ArweavePublishResult(
+      cid: 'ar://$txId',
+      contentHash: bytesToHex(keccak256(content), include0x: true),
+    );
+  }
+
+  Future<ArweavePublishResult> publishDocument(
+    Uint8List content,
+    String fileName,
+    String mimeType,
+  ) async {
+    final jwk = await _walletService.load();
+    final txId = await publish(nodeUrl, jwk, content, [
+      ('Content-Type', mimeType),
+      ('App-Name', 'TruthID'),
+      ('File-Name', fileName),
+    ]);
+    return ArweavePublishResult(
+      cid: 'ar://$txId',
+      contentHash: bytesToHex(keccak256(content), include0x: true),
+    );
+  }
 }

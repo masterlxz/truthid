@@ -128,8 +128,6 @@ void main() {
       (_) async => const VaultPublishResult(
         cid: 'bafy123',
         contentHash: '0xhash',
-        providersOk: ['local-kubo'],
-        providersFailed: [],
       ),
     );
   });
@@ -667,8 +665,6 @@ void main() {
         return const VaultPublishResult(
           cid: 'bafy123',
           contentHash: '0xhash',
-          providersOk: ['local-kubo'],
-          providersFailed: [],
         );
       });
 
