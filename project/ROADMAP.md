@@ -1233,6 +1233,56 @@ Desktop.** Fecha por completo o épico de migração de storage no lado Mobile (
 - **Não validado em hardware físico** (sem celular conectado nesta sessão, mesma limitação já
   registrada nas Sessões 190/191) — só revisão de código + `flutter analyze`/`flutter test`.
 
+**Sessão 193 (2026-08-11): canal `pin_content`/`/truthid/v1/pin` (apps terceiros, ex: Practice
+Valuation) migrado do IPFS pro Arweave — os dois pontos de entrada, Desktop (loopback HTTP) e
+Mobile (cross-device via QR).** Pedido explícito do dono do projeto desde a Sessão 189: apps
+terceiros usam a mesma wallet Arweave local que a pessoa já configura pro Vault, sem billing
+central.
+
+- **Rust**: `arweave::publish_pinned_content_with_jwk`/`publish_pinned_content` novos
+  (`arweave/mod.rs`), mesmo padrão de wrapper por entry-point já usado por
+  `publish_vault_blob`/`publish_document` (tags genéricas, corte direto sem fallback pro IPFS,
+  erro claro se a wallet não estiver configurada). `pin_content` (`lib.rs`) passa a chamar essa
+  função em vez de `ipfs::load_providers`/`ipfs::pin_vault` — assinatura não muda, continua
+  injetada como a mesma closure em `pin::handle_incoming`. `PinResponse`/`PinOutcome` não mudam
+  de schema (rota HTTP pública já consumida fora do repo): `cid` sai prefixado `ar://` (mesmo
+  dispatch de `vault_document_read`), `providersOk: ["arweave"]`.
+- **Achado que expandiu o escopo**: existem *dois* pontos de entrada do `/pin`, não um — o
+  loopback HTTP do Desktop e o cross-device via QR pro Mobile
+  (`TruthIDRequester.pin()`/`pin_approval_screen.dart`). Migrar só o Desktop deixaria pedidos
+  roteados pro Mobile presos no IPFS. `ArweaveVaultPublisher.publishPinnedContent` novo em
+  `arweave_client.dart` (mirror do Rust), `pin_approval_screen.dart::_approve()` reescrito pra
+  chamar isso em vez de `_pinningProviderService.load()`/`_ipfsPinClient.pinVault(...)`.
+  `_ipfsPinClient`/`_pinningProviderService` continuam no arquivo — servem só o dead-drop do
+  envelope de *resultado* via `CrossDeviceDeliveryChannel`, mecanismo de transporte não
+  relacionado ao backend do conteúdo publicado.
+- **Segundo achado, confirmado com o dono do projeto antes de mexer**: depois dessa migração, o
+  sistema de "Pinning Providers" (Kubo/PSA) do **Desktop** ficava inteiramente órfão — o Vault já
+  não o usava desde a Sessão 189, e o `/pin` era o último chamador de
+  `ipfs::pin_vault`/`load_providers`. Decisão já registrada na Sessão 184 ("remover o sistema de
+  pinning por completo"), nunca fechada até agora. Removido nesta sessão:
+  `PinningProvider`/`pin_vault`/`kubo_add`/`psa_pin`/`load_providers`/`save_providers` de
+  `ipfs.rs` (mantidos `keccak256_hex`/`fetch_from_gateway`, ainda usados por
+  `vault_document_read` pra ler documentos antigos em IPFS); comandos Tauri
+  `vault_get_providers`/`vault_set_providers`; a seção inteira de gerenciamento de providers em
+  `VaultSettings.tsx` (o componente vira só `<ArweaveWalletSection /><PinAuthorizationsSection />`);
+  tipo `PinningProvider` de `types.ts`; dependência `futures` e feature `multipart` do `reqwest`
+  em `Cargo.toml` (confirmado por grep que ficaram sem nenhum uso no crate). Header da view
+  renomeado de "Providers de Pinning" pra "Wallet Arweave" em `VaultManagement.tsx`. **Isso é só
+  sobre o Desktop** — no Mobile, `PinningProviderService`/`IpfsPinClient` continuam 100% vivos,
+  usados pelo dead-drop LAN de várias outras telas de aprovação (sign-message, sign-request,
+  autofill), sistema completamente separado.
+- **Testes**: `mobile/test/screens/pin_approval_screen_test.dart` — grupo "fase 2 — Approve"
+  reescrito com `MockArweaveVaultPublisher` no lugar de `MockIpfsPinClient`/
+  `MockPinningProviderService`; teste "sem provider configurado" virou "sem wallet configurada".
+  Nenhum teste de `pin.rs`/`local_signer_server.rs` mudou de comportamento (usam `fake_pin`
+  sintético e só testam o caminho Rejected, respectivamente) — só comentários corrigidos.
+  `cargo test --lib` 177/177, clippy limpo, `tsc --noEmit`/`npx vitest run` (101/101) limpos,
+  Mobile 571/571 + `flutter analyze` limpo.
+- **Não validado de ponta a ponta**: precisa de uma wallet Arweave financiada de verdade e do
+  outro app (Practice Valuation) rodando pra exercitar o `/pin` contra um node Arweave real —
+  mesma limitação de todo o épico de migração de storage.
+
 ---
 
 ### Interface e identidade visual (UI/UX)
