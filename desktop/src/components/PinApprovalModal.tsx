@@ -8,9 +8,9 @@ import { respondToRequest } from "../services/respondToRequest";
  * Aprovação de /truthid/v1/pin — só aparece quando o app precisa de
  * aprovação humana (app novo, ou cota diária estourada). Um app já
  * autorizado e dentro da cota pina direto no Rust, sem popup nenhum;
- * aprovar aqui autoriza o app a usar os providers de pinning já
- * configurados no TruthID (ver VaultSettings) pelo limite diário indicado —
- * a chave de API dos providers nunca sai do Rust.
+ * aprovar aqui autoriza o app a publicar no Arweave usando a wallet local já
+ * configurada no TruthID (ver VaultSettings) pelo limite diário indicado —
+ * a chave privada da wallet nunca sai do Rust.
  */
 export function PinApprovalModal() {
   const { request, clear } = useIncomingPinRequest();

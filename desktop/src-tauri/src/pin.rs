@@ -372,7 +372,8 @@ pub async fn set_daily_limit(
 /// estourada); no caminho rápido (autorizado, dentro da cota) nunca é
 /// chamado. `pin` é injetado pra este módulo ser testável sem HTTP real — é
 /// assíncrono (não `FnOnce` síncrono como o `sign` de sign_message.rs)
-/// porque `ipfs::pin_vault`, a implementação real, faz chamadas HTTP.
+/// porque `arweave::publish_pinned_content`, a implementação real, faz
+/// chamadas HTTP pra rede Arweave.
 pub async fn handle_incoming<F, Fut>(
     state: &PinState,
     body: PinRequestBody,

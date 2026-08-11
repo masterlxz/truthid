@@ -1135,7 +1135,7 @@ export function VaultManagement() {
           >
             ← Vault
           </button>
-          <h2 style={{ margin: 0 }}>Providers de Pinning</h2>
+          <h2 style={{ margin: 0 }}>Wallet Arweave</h2>
         </div>
         <VaultSettings />
       </div>

@@ -7,13 +7,6 @@ export type DeviceInfo = {
   exists: boolean;
 };
 
-export type PinningProvider = {
-  name: string;
-  kind: "kubo" | "psa";
-  endpoint_url: string;
-  api_key: string;
-};
-
 export type Passkey = {
   rp_id: string;
   credential_id_b64: string;

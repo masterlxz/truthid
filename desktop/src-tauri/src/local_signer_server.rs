@@ -917,10 +917,10 @@ mod tests {
 
     // Os 2 testes de /pin abaixo só exercitam o caminho Rejected — ao
     // contrário de sign-message, o `pin` real (crate::pin_content) faz
-    // chamadas HTTP de verdade pros providers de pinning configurados no
-    // $HOME real, o que seria não-determinístico e dependente de máquina
+    // chamadas HTTP de verdade pra rede Arweave usando a wallet configurada
+    // no $HOME real, o que seria não-determinístico e dependente de máquina
     // aqui. Rejeitar nunca chama `pin`, então cobre o roteamento/wiring de
-    // ponta a ponta sem depender de infraestrutura de IPFS.
+    // ponta a ponta sem depender de infraestrutura externa.
 
     #[tokio::test]
     async fn pin_endpoint_new_app_request_parks_and_can_be_rejected() {

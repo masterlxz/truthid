@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
 import 'package:truthid_mobile/screens/pin_approval_screen.dart';
+import 'package:truthid_mobile/services/arweave_client.dart';
 import 'package:truthid_mobile/services/ecies_service.dart';
 import 'package:truthid_mobile/services/ipfs_pin_client.dart';
 import 'package:truthid_mobile/services/pin_content_cipher_service.dart';
@@ -23,6 +24,9 @@ class MockIpfsPinClient extends Mock implements IpfsPinClient {}
 class MockPinningProviderService extends Mock
     implements PinningProviderService {}
 
+class MockArweaveVaultPublisher extends Mock
+    implements ArweaveVaultPublisher {}
+
 class MockResultDeliveryChannel extends Mock
     implements ResultDeliveryChannel {}
 
@@ -31,6 +35,7 @@ void main() {
   late MockRemoteSignerLanServer mockLanServer;
   late MockIpfsPinClient mockIpfsPinClient;
   late MockPinningProviderService mockPinningProviderService;
+  late MockArweaveVaultPublisher mockArweavePublisher;
   late MockResultDeliveryChannel mockDelivery;
 
   final farFuture = DateTime.now().add(const Duration(minutes: 3));
@@ -68,6 +73,7 @@ void main() {
     mockLanServer = MockRemoteSignerLanServer();
     mockIpfsPinClient = MockIpfsPinClient();
     mockPinningProviderService = MockPinningProviderService();
+    mockArweavePublisher = MockArweaveVaultPublisher();
     mockDelivery = MockResultDeliveryChannel();
   });
 
@@ -79,6 +85,7 @@ void main() {
         lanServer: mockLanServer,
         ipfsPinClient: mockIpfsPinClient,
         pinningProviderService: mockPinningProviderService,
+        arweavePublisher: mockArweavePublisher,
         deliveryChannel: mockDelivery,
       ),
     );
@@ -163,8 +170,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.text('Practice Valuation wants to pin content to your IPFS '
-            'providers'),
+        find.text('Practice Valuation wants to publish content to Arweave'),
         findsOneWidget,
       );
       expect(find.text('Size: 5 bytes'), findsOneWidget);
@@ -204,23 +210,12 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('pina via providers configurados e entrega {status: pinned}',
+    testWidgets('publica no Arweave e entrega {status: pinned}',
         (tester) async {
-      final providers = [
-        const PinningProvider(
-          name: 'local-kubo',
-          kind: 'kubo',
-          endpointUrl: 'http://127.0.0.1:5001',
-        ),
-      ];
-      when(() => mockPinningProviderService.load())
-          .thenAnswer((_) async => providers);
-      when(() => mockIpfsPinClient.pinVault(any(), providers)).thenAnswer(
-        (_) async => const PinResult(
-          cid: 'bafy123',
+      when(() => mockArweavePublisher.publishPinnedContent(any())).thenAnswer(
+        (_) async => const ArweavePublishResult(
+          cid: 'ar://tx123',
           contentHash: '0xhash',
-          providersOk: ['local-kubo'],
-          providersFailed: [],
         ),
       );
       when(() => mockDelivery.deliver(
@@ -238,10 +233,10 @@ void main() {
       verify(() => mockDelivery.deliver(
             result: {
               'status': 'pinned',
-              'cid': 'bafy123',
+              'cid': 'ar://tx123',
               'contentHash': '0xhash',
-              'providersOk': ['local-kubo'],
-              'providersFailed': <String>[],
+              'providersOk': const ['arweave'],
+              'providersFailed': const <String>[],
             },
             sessionId: testSessionId,
             expiresAt: any(named: 'expiresAt'),
@@ -250,25 +245,14 @@ void main() {
     });
 
     testWidgets(
-        'duplo toque em Approve pina só uma vez (M6, achado do '
+        'duplo toque em Approve publica só uma vez (M6, achado do '
         '/code-review high: sem guarda síncrona, um 2º toque antes do 1º '
         'frame renderizar disparava um 2º fluxo de pin concorrente)',
         (tester) async {
-      final providers = [
-        const PinningProvider(
-          name: 'local-kubo',
-          kind: 'kubo',
-          endpointUrl: 'http://127.0.0.1:5001',
-        ),
-      ];
-      when(() => mockPinningProviderService.load())
-          .thenAnswer((_) async => providers);
-      when(() => mockIpfsPinClient.pinVault(any(), providers)).thenAnswer(
-        (_) async => const PinResult(
-          cid: 'bafy123',
+      when(() => mockArweavePublisher.publishPinnedContent(any())).thenAnswer(
+        (_) async => const ArweavePublishResult(
+          cid: 'ar://tx123',
           contentHash: '0xhash',
-          providersOk: ['local-kubo'],
-          providersFailed: [],
         ),
       );
       when(() => mockDelivery.deliver(
@@ -284,12 +268,17 @@ void main() {
       await tester.tap(find.text('Approve'));
       await tester.pumpAndSettle();
 
-      verify(() => mockIpfsPinClient.pinVault(any(), providers)).called(1);
+      verify(() => mockArweavePublisher.publishPinnedContent(any()))
+          .called(1);
     });
 
-    testWidgets('sem provider configurado entrega {status: failed}',
+    testWidgets('sem wallet configurada entrega {status: failed}',
         (tester) async {
-      when(() => mockPinningProviderService.load()).thenAnswer((_) async => []);
+      when(() => mockArweavePublisher.publishPinnedContent(any())).thenThrow(
+        Exception(
+          'nenhuma wallet Arweave configurada — gere ou importe uma antes de publicar',
+        ),
+      );
       when(() => mockDelivery.deliver(
             result: any(named: 'result'),
             sessionId: any(named: 'sessionId'),
@@ -310,12 +299,11 @@ void main() {
             sessionId: testSessionId,
             expiresAt: any(named: 'expiresAt'),
           )).called(1);
-      verifyNever(() => mockIpfsPinClient.pinVault(any(), any()));
     });
   });
 
   group('fase 2 — Reject', () {
-    testWidgets('nunca chama pinVault, entrega {status: rejected}',
+    testWidgets('nunca chama publishPinnedContent, entrega {status: rejected}',
         (tester) async {
       final key = derivePinContentKey(testSessionId);
       final encrypted =
@@ -338,7 +326,7 @@ void main() {
       await tester.tap(find.text('Reject'));
       await tester.pumpAndSettle();
 
-      verifyNever(() => mockIpfsPinClient.pinVault(any(), any()));
+      verifyNever(() => mockArweavePublisher.publishPinnedContent(any()));
       verify(() => mockDelivery.deliver(
             result: {'status': 'rejected'},
             sessionId: testSessionId,

@@ -567,9 +567,8 @@ fn vault_encrypt(plaintext_b64: String) -> Result<String, String> {
 
 /// Resultado de uma publicação de storage (Arweave ou IPFS legado): CID/ponteiro
 /// obtido, hash do conteúdo (pro contrato) e listas de providers que tiveram
-/// sucesso ou falha — nome/campos genéricos porque hoje é compartilhado por
-/// `arweave::publish_vault_blob*`/`publish_document*` e pelo `ipfs::pin_vault`
-/// ainda usado pelo canal `/pin` de apps terceiros.
+/// sucesso ou falha — nome/campos genéricos porque é compartilhado por
+/// `arweave::publish_vault_blob*`/`publish_document*`/`publish_pinned_content*`.
 #[derive(Serialize, serde::Deserialize, Debug)]
 pub(crate) struct PublishResult {
     pub cid: String,
@@ -701,18 +700,6 @@ async fn vault_document_read(
 #[tauri::command]
 fn vault_pending_changes() -> Result<u64, String> {
     vault::pending_changes()
-}
-
-/// Retorna a lista de providers de pinning configurados.
-#[tauri::command]
-fn vault_get_providers() -> Result<Vec<ipfs::PinningProvider>, String> {
-    Ok(ipfs::load_providers())
-}
-
-/// Salva a lista de providers de pinning.
-#[tauri::command]
-fn vault_set_providers(providers: Vec<ipfs::PinningProvider>) -> Result<(), String> {
-    ipfs::save_providers(&providers)
 }
 
 /// Retorna a config do bundler Pimlico (chave de API + rede) usada pra
@@ -850,20 +837,15 @@ fn sign_challenge(challenge: String) -> Result<String, String> {
     sign_personal_message(&challenge)
 }
 
-/// Pina `content` nos providers de pinning que o usuário já configurou —
-/// injetada em `pin::handle_incoming` como a closure `pin` do canal
-/// `/truthid/v1/pin`. Mesma mensagem de erro de `vault_publish` quando não há
-/// provider configurado (mesmo caminho de código, mesma UX).
+/// Publica `content` no Arweave via a wallet local — injetada em
+/// `pin::handle_incoming` como a closure `pin` do canal `/truthid/v1/pin`.
+/// Mesmo corte direto sem fallback pro IPFS do resto da migração de storage
+/// (ver `arweave::publish_pinned_content`): erro claro se a wallet não
+/// estiver configurada.
 pub(crate) async fn pin_content(
     content: Vec<u8>,
 ) -> Result<(String, String, Vec<String>, Vec<String>), String> {
-    let providers = ipfs::load_providers();
-    if providers.is_empty() {
-        return Err(
-            "nenhum provider de pinning configurado — use vault_set_providers primeiro".to_string(),
-        );
-    }
-    let result = ipfs::pin_vault(&content, &providers).await?;
+    let result = arweave::publish_pinned_content(&content).await?;
     Ok((
         result.cid,
         result.content_hash,
@@ -1222,8 +1204,6 @@ pub fn run() {
             vault_document_write,
             vault_document_read,
             vault_pending_changes,
-            vault_get_providers,
-            vault_set_providers,
             vault_get_device_permissions,
             vault_set_device_permission,
             vault_set_favorite,

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../services/arweave_client.dart' show ArweaveVaultPublisher;
 import '../services/cross_device_delivery_channel.dart';
 import '../services/ecies_service.dart';
 import '../services/ipfs_pin_client.dart';
@@ -32,10 +33,12 @@ String _formatBytes(int bytes) {
 }
 
 /// Tela de aprovação de `/pin` cross-device — um app terceiro (ex: Practice
-/// Valuation) pede pro celular pinar um conteúdo usando os providers de IPFS
-/// já configurados no Vault. Diferente de `/sign-message`/`/sign-request`, o
-/// celular não gera o resultado sozinho — primeiro precisa RECEBER o
-/// conteúdo a pinar, que pode ser grande demais pro QR. Fluxo em 2 fases:
+/// Valuation) pede pro celular publicar um conteúdo no Arweave usando a
+/// wallet local já configurada no Vault (mesma migração do canal loopback do
+/// Desktop, ver `arweave::publish_pinned_content`/`project/ROADMAP.md`).
+/// Diferente de `/sign-message`/`/sign-request`, o celular não gera o
+/// resultado sozinho — primeiro precisa RECEBER o conteúdo a publicar, que
+/// pode ser grande demais pro QR. Fluxo em 2 fases:
 ///
 ///   Fase 1 (conteúdo): o requisitante varre a LAN até achar o servidor
 ///   efêmero que esta tela sobe (`RemoteSignerLanServer.receiveOnce`) e
@@ -45,11 +48,14 @@ String _formatBytes(int bytes) {
 ///   direção).
 ///   Fase 2 (resultado): igual ao padrão já validado em sign-message/
 ///   sign-request — aprova/rejeita, entrega `{status, cid, contentHash,
-///   providersOk, providersFailed}` via `CrossDeviceDeliveryChannel` (ECIES
-///   contra o `ephemeralPubKey` do QR + LAN + dead-drop IPFS/IPNS).
+///   providersOk, providersFailed}` via `CrossDeviceDeliveryChannel` — que
+///   ainda usa `IpfsPinClient`/`PinningProviderService` só como transporte de
+///   dead-drop desse envelope de resultado (ECIES contra o `ephemeralPubKey`
+///   do QR + LAN + dead-drop IPFS/IPNS), não relacionado ao backend do
+///   conteúdo em si.
 ///
 /// Schema do QR v1 (só cross-device nesta rodada, sem variante deep link —
-/// não faz sentido pinar via HTTP loopback dentro do mesmo device):
+/// não faz sentido publicar via HTTP loopback dentro do mesmo device):
 ///   { action: 'truthid-pin', v: 1, sessionId, ephemeralPubKey, expiresAt,
 ///     appName }
 /// Sem sistema de cota/autorização persistente por app (diferente do
@@ -61,6 +67,7 @@ class PinApprovalScreen extends StatefulWidget {
   final RemoteSignerLanServer? lanServer;
   final IpfsPinClient? ipfsPinClient;
   final PinningProviderService? pinningProviderService;
+  final ArweaveVaultPublisher? arweavePublisher;
   final ResultDeliveryChannel? deliveryChannel;
 
   const PinApprovalScreen({
@@ -70,6 +77,7 @@ class PinApprovalScreen extends StatefulWidget {
     this.lanServer,
     this.ipfsPinClient,
     this.pinningProviderService,
+    this.arweavePublisher,
     this.deliveryChannel,
   });
 
@@ -94,6 +102,7 @@ class _PinApprovalScreenState extends State<PinApprovalScreen> {
   late final RemoteSignerLanServer _lanServer;
   late final IpfsPinClient _ipfsPinClient;
   late final PinningProviderService _pinningProviderService;
+  late final ArweaveVaultPublisher _arweavePublisher;
   ResultDeliveryChannel? _deliveryChannel;
 
   @override
@@ -104,6 +113,7 @@ class _PinApprovalScreenState extends State<PinApprovalScreen> {
     _ipfsPinClient = widget.ipfsPinClient ?? IpfsPinClient();
     _pinningProviderService =
         widget.pinningProviderService ?? PinningProviderService();
+    _arweavePublisher = widget.arweavePublisher ?? ArweaveVaultPublisher();
 
     final validationError = _validatePayload();
     if (validationError != null) {
@@ -208,22 +218,16 @@ class _PinApprovalScreenState extends State<PinApprovalScreen> {
     if (_responded) return;
     _responded = true;
     try {
-      final providers = await _pinningProviderService.load();
-      if (providers.isEmpty) {
-        await _deliver({
-          'status': 'failed',
-          'error': 'no pinning provider configured — set one up in '
-              'Vault > Pinning providers first',
-        });
-        return;
-      }
-      final result = await _ipfsPinClient.pinVault(_content!, providers);
+      // ArweaveWalletService.load() (dentro de publishPinnedContent) já
+      // lança um erro claro ("nenhuma wallet Arweave configurada...") se
+      // ausente — mesma UX do Desktop, sem checagem manual antes.
+      final result = await _arweavePublisher.publishPinnedContent(_content!);
       await _deliver({
         'status': 'pinned',
         'cid': result.cid,
         'contentHash': result.contentHash,
-        'providersOk': result.providersOk,
-        'providersFailed': result.providersFailed,
+        'providersOk': const ['arweave'],
+        'providersFailed': const <String>[],
       });
     } catch (e) {
       await _deliver({'status': 'failed', 'error': '$e'});
@@ -355,7 +359,7 @@ class _PinApprovalScreenState extends State<PinApprovalScreen> {
                 size: 64, color: AppColors.accent),
             const SizedBox(height: 16),
             Text(
-              '$_appName wants to pin content to your IPFS providers',
+              '$_appName wants to publish content to Arweave',
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),

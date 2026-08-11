@@ -346,6 +346,41 @@ pub(crate) async fn publish_document(
     publish_document_with_jwk(&http_client(), ARWEAVE_DEFAULT_NODE, &jwk, content, file_name, mime_type).await
 }
 
+/// Mesmo papel que `publish_vault_blob_with_jwk`, mas para o conteúdo
+/// arbitrário que apps terceiros enviam via `/truthid/v1/pin` — mesmas tags
+/// genéricas do blob principal (sem tag de app de origem por ora).
+pub(crate) async fn publish_pinned_content_with_jwk(
+    client: &reqwest::Client,
+    node_url: &str,
+    jwk: &ArweaveJwk,
+    content: &[u8],
+) -> Result<crate::PublishResult, String> {
+    let tags = vec![
+        ("Content-Type".to_string(), "application/octet-stream".to_string()),
+        ("App-Name".to_string(), "TruthID".to_string()),
+    ];
+    let tx_id = publish(client, node_url, jwk, content, &tags).await?;
+    Ok(crate::PublishResult {
+        cid: format!("ar://{tx_id}"),
+        content_hash: crate::ipfs::keccak256_hex(content),
+        providers_ok: vec!["arweave".to_string()],
+        providers_failed: vec![],
+    })
+}
+
+/// Ponto de entrada real do canal `/truthid/v1/pin` (apps terceiros) —
+/// mesmo padrão de `publish_vault_blob`/`publish_document` (carrega a
+/// wallet local, erro claro se ausente, sem fallback pro IPFS: corte
+/// direto).
+pub(crate) async fn publish_pinned_content(content: &[u8]) -> Result<crate::PublishResult, String> {
+    let json = crate::get_arweave_wallet().map_err(|_| {
+        "nenhuma wallet Arweave configurada — gere ou importe uma antes de usar o /pin"
+            .to_string()
+    })?;
+    let jwk = wallet::parse_jwk(&json)?;
+    publish_pinned_content_with_jwk(&http_client(), ARWEAVE_DEFAULT_NODE, &jwk, content).await
+}
+
 // ---------------------------------------------------------------------------
 // Tauri commands — validação manual isolada (sem integração com o Vault)
 // ---------------------------------------------------------------------------

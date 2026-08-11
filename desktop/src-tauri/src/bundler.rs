@@ -3,10 +3,10 @@ use serde::{Deserialize, Serialize};
 /// Config do bundler Pimlico usado pra montar/enviar UserOperations ERC-4337
 /// pela device key (sem Ledger) — mirror de `BundlerConfigService` no Mobile
 /// (`mobile/lib/services/bundler_config_service.dart`), mesmo padrão de
-/// persistência local de `ipfs::PinningProvider`
-/// (`~/.truthid/pinning_providers.json`). Sem UI de configuração ainda — só
-/// o suficiente pra configurar a chave manualmente uma vez e os testes
-/// conseguirem rodar contra o bundler de verdade.
+/// persistência local em JSON usado pela wallet Arweave
+/// (`crate::get_arweave_wallet`/`set_arweave_wallet`). Sem UI de configuração
+/// ainda — só o suficiente pra configurar a chave manualmente uma vez e os
+/// testes conseguirem rodar contra o bundler de verdade.
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub(crate) struct BundlerConfig {
     pub api_key: String,

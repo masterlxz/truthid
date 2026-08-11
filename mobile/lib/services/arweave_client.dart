@@ -273,6 +273,21 @@ class ArweaveVaultPublisher {
     );
   }
 
+  // Mirror de `arweave::publish_pinned_content` (Rust) — conteúdo arbitrário
+  // que apps terceiros enviam via `/truthid/v1/pin` cross-device. Mesmas
+  // tags genéricas do blob principal.
+  Future<ArweavePublishResult> publishPinnedContent(Uint8List content) async {
+    final jwk = await _walletService.load();
+    final txId = await publish(nodeUrl, jwk, content, const [
+      ('Content-Type', 'application/octet-stream'),
+      ('App-Name', 'TruthID'),
+    ]);
+    return ArweavePublishResult(
+      cid: 'ar://$txId',
+      contentHash: bytesToHex(keccak256(content), include0x: true),
+    );
+  }
+
   Future<ArweavePublishResult> publishDocument(
     Uint8List content,
     String fileName,
