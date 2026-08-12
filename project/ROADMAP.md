@@ -1283,6 +1283,45 @@ central.
   outro app (Practice Valuation) rodando pra exercitar o `/pin` contra um node Arweave real —
   mesma limitação de todo o épico de migração de storage.
 
+**Sessão 194 (2026-08-12): validação de hardware real (Android físico + Desktop nativo) — fecha a
+pendência de benchmark da Sessão 190, acha uma regressão real de onboarding pós-migração.**
+
+- **Pareamento de device novo em hardware real, ponta a ponta**: build debug instalado num Samsung
+  Galaxy S25 FE físico (adb wireless), identidade nova gerada localmente, pareado contra a
+  identidade `@masterlxz` (Mainnet real) via `PairDevice.tsx` no Desktop — commit-reveal assinado
+  pela Ledger física, os dois passos confirmaram, device apareceu registrado no Mobile via polling.
+  Fluxo nunca tinha sido validado em hardware real desde que existe.
+- **Achado real (regressão de onboarding, não corrigido ainda)**: o vault dessa identidade aponta
+  pro último CID publicado no IPFS, de antes da migração pro Arweave (Sessão 193). Um device novo
+  sem cache local não consegue carregar esse CID — todos os gateways públicos dão timeout, porque
+  o pinning dedicado foi desligado na mesma sessão que migrou o Vault. O Desktop só continua
+  funcionando porque já tinha o vault em cache local de antes; um device **novo** pareado a
+  qualquer identidade que não republicou desde a Sessão 193 fica sem conseguir ler o vault (não é
+  perda de dado — o Desktop original ainda tem o conteúdo — mas onboarding de device novo quebra
+  silenciosamente pra essas identidades). Mitigação natural é republicar (qualquer save no Desktop
+  gera um CID novo no Arweave), mas isso exige a wallet Arweave da identidade estar financiada.
+  **Decisão do dono do projeto (mesma sessão): documentar como risco conhecido por agora, sem
+  fallback automático implementado.** Identidades que não republicarem o vault desde a Sessão 193
+  ficam sujeitas a esse onboarding quebrado pra device novo até republicarem (o que já resolve
+  sozinho, sem código novo — só exige a wallet Arweave da identidade estar financiada). Reavaliar
+  se compensa um fallback automático (detectar CID IPFS morto e sugerir republish) só se isso se
+  mostrar um problema recorrente na prática.
+- **Geração de wallet Arweave validada em hardware real nos dois lados**: Desktop (nativo, via
+  `ArweaveWalletSection`) e Mobile (via pareamento acima, mesma lógica de `ArweaveWalletService`).
+  Um travamento momentâneo da janela do Desktop durante o teste foi falso alarme (processo nunca
+  morreu, CPU do container ainda ativa, janela voltou sozinha) — não é bug.
+- **Publish real na Mainnet do Arweave tentado e falhou como esperado**: wallet recém-gerada com
+  saldo zero recebeu `POST /tx` → `400 Bad Request: Transaction verification failed` do node
+  Arweave. Confirma (não é bug novo) a pendência já registrada nas Sessões 190-193 — publish real
+  exige AR de verdade na wallet, decisão consciente do dono do projeto de não financiar agora.
+- **Benchmark de `signTransaction` em modo release, hardware físico real (Galaxy S25 FE) — fecha a
+  pendência da Sessão 190**: medido via hook temporário (long-press no título "TruthID", revertido
+  logo depois de coletar o dado, nunca commitado) chamando `generateJwkInIsolate`/
+  `signTransactionInIsolate` diretamente. Resultado: **keygen (RSA-4096) = 1743ms, sign (PSS,
+  20KB) = 16ms**. Conclusão: assinatura é rápida o bastante pra não precisar de UI de progresso
+  dedicada; geração de chave (~1.7s, operação única de setup) já tem o loading state "Gerando..."
+  implementado desde a Sessão 192, adequado ao tempo medido.
+
 ---
 
 ### Interface e identidade visual (UI/UX)
