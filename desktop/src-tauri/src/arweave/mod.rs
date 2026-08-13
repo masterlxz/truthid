@@ -8,11 +8,13 @@
 //! chunks (`submit_chunk`, `POST /chunk`) cobre conteúdo de qualquer
 //! tamanho, não só o blob principal.
 
+mod checkpoint;
 mod deep_hash;
 mod merkle;
 mod transaction;
 mod wallet;
 
+use rsa::BigUint;
 use serde::Serialize;
 use transaction::ArweaveTransaction;
 use wallet::ArweaveJwk;
@@ -142,6 +144,10 @@ pub(crate) async fn submit_chunk(
 
 /// `GET /tx/{id}/status` — 200 = confirmada (corpo tem `block_height` e
 /// `number_of_confirmations`); 202/404 = ainda pendente/não encontrada.
+/// Qualquer outro status (5xx, etc.) é um erro real do node, não "ainda
+/// pendente" — devolve `Err` em vez de mascarar como `confirmed: false`
+/// (achado de `/code-review`: um node fora do ar ficava indistinguível de
+/// uma tx genuinamente não minerada ainda).
 pub(crate) async fn get_tx_status(
     client: &reqwest::Client,
     node_url: &str,
@@ -150,20 +156,22 @@ pub(crate) async fn get_tx_status(
     let url = format!("{}/tx/{}/status", node_url.trim_end_matches('/'), tx_id);
     let res = client.get(&url).send().await.map_err(|e| e.to_string())?;
 
-    if res.status() == reqwest::StatusCode::OK {
-        let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
-        return Ok(TxStatus {
-            confirmed: true,
-            block_height: json["block_height"].as_u64(),
-            number_of_confirmations: json["number_of_confirmations"].as_u64(),
-        });
+    match res.status() {
+        reqwest::StatusCode::OK => {
+            let json: serde_json::Value = res.json().await.map_err(|e| e.to_string())?;
+            Ok(TxStatus {
+                confirmed: true,
+                block_height: json["block_height"].as_u64(),
+                number_of_confirmations: json["number_of_confirmations"].as_u64(),
+            })
+        }
+        reqwest::StatusCode::ACCEPTED | reqwest::StatusCode::NOT_FOUND => Ok(TxStatus {
+            confirmed: false,
+            block_height: None,
+            number_of_confirmations: None,
+        }),
+        other => Err(format!("GET /tx/{{id}}/status retornou {other}")),
     }
-
-    Ok(TxStatus {
-        confirmed: false,
-        block_height: None,
-        number_of_confirmations: None,
-    })
 }
 
 /// `GET /{id}` — lê o conteúdo bruto publicado numa tx.
@@ -183,6 +191,96 @@ pub(crate) async fn fetch_data(
         .map_err(|e| e.to_string())
 }
 
+/// Envia os chunks a partir de `cp.next_chunk_index` (0 numa publicação
+/// nova, > 0 ao retomar uma que falhou no meio) — salva o checkpoint depois
+/// de CADA chunk confirmado, não só no fim, pra uma segunda falha retomar
+/// do ponto certo em vez de voltar pro início.
+async fn submit_remaining_chunks(
+    client: &reqwest::Client,
+    node_url: &str,
+    cp: &mut checkpoint::PublishCheckpoint,
+    chunks: &[merkle::Chunk],
+    proofs: &[merkle::Proof],
+    content: &[u8],
+    data_root_bytes: &[u8],
+) -> Result<(), String> {
+    let total = cp.total_chunks;
+    for i in cp.next_chunk_index..total {
+        let chunk = &chunks[i];
+        let proof = &proofs[i];
+        // Sanity check local antes de gastar a requisição — ArLocal não
+        // valida a prova que o cliente manda, então esse é o único jeito de
+        // pegar um bug sutil em `generate_proofs` antes de mainnet (mesmo
+        // padrão de `verify_transaction_signature` acima).
+        if merkle::validate_path(data_root_bytes, proof.offset as i64, 0, content.len(), &proof.proof)
+            .is_none()
+        {
+            return Err(format!(
+                "tx {} publicada, prova de merkle inválida localmente pro chunk {i}/{total} — não enviado (retomável, publique de novo com o mesmo conteúdo)",
+                cp.tx_id
+            ));
+        }
+
+        let bytes = &content[chunk.min_byte_range..chunk.max_byte_range];
+        submit_chunk(client, node_url, &cp.data_root, &cp.data_size, proof, bytes)
+            .await
+            .map_err(|e| {
+                format!(
+                    "tx {} publicada, chunk {i}/{total} falhou: {e} (retomável, publique de novo com o mesmo conteúdo)",
+                    cp.tx_id
+                )
+            })?;
+
+        cp.next_chunk_index = i + 1;
+        checkpoint::save(cp)?;
+    }
+    Ok(())
+}
+
+/// Só chamado quando `chunks.len() > 1` — confere se existe um checkpoint
+/// utilizável (mesma wallet/node/conteúdo de uma tentativa anterior que
+/// falhou no meio) e, se sim, retoma o envio dos chunks restantes. Devolve
+/// `Ok(None)` se não havia checkpoint nenhum (segue como publicação nova);
+/// um checkpoint que existe mas não bate é descartado antes de devolver
+/// `None`, pelo mesmo motivo.
+async fn try_resume(
+    client: &reqwest::Client,
+    node_url: &str,
+    jwk: &ArweaveJwk,
+    content: &[u8],
+    chunks: &[merkle::Chunk],
+    proofs: &[merkle::Proof],
+) -> Result<Option<String>, String> {
+    let content_hash = checkpoint::content_hash_hex(content);
+    let Some(mut cp) = checkpoint::load(&content_hash) else {
+        return Ok(None);
+    };
+
+    let wallet_addr = wallet::wallet_address(jwk)?;
+    let recomputed_root = if content.is_empty() {
+        String::new()
+    } else {
+        transaction::b64url_encode(&merkle::compute_data_root(&merkle::chunk_data(content)))
+    };
+    let matches = cp.wallet_address == wallet_addr
+        && cp.node_url == node_url
+        && cp.total_chunks == chunks.len()
+        && recomputed_root == cp.data_root;
+
+    if !matches {
+        // Checkpoint existe mas não bate (conteúdo mudou desde a tentativa
+        // que falhou, wallet/node diferente, ou contagem de chunks
+        // divergente) — descarta e segue como publicação nova.
+        checkpoint::clear(&content_hash)?;
+        return Ok(None);
+    }
+
+    let data_root_bytes = transaction::b64url_decode(&cp.data_root)?;
+    submit_remaining_chunks(client, node_url, &mut cp, chunks, proofs, content, &data_root_bytes).await?;
+    checkpoint::clear(&content_hash)?;
+    Ok(Some(cp.tx_id))
+}
+
 /// Orquestrador de ponta a ponta — preço, anchor, monta, assina, submete.
 /// Devolve o tx_id. Equivalente ao `pin_vault` de `ipfs.rs`. Publica inline
 /// (`POST /tx` com `data`) se o conteúdo cabe em 1 chunk (≤256KiB); caso
@@ -190,6 +288,13 @@ pub(crate) async fn fetch_data(
 /// `POST /chunk`, sequencialmente (ver `arlocal_tests` — upload concorrente
 /// corrompe a ordem de remontagem no ArLocal, que deriva o offset por ordem
 /// de chegada em vez de usar o `offset` que o cliente envia).
+///
+/// Caminho multi-chunk tem checkpoint/resume (ver `checkpoint.rs`): se uma
+/// chamada anterior com o mesmo conteúdo+wallet+node falhou no meio do envio
+/// de chunks, retoma a partir do chunk que faltou em vez de assinar/submeter
+/// uma tx nova (que desperdiçaria o reward já comprometido pela tx anterior,
+/// deixando-a presa on-chain incompleta pra sempre). O caminho single-shot
+/// nunca toca o checkpoint — é uma única requisição, atômica o bastante.
 pub(crate) async fn publish(
     client: &reqwest::Client,
     node_url: &str,
@@ -197,8 +302,35 @@ pub(crate) async fn publish(
     content: &[u8],
     tags: &[(String, String)],
 ) -> Result<String, String> {
+    let (chunks, proofs) = merkle::chunk_data_for_upload(content);
+
+    if chunks.len() > 1 {
+        if let Some(tx_id) = try_resume(client, node_url, jwk, content, &chunks, &proofs).await? {
+            return Ok(tx_id);
+        }
+    }
+
     let private_key = wallet::jwk_to_private_key(jwk)?;
     let reward = get_price(client, node_url, content.len()).await?;
+
+    // Checagem de saldo antes de qualquer chamada que muta estado (assinar,
+    // submeter) — sem isso, uma wallet sem fundos só descobre isso como um
+    // "POST /tx retornou 400" cru lá na frente, exatamente o que esta
+    // checagem existe pra evitar (ver doc de `get_wallet_balance`).
+    let wallet_addr = wallet::wallet_address(jwk)?;
+    let balance = get_wallet_balance(client, node_url, &wallet_addr).await?;
+    let balance_n: BigUint = balance
+        .trim()
+        .parse()
+        .map_err(|_| format!("saldo retornado pelo node não é um inteiro válido: {balance}"))?;
+    let reward_n: BigUint = reward
+        .trim()
+        .parse()
+        .map_err(|_| format!("reward retornado pelo node não é um inteiro válido: {reward}"))?;
+    if balance_n < reward_n {
+        return Err(format!("saldo insuficiente: precisa de {reward} winston, tem {balance} winston"));
+    }
+
     let last_tx = get_tx_anchor(client, node_url).await?;
 
     let mut tx = transaction::build_transaction(content, tags, &reward, &last_tx, &jwk.n);
@@ -206,11 +338,9 @@ pub(crate) async fn publish(
 
     // Sanity check local antes de gastar uma requisição de rede: garante que
     // a tx não foi corrompida entre assinar e submeter.
-    if !transaction::verify_transaction_signature(&tx)? {
+    if !transaction::verify_transaction_signature(&tx, &jwk.e)? {
         return Err("assinatura da tx falhou na verificação local antes do submit".to_string());
     }
-
-    let (chunks, proofs) = merkle::chunk_data_for_upload(content);
 
     if chunks.len() <= 1 {
         submit_transaction(client, node_url, &tx).await?;
@@ -219,27 +349,21 @@ pub(crate) async fn publish(
 
     submit_transaction_no_data(client, node_url, &tx).await?;
 
-    let data_root_bytes = transaction::b64url_decode(&tx.data_root)?;
-    let total = chunks.len();
-    for (i, (chunk, proof)) in chunks.iter().zip(proofs.iter()).enumerate() {
-        // Sanity check local antes de gastar a requisição — ArLocal não
-        // valida a prova que o cliente manda, então esse é o único jeito de
-        // pegar um bug sutil em `generate_proofs` antes de mainnet (mesmo
-        // padrão de `verify_transaction_signature` acima).
-        if merkle::validate_path(&data_root_bytes, proof.offset as i64, 0, content.len(), &proof.proof)
-            .is_none()
-        {
-            return Err(format!(
-                "tx {} publicada, prova de merkle inválida localmente pro chunk {i}/{total} — não enviado",
-                tx.id
-            ));
-        }
+    let mut cp = checkpoint::PublishCheckpoint {
+        wallet_address: wallet::wallet_address(jwk)?,
+        content_hash: checkpoint::content_hash_hex(content),
+        tx_id: tx.id.clone(),
+        data_root: tx.data_root.clone(),
+        data_size: tx.data_size.clone(),
+        node_url: node_url.to_string(),
+        total_chunks: chunks.len(),
+        next_chunk_index: 0,
+    };
+    checkpoint::save(&cp)?;
 
-        let bytes = &content[chunk.min_byte_range..chunk.max_byte_range];
-        submit_chunk(client, node_url, &tx.data_root, &tx.data_size, proof, bytes)
-            .await
-            .map_err(|e| format!("tx {} publicada, chunk {i}/{total} falhou: {e}", tx.id))?;
-    }
+    let data_root_bytes = transaction::b64url_decode(&tx.data_root)?;
+    submit_remaining_chunks(client, node_url, &mut cp, &chunks, &proofs, content, &data_root_bytes).await?;
+    checkpoint::clear(&cp.content_hash)?;
 
     Ok(tx.id.clone())
 }
@@ -466,6 +590,307 @@ mod tests {
     #[test]
     fn default_node_is_https() {
         assert!(ARWEAVE_DEFAULT_NODE.starts_with("https://"));
+    }
+}
+
+// Mock de um node Arweave via axum + TcpListener local (mesmo padrão de
+// `local_signer_server.rs`), não ArLocal real — testa o comportamento do
+// *cliente* (checkpoint/resume, checagem de saldo) sob falha controlada de
+// rede, o que ArLocal não permite simular de forma determinística.
+#[cfg(test)]
+mod publish_resume_tests {
+    use super::*;
+    use crate::arweave::wallet::{parse_jwk, wallet_address, TEST_WALLET_JWK_JSON};
+    use axum::{extract::State, routing::{get, post}, Router};
+    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::Arc;
+    use tokio::net::TcpListener;
+
+    #[derive(Default)]
+    struct MockNodeState {
+        price_hits: AtomicUsize,
+        balance_hits: AtomicUsize,
+        anchor_hits: AtomicUsize,
+        tx_hits: AtomicUsize,
+        chunk_hits: AtomicUsize,
+        // Testado por checkpoint_tests_insufficient_balance_never_submits_tx
+        // — todos os outros testes desta suíte deixam em `false` (saldo
+        // sempre suficiente, não é o que estão testando).
+        low_balance: AtomicBool,
+    }
+
+    async fn mock_price(State(state): State<Arc<MockNodeState>>) -> String {
+        state.price_hits.fetch_add(1, Ordering::SeqCst);
+        "1000".to_string()
+    }
+
+    // Saldo bem maior que o reward fixo de mock_price por padrão — nunca
+    // deve disparar o erro de saldo insuficiente nos testes de
+    // checkpoint/resume (que não são sobre a checagem de saldo em si).
+    async fn mock_balance(State(state): State<Arc<MockNodeState>>) -> String {
+        state.balance_hits.fetch_add(1, Ordering::SeqCst);
+        if state.low_balance.load(Ordering::SeqCst) {
+            "0".to_string()
+        } else {
+            "999999999999".to_string()
+        }
+    }
+
+    async fn mock_anchor(State(state): State<Arc<MockNodeState>>) -> String {
+        state.anchor_hits.fetch_add(1, Ordering::SeqCst);
+        // Mesmo anchor fixo de teste usado em transaction.rs (32 bytes de
+        // 0xAA em base64url) — só precisa decodificar via
+        // b64url_decode_lenient, não representar um anchor real.
+        "qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo".to_string()
+    }
+
+    async fn mock_tx(State(state): State<Arc<MockNodeState>>) -> axum::http::StatusCode {
+        state.tx_hits.fetch_add(1, Ordering::SeqCst);
+        axum::http::StatusCode::OK
+    }
+
+    // Falha só a primeira chamada (simula um chunk que falhou por blip de
+    // rede) — todas as seguintes (incluindo o retry via resume) sucedem.
+    async fn mock_chunk(State(state): State<Arc<MockNodeState>>) -> axum::http::StatusCode {
+        let prev = state.chunk_hits.fetch_add(1, Ordering::SeqCst);
+        if prev == 0 {
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR
+        } else {
+            axum::http::StatusCode::OK
+        }
+    }
+
+    async fn start_mock_node() -> (String, Arc<MockNodeState>, tokio::task::JoinHandle<()>) {
+        let state = Arc::new(MockNodeState::default());
+        let router = Router::new()
+            .route("/price/{bytes}", get(mock_price))
+            .route("/wallet/{address}/balance", get(mock_balance))
+            .route("/tx_anchor", get(mock_anchor))
+            .route("/tx", post(mock_tx))
+            .route("/chunk", post(mock_chunk))
+            .with_state(Arc::clone(&state));
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind deve suceder");
+        let addr = listener.local_addr().expect("addr deve resolver");
+        let handle = tokio::spawn(async move {
+            let _ = axum::serve(listener, router).await;
+        });
+        (format!("http://{addr}"), state, handle)
+    }
+
+    #[tokio::test]
+    async fn multi_chunk_publish_resumes_after_chunk_failure_without_redoing_price_anchor_tx() {
+        let (node_url, state, server_handle) = start_mock_node().await;
+        let client = http_client();
+        let jwk = parse_jwk(TEST_WALLET_JWK_JSON).expect("wallet de teste deve parsear");
+        let address = wallet_address(&jwk).expect("endereço deve ser derivável");
+
+        // Mesmo tamanho usado nos testes de multi-chunk existentes: 3 chunks
+        // reais (256KiB + ~128KiB + ~128KiB), conteúdo não-uniforme. Byte 0
+        // como marcador (0xA1) só pra garantir um hash/checkpoint diferente
+        // do outro teste desta suíte que usa o mesmo tamanho — cargo test
+        // roda em paralelo e os dois batem no mesmo $HOME/.truthid/ real,
+        // então conteúdo idêntico faria os dois competirem pelo mesmo
+        // arquivo de checkpoint.
+        let size = merkle::MAX_CHUNK_SIZE * 2 + 500;
+        let content: Vec<u8> = std::iter::once(0xA1u8)
+            .chain((1..size).map(|i| (i % 251) as u8))
+            .collect();
+        let content_hash = checkpoint::content_hash_hex(&content);
+
+        // Limpa qualquer checkpoint de uma execução anterior desta mesma
+        // wallet+conteúdo (determinístico, então pode já existir em disco).
+        let _ = checkpoint::clear(&content_hash);
+
+        let first_attempt = publish(&client, &node_url, &jwk, &content, &[]).await;
+        assert!(first_attempt.is_err(), "1º chunk falha por design do mock");
+
+        let cp = checkpoint::load(&content_hash).expect("checkpoint deve existir após falha");
+        assert_eq!(cp.wallet_address, address);
+        assert_eq!(cp.total_chunks, 3);
+        assert_eq!(cp.next_chunk_index, 0, "chunk 0 falhou, resume deve começar dele");
+        assert_eq!(state.price_hits.load(Ordering::SeqCst), 1);
+        assert_eq!(state.balance_hits.load(Ordering::SeqCst), 1);
+        assert_eq!(state.anchor_hits.load(Ordering::SeqCst), 1);
+        assert_eq!(state.tx_hits.load(Ordering::SeqCst), 1);
+
+        let resumed = publish(&client, &node_url, &jwk, &content, &[])
+            .await
+            .expect("2ª tentativa deve suceder via resume");
+        assert_eq!(resumed, cp.tx_id, "resume deve devolver o mesmo tx_id da tentativa original");
+
+        // Preço/saldo/anchor/tx não foram chamados de novo — resume pula
+        // direto pro reenvio dos chunks restantes, sem gastar fundos numa tx
+        // nova.
+        assert_eq!(state.price_hits.load(Ordering::SeqCst), 1);
+        assert_eq!(state.balance_hits.load(Ordering::SeqCst), 1);
+        assert_eq!(state.anchor_hits.load(Ordering::SeqCst), 1);
+        assert_eq!(state.tx_hits.load(Ordering::SeqCst), 1);
+        assert_eq!(state.chunk_hits.load(Ordering::SeqCst), 4, "1 falha + 3 chunks enviados com sucesso");
+
+        assert!(
+            checkpoint::load(&content_hash).is_none(),
+            "checkpoint deve ser limpo após publish bem-sucedido"
+        );
+
+        server_handle.abort();
+    }
+
+    #[tokio::test]
+    async fn checkpoint_with_mismatched_content_is_discarded_not_resumed() {
+        let (node_url, state, server_handle) = start_mock_node().await;
+        let client = http_client();
+        let jwk = parse_jwk(TEST_WALLET_JWK_JSON).expect("wallet de teste deve parsear");
+
+        // Byte 0 como marcador (0xB2, diferente do outro teste desta
+        // suíte) — mesmo motivo do comentário acima: evita colidir no
+        // mesmo arquivo de checkpoint real quando os testes rodam em
+        // paralelo.
+        let size = merkle::MAX_CHUNK_SIZE * 2 + 500;
+        let content: Vec<u8> = std::iter::once(0xB2u8)
+            .chain((1..size).map(|i| (i % 251) as u8))
+            .collect();
+        let content_hash = checkpoint::content_hash_hex(&content);
+        let _ = checkpoint::clear(&content_hash);
+
+        // Escreve um checkpoint "stale" (dados divergentes de qualquer coisa
+        // que este publish() real produziria) diretamente, simulando uma
+        // versão antiga do conteúdo que ficou presa numa tentativa anterior.
+        checkpoint::save(&checkpoint::PublishCheckpoint {
+            wallet_address: wallet_address(&jwk).unwrap(),
+            content_hash: content_hash.clone(),
+            tx_id: "tx-de-uma-tentativa-antiga".to_string(),
+            data_root: "root-que-nao-bate-com-o-conteudo-atual".to_string(),
+            data_size: size.to_string(),
+            node_url: node_url.clone(),
+            total_chunks: 3,
+            next_chunk_index: 2,
+        })
+        .unwrap();
+
+        // `data_root` divergente força o descarte do checkpoint — publish()
+        // segue como uma publicação nova (chama /price e /tx_anchor de novo)
+        // em vez de tentar resumir com dados que não correspondem ao
+        // conteúdo real.
+        let result = publish(&client, &node_url, &jwk, &content, &[]).await;
+        assert!(result.is_err(), "1º chunk ainda falha por design do mock, mesmo na publicação nova");
+        assert_eq!(
+            state.price_hits.load(Ordering::SeqCst),
+            1,
+            "checkpoint divergente deve ser descartado, não usado — precisa recomeçar do zero"
+        );
+        assert_eq!(state.balance_hits.load(Ordering::SeqCst), 1);
+
+        let cp = checkpoint::load(&content_hash).unwrap();
+        assert_ne!(cp.tx_id, "tx-de-uma-tentativa-antiga", "checkpoint velho não pode ter sido reaproveitado");
+
+        checkpoint::clear(&content_hash).unwrap();
+        server_handle.abort();
+    }
+
+    #[tokio::test]
+    async fn insufficient_balance_blocks_before_any_mutation() {
+        let (node_url, state, server_handle) = start_mock_node().await;
+        state.low_balance.store(true, Ordering::SeqCst);
+        let client = http_client();
+        let jwk = parse_jwk(TEST_WALLET_JWK_JSON).expect("wallet de teste deve parsear");
+
+        // Conteúdo pequeno (single-shot) — a checagem de saldo roda pra
+        // qualquer publish(), não só multi-chunk.
+        let content = b"vault blob pequeno".to_vec();
+
+        let result = publish(&client, &node_url, &jwk, &content, &[]).await;
+
+        let err = result.expect_err("saldo zero deve falhar");
+        assert!(err.contains("saldo insuficiente"), "mensagem devia mencionar saldo insuficiente: {err}");
+
+        // A checagem acontece antes de assinar/submeter — nenhuma tx foi
+        // sequer tentada.
+        assert_eq!(state.price_hits.load(Ordering::SeqCst), 1);
+        assert_eq!(state.balance_hits.load(Ordering::SeqCst), 1);
+        assert_eq!(state.anchor_hits.load(Ordering::SeqCst), 0, "não deve buscar anchor após saldo insuficiente");
+        assert_eq!(state.tx_hits.load(Ordering::SeqCst), 0, "POST /tx nunca deve ser tentado");
+
+        server_handle.abort();
+    }
+}
+
+// Mock de node pra get_tx_status especificamente — módulo separado de
+// publish_resume_tests porque não precisa de nenhum dos endpoints de
+// publish (/price, /tx_anchor, /tx, /chunk), só /tx/{id}/status.
+#[cfg(test)]
+mod get_tx_status_tests {
+    use super::*;
+    use axum::{extract::Path, routing::get, Router};
+    use tokio::net::TcpListener;
+
+    async fn start_mock_status_node(
+        status_code: axum::http::StatusCode,
+        body: Option<serde_json::Value>,
+    ) -> (String, tokio::task::JoinHandle<()>) {
+        async fn handler(
+            axum::extract::State((status, body)): axum::extract::State<(
+                axum::http::StatusCode,
+                Option<serde_json::Value>,
+            )>,
+            Path(_tx_id): Path<String>,
+        ) -> (axum::http::StatusCode, axum::Json<serde_json::Value>) {
+            (status, axum::Json(body.unwrap_or(serde_json::Value::Null)))
+        }
+
+        let router = Router::new()
+            .route("/tx/{tx_id}/status", get(handler))
+            .with_state((status_code, body));
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind deve suceder");
+        let addr = listener.local_addr().expect("addr deve resolver");
+        let handle = tokio::spawn(async move {
+            let _ = axum::serve(listener, router).await;
+        });
+        (format!("http://{addr}"), handle)
+    }
+
+    #[tokio::test]
+    async fn status_200_confirmed_with_block_info() {
+        let (node_url, handle) = start_mock_status_node(
+            axum::http::StatusCode::OK,
+            Some(serde_json::json!({"block_height": 42, "number_of_confirmations": 7})),
+        )
+        .await;
+
+        let status = get_tx_status(&http_client(), &node_url, "abc").await.unwrap();
+        assert!(status.confirmed);
+        assert_eq!(status.block_height, Some(42));
+        assert_eq!(status.number_of_confirmations, Some(7));
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn status_202_is_pending_not_error() {
+        let (node_url, handle) = start_mock_status_node(axum::http::StatusCode::ACCEPTED, None).await;
+        let status = get_tx_status(&http_client(), &node_url, "abc").await.unwrap();
+        assert!(!status.confirmed);
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn status_404_is_pending_not_error() {
+        let (node_url, handle) = start_mock_status_node(axum::http::StatusCode::NOT_FOUND, None).await;
+        let status = get_tx_status(&http_client(), &node_url, "abc").await.unwrap();
+        assert!(!status.confirmed);
+        handle.abort();
+    }
+
+    // Regressão: antes do fix, qualquer status != 200 (incluindo 500 real do
+    // node) virava confirmed=false silenciosamente, indistinguível de "ainda
+    // pendente".
+    #[tokio::test]
+    async fn status_500_is_an_error_not_pending() {
+        let (node_url, handle) =
+            start_mock_status_node(axum::http::StatusCode::INTERNAL_SERVER_ERROR, None).await;
+        let result = get_tx_status(&http_client(), &node_url, "abc").await;
+        assert!(result.is_err(), "500 real do node deve virar Err, não confirmed=false");
+        handle.abort();
     }
 }
 

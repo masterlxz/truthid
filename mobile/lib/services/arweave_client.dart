@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart' show consolidateHttpClientResponseBytes
 import 'package:web3dart/crypto.dart' show keccak256, bytesToHex;
 
 import 'arweave_b64url.dart';
+import 'arweave_checkpoint.dart';
 import 'arweave_isolate.dart';
 import 'arweave_jwk.dart';
 import 'arweave_merkle.dart';
@@ -122,8 +123,11 @@ Future<void> submitChunk(
 }
 
 // `GET /tx/{id}/status` — 200 = confirmada (corpo tem block_height e
-// number_of_confirmations); qualquer outro status = ainda pendente/não
-// encontrada (não lança, só reporta confirmed=false).
+// number_of_confirmations); 202/404 = ainda pendente/não encontrada.
+// Qualquer outro status (5xx, etc.) é um erro real do node, não "ainda
+// pendente" — lança em vez de mascarar como confirmed=false (mirror do
+// mesmo fix no Rust; achado de /code-review: um node fora do ar ficava
+// indistinguível de uma tx genuinamente não minerada ainda).
 Future<TxStatus> getTxStatus(String nodeUrl, String txId) async {
   final client = HttpClient();
   try {
@@ -138,8 +142,12 @@ Future<TxStatus> getTxStatus(String nodeUrl, String txId) async {
         (json['number_of_confirmations'] as num?)?.toInt(),
       );
     }
-    await response.drain<void>();
-    return const TxStatus(false, null, null);
+    if (response.statusCode == 202 || response.statusCode == 404) {
+      await response.drain<void>();
+      return const TxStatus(false, null, null);
+    }
+    final text = await response.transform(utf8.decoder).join();
+    throw Exception('GET /tx/{id}/status retornou ${response.statusCode}: $text');
   } finally {
     client.close();
   }
@@ -176,6 +184,86 @@ Future<String> getWalletBalance(String nodeUrl, String address) async {
   }
 }
 
+// Envia os chunks a partir de cp.nextChunkIndex (0 numa publicação nova,
+// > 0 ao retomar uma que falhou no meio) — salva o checkpoint depois de
+// CADA chunk confirmado, não só no fim, pra uma segunda falha retomar do
+// ponto certo em vez de voltar pro início. Mirror de submit_remaining_chunks
+// (Rust).
+Future<void> _submitRemainingChunks(
+  String nodeUrl,
+  ArweaveCheckpointStore checkpointStore,
+  PublishCheckpoint cp,
+  List<Chunk> chunks,
+  List<Proof> proofs,
+  Uint8List content,
+  Uint8List dataRootBytes,
+) async {
+  final total = cp.totalChunks;
+  for (var i = cp.nextChunkIndex; i < total; i++) {
+    final chunk = chunks[i];
+    final proof = proofs[i];
+    // Sanity check local antes de gastar a requisição — ArLocal não valida
+    // a prova que o cliente manda, então esse é o único jeito de pegar um
+    // bug sutil em generateProofs antes de mainnet (mesmo padrão de
+    // verifyTransactionSignature acima).
+    if (validatePath(dataRootBytes, proof.offset, 0, content.length, proof.proof) == null) {
+      throw Exception(
+          'tx ${cp.txId} publicada, prova de merkle inválida localmente pro chunk $i/$total — não enviado (retomável, publique de novo com o mesmo conteúdo)');
+    }
+
+    final bytes = content.sublist(chunk.minByteRange, chunk.maxByteRange);
+    try {
+      await submitChunk(nodeUrl, cp.dataRoot, cp.dataSize, proof, bytes);
+    } catch (e) {
+      throw Exception(
+          'tx ${cp.txId} publicada, chunk $i/$total falhou: $e (retomável, publique de novo com o mesmo conteúdo)');
+    }
+
+    cp.nextChunkIndex = i + 1;
+    await checkpointStore.save(cp);
+  }
+}
+
+// Só chamado quando chunks.length > 1 — confere se existe um checkpoint
+// utilizável (mesma wallet/node/conteúdo de uma tentativa anterior que
+// falhou no meio) e, se sim, retoma o envio dos chunks restantes. Devolve
+// null se não havia checkpoint nenhum (segue como publicação nova); um
+// checkpoint que existe mas não bate é descartado antes de devolver null,
+// pelo mesmo motivo. Mirror de try_resume (Rust).
+Future<String?> _tryResume(
+  String nodeUrl,
+  ArweaveJwk jwk,
+  Uint8List content,
+  List<Chunk> chunks,
+  List<Proof> proofs,
+  ArweaveCheckpointStore checkpointStore,
+) async {
+  final hash = contentHashHex(content);
+  final cp = await checkpointStore.load(hash);
+  if (cp == null) return null;
+
+  final walletAddr = walletAddress(jwk);
+  final recomputedRoot =
+      content.isEmpty ? '' : b64UrlEncode(computeDataRoot(chunkData(content)));
+  final matches = cp.walletAddress == walletAddr &&
+      cp.nodeUrl == nodeUrl &&
+      cp.totalChunks == chunks.length &&
+      recomputedRoot == cp.dataRoot;
+
+  if (!matches) {
+    // Checkpoint existe mas não bate (conteúdo mudou desde a tentativa que
+    // falhou, wallet/node diferente, ou contagem de chunks divergente) —
+    // descarta e segue como publicação nova.
+    await checkpointStore.clear(hash);
+    return null;
+  }
+
+  final dataRootBytes = b64UrlDecodeStrict(cp.dataRoot);
+  await _submitRemainingChunks(nodeUrl, checkpointStore, cp, chunks, proofs, content, dataRootBytes);
+  await checkpointStore.clear(hash);
+  return cp.txId;
+}
+
 // Orquestrador de ponta a ponta — preço, anchor, monta, assina, submete.
 // Devolve o tx_id. Publica inline (POST /tx com data) se o conteúdo cabe
 // em 1 chunk (≤256KiB); caso contrário, submete a tx sem data e faz upload
@@ -183,13 +271,42 @@ Future<String> getWalletBalance(String nodeUrl, String address) async {
 // (mesmo motivo do Rust: ArLocal deriva a ordem de remontagem por ordem de
 // chegada, não pelo campo offset que o cliente envia; não é limitação de
 // node real, mas o código não distingue hoje).
+//
+// Caminho multi-chunk tem checkpoint/resume (ver arweave_checkpoint.dart):
+// se uma chamada anterior com o mesmo conteúdo+wallet+node falhou no meio
+// do envio de chunks, retoma a partir do chunk que faltou em vez de
+// assinar/submeter uma tx nova (que desperdiçaria o reward já comprometido
+// pela tx anterior, deixando-a presa on-chain incompleta pra sempre). O
+// caminho single-shot nunca toca o checkpoint — é uma única requisição,
+// atômica o bastante.
 Future<String> publish(
   String nodeUrl,
   ArweaveJwk jwk,
   Uint8List content,
-  List<(String, String)> tags,
-) async {
+  List<(String, String)> tags, {
+  ArweaveCheckpointStore checkpointStore = const ArweaveCheckpointStore(),
+}) async {
+  final (chunks, proofs) = chunkDataForUpload(content);
+
+  if (chunks.length > 1) {
+    final resumed = await _tryResume(nodeUrl, jwk, content, chunks, proofs, checkpointStore);
+    if (resumed != null) return resumed;
+  }
+
   final reward = await getPrice(nodeUrl, content.length);
+
+  // Checagem de saldo antes de qualquer chamada que muta estado (assinar,
+  // submeter) — sem isso, uma wallet sem fundos só descobre isso como um
+  // "POST /tx retornou 400" cru lá na frente, exatamente o que esta
+  // checagem existe pra evitar (mirror da mesma checagem no Rust).
+  final address = walletAddress(jwk);
+  final balance = await getWalletBalance(nodeUrl, address);
+  final balanceN = BigInt.parse(balance.trim());
+  final rewardN = BigInt.parse(reward.trim());
+  if (balanceN < rewardN) {
+    throw Exception('saldo insuficiente: precisa de $reward winston, tem $balance winston');
+  }
+
   final lastTx = await getTxAnchor(nodeUrl);
 
   final tx = buildTransaction(content, tags, reward, lastTx, jwk.n);
@@ -199,11 +316,9 @@ Future<String> publish(
 
   // Sanity check local antes de gastar uma requisição de rede: garante que
   // a tx não foi corrompida entre assinar e submeter.
-  if (!verifyTransactionSignature(tx)) {
+  if (!verifyTransactionSignature(tx, jwk.e)) {
     throw Exception('assinatura da tx falhou na verificação local antes do submit');
   }
-
-  final (chunks, proofs) = chunkDataForUpload(content);
 
   if (chunks.length <= 1) {
     await submitTransaction(nodeUrl, tx);
@@ -212,27 +327,21 @@ Future<String> publish(
 
   await submitTransactionNoData(nodeUrl, tx);
 
-  final dataRootBytes = b64UrlDecodeStrict(tx.dataRoot);
-  final total = chunks.length;
-  for (var i = 0; i < chunks.length; i++) {
-    final chunk = chunks[i];
-    final proof = proofs[i];
-    // Sanity check local antes de gastar a requisição — ArLocal não valida
-    // a prova que o cliente manda, então esse é o único jeito de pegar um
-    // bug sutil em generateProofs antes de mainnet (mesmo padrão de
-    // verifyTransactionSignature acima).
-    if (validatePath(dataRootBytes, proof.offset, 0, content.length, proof.proof) == null) {
-      throw Exception(
-          'tx ${tx.id} publicada, prova de merkle inválida localmente pro chunk $i/$total — não enviado');
-    }
+  final cp = PublishCheckpoint(
+    walletAddress: walletAddress(jwk),
+    contentHash: contentHashHex(content),
+    txId: tx.id,
+    dataRoot: tx.dataRoot,
+    dataSize: tx.dataSize,
+    nodeUrl: nodeUrl,
+    totalChunks: chunks.length,
+    nextChunkIndex: 0,
+  );
+  await checkpointStore.save(cp);
 
-    final bytes = content.sublist(chunk.minByteRange, chunk.maxByteRange);
-    try {
-      await submitChunk(nodeUrl, tx.dataRoot, tx.dataSize, proof, bytes);
-    } catch (e) {
-      throw Exception('tx ${tx.id} publicada, chunk $i/$total falhou: $e');
-    }
-  }
+  final dataRootBytes = b64UrlDecodeStrict(tx.dataRoot);
+  await _submitRemainingChunks(nodeUrl, checkpointStore, cp, chunks, proofs, content, dataRootBytes);
+  await checkpointStore.clear(cp.contentHash);
 
   return tx.id;
 }

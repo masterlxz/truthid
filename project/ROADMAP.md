@@ -1322,6 +1322,61 @@ pendência de benchmark da Sessão 190, acha uma regressão real de onboarding p
   dedicada; geração de chave (~1.7s, operação única de setup) já tem o loading state "Gerando..."
   implementado desde a Sessão 192, adequado ao tempo medido.
 
+**Sessão 195 (2026-08-12): `/code-review` sobre os 15 commits da migração de storage pro Arweave
+(`03c5828..40ba64b`) achou 10 problemas — os 5 mais graves corrigidos nos dois lados
+(Rust+Dart).**
+
+- **RSA exponent fixo em `verify_transaction_signature`/`verifyTransactionSignature`**
+  (`transaction.rs`/`arweave_transaction.dart`): assumia `e = 65537` fixo em vez de ler o `e` real
+  da wallet — uma wallet importada com expoente diferente assinava válido mas falhava na
+  verificação local, ficando permanentemente incapaz de publicar. Corrigido nos dois lados
+  (achado do review só apontava o Rust; confirmado que o Dart tinha o mesmo bug, corrigido
+  também pra manter a paridade). Teste de regressão novo em cada lado usa uma chave de expoente
+  não-padrão (17) pra provar que a wallet de teste fixa (que por acaso usa 65537) não mascarava o
+  bug.
+- **Checkpoint/resume pra publish multi-chunk** (`checkpoint.rs`/`arweave_checkpoint.dart`,
+  módulos novos nos dois lados): antes, um chunk que falhasse no meio do upload deixava a tx
+  presa on-chain incompleta pra sempre — só resolvia recomeçando do zero, o que desperdiça o
+  reward já comprometido pela tx anterior. Decisão do dono do projeto: implementar
+  checkpoint/resume completo (não só retry), um checkpoint por hash SHA-256 do conteúdo (não um
+  único arquivo/entrada global — suporta múltiplas publicações parciais pendentes ao mesmo
+  tempo). `publish()` salva o progresso depois de cada chunk confirmado; uma chamada seguinte com
+  o mesmo conteúdo+wallet+node detecta o checkpoint e retoma do chunk certo, sem re-pagar
+  preço/anchor/tx. Checkpoint com dados divergentes (conteúdo mudou) é descartado, não reusado.
+  Rust guarda em `$HOME/.truthid/arweave_checkpoint_{hash}.json` (mesmos helpers de
+  `config.rs` já usados pela wallet); Dart guarda no `FlutterSecureStorage` (mesmo padrão de
+  `ArweaveWalletService`). **Achado no caminho**: os dois testes novos de mock-server geravam o
+  mesmo conteúdo de teste (mesma fórmula usada em outros testes já existentes), colidindo no
+  mesmo arquivo de checkpoint real quando `cargo test` roda em paralelo — corrigido dando um byte
+  marcador distinto pra cada teste, não um bug da feature em si.
+- **Texto enganoso na tela "Pinning Providers" do Mobile** (`pinning_providers_screen.dart`):
+  ainda afirmava que o vault cifrado é enviado pra esses providers ao publicar — falso desde a
+  migração pro Arweave. Corrigido pra explicar que o vault agora publica no Arweave e que esses
+  providers seguem servindo só o canal de entrega cross-device (LAN/dead-drop) das aprovações com
+  a extensão. Escopo só do texto — a tela/feature em si continua existindo, ainda usada por
+  `CrossDeviceDeliveryChannel`.
+- **Checagem de saldo antes de publicar** (`get_wallet_balance`/`getWalletBalance` já existiam,
+  só nunca eram chamados antes de `publish()`): agora `publish()` compara saldo vs. reward (via
+  `BigUint`/`BigInt`, evita overflow) logo após `get_price`, antes de qualquer chamada que muta
+  estado — erro claro de "saldo insuficiente" em vez do `POST /tx 400` cru que a própria sessão
+  anterior (194) bateu de frente durante a validação em hardware real. Corrigido nos dois lados
+  (achado do review só testou o Rust; Dart tinha a mesma lacuna, corrigido também).
+- **`get_tx_status`/`getTxStatus` mascarava erro real do node como "pendente"**: qualquer status
+  HTTP diferente de 200 (incluindo 500/429 reais) caía no mesmo branch de "ainda não confirmada"
+  que 202/404 (esses sim legítimos) — um node fora do ar ficava indistinguível de uma tx
+  genuinamente não minerada. Corrigido nos dois lados (Dart também tinha o bug, não só o Rust
+  apontado pelo review) pra só tratar 202/404 como pendente; qualquer outro status vira erro.
+  Nenhum caller de produção existe ainda pra essa função em nenhum dos dois lados (só
+  teste/validação manual).
+- **Validação**: `cargo test --lib` 189/189, `cargo clippy` limpo (só 1 warning pré-existente não
+  relacionado em `vault.rs`), `flutter test` 582/582, `flutter analyze` limpo (só ruído
+  pré-existente não relacionado). `npx vitest run` do Desktop tem 6 falhas em `totp.test.ts`
+  (`crypto.subtle.sign` incompatível com o polyfill do ambiente vitest) — confirmado
+  pré-existente e sem relação (nenhum arquivo TS tocado nesta sessão). **Não validado**: cenário
+  real contra ArLocal (matar o node no meio de um publish multi-chunk) — os testes de mock server
+  já provam a lógica de forma determinística, fica como validação adicional possível antes de
+  produção.
+
 ---
 
 ### Interface e identidade visual (UI/UX)

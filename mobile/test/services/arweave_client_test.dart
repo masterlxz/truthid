@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:truthid_mobile/services/arweave_checkpoint.dart';
 import 'package:truthid_mobile/services/arweave_client.dart';
 import 'package:truthid_mobile/services/arweave_jwk.dart';
 import 'package:truthid_mobile/services/arweave_merkle.dart';
@@ -12,8 +13,52 @@ import 'package:truthid_mobile/services/arweave_transaction.dart';
 // Teste puro (test(), não testWidgets) — bind de socket real e request HTTP
 // real. I/O real não resolve dentro da zona FakeAsync do binding de widget
 // (achado real da Sessão 98, ver remote_signer_lan_server_test.dart).
+//
+// TestWidgetsFlutterBinding.ensureInitialized() + mock do canal de
+// flutter_secure_storage são necessários desde que publish() ganhou
+// checkpoint/resume (ArweaveCheckpointStore usa FlutterSecureStorage por
+// padrão) — sem isso, qualquer publish() multi-chunk aqui lançaria
+// "Binding has not yet been initialized" (mesmo achado de
+// vault_key_service_test.dart/arweave_wallet_service_test.dart).
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  // ensureInitialized() instala um HttpOverrides que faz todo HttpClient
+  // devolver 400 sem tocar rede (proteção padrão contra testes de
+  // integração acidentais) — mas este arquivo inteiro depende de rede real
+  // (bind de socket local via HttpServer.bind). Mesmo achado documentado em
+  // arweave_arlocal_integration_test.dart.
+  HttpOverrides.global = null;
+
   final testWalletJson = File('test/fixtures/arweave/test_wallet.json').readAsStringSync();
+
+  const secureStorageChannel = MethodChannel('plugins.it_nomads.com/flutter_secure_storage');
+
+  tearDown(() {
+    TestWidgetsFlutterBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(secureStorageChannel, null);
+  });
+
+  Map<String, String> mockCheckpointStorage() {
+    final store = <String, String>{};
+    TestWidgetsFlutterBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(secureStorageChannel, (call) async {
+      final args = call.arguments as Map;
+      final key = args['key'] as String;
+      switch (call.method) {
+        case 'read':
+          return store[key];
+        case 'write':
+          store[key] = args['value'] as String;
+          return null;
+        case 'delete':
+          store.remove(key);
+          return null;
+        default:
+          return null;
+      }
+    });
+    return store;
+  }
 
   group('arweave_client — endpoints individuais', () {
     test('getPrice lê o corpo texto do /price/{bytes}', () async {
@@ -89,7 +134,7 @@ void main() {
       expect(status.numberOfConfirmations, 7);
     });
 
-    test('getTxStatus não-confirmado quando status != 200 (sem lançar)', () async {
+    test('getTxStatus não-confirmado quando 404 (sem lançar)', () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       server.listen((request) async {
         request.response.statusCode = 404;
@@ -100,6 +145,40 @@ void main() {
       final status = await getTxStatus('http://127.0.0.1:${server.port}', 'abc');
       expect(status.confirmed, isFalse);
       expect(status.blockHeight, isNull);
+    });
+
+    test('getTxStatus não-confirmado quando 202 (sem lançar)', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((request) async {
+        request.response.statusCode = 202;
+        await request.response.close();
+      });
+      addTearDown(server.close);
+
+      final status = await getTxStatus('http://127.0.0.1:${server.port}', 'abc');
+      expect(status.confirmed, isFalse);
+    });
+
+    // Regressão: antes do fix, qualquer status != 200 (incluindo 500 real do
+    // node) virava confirmed=false silenciosamente, indistinguível de "ainda
+    // pendente".
+    test('getTxStatus lança quando o node devolve erro real (500)', () async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((request) async {
+        request.response.statusCode = 500;
+        request.response.write('internal error');
+        await request.response.close();
+      });
+      addTearDown(server.close);
+
+      await expectLater(
+        getTxStatus('http://127.0.0.1:${server.port}', 'abc'),
+        throwsA(isA<Exception>().having(
+          (e) => e.toString(),
+          'message',
+          contains('500'),
+        )),
+      );
     });
 
     test('submitTransaction manda o corpo de toWireJson via POST /tx', () async {
@@ -213,6 +292,8 @@ void main() {
         request.response.statusCode = 200;
         if (request.uri.path.startsWith('/price/')) {
           request.response.write('100000');
+        } else if (request.uri.path.startsWith('/wallet/')) {
+          request.response.write('999999999999');
         } else if (request.uri.path == '/tx_anchor') {
           request.response.write('qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo');
         }
@@ -234,6 +315,7 @@ void main() {
     });
 
     test('conteúdo multi-chunk publica em chunks sequenciais, nunca concorrentes', () async {
+      mockCheckpointStorage();
       var active = 0;
       var maxActive = 0;
       final chunkOrder = <int>[];
@@ -259,6 +341,8 @@ void main() {
         request.response.statusCode = 200;
         if (path.startsWith('/price/')) {
           request.response.write('100000000');
+        } else if (path.startsWith('/wallet/')) {
+          request.response.write('999999999999');
         } else if (path == '/tx_anchor') {
           request.response.write('qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo');
         }
@@ -275,6 +359,183 @@ void main() {
       expect(maxActive, 1, reason: 'upload de chunk nunca deve ser concorrente');
       // ordem crescente de offset — mesma ordem de chunkDataForUpload
       expect(chunkOrder, [chunkOrder[0], chunkOrder[1], chunkOrder[2]]..sort());
+    });
+  });
+
+  group('arweave_client — publish() checkpoint/resume', () {
+    test('retoma após falha de chunk sem refazer price/anchor/tx', () async {
+      mockCheckpointStorage();
+      var priceHits = 0;
+      var balanceHits = 0;
+      var anchorHits = 0;
+      var txHits = 0;
+      var chunkHits = 0;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((request) async {
+        final path = request.uri.path;
+        if (path == '/chunk') {
+          chunkHits++;
+          await request.drain<void>();
+          // Falha só a 1ª chamada — simula um blip de rede num chunk.
+          request.response.statusCode = chunkHits == 1 ? 500 : 200;
+          if (chunkHits != 1) request.response.write('OK');
+          await request.response.close();
+          return;
+        }
+        await request.drain<void>();
+        request.response.statusCode = 200;
+        if (path.startsWith('/price/')) {
+          priceHits++;
+          request.response.write('100000000');
+        } else if (path.startsWith('/wallet/')) {
+          balanceHits++;
+          request.response.write('999999999999');
+        } else if (path == '/tx_anchor') {
+          anchorHits++;
+          request.response.write('qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo');
+        } else if (path == '/tx') {
+          txHits++;
+        }
+        await request.response.close();
+      });
+      addTearDown(server.close);
+
+      final jwk = parseJwk(testWalletJson);
+      final content = Uint8List(maxChunkSize * 2 + 500)..fillRange(0, maxChunkSize * 2 + 500, 0xCD);
+      final nodeUrl = 'http://127.0.0.1:${server.port}';
+      const checkpointStore = ArweaveCheckpointStore();
+      final hash = contentHashHex(content);
+
+      await expectLater(
+        publish(nodeUrl, jwk, content, [], checkpointStore: checkpointStore),
+        throwsA(isA<Exception>()),
+      );
+
+      final cp = await checkpointStore.load(hash);
+      expect(cp, isNotNull, reason: 'checkpoint deve existir após falha no meio do envio');
+      expect(cp!.totalChunks, 3);
+      expect(cp.nextChunkIndex, 0, reason: 'chunk 0 falhou, resume deve começar dele');
+      expect(priceHits, 1);
+      expect(balanceHits, 1);
+      expect(anchorHits, 1);
+      expect(txHits, 1);
+
+      final txId = await publish(nodeUrl, jwk, content, [], checkpointStore: checkpointStore);
+      expect(txId, cp.txId, reason: 'resume deve devolver o mesmo tx_id da tentativa original');
+
+      // Preço/saldo/anchor/tx não foram chamados de novo — resume pula
+      // direto pro reenvio dos chunks restantes, sem gastar fundos numa tx
+      // nova.
+      expect(priceHits, 1);
+      expect(balanceHits, 1);
+      expect(anchorHits, 1);
+      expect(txHits, 1);
+      expect(chunkHits, 4, reason: '1 falha + 3 chunks enviados com sucesso');
+      expect(await checkpointStore.load(hash), isNull, reason: 'checkpoint deve ser limpo após sucesso');
+    });
+
+    test('checkpoint com conteúdo divergente é descartado, não reaproveitado', () async {
+      mockCheckpointStorage();
+      var priceHits = 0;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((request) async {
+        final path = request.uri.path;
+        if (path == '/chunk') {
+          await request.drain<void>();
+          request.response.statusCode = 200;
+          request.response.write('OK');
+          await request.response.close();
+          return;
+        }
+        await request.drain<void>();
+        request.response.statusCode = 200;
+        if (path.startsWith('/price/')) {
+          priceHits++;
+          request.response.write('100000000');
+        } else if (path.startsWith('/wallet/')) {
+          request.response.write('999999999999');
+        } else if (path == '/tx_anchor') {
+          request.response.write('qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo');
+        }
+        await request.response.close();
+      });
+      addTearDown(server.close);
+
+      final jwk = parseJwk(testWalletJson);
+      final content = Uint8List(maxChunkSize * 2 + 500)..fillRange(0, maxChunkSize * 2 + 500, 0xEF);
+      final nodeUrl = 'http://127.0.0.1:${server.port}';
+      const checkpointStore = ArweaveCheckpointStore();
+      final hash = contentHashHex(content);
+
+      // Checkpoint "stale" com dados que não correspondem a este conteúdo —
+      // simula uma versão antiga presa numa tentativa anterior.
+      await checkpointStore.save(PublishCheckpoint(
+        walletAddress: walletAddress(jwk),
+        contentHash: hash,
+        txId: 'tx-de-uma-tentativa-antiga',
+        dataRoot: 'root-que-nao-bate-com-o-conteudo-atual',
+        dataSize: content.length.toString(),
+        nodeUrl: nodeUrl,
+        totalChunks: 3,
+        nextChunkIndex: 2,
+      ));
+
+      final txId = await publish(nodeUrl, jwk, content, [], checkpointStore: checkpointStore);
+
+      expect(txId, isNot('tx-de-uma-tentativa-antiga'), reason: 'checkpoint velho não pode ter sido reaproveitado');
+      expect(priceHits, 1, reason: 'checkpoint divergente descartado — precisa recomeçar do zero, chamando /price');
+      expect(await checkpointStore.load(hash), isNull, reason: 'checkpoint limpo após sucesso da publicação nova');
+    });
+  });
+
+  group('arweave_client — publish() checagem de saldo', () {
+    test('saldo insuficiente bloqueia antes de qualquer mutação', () async {
+      var priceHits = 0;
+      var balanceHits = 0;
+      var anchorHits = 0;
+      var txHits = 0;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((request) async {
+        final path = request.uri.path;
+        await request.drain<void>();
+        request.response.statusCode = 200;
+        if (path.startsWith('/price/')) {
+          priceHits++;
+          request.response.write('100000000');
+        } else if (path.startsWith('/wallet/')) {
+          balanceHits++;
+          request.response.write('0');
+        } else if (path == '/tx_anchor') {
+          anchorHits++;
+          request.response.write('qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqo');
+        } else if (path == '/tx') {
+          txHits++;
+        }
+        await request.response.close();
+      });
+      addTearDown(server.close);
+
+      final jwk = parseJwk(testWalletJson);
+      // Conteúdo pequeno (single-shot) — a checagem de saldo roda pra
+      // qualquer publish(), não só multi-chunk.
+      final content = Uint8List.fromList(utf8.encode('vault blob pequeno'));
+      final nodeUrl = 'http://127.0.0.1:${server.port}';
+
+      await expectLater(
+        publish(nodeUrl, jwk, content, []),
+        throwsA(isA<Exception>().having(
+          (e) => e.toString(),
+          'message',
+          contains('saldo insuficiente'),
+        )),
+      );
+
+      // A checagem acontece antes de assinar/submeter — nenhuma tx foi
+      // sequer tentada.
+      expect(priceHits, 1);
+      expect(balanceHits, 1);
+      expect(anchorHits, 0, reason: 'não deve buscar anchor após saldo insuficiente');
+      expect(txHits, 0, reason: 'POST /tx nunca deve ser tentado');
     });
   });
 }

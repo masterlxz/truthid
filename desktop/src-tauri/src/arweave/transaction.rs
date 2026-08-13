@@ -156,11 +156,17 @@ pub(crate) fn sign_transaction(
 
 /// Verificação local (RSA-PSS/SHA-256 contra o próprio deep hash) — só
 /// garante consistência interna (a tx não foi corrompida entre assinar e
-/// submeter), não confirma nada contra a rede real.
-pub(crate) fn verify_transaction_signature(tx: &ArweaveTransaction) -> Result<bool, String> {
+/// submeter), não confirma nada contra a rede real. `e_b64` precisa ser o
+/// expoente público *real* da wallet (`ArweaveJwk::e`) — wallets importadas
+/// podem ter um expoente diferente de 65537 (o padrão que só `generate_jwk`
+/// usa pra chaves novas), então não pode ser assumido aqui.
+pub(crate) fn verify_transaction_signature(
+    tx: &ArweaveTransaction,
+    e_b64: &str,
+) -> Result<bool, String> {
     let sig_data = signature_data(tx)?;
     let n = BigUint::from_bytes_be(&b64url_decode(&tx.owner)?);
-    let e = BigUint::from(65_537u32);
+    let e = BigUint::from_bytes_be(&b64url_decode(e_b64)?);
     let pub_key = RsaPublicKey::new(n, e).map_err(|e| e.to_string())?;
     let verifying_key = VerifyingKey::<Sha256>::new(pub_key);
 
@@ -223,6 +229,7 @@ impl ArweaveTransaction {
 mod tests {
     use super::*;
     use crate::arweave::wallet::{jwk_to_private_key, parse_jwk, TEST_WALLET_JWK_JSON};
+    use rsa::traits::PublicKeyParts;
 
     fn test_wallet() -> (crate::arweave::wallet::ArweaveJwk, RsaPrivateKey) {
         let jwk = parse_jwk(TEST_WALLET_JWK_JSON).unwrap();
@@ -282,7 +289,7 @@ mod tests {
         sign_transaction(&mut tx, &key).unwrap();
         assert!(!tx.signature.is_empty());
         assert!(!tx.id.is_empty());
-        assert!(verify_transaction_signature(&tx).unwrap());
+        assert!(verify_transaction_signature(&tx, &jwk.e).unwrap());
     }
 
     #[test]
@@ -291,7 +298,7 @@ mod tests {
         let mut tx = build_transaction(b"vault blob", &[], "1000", TEST_ANCHOR, &jwk.n);
         sign_transaction(&mut tx, &key).unwrap();
         tx.data_size = "999999".to_string();
-        assert!(!verify_transaction_signature(&tx).unwrap());
+        assert!(!verify_transaction_signature(&tx, &jwk.e).unwrap());
     }
 
     #[test]
@@ -305,8 +312,26 @@ mod tests {
         sign_transaction(&mut tx2, &key).unwrap();
         assert_ne!(tx1.signature, tx2.signature);
         // mas ambas devem verificar
-        assert!(verify_transaction_signature(&tx1).unwrap());
-        assert!(verify_transaction_signature(&tx2).unwrap());
+        assert!(verify_transaction_signature(&tx1, &jwk.e).unwrap());
+        assert!(verify_transaction_signature(&tx2, &jwk.e).unwrap());
+    }
+
+    // Regressão: `verify_transaction_signature` já assumiu `e = 65537` fixo
+    // em vez de ler o expoente real da wallet. A wallet de teste (`test_wallet`)
+    // por acaso usa 65537, então os testes acima passam com ou sem o fix —
+    // este aqui usa uma chave com expoente não-padrão (17) pra provar que a
+    // verificação de fato lê `e` da wallet, não assume um valor fixo.
+    #[test]
+    fn verify_with_non_standard_public_exponent() {
+        let mut rng = rand::thread_rng();
+        let exp = BigUint::from(17u32);
+        let key = RsaPrivateKey::new_with_exp(&mut rng, 1024, &exp).unwrap();
+        let e_b64 = b64url_encode(&key.e().to_bytes_be());
+        let n_b64 = b64url_encode(&key.n().to_bytes_be());
+
+        let mut tx = build_transaction(b"vault blob", &[], "1000", TEST_ANCHOR, &n_b64);
+        sign_transaction(&mut tx, &key).unwrap();
+        assert!(verify_transaction_signature(&tx, &e_b64).unwrap());
     }
 
     /// Vetor cross-checado contra `arweave-js` (`Transaction.getSignatureData()`

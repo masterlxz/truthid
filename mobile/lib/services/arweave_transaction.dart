@@ -169,11 +169,14 @@ void signTransaction(ArweaveTransaction tx, pc.RSAPrivateKey privateKey) {
 
 // Verificação local (RSA-PSS/SHA-256 contra o próprio deep hash) — só
 // garante consistência interna (a tx não foi corrompida entre assinar e
-// submeter), não confirma nada contra a rede real.
-bool verifyTransactionSignature(ArweaveTransaction tx) {
+// submeter), não confirma nada contra a rede real. `eB64` precisa ser o
+// expoente público real da wallet (ArweaveJwk.e) — wallets importadas podem
+// ter um expoente diferente de 65537 (o padrão que só generateJwk usa pra
+// chaves novas), então não pode ser assumido aqui.
+bool verifyTransactionSignature(ArweaveTransaction tx, String eB64) {
   final sigData = signatureData(tx);
   final n = _bytesToBigIntBE(b64UrlDecodeStrict(tx.owner));
-  final e = BigInt.from(65537);
+  final e = _bytesToBigIntBE(b64UrlDecodeStrict(eB64));
   final pubKey = pc.RSAPublicKey(n, e);
 
   final verifier = pc.PSSSigner(pc.RSAEngine(), pc.SHA256Digest(), pc.SHA256Digest());

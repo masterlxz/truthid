@@ -145,9 +145,10 @@ class _PinningProvidersScreenState extends State<PinningProvidersScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Text(
-                    'O vault cifrado é enviado pra todos os providers configurados ao '
-                    'publicar. Recomendado: pelo menos um kubo (nó local, sem custo) e '
-                    'um psa (cloud, pra redundância).',
+                    'O vault em si agora publica direto no Arweave (veja "Arweave '
+                    'wallet"). Estes providers seguem em uso só pro canal de entrega '
+                    'cross-device (LAN/dead-drop) das aprovações com a extensão de '
+                    'navegador — não fazem mais parte da publicação do vault.',
                     style: TextStyle(color: AppColors.textMuted, fontSize: 13),
                   ),
                   const SizedBox(height: 16),

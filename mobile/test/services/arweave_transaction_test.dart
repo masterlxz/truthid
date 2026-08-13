@@ -1,15 +1,26 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pointycastle/export.dart' as pc;
 
+import 'package:truthid_mobile/services/arweave_b64url.dart';
 import 'package:truthid_mobile/services/arweave_jwk.dart';
 import 'package:truthid_mobile/services/arweave_transaction.dart';
 
 String _hex(List<int> bytes) =>
     bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+
+String _bigIntToB64Url(BigInt value) {
+  var hexStr = value.toRadixString(16);
+  if (hexStr.length % 2 != 0) hexStr = '0$hexStr';
+  final bytes = Uint8List.fromList(
+    List.generate(hexStr.length ~/ 2, (i) => int.parse(hexStr.substring(i * 2, i * 2 + 2), radix: 16)),
+  );
+  return b64UrlEncode(bytes);
+}
 
 // last_tx/anchor de teste: precisa ser base64url válido (canônico) — um
 // placeholder de texto arbitrário como "anchor123" falha ao decodificar
@@ -62,7 +73,7 @@ void main() {
       signTransaction(tx, priv);
       expect(tx.signature.isEmpty, isFalse);
       expect(tx.id.isEmpty, isFalse);
-      expect(verifyTransactionSignature(tx), isTrue);
+      expect(verifyTransactionSignature(tx, jwk.e), isTrue);
     });
 
     test('data_size adulterado falha na verificação', () {
@@ -77,7 +88,40 @@ void main() {
       );
       signTransaction(tx, priv);
       tx.dataSize = '999999';
-      expect(verifyTransactionSignature(tx), isFalse);
+      expect(verifyTransactionSignature(tx, jwk.e), isFalse);
+    });
+
+    // Regressão: verifyTransactionSignature já assumiu e = 65537 fixo em vez
+    // de ler o expoente real da wallet. A wallet de teste (test_wallet.json)
+    // por acaso usa 65537, então os testes acima passam com ou sem o fix —
+    // este aqui usa uma chave com expoente não-padrão (17) pra provar que a
+    // verificação de fato lê e da wallet, não assume um valor fixo.
+    test('verifica com expoente público não-padrão', () {
+      final secureRandom = pc.FortunaRandom();
+      final seedSource = Random.secure();
+      final seeds = Uint8List.fromList(List.generate(32, (_) => seedSource.nextInt(256)));
+      secureRandom.seed(pc.KeyParameter(seeds));
+
+      final keyGen = pc.RSAKeyGenerator();
+      keyGen.init(pc.ParametersWithRandom(
+        pc.RSAKeyGeneratorParameters(BigInt.from(17), 1024, 64),
+        secureRandom,
+      ));
+      final pair = keyGen.generateKeyPair();
+      final priv = pair.privateKey as pc.RSAPrivateKey;
+      final pub = pair.publicKey as pc.RSAPublicKey;
+      final nB64 = _bigIntToB64Url(pub.n!);
+      final eB64 = _bigIntToB64Url(pub.publicExponent!);
+
+      final tx = buildTransaction(
+        Uint8List.fromList(utf8.encode('vault blob')),
+        [],
+        '1000',
+        _testAnchor,
+        nB64,
+      );
+      signTransaction(tx, priv);
+      expect(verifyTransactionSignature(tx, eB64), isTrue);
     });
 
     test('duas assinaturas da mesma tx não são bytes idênticos', () {
@@ -92,8 +136,8 @@ void main() {
       signTransaction(tx1, priv);
       signTransaction(tx2, priv);
       expect(tx1.signature, isNot(equals(tx2.signature)));
-      expect(verifyTransactionSignature(tx1), isTrue);
-      expect(verifyTransactionSignature(tx2), isTrue);
+      expect(verifyTransactionSignature(tx1, jwk.e), isTrue);
+      expect(verifyTransactionSignature(tx2, jwk.e), isTrue);
     });
 
     // Vetor cross-checado contra arweave-js (Transaction.getSignatureData()
