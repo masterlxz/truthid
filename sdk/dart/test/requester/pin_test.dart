@@ -72,9 +72,9 @@ void main() {
 
     final resultJson = {
       'status': 'pinned',
-      'cid': 'bafy123',
+      'cid': 'ar://abc123',
       'contentHash': '0xhash',
-      'providersOk': ['local-kubo'],
+      'providersOk': ['arweave'],
       'providersFailed': <String>[],
     };
     resultBlobToServe = await ecies.encrypt(
@@ -86,9 +86,9 @@ void main() {
 
     expect(result.delivered, isTrue);
     expect(result.data!.status, 'pinned');
-    expect(result.data!.cid, 'bafy123');
+    expect(result.data!.cid, 'ar://abc123');
     expect(result.data!.contentHash, '0xhash');
-    expect(result.data!.providersOk, ['local-kubo']);
+    expect(result.data!.providersOk, ['arweave']);
     expect(result.data!.providersFailed, isEmpty);
   });
 

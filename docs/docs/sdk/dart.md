@@ -208,7 +208,7 @@ The phone doesn't just sign here — it submits the UserOperation through a bund
 
 ### `pin({appName, content, timeout})`
 
-Asks the phone to pin arbitrary bytes to its configured IPFS providers. Two phases under the hood, both handled for you: the encrypted `content` is pushed to the phone over the LAN first (there's no dead-drop for this phase — the phone only starts listening once it scans the QR, so this keeps retrying the push in the background until it lands or the request expires); once the phone has it, the usual result race (LAN + dead-drop) delivers the pin result.
+Asks the phone to publish arbitrary bytes to Arweave, paid for by the identity's own local Arweave wallet — there's no concept of "configured providers" here, it's always the requesting identity's wallet. Two phases under the hood, both handled for you: the encrypted `content` is pushed to the phone over the LAN first (there's no dead-drop for this phase — the phone only starts listening once it scans the QR, so this keeps retrying the push in the background until it lands or the request expires); once the phone has it, the usual result race (LAN + dead-drop) delivers the pin result.
 
 | Name | Type | Required | Description |
 |------|------|----------|--------------|
@@ -222,7 +222,7 @@ Asks the phone to pin arbitrary bytes to its configured IPFS providers. Two phas
 final pending = requester.pin(appName: 'My App', content: fileBytes);
 final result = await pending.result;
 if (result.delivered && result.data!.status == 'pinned') {
-  print('CID: ${result.data!.cid}');
+  print('Content pointer: ${result.data!.cid}');
 }
 ```
 
@@ -386,7 +386,7 @@ class SignRequestResult {
 ```dart
 class PinResult {
   final String status; // 'pinned' | 'failed' | 'rejected'
-  final String? cid;
+  final String? cid; // "ar://<tx_id>" — an Arweave pointer, not an IPFS CID
   final String? contentHash;
   final List<String>? providersOk;
   final List<String>? providersFailed;
