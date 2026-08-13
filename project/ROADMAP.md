@@ -1540,6 +1540,33 @@ identidade Mainnet, primeira vez que uma cascata acontece com valor de verdade e
   (Mobile). `PENDING.md`/`ARCHITECTURE.md` atualizados (P1/P2/P26 resolvidos, débito #52 e item #5
   de Pendências de Deploy fechados).
 
+**Sessão 198 (2026-08-13): checado o impacto real da migração de storage IPFS→Arweave (Sessões
+184-196) nos 4 SDKs — achado bem menor do que a pergunta original supunha.**
+
+- Pedido do dono do projeto: já que o storage do Vault e do canal `/truthid/v1/pin` (apps
+  terceiros, ex: Practice Valuation) migrou pra Arweave, os SDKs (pensados originalmente pra IPFS)
+  precisavam de algum ajuste? 3 agentes de exploração em paralelo (protocolo `/pin`, os 4 SDKs,
+  transporte dead-drop) investigaram antes de qualquer código.
+- **Achados convergentes**: o schema HTTP/JSON do `/pin` não mudou — `status`/`cid`/`contentHash`/
+  `providersOk`/`providersFailed`/`error` continuam os mesmos campos, mesma decisão deliberada de
+  não quebrar a rota pública. Só o *valor* de `cid` mudou (`"ar://<tx_id>"` em vez de CID IPFS);
+  `providersOk`/`providersFailed` viraram constantes vestigiais (`["arweave"]`/`[]`).
+  `TruthIDRequester.pin()` (único lugar nos 4 SDKs que toca nisso — TS/Python/Ruby confirmados sem
+  nenhum código relacionado a pin/cid/ipfs, papel deles é só verificador) já tratava `cid` como
+  string opaca, sem parsing/validação de formato — zero bug de código. O dead-drop (transporte
+  IPFS/IPNS efêmero usado por `pin`/`sign-message`/`sign-request`/`vault-edit` quando não há LAN
+  compartilhada) é mecanismo genuinamente separado do storage permanente — continua e deve
+  continuar em IPFS (Arweave não serve pra "nome mutável com TTL curto"); vários comentários no
+  código já documentam essa separação.
+- **Único achado real**: `docs/docs/sdk/dart.md` — única doc pública do `pin()` (papel exclusivo
+  do SDK Dart) — ainda descrevia "pin arbitrary bytes to its configured IPFS providers", falso
+  desde a Sessão 193. Corrigido: texto do método, rótulo do exemplo (`'CID: ...'` →
+  `'Content pointer: ...'`), e nota no doc comment de `PinResult.cid` explicando o prefixo
+  `"ar://"`. Fixture de teste desatualizado corrigido junto (`sdk/dart/test/requester/pin_test.dart`:
+  `'bafy123'`/`'local-kubo'` → `'ar://abc123'`/`'arweave'`, sem mudança de comportamento). Sem bump
+  de versão (correção de doc/exemplo, não mudança de API). `dart analyze` limpo, `dart test` 69/69,
+  build do Docusaurus validado. Commit `d775318`.
+
 ---
 
 ### Interface e identidade visual (UI/UX)
