@@ -3,6 +3,38 @@ pragma solidity ^0.8.24;
 
 import {IdentityResolver} from "./IdentityResolver.sol";
 
+// Interfaces mínimas do par (DeviceRegistry, IdentityRegistry) "legado" —
+// a instância anterior à cascata de redeploy do débito #52, usada só por
+// `migrateDevices` para portar o histórico real de devices sem exigir que
+// cada um seja re-pareado fisicamente. Mesmo padrão de interface mínima já
+// usado em `RecoveryManager.sol`/`IdentityRegistry.sol` (evita import do
+// contrato inteiro).
+interface ILegacyIdentityRegistry {
+    struct LegacyIdentity {
+        uint256 id;
+        string username;
+        address controller;
+        bool exists;
+    }
+
+    function getIdentity(string calldata username) external view returns (LegacyIdentity memory);
+}
+
+interface ILegacyDeviceRegistry {
+    struct LegacyDevice {
+        uint256 identityId;
+        address pubKey;
+        string label;
+        uint256 addedAt;
+        bool revoked;
+        bool exists;
+    }
+
+    function getDevicesByIdentity(uint256 identityId) external view returns (address[] memory);
+    function getDevice(address pubKey) external view returns (LegacyDevice memory);
+    function deviceVaultKeys(address pubKey) external view returns (bytes memory);
+}
+
 // Por que a chave pública do device é um `address`?
 // -------------------------------------------------------
 // Dispositivos (mobile/desktop) geram um par de chaves secp256k1 — o mesmo
@@ -58,14 +90,26 @@ contract DeviceRegistry is IdentityResolver {
     // na janela entre o deploy e a configuração oficial (front-running).
     address public immutable owner;
 
+    // Par legado (débito #52) — só lido por `migrateDevices`, nunca escrito.
+    // `address(0)` em qualquer um dos dois desativa a migração (ex: deploys
+    // em Sepolia sem identidade real pra portar).
+    ILegacyDeviceRegistry private immutable _legacyDeviceRegistry;
+    ILegacyIdentityRegistry private immutable _legacyIdentityRegistry;
+
+    // identityId (no registry NOVO) → já rodou migrateDevices?
+    mapping(uint256 => bool) private _migrated;
+
     // -------------------------------------------------------------------------
     // Eventos
     // -------------------------------------------------------------------------
 
-    event DeviceRegistered(uint256 indexed identityId, address indexed pubKey, string label, bytes encryptedVaultKey);
+    event DeviceRegistered(
+        uint256 indexed identityId, address indexed pubKey, string label, bytes encryptedVaultKey
+    );
     event DeviceRevoked(uint256 indexed identityId, address indexed pubKey);
     event DeviceVaultKeyUpdated(uint256 indexed identityId, address indexed pubKey);
     event RecoveryManagerSet(address indexed recoveryManager);
+    event DevicesMigrated(uint256 indexed identityId, uint256 count);
 
     // -------------------------------------------------------------------------
     // Constantes
@@ -91,13 +135,21 @@ contract DeviceRegistry is IdentityResolver {
     error RevealTooEarly();
     error NotRecoveryManager();
     error RecoveryManagerAlreadySet();
+    error AlreadyMigrated(uint256 identityId);
+    error MigrationDisabled();
 
     // -------------------------------------------------------------------------
     // Constructor
     // -------------------------------------------------------------------------
 
-    constructor(address identityRegistry) IdentityResolver(identityRegistry) {
+    constructor(
+        address identityRegistry,
+        address legacyDeviceRegistry,
+        address legacyIdentityRegistry
+    ) IdentityResolver(identityRegistry) {
         owner = msg.sender;
+        _legacyDeviceRegistry = ILegacyDeviceRegistry(legacyDeviceRegistry);
+        _legacyIdentityRegistry = ILegacyIdentityRegistry(legacyIdentityRegistry);
     }
 
     // -------------------------------------------------------------------------
@@ -127,9 +179,12 @@ contract DeviceRegistry is IdentityResolver {
     /// com a chave pública do device (ECIES secp256k1) — o device consegue
     /// decifrar com sua chave privada e assim acessar o vault sem precisar da
     /// wallet conectada.
-    function registerDevice(address devicePubKey, string calldata label, bytes32 salt, bytes calldata encryptedVaultKey)
-        external
-    {
+    function registerDevice(
+        address devicePubKey,
+        string calldata label,
+        bytes32 salt,
+        bytes calldata encryptedVaultKey
+    ) external {
         if (devicePubKey == address(0)) revert InvalidPubKey();
 
         Device storage existing = _devices[devicePubKey];
@@ -202,7 +257,9 @@ contract DeviceRegistry is IdentityResolver {
     /// existir, já estiver revogado (não faz sentido atualizar a chave de
     /// um device sem acesso) ou se `newEncryptedVaultKey` vier vazio (usar
     /// `registerDevice` para o caso de "nenhuma chave compartilhada").
-    function updateDeviceVaultKey(address devicePubKey, bytes calldata newEncryptedVaultKey) external {
+    function updateDeviceVaultKey(address devicePubKey, bytes calldata newEncryptedVaultKey)
+        external
+    {
         if (!_devices[devicePubKey].exists) revert DeviceNotFound(devicePubKey);
         if (_devices[devicePubKey].revoked) revert DeviceAlreadyRevoked(devicePubKey);
         if (newEncryptedVaultKey.length == 0) revert InvalidVaultKey();
@@ -223,6 +280,76 @@ contract DeviceRegistry is IdentityResolver {
         if (_recoveryManager != address(0)) revert RecoveryManagerAlreadySet();
         _recoveryManager = rm;
         emit RecoveryManagerSet(rm);
+    }
+
+    /// Migração de cascata (débito #52) — porta o histórico de devices da
+    /// identidade do chamador de um `DeviceRegistry` legado (par de
+    /// endereços fixado no constructor) para este contrato, numa única
+    /// transação. Existe porque re-parear fisicamente cada device (celular,
+    /// desktop, extensão, hardware wallet) a cada redeploy em cascata não é
+    /// razoável quando já existe identidade real em uso.
+    ///
+    /// Uso único por identidade — `_migrated` trava reexecução, marcada
+    /// ANTES de qualquer leitura externa (mesmo padrão Checks-Effects-
+    /// Interactions do fix C1 em RecoveryManager). Só quem já controla uma
+    /// identidade *neste* registry pode chamar (via `_getCallerIdentityId`),
+    /// e o username usado para localizar o histórico legado é lido
+    /// diretamente do registry novo — nunca aceito como parâmetro — para que
+    /// ninguém consiga portar o histórico de outra identidade pra própria.
+    function migrateDevices() external {
+        if (
+            address(_legacyDeviceRegistry) == address(0)
+                || address(_legacyIdentityRegistry) == address(0)
+        ) {
+            revert MigrationDisabled();
+        }
+
+        uint256 identityId = _getCallerIdentityId();
+        if (_migrated[identityId]) revert AlreadyMigrated(identityId);
+        _migrated[identityId] = true;
+
+        string memory username = _identityRegistry.getUsernameByController(msg.sender);
+        uint256 legacyIdentityId = _legacyIdentityRegistry.getIdentity(username).id;
+
+        address[] memory legacyPubKeys =
+            _legacyDeviceRegistry.getDevicesByIdentity(legacyIdentityId);
+        uint256 migratedCount = 0;
+
+        for (uint256 i = 0; i < legacyPubKeys.length; i++) {
+            address pubKey = legacyPubKeys[i];
+
+            // Array legado pode ter duplicata (D52: aceita de propósito) e a
+            // função pode ser chamada depois de algum device já ter sido
+            // re-registrado organicamente — os dois casos caem aqui.
+            if (_devices[pubKey].exists) continue;
+
+            if (_devicesByIdentity[identityId].length >= MAX_DEVICES) {
+                revert MaxDevicesExceeded(identityId);
+            }
+
+            ILegacyDeviceRegistry.LegacyDevice memory legacy =
+                _legacyDeviceRegistry.getDevice(pubKey);
+
+            _devices[pubKey] = Device({
+                identityId: identityId,
+                pubKey: pubKey,
+                label: legacy.label,
+                addedAt: legacy.addedAt,
+                revoked: legacy.revoked,
+                exists: true
+            });
+            _devicesByIdentity[identityId].push(pubKey);
+
+            bytes memory vaultKey = _legacyDeviceRegistry.deviceVaultKeys(pubKey);
+            if (vaultKey.length > 0) {
+                deviceVaultKeys[pubKey] = vaultKey;
+            }
+
+            migratedCount++;
+            emit DeviceRegistered(identityId, pubKey, legacy.label, vaultKey);
+        }
+
+        emit DevicesMigrated(identityId, migratedCount);
     }
 
     /// Revoga todos os devices de uma identidade. Só o RecoveryManager

@@ -32,7 +32,7 @@ contract VaultRegistryTest is Test, IdentityConsentHelper {
         (bob, bobKey) = makeAddrAndKey("bob");
 
         identityRegistry = new IdentityRegistry();
-        deviceRegistry = new DeviceRegistry(address(identityRegistry));
+        deviceRegistry = new DeviceRegistry(address(identityRegistry), address(0), address(0));
         vaultRegistry = new VaultRegistry(address(identityRegistry), address(deviceRegistry));
 
         vm.prank(alice);

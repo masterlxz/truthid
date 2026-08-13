@@ -16,11 +16,11 @@ abstract contract IdentityResolver {
     // Estado
     // -------------------------------------------------------------------------
 
-    // `private`: nenhum contrato derivado toca em `_identityRegistry`
-    // diretamente hoje — todos passam por `_getCallerIdentityId()`, que já
-    // vive aqui. Promover pra `internal` se um derivado precisar do endereço
-    // bruto no futuro.
-    IdentityRegistry private immutable _identityRegistry;
+    // `internal` (promovido de `private`): o `DeviceRegistry` da migração de
+    // cascata (débito #52) precisa resolver o próprio username no registry
+    // novo diretamente, sem depender de mais uma chamada externa — exatamente
+    // o cenário que este comentário já antecipava.
+    IdentityRegistry internal immutable _identityRegistry;
 
     // -------------------------------------------------------------------------
     // Erros customizados

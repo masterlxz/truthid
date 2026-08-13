@@ -96,7 +96,7 @@ contract RecoveryManagerTest is Test, IdentityConsentHelper {
         // C3: DeviceRegistry necessário para validação de revogação de
         // devices pós-recovery. O RecoveryManager recebe seu endereço no
         // construtor para poder chamar revokeAllDevices durante executeRecovery.
-        deviceRegistry = new DeviceRegistry(address(identityRegistry));
+        deviceRegistry = new DeviceRegistry(address(identityRegistry), address(0), address(0));
 
         recoveryManager = new RecoveryManager(address(identityRegistry), address(deviceRegistry));
 

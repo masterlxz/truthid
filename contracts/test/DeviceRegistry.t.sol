@@ -32,7 +32,7 @@ contract DeviceRegistryTest is Test, IdentityConsentHelper {
         (bob, bobKey) = makeAddrAndKey("bob");
 
         identityRegistry = new IdentityRegistry();
-        deviceRegistry = new DeviceRegistry(address(identityRegistry));
+        deviceRegistry = new DeviceRegistry(address(identityRegistry), address(0), address(0));
 
         vm.prank(alice);
         _createIdentity(identityRegistry, aliceKey, "alice.id"); // identityId = 1

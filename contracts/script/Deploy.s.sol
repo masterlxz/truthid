@@ -10,13 +10,23 @@ import {ENTRY_POINT_V07} from "../src/ERC4337Constants.sol";
 
 contract Deploy is Script {
     function run() external {
+        // Débito #52: par legado, só usado por `DeviceRegistry.migrateDevices`
+        // para portar o histórico de devices de uma cascata anterior. Omitir
+        // as duas env vars (deploy fresh, sem identidade real a migrar — ex:
+        // ambiente local) desativa a migração via `address(0)`.
+        address legacyDeviceRegistry = vm.envOr("LEGACY_DEVICE_REGISTRY", address(0));
+        address legacyIdentityRegistry = vm.envOr("LEGACY_IDENTITY_REGISTRY", address(0));
+
         vm.startBroadcast();
 
         IdentityRegistry identityRegistry = new IdentityRegistry();
 
-        DeviceRegistry deviceRegistry = new DeviceRegistry(address(identityRegistry));
+        DeviceRegistry deviceRegistry = new DeviceRegistry(
+            address(identityRegistry), legacyDeviceRegistry, legacyIdentityRegistry
+        );
 
-        RecoveryManager recoveryManager = new RecoveryManager(address(identityRegistry), address(deviceRegistry));
+        RecoveryManager recoveryManager =
+            new RecoveryManager(address(identityRegistry), address(deviceRegistry));
 
         identityRegistry.setRecoveryManager(address(recoveryManager));
 
@@ -25,7 +35,10 @@ contract Deploy is Script {
         deviceRegistry.setRecoveryManager(address(recoveryManager));
 
         TruthIDAccountFactory factory = new TruthIDAccountFactory(
-            ENTRY_POINT_V07, address(deviceRegistry), address(identityRegistry), address(recoveryManager)
+            ENTRY_POINT_V07,
+            address(deviceRegistry),
+            address(identityRegistry),
+            address(recoveryManager)
         );
 
         // Débito #17: registra a factory no IdentityRegistry pra validar
