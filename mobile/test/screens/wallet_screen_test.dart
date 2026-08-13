@@ -68,12 +68,13 @@ void main() {
     );
     when(() => mockBlockchain.getBalance(smartAccountAddress))
         .thenAnswer((_) async => BigInt.from(123000000000000000)); // 0.123 ETH
-    // Precisa ser maior que os deploy blocks reais (~48.2M na Base Mainnet)
-    // pra que `_loadActivity` não pule o scan achando que "já passou do tip"
-    // (fromBlock > latest) — esse guard existe pra evitar chamar o scanner
-    // com uma faixa invertida quando a chain ainda não chegou no deploy block.
+    // Precisa ser maior que os deploy blocks reais (~49.9M na Base Mainnet,
+    // redeploy em cascata do débito #52) pra que `_loadActivity` não pule o
+    // scan achando que "já passou do tip" (fromBlock > latest) — esse guard
+    // existe pra evitar chamar o scanner com uma faixa invertida quando a
+    // chain ainda não chegou no deploy block.
     when(() => mockBlockchain.getLatestBlockNumber())
-        .thenAnswer((_) async => 48300000);
+        .thenAnswer((_) async => 49940000);
 
     when(() => mockActivityCacheService.read(BigInt.one))
         .thenAnswer((_) async => null);

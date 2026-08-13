@@ -1,29 +1,29 @@
 import 'types.dart';
 
 const Map<Network, String> identityRegistryAddresses = {
-  Network.baseSepolia: '0x7582E1c55fAFF19619A6c0a8b6575855d4e933d0',
-  Network.baseMainnet: '0xC11426fd1cB103bC56dD3263325b34f2AcEe9903',
+  Network.baseSepolia: '0xb56DbCB7580c097d3f64808064C2d5609dD6B243',
+  Network.baseMainnet: '0x97787D6EE3EfD76962dc7E3Bf143E659D9961962',
 };
 
 // Immutables of the TruthIDAccountFactory (ERC-4337 smart account), used to
 // predict a controller address via CREATE2 before it's ever deployed — see
 // smart_account.dart. Same source as desktop/src/config/truthidAccount.ts.
 const Map<Network, String> smartAccountFactoryAddresses = {
-  Network.baseSepolia: '0x490A82AD72705fA92e0BBc0Dc5A894883fE90a9E',
-  Network.baseMainnet: '0x6b1a78656510f734c7072040000A428e125C50df',
+  Network.baseSepolia: '0xc4Ca3A79BAb993C4B7cFD312C80c20b2182F8c1e',
+  Network.baseMainnet: '0xc2C86cB7d8694EcA8BaAdD95B14842E8643aB262',
 };
 
 const Map<Network, String> recoveryManagerAddresses = {
-  Network.baseSepolia: '0xC60AE3D7Fc7991A48B780E3bF2838027079204Ce',
-  Network.baseMainnet: '0x1d51daD35Bd3562f8B56B334a9B8637873fE40e9',
+  Network.baseSepolia: '0x97787D6EE3EfD76962dc7E3Bf143E659D9961962',
+  Network.baseMainnet: '0x42Ca394c23aB027e877B9900B384f59E2Af23470',
 };
 
 // ERC-4337 EntryPoint v0.7 — same canonical singleton address on every chain.
 const String entryPointV07Address = '0x0000000071727De22E5E9d8BAf0edAc6f37da032';
 
 const Map<Network, String> deviceRegistryAddresses = {
-  Network.baseSepolia: '0x867EA636FDF324B0Cc4a631C70421580e2Bbe91c',
-  Network.baseMainnet: '0x4Fd53d70553df00D42c015EB35E2626cB80b1614',
+  Network.baseSepolia: '0xe40e10627D307B0994f1856584bcc5DC323a4330',
+  Network.baseMainnet: '0x937702CBABDab0EEBD1A29f0a7A658FeF4582543',
 };
 
 const String deviceRegistryAbi = '''
@@ -59,8 +59,8 @@ const String deviceRegistryAbi = '''
 ''';
 
 const Map<Network, String> sessionRegistryAddresses = {
-  Network.baseSepolia: '0xFE49Cec3a927136f7F18E521BF1547f00b09B17f',
-  Network.baseMainnet: '0x66F10F8c38b3F35551e90ACa3c675F5E3432C6Df',
+  Network.baseSepolia: '0xc2C86cB7d8694EcA8BaAdD95B14842E8643aB262',
+  Network.baseMainnet: '0x8C65527eDA3ce7754Bf87B34aC4ec8ce74D647e2',
 };
 
 const String sessionRegistryAbi = '''

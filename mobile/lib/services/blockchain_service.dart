@@ -99,17 +99,17 @@ class BlockchainService {
   static const _rpcRetryRounds = 3;
   static const _rpcRetryBackoff = Duration(milliseconds: 500);
   static const _sessionRegistryAddress =
-      '0x66F10F8c38b3F35551e90ACa3c675F5E3432C6Df';
+      '0x8C65527eDA3ce7754Bf87B34aC4ec8ce74D647e2';
   static const _deviceRegistryAddress =
-      '0x4Fd53d70553df00D42c015EB35E2626cB80b1614';
+      '0x937702CBABDab0EEBD1A29f0a7A658FeF4582543';
   static const _identityRegistryAddress =
-      '0xC11426fd1cB103bC56dD3263325b34f2AcEe9903';
-  // Primeiro deploy do VaultRegistry, Sessão 88 — mesmo endereço Mainnet já
-  // usado em desktop/src/config/contracts.ts.
+      '0x97787D6EE3EfD76962dc7E3Bf143E659D9961962';
+  // Redeploy em cascata (débito #52) — mesmo endereço Mainnet já usado em
+  // desktop/src/config/contracts.ts.
   static const _vaultRegistryAddress =
-      '0x602Fa39611960e5ef17D95a5d7b16816eE0ff734';
+      '0x07449b0c8dAE1252f59A5C0992D1413113a849B4';
   static const _recoveryManagerAddress =
-      '0x1d51daD35Bd3562f8B56B334a9B8637873fE40e9';
+      '0x42Ca394c23aB027e877B9900B384f59E2Af23470';
 
   // Exposto publicamente — a 14.9.5 (SessionCreator) precisa deste endereço
   // como `dest` da chamada `TruthIDAccount.execute`.
@@ -123,26 +123,24 @@ class BlockchainService {
   // deste endereço pra escanear os eventos DeviceRegistered/DeviceRevoked.
   static const deviceRegistryAddress = _deviceRegistryAddress;
 
-  // Blocos de deploy na Base Mainnet (redeploy da Sessão 88, débito #42) —
+  // Blocos de deploy na Base Mainnet (redeploy em cascata, débito #52) —
   // mesmos valores já usados no Desktop (desktop/src/config/contracts.ts),
   // confirmados nos artefatos de broadcast do Foundry. Ponto de partida do
   // scan de histórico completo da aba Wallet.
-  static const deviceRegistryDeployBlock = 48294070;
-  static const sessionRegistryDeployBlock = 48294090;
+  static const deviceRegistryDeployBlock = 49935103;
+  static const sessionRegistryDeployBlock = 49935140;
   // IdentityRegistry é deployado antes dos outros dois no mesmo script —
   // ponto de partida do scan pra frente em getUsernameForIdentity.
-  static const identityRegistryDeployBlock = 48294068;
+  static const identityRegistryDeployBlock = 49935101;
 
   // Única rede configurada hoje é Base Mainnet (ver _rpcUrls acima) — por
   // isso um único chainId fixo, em vez de um mapa rede→chainId que nada usaria.
   static final chainId = BigInt.from(8453);
 
-  // Desligada por padrão — o fix C4 (domain separation, replay cross-chain)
-  // já existe no código-fonte do SessionRegistry mas ainda não foi
-  // redeployado (P1/P2 em PENDING.md). Ligar esta flag antes do redeploy
-  // acontecer quebra a criação de sessão contra o contrato antigo, que
-  // ainda espera a assinatura sem domain separation. Ver P26 em PENDING.md.
-  static const sessionDomainSeparationEnabled = false;
+  // Ligada — o SessionRegistry novo (redeploy em cascata, débito #52) já
+  // verifica keccak256(chainId, address(this), hash) na assinatura de
+  // sessão (fix C4). Ver P26 em PENDING.md.
+  static const sessionDomainSeparationEnabled = true;
 
   static final _sessionContract = DeployedContract(
     ContractAbi.fromJson(sessionRegistryAbi, 'SessionRegistry'),

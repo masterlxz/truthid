@@ -53,4 +53,4 @@ def test_reproducible_across_repeated_calls():
 
 def test_matches_fixed_cross_language_parity_vector():
     addr = compute_smart_account_address(PARITY_LEDGER, PARITY_NETWORK, PARITY_INDEX)
-    assert addr == "0xED83305810c42dEa66bA7C5c12BF61A7adC2356B"
+    assert addr == "0x83E364261871F2eC815dD7a63bD7455B69e2d9B9"

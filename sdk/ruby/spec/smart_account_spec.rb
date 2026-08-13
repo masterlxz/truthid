@@ -51,6 +51,6 @@ RSpec.describe "TruthID.compute_smart_account_address" do
 
   it "matches the fixed cross-language parity vector" do
     addr = compute(parity_ledger, network: parity_network, index: parity_index)
-    expect(addr).to eq("0xED83305810c42dEa66bA7C5c12BF61A7adC2356B")
+    expect(addr).to eq("0x83E364261871F2eC815dD7a63bD7455B69e2d9B9")
   end
 end

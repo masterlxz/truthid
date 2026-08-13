@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-08-01 (Sessão 182 — P33 validado via Brave real: 2 bugs reais achados e corrigidos, gesto de permissão perdido + CORS ausente no loopback; P46 investigado a fundo, causa raiz não fechada por completo)
+> Última atualização: 2026-08-13 (redeploy em cascata do débito #52 — migração real da identidade Mainnet, P1/P2/P26 fechados)
 
 ---
 
@@ -12,11 +12,7 @@
 
 ### Deploy e Redeploy
 
-| ID | Item | Onde se originou | Prioridade |
-|---|---|---|---|
-| P1 | **Deploy em cascata (DeviceRegistry débito #52)** — `DeviceRegistry.sol` alterado (re-registro após revogação). Exige redeploy de 5 contratos em Sepolia e Mainnet. ⚠️ Há identidade real em uso na Mainnet desde a Sessão 116 — avaliar migração antes de redeployar. | `ARCHITECTURE.md` (débito #52, Pendências de Deploy #5) | 🔴 Alta |
-| P2 | **Deploy do RecoveryManager corrigido** (C1 — reentrância) — código corrigido na Sessão 150. Aguardando cascata junto com outros contratos. | `SESSIONS.md` (Sessão 150) | 🔴 Alta |
-| P26 | **Assinatura de sessão desalinhada com o fix C4 (domain separation)** — `SessionRegistry.createSession` já verifica `keccak256(chainId, address(this), hash)` no código-fonte (fix C4, ainda não redeployado — ver P1/P2). **Fix implementado nesta sessão em mobile e desktop** (achado real no caminho: o desktop tinha o mesmo bug, não documentado — `QuickLogin.tsx`/`sign_session_hash` também assinava o hash cru), atrás de flag desligada por padrão (`BlockchainService.sessionDomainSeparationEnabled` no mobile, `SESSION_DOMAIN_SEPARATION_ENABLED` em `desktop/src/config/contracts.ts`) — liga a flag quebraria a criação de sessão contra o contrato atual (sem o fix C4), então a ativação fica pra quando o redeploy em cascata (P1/P2) realmente acontecer. Novo `mobile/lib/utils/session_domain_hash.dart`/`desktop/src/utils/buildSessionDomainHash.ts` espelham `keccak256(abi.encode(chainId, address(this), hash))`; `signHash`/`sign_session_hash` continuam genéricos (compartilhados com a assinatura de UserOperation), só o call site em `approval_screen.dart`/`QuickLogin.tsx` decide o que assinar. `flutter test` 403/403, `flutter analyze` limpo, `npx vitest run` 101/101, `tsc --noEmit` limpo. | `SESSIONS.md` (Sessões 160, 163) | 🟠 Média — aguardando ativação em lockstep com o redeploy (P1/P2) |
+Nenhuma pendência aberta nesta categoria no momento.
 
 ### Validações em Hardware Real
 
@@ -66,6 +62,14 @@
 ---
 
 ## Resolvidas
+
+### P1/P2/P26 — Redeploy em cascata do débito #52, migração real de identidade na Mainnet
+
+| ID | Item | Resolvida em |
+|---|---|---|
+| ~~P1~~ | ~~Deploy em cascata (`DeviceRegistry` débito #52) — 6 contratos redeployados em Sepolia (rehearsal) e Mainnet (`IdentityRegistry`, `DeviceRegistry`, `RecoveryManager`, `TruthIDAccountFactory`, `SessionRegistry`, `VaultRegistry`), todos com os fixes C1-C9. Novo `DeviceRegistry.migrateDevices()` (função de uso único, 9 testes novos) portou os 7 devices da identidade real (`masterlxz`, Sessão 116) numa única transação — status idêntico ao legado (3 revogados, 4 ativos), sem re-pareamento físico. Smart account mudou de endereço (`0x6689...` → `0xAa45...`, inevitável — CREATE2 depende do endereço da factory, e a conta antiga tinha os registries `immutable`, sem `updateRegistries`). Saldo ETH e ponteiro do vault (mesmo CID) migrados via `execute()` direto da Ledger. Endereços novos propagados em Desktop/Mobile/4 SDKs/docs/READMEs~~ | **Sessão 197** |
+| ~~P2~~ | ~~Deploy do `RecoveryManager` corrigido (C1 — reentrância) — parte da mesma cascata~~ | **Sessão 197** |
+| ~~P26~~ | ~~Assinatura de sessão desalinhada com o fix C4 (domain separation) — `SESSION_DOMAIN_SEPARATION_ENABLED`/`sessionDomainSeparationEnabled` ligadas em Desktop e Mobile agora que o `SessionRegistry` novo (com o fix C4) está live~~ | **Sessão 197** |
 
 ### Débitos Técnicos (1–53)
 

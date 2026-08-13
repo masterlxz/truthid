@@ -1,5 +1,5 @@
 export const IDENTITY_REGISTRY_ADDRESS =
-  "0xC11426fd1cB103bC56dD3263325b34f2AcEe9903" as const;
+  "0x97787D6EE3EfD76962dc7E3Bf143E659D9961962" as const;
 
 export const IDENTITY_REGISTRY_ABI = [
   {
@@ -52,11 +52,12 @@ export const IDENTITY_REGISTRY_ABI = [
 // ─── DeviceRegistry ────────────────────────────────────────────────────────────
 
 export const DEVICE_REGISTRY_ADDRESS =
-  "0x4Fd53d70553df00D42c015EB35E2626cB80b1614" as const;
+  "0x937702CBABDab0EEBD1A29f0a7A658FeF4582543" as const;
 
-// Bloco de deploy na Base Mainnet (Sessão 88 — redeploy completo, débito #42).
+// Bloco de deploy na Base Mainnet (débito #52 — redeploy em cascata com
+// migração real de devices, ver migrateDevices() no contrato).
 // Fonte: contracts/broadcast/Deploy.s.sol/8453/run-latest.json
-export const DEVICE_REGISTRY_DEPLOY_BLOCK = 48_294_070n;
+export const DEVICE_REGISTRY_DEPLOY_BLOCK = 49_935_103n;
 
 export const DEVICE_REGISTRY_ABI = [
   {
@@ -167,18 +168,16 @@ export const DEVICE_REGISTRY_ABI = [
 // ─── SessionRegistry ───────────────────────────────────────────────────────────
 
 export const SESSION_REGISTRY_ADDRESS =
-  "0x66F10F8c38b3F35551e90ACa3c675F5E3432C6Df" as const;
+  "0x8C65527eDA3ce7754Bf87B34aC4ec8ce74D647e2" as const;
 
-// Desligada por padrão — o fix C4 (domain separation, replay cross-chain) já
-// existe no código-fonte do SessionRegistry mas ainda não foi redeployado
-// (P1/P2 em project/PENDING.md). Ligar esta flag antes do redeploy acontecer
-// quebra a criação de sessão contra o contrato antigo, que ainda espera a
-// assinatura sem domain separation. Ver P26 em project/PENDING.md.
-export const SESSION_DOMAIN_SEPARATION_ENABLED = false as const;
+// Ligada — o SessionRegistry novo (redeploy em cascata, débito #52) já
+// verifica keccak256(chainId, address(this), hash) na assinatura de sessão
+// (fix C4). Ver P26 em project/PENDING.md.
+export const SESSION_DOMAIN_SEPARATION_ENABLED = true as const;
 
-// Bloco de deploy na Base Mainnet (Sessão 88 — redeploy completo, débito #42).
+// Bloco de deploy na Base Mainnet (redeploy em cascata, débito #52).
 // Fonte: contracts/broadcast/DeploySessionRegistry.s.sol/8453/run-latest.json
-export const SESSION_REGISTRY_DEPLOY_BLOCK = 48_294_090n;
+export const SESSION_REGISTRY_DEPLOY_BLOCK = 49_935_140n;
 
 export const SESSION_REGISTRY_ABI = [
   {
@@ -273,11 +272,10 @@ export const SESSION_REGISTRY_ABI = [
 
 // Endereço do RecoveryManager deployado na Base Mainnet.
 // Fonte: contracts/broadcast/Deploy.s.sol/8453/run-latest.json
-// O contrato fonte já contém os fixes C1 (reentrância), C3 (revogação de
-// devices), C5-C9 — mas o contrato on-chain ainda é a versão pré-fix.
-// O redeploy em cascata (P1/P2) atualizará este endereço no futuro.
+// Redeploy em cascata (débito #52) já com os fixes C1 (reentrância),
+// C3 (revogação de devices), C5-C9.
 export const RECOVERY_MANAGER_ADDRESS =
-  "0x1d51daD35Bd3562f8B56B334a9B8637873fE40e9" as const;
+  "0x42Ca394c23aB027e877B9900B384f59E2Af23470" as const;
 
 export const RECOVERY_MANAGER_ABI = [
   {
@@ -419,11 +417,11 @@ export const RECOVERY_MANAGER_ABI = [
 ] as const;
 
 export const VAULT_REGISTRY_ADDRESS =
-  "0x602Fa39611960e5ef17D95a5d7b16816eE0ff734" as const;
+  "0x07449b0c8dAE1252f59A5C0992D1413113a849B4" as const;
 
-// Bloco de deploy na Base Mainnet (Sessão 88 — primeiro deploy do VaultRegistry).
+// Bloco de deploy na Base Mainnet (redeploy em cascata, débito #52).
 // Fonte: contracts/broadcast/DeployVaultRegistry.s.sol/8453/run-latest.json
-export const VAULT_REGISTRY_DEPLOY_BLOCK = 48_294_149n;
+export const VAULT_REGISTRY_DEPLOY_BLOCK = 49_935_166n;
 
 export const VAULT_REGISTRY_ABI = [
   {

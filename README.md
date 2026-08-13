@@ -48,10 +48,10 @@ There is no relay, signaling server, or backend operated by TruthID — every of
 
 | Contract | Address |
 |---|---|
-| `IdentityRegistry` | [`0xC11426fd1cB103bC56dD3263325b34f2AcEe9903`](https://basescan.org/address/0xC11426fd1cB103bC56dD3263325b34f2AcEe9903) |
-| `DeviceRegistry` | [`0x4Fd53d70553df00D42c015EB35E2626cB80b1614`](https://basescan.org/address/0x4Fd53d70553df00D42c015EB35E2626cB80b1614) |
-| `RecoveryManager` | [`0x1d51daD35Bd3562f8B56B334a9B8637873fE40e9`](https://basescan.org/address/0x1d51daD35Bd3562f8B56B334a9B8637873fE40e9) |
-| `SessionRegistry` | [`0x66F10F8c38b3F35551e90ACa3c675F5E3432C6Df`](https://basescan.org/address/0x66F10F8c38b3F35551e90ACa3c675F5E3432C6Df) |
+| `IdentityRegistry` | [`0x97787D6EE3EfD76962dc7E3Bf143E659D9961962`](https://basescan.org/address/0x97787D6EE3EfD76962dc7E3Bf143E659D9961962) |
+| `DeviceRegistry` | [`0x937702CBABDab0EEBD1A29f0a7A658FeF4582543`](https://basescan.org/address/0x937702CBABDab0EEBD1A29f0a7A658FeF4582543) |
+| `RecoveryManager` | [`0x42Ca394c23aB027e877B9900B384f59E2Af23470`](https://basescan.org/address/0x42Ca394c23aB027e877B9900B384f59E2Af23470) |
+| `SessionRegistry` | [`0x8C65527eDA3ce7754Bf87B34aC4ec8ce74D647e2`](https://basescan.org/address/0x8C65527eDA3ce7754Bf87B34aC4ec8ce74D647e2) |
 
 All four contracts are immutable (no upgrade proxy) and verified on Basescan. Base Sepolia testnet addresses and a full address reference are in [`sdk/README.md`](sdk/README.md#smart-contracts).
 

@@ -1475,6 +1475,73 @@ de achados, não só os corrigidos.**
 
 ---
 
+**Sessão 197 (2026-08-13): redeploy em cascata do débito #52 (P1/P2/P26) — migração real da
+identidade Mainnet, primeira vez que uma cascata acontece com valor de verdade em jogo.**
+
+- **Contexto**: C1-C9 (`/code-review` da Sessão 140) estavam corrigidos no código desde a Sessão
+  150, mas nunca deployados — `DeviceRegistry` mudou (débito #52, re-registro após revogação) e é
+  referenciado como `immutable` por `SessionRegistry`/`VaultRegistry`/`RecoveryManager`/
+  `TruthIDAccountFactory`, forçando cascata completa. Toda cascata anterior (Sessões 70/77/88)
+  aconteceu com `totalIdentities() == 0` — nada a perder. Desta vez `totalIdentities() == 1`: a
+  identidade `masterlxz` (Sessão 116), com 7 devices, um vault publicado e saldo ETH reais.
+- **Achado que mudou o escopo real do trabalho**: a `TruthIDAccount` da identidade real foi
+  deployada *antes* do fix C8 (Sessão 140, endereços de registry mutáveis via `updateRegistries`)
+  — bytecode antigo, sem essa função, nunca vai poder ser redirecionado pros contratos novos. Pra
+  se beneficiar dos fixes (inclusive a reentrância crítica do C1), era obrigatório deployar uma
+  smart account nova via uma factory nova — e como o CREATE2 da factory inclui o próprio endereço
+  dela no salt, isso muda o endereço da smart account, sem alternativa. Confirmado com o dono do
+  projeto antes de seguir.
+- **Fase 1 — contrato**: novo `DeviceRegistry.migrateDevices()`, função de uso único por
+  identidade. Constructor ganha `legacyDeviceRegistry`/`legacyIdentityRegistry` (`address(0)`
+  desativa a migração, usado em deploys locais/frescos). A função resolve o próprio username no
+  registry novo (nunca aceita como parâmetro — evita spoof do histórico de outra identidade),
+  busca a identidade correspondente no par legado, copia label/`addedAt`/status revogado/chave
+  ECIES do vault de cada device (dedupe automático via `_devices[pubKey].exists`), trava
+  reexecução com `_migrated[identityId]` setado antes de qualquer leitura externa (mesmo padrão
+  CEI do fix C1). `IdentityResolver._identityRegistry` promovido de `private` pra `internal`
+  (o próprio comentário do arquivo já antecipava essa necessidade). 9 testes novos em
+  `DeviceRegistryMigration.t.sol` (happy path com 3 devices simulando um par legado real, `Already
+  Migrated`, identidade sem correspondente no legado, device já re-pareado organicamente não é
+  sobrescrito). `Deploy.s.sol` estendido com `LEGACY_DEVICE_REGISTRY`/`LEGACY_IDENTITY_REGISTRY`
+  via `vm.envOr`. `forge test` 285/285.
+- **Fase 2/3 — deploy real**: rehearsal completo no Sepolia primeiro (deploy dos 6 contratos via
+  Ledger real, `--mnemonic-indexes 1` — a conta certa da Ledger, achada testando índices até bater
+  com o `owner()` da smart account real; migração de devices não ensaiada lá porque o
+  `IdentityRegistry` legado do Sepolia tinha `totalIdentities() == 0`, decisão do dono do projeto
+  de não criar identidade de teste só pra isso). Confirmado tudo via `cast call` independente
+  antes de tocar na Mainnet. **Mainnet**: mesma cascata (6 contratos), depois runbook manual
+  passo a passo, cada transação assinada fisicamente na Ledger e simulada via `cast call` antes de
+  `cast send`: (1) `createIdentity` com o mesmo username e uma assinatura de consentimento nova
+  pro endereço da smart account nova (previsto via `factory.getAddress`); (2)
+  `factory.createAccount`; (3) `smartAccountNova.execute(deviceRegistryNovo,
+  migrateDevices())` — os 7 devices migrados numa única transação, status idêntico ao legado (3
+  revogados, 4 ativos, confirmado device a device via `cast call` nos dois registries); (4)
+  `smartAccountAntiga.execute(smartAccountNova, saldo, "")` — ETH movido, conta antiga zerada; (5)
+  mesmo CID/contentHash do vault replicado no `VaultRegistry` novo via `execute()` direto (sem
+  precisar do app — CID já é público, não depende de qual registry aponta pra ele). Tudo
+  confirmado de ponta a ponta por leituras `cast call` independentes ao final.
+- **Fase 4 — propagação**: endereços novos em `desktop/src/config/{contracts,truthidAccount}.ts`,
+  `mobile/lib/services/blockchain_service.dart`, os 4 SDKs (TS/Python/Ruby/Dart), `README.md`,
+  `sdk/README.md`, `docs/docs/{intro,contracts,smart-account}.mdx` (Mainnet e Sepolia). Flags
+  `SESSION_DOMAIN_SEPARATION_ENABLED`/`sessionDomainSeparationEnabled` (P26) ligadas — o
+  `SessionRegistry` novo já tem o fix C4 live. Practice Valuation (projeto separado, fora deste
+  workspace) fica pendente de atualização manual pelo dono do projeto.
+- **2 achados reais no caminho da validação, ambos testes desatualizados (não bugs de produto)**:
+  o vetor de paridade cross-linguagem `computeSmartAccountAddress` (TS/Python/Ruby/Dart) tinha o
+  endereço esperado hardcoded contra a factory antiga do Sepolia — recomputado e confirmado
+  batendo byte a byte nos 4 idiomas com a factory nova; `wallet_screen_test.dart` mockava
+  `getLatestBlockNumber()` fixo em 48.3M, menor que o novo `deviceRegistryDeployBlock`
+  (~49.9M) — o guard real do app (`fromBlock > latest` pula o scan) fazia o teste passar sem
+  nunca chamar `scan()`, confirmado como regressão de teste (não de app) comparando contra a
+  baseline via `git stash`.
+- **Validação final**: `forge test` 285/285, `npx tsc --noEmit` limpo (Desktop e SDK TS),
+  `npx vitest run` 101/101 (Desktop) + 17/17 (SDK TS), `pytest` 17/17 (SDK Python), `rspec` 17/17
+  (SDK Ruby), `dart test` 69/69 (SDK Dart), `flutter analyze` limpo, `flutter test` 578/578
+  (Mobile). `PENDING.md`/`ARCHITECTURE.md` atualizados (P1/P2/P26 resolvidos, débito #52 e item #5
+  de Pendências de Deploy fechados).
+
+---
+
 ### Interface e identidade visual (UI/UX)
 
 **Quando**: após Fase 4 (Mobile App completo) — pode ser uma Fase 5.5 intercalada com SDKs, ou uma Fase 8 dedicada pós-lançamento. A definir pelo dono do projeto.

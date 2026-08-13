@@ -61,6 +61,6 @@ void main() {
 
   test('matches the fixed cross-language parity vector', () {
     final addr = computeSmartAccountAddress(parityLedger, parityNetwork, index: parityIndex);
-    expect(addr, '0xED83305810c42dEa66bA7C5c12BF61A7adC2356B');
+    expect(addr, '0x83E364261871F2eC815dD7a63bD7455B69e2d9B9');
   });
 }
