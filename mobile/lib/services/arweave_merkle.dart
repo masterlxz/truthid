@@ -8,6 +8,15 @@ import 'package:crypto/crypto.dart' show sha256;
 // porte Rust já validado em desktop/src-tauri/src/arweave/merkle.rs. Hash
 // aqui é SHA-256 (32 bytes) — distinto do SHA-384 do deep hash
 // (arweave_deep_hash.dart), que assina a tx em si, não o conteúdo.
+//
+// maxChunkSize/minChunkSize são constantes de PROTOCOLO do Arweave (mesmos
+// valores de arweave-js lib/merkle.ts), não escolhas deste código — não dá
+// pra extrair numa constante compartilhada de verdade entre Dart e Rust
+// (sem pipeline de codegen cross-linguagem no projeto), então o par tem que
+// ser mantido manualmente em sincronia com
+// desktop/src-tauri/src/arweave/merkle.rs (MAX_CHUNK_SIZE/MIN_CHUNK_SIZE)
+// — se um dia o protocolo mudar esses valores, atualize os dois junto,
+// nunca só um (achado do /code-review, Sessão 195).
 const int maxChunkSize = 256 * 1024;
 const int minChunkSize = 32 * 1024;
 const int _noteSize = 32;
@@ -194,9 +203,14 @@ void _resolveBranchProofs(_MerkleNode node, Uint8List prefix, List<Proof> out) {
 // o último chunk tiver 0 bytes (conteúdo múltiplo exato de maxChunkSize).
 // Mesmo splice que generateTransactionChunks faz em arweave-js: esse chunk
 // vazio existe só pra fechar a árvore de merkle corretamente, nunca deve
-// ser upado via POST /chunk.
-(List<Chunk>, List<Proof>) chunkDataForUpload(Uint8List data) {
+// ser upado via POST /chunk. Devolve também o dataRoot do conjunto de
+// chunks completo (antes do descarte acima), reusando os hashes já
+// calculados por chunkData — quem chama não precisa rechunkar/rehashear o
+// conteúdo inteiro de novo só pra obter o mesmo root (mirror de
+// chunk_data_for_upload em merkle.rs; achado do /code-review, Sessão 195).
+(List<Chunk>, List<Proof>, Uint8List) chunkDataForUpload(Uint8List data) {
   final chunks = chunkData(data);
+  final dataRoot = computeDataRoot(chunks);
   final proofs = generateProofs(chunks);
   if (chunks.length > 1) {
     final last = chunks.last;
@@ -205,7 +219,7 @@ void _resolveBranchProofs(_MerkleNode node, Uint8List prefix, List<Proof> out) {
       proofs.removeLast();
     }
   }
-  return (chunks, proofs);
+  return (chunks, proofs, dataRoot);
 }
 
 int _bufferToUsize(Uint8List buffer) {

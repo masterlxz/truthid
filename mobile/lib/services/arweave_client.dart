@@ -28,12 +28,19 @@ class TxStatus {
 
 String _trimTrailingSlash(String url) => url.endsWith('/') ? url.substring(0, url.length - 1) : url;
 
+// Mesmo timeout que `ipfs_gateway_client.dart` usa pro mesmo motivo — sem
+// isso, um node/gateway Arweave sem resposta trava qualquer request
+// indefinidamente (mirror de `HTTP_TIMEOUT_SECS` em mod.rs, Rust).
+const Duration _httpTimeout = Duration(seconds: 15);
+
+HttpClient _newClient() => HttpClient()..connectionTimeout = _httpTimeout;
+
 // `GET /price/{bytes}` — reward estimado em winston pra publicar `bytes`.
 Future<String> getPrice(String nodeUrl, int bytes) async {
-  final client = HttpClient();
+  final client = _newClient();
   try {
     final uri = Uri.parse('${_trimTrailingSlash(nodeUrl)}/price/$bytes');
-    final response = await (await client.getUrl(uri)).close();
+    final response = await (await client.getUrl(uri)).close().timeout(_httpTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('GET /price retornou ${response.statusCode}');
     }
@@ -45,10 +52,10 @@ Future<String> getPrice(String nodeUrl, int bytes) async {
 
 // `GET /tx_anchor` — anchor recente pra usar como last_tx, evita replay.
 Future<String> getTxAnchor(String nodeUrl) async {
-  final client = HttpClient();
+  final client = _newClient();
   try {
     final uri = Uri.parse('${_trimTrailingSlash(nodeUrl)}/tx_anchor');
-    final response = await (await client.getUrl(uri)).close();
+    final response = await (await client.getUrl(uri)).close().timeout(_httpTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('GET /tx_anchor retornou ${response.statusCode}');
     }
@@ -59,13 +66,13 @@ Future<String> getTxAnchor(String nodeUrl) async {
 }
 
 Future<void> _postTx(String nodeUrl, Map<String, dynamic> body) async {
-  final client = HttpClient();
+  final client = _newClient();
   try {
     final uri = Uri.parse('${_trimTrailingSlash(nodeUrl)}/tx');
     final request = await client.postUrl(uri);
     request.headers.contentType = ContentType.json;
     request.write(jsonEncode(body));
-    final response = await request.close();
+    final response = await request.close().timeout(_httpTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final text = await response.transform(utf8.decoder).join();
       throw Exception('POST /tx retornou ${response.statusCode}: $text');
@@ -99,7 +106,7 @@ Future<void> submitChunk(
   Proof proof,
   Uint8List chunkBytes,
 ) async {
-  final client = HttpClient();
+  final client = _newClient();
   try {
     final uri = Uri.parse('${_trimTrailingSlash(nodeUrl)}/chunk');
     final request = await client.postUrl(uri);
@@ -111,7 +118,7 @@ Future<void> submitChunk(
       'chunk': b64UrlEncode(chunkBytes),
       'offset': proof.offset.toString(),
     }));
-    final response = await request.close();
+    final response = await request.close().timeout(_httpTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       final text = await response.transform(utf8.decoder).join();
       throw Exception('POST /chunk retornou ${response.statusCode}: $text');
@@ -129,10 +136,10 @@ Future<void> submitChunk(
 // mesmo fix no Rust; achado de /code-review: um node fora do ar ficava
 // indistinguível de uma tx genuinamente não minerada ainda).
 Future<TxStatus> getTxStatus(String nodeUrl, String txId) async {
-  final client = HttpClient();
+  final client = _newClient();
   try {
     final uri = Uri.parse('${_trimTrailingSlash(nodeUrl)}/tx/$txId/status');
-    final response = await (await client.getUrl(uri)).close();
+    final response = await (await client.getUrl(uri)).close().timeout(_httpTimeout);
     if (response.statusCode == 200) {
       final text = await response.transform(utf8.decoder).join();
       final json = jsonDecode(text) as Map<String, dynamic>;
@@ -156,10 +163,10 @@ Future<TxStatus> getTxStatus(String nodeUrl, String txId) async {
 // `GET /{id}` — lê o conteúdo bruto publicado numa tx. Já remonta chunks
 // automaticamente tanto no ArLocal quanto em gateway real.
 Future<Uint8List> fetchData(String nodeUrl, String txId) async {
-  final client = HttpClient();
+  final client = _newClient();
   try {
     final uri = Uri.parse('${_trimTrailingSlash(nodeUrl)}/$txId');
-    final response = await (await client.getUrl(uri)).close();
+    final response = await (await client.getUrl(uri)).close().timeout(_httpTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('GET /{id} retornou ${response.statusCode}');
     }
@@ -171,10 +178,10 @@ Future<Uint8List> fetchData(String nodeUrl, String txId) async {
 
 // `GET /wallet/{address}/balance` — saldo em winston.
 Future<String> getWalletBalance(String nodeUrl, String address) async {
-  final client = HttpClient();
+  final client = _newClient();
   try {
     final uri = Uri.parse('${_trimTrailingSlash(nodeUrl)}/wallet/$address/balance');
-    final response = await (await client.getUrl(uri)).close();
+    final response = await (await client.getUrl(uri)).close().timeout(_httpTimeout);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception('GET /wallet/{address}/balance retornou ${response.statusCode}');
     }
@@ -184,11 +191,20 @@ Future<String> getWalletBalance(String nodeUrl, String address) async {
   }
 }
 
+// A cada quantos chunks confirmados o checkpoint é regravado no
+// FlutterSecureStorage — salvar em CADA chunk significa milhares de
+// round-trips reais de IPC pro Keychain/Keystore do SO (~4000 pra 1GB),
+// custo real sem benefício proporcional: reenviar até
+// _checkpointSaveInterval - 1 chunks já aceitos pelo node numa segunda
+// falha é barato (POST /chunk é idempotente pro mesmo conteúdo+prova)
+// comparado ao I/O evitado (achado do /code-review, Sessão 195; mirror de
+// CHECKPOINT_SAVE_INTERVAL no Rust).
+const int _checkpointSaveInterval = 16;
+
 // Envia os chunks a partir de cp.nextChunkIndex (0 numa publicação nova,
-// > 0 ao retomar uma que falhou no meio) — salva o checkpoint depois de
-// CADA chunk confirmado, não só no fim, pra uma segunda falha retomar do
-// ponto certo em vez de voltar pro início. Mirror de submit_remaining_chunks
-// (Rust).
+// > 0 ao retomar uma que falhou no meio) — salva o checkpoint a cada
+// _checkpointSaveInterval chunks confirmados (e sempre no último), não a
+// cada chunk. Mirror de submit_remaining_chunks (Rust).
 Future<void> _submitRemainingChunks(
   String nodeUrl,
   ArweaveCheckpointStore checkpointStore,
@@ -220,7 +236,9 @@ Future<void> _submitRemainingChunks(
     }
 
     cp.nextChunkIndex = i + 1;
-    await checkpointStore.save(cp);
+    if (cp.nextChunkIndex % _checkpointSaveInterval == 0 || cp.nextChunkIndex == total) {
+      await checkpointStore.save(cp);
+    }
   }
 }
 
@@ -236,6 +254,7 @@ Future<String?> _tryResume(
   Uint8List content,
   List<Chunk> chunks,
   List<Proof> proofs,
+  Uint8List dataRoot,
   ArweaveCheckpointStore checkpointStore,
 ) async {
   final hash = contentHashHex(content);
@@ -243,8 +262,7 @@ Future<String?> _tryResume(
   if (cp == null) return null;
 
   final walletAddr = walletAddress(jwk);
-  final recomputedRoot =
-      content.isEmpty ? '' : b64UrlEncode(computeDataRoot(chunkData(content)));
+  final recomputedRoot = content.isEmpty ? '' : b64UrlEncode(dataRoot);
   final matches = cp.walletAddress == walletAddr &&
       cp.nodeUrl == nodeUrl &&
       cp.totalChunks == chunks.length &&
@@ -286,10 +304,11 @@ Future<String> publish(
   List<(String, String)> tags, {
   ArweaveCheckpointStore checkpointStore = const ArweaveCheckpointStore(),
 }) async {
-  final (chunks, proofs) = chunkDataForUpload(content);
+  final (chunks, proofs, dataRoot) = chunkDataForUpload(content);
 
   if (chunks.length > 1) {
-    final resumed = await _tryResume(nodeUrl, jwk, content, chunks, proofs, checkpointStore);
+    final resumed =
+        await _tryResume(nodeUrl, jwk, content, chunks, proofs, dataRoot, checkpointStore);
     if (resumed != null) return resumed;
   }
 
@@ -370,7 +389,14 @@ class ArweaveVaultPublisher {
   final ArweaveWalletService _walletService;
   final String nodeUrl;
 
-  Future<ArweavePublishResult> publishVaultBlob(Uint8List content) async {
+  // Núcleo compartilhado de publishVaultBlob/publishPinnedContent — mesmas
+  // tags genéricas, mesmo formato de resultado. As duas ficam separadas (em
+  // vez de uma reexportar a outra) porque representam conceitos diferentes
+  // pro chamador e já têm uma divergência futura conhecida: o /pin de apps
+  // terceiros deve ganhar uma tag de app de origem que o blob do vault não
+  // precisa (mirror de publish_generic_content_with_jwk, Rust; achado do
+  // /code-review, Sessão 195 — as duas eram cópias idênticas até aqui).
+  Future<ArweavePublishResult> _publishGenericContent(Uint8List content) async {
     final jwk = await _walletService.load();
     final txId = await publish(nodeUrl, jwk, content, const [
       ('Content-Type', 'application/octet-stream'),
@@ -382,20 +408,14 @@ class ArweaveVaultPublisher {
     );
   }
 
+  Future<ArweavePublishResult> publishVaultBlob(Uint8List content) =>
+      _publishGenericContent(content);
+
   // Mirror de `arweave::publish_pinned_content` (Rust) — conteúdo arbitrário
   // que apps terceiros enviam via `/truthid/v1/pin` cross-device. Mesmas
   // tags genéricas do blob principal.
-  Future<ArweavePublishResult> publishPinnedContent(Uint8List content) async {
-    final jwk = await _walletService.load();
-    final txId = await publish(nodeUrl, jwk, content, const [
-      ('Content-Type', 'application/octet-stream'),
-      ('App-Name', 'TruthID'),
-    ]);
-    return ArweavePublishResult(
-      cid: 'ar://$txId',
-      contentHash: bytesToHex(keccak256(content), include0x: true),
-    );
-  }
+  Future<ArweavePublishResult> publishPinnedContent(Uint8List content) =>
+      _publishGenericContent(content);
 
   Future<ArweavePublishResult> publishDocument(
     Uint8List content,

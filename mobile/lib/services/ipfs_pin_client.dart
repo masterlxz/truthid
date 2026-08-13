@@ -2,8 +2,6 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:web3dart/crypto.dart';
-
 import 'ipns_key_service.dart';
 
 // Configuração de um provider de pinning IPFS — mesma spec do Desktop
@@ -42,81 +40,14 @@ class PinningProvider {
       };
 }
 
-// Resultado de pinVault: CID retornado pelo provider, hash do conteúdo (pro
-// contrato VaultRegistry) e listas de providers que tiveram sucesso ou falha.
-class PinResult {
-  final String cid;
-  final String contentHash;
-  final List<String> providersOk;
-  final List<String> providersFailed;
-
-  const PinResult({
-    required this.cid,
-    required this.contentHash,
-    required this.providersOk,
-    required this.providersFailed,
-  });
-}
-
-// Mirror em Dart de `desktop/src-tauri/src/ipfs.rs::pin_vault` — mesmo
-// protocolo (Kubo `/api/v0/add` pra upload, PSA `/pins` pra fixar), só que
-// via `dart:io HttpClient` puro (mesmo padrão já usado em
-// `IpfsGatewayClient`, sem depender do pacote `http`).
+// Mirror em Dart de partes de `desktop/src-tauri/src/ipfs.rs` — via
+// `dart:io HttpClient` puro (mesmo padrão já usado em `IpfsGatewayClient`,
+// sem depender do pacote `http`). Só cobre o transporte dead-drop
+// (`publishDeadDrop`, IPNS) — o pin de conteúdo pro backend público (upload
+// Kubo/PSA do vault) foi removido daqui na migração pro Arweave (Sessão
+// 195): não tinha mais nenhum chamador em produção desde então, só o
+// próprio Kubo (`_kuboAdd`) segue vivo como transporte do dead-drop abaixo.
 class IpfsPinClient {
-  Future<PinResult> pinVault(
-    Uint8List content,
-    List<PinningProvider> providers,
-  ) async {
-    final contentHash = bytesToHex(keccak256(content), include0x: true);
-
-    final kubo = providers.where((p) => p.kind == 'kubo').toList();
-    final psa = providers.where((p) => p.kind == 'psa').toList();
-
-    if (kubo.isEmpty) {
-      throw Exception(
-        'nenhum provider Kubo configurado — faça o upload pelo menos via nó local',
-      );
-    }
-
-    var cid = '';
-    final providersOk = <String>[];
-    final providersFailed = <String>[];
-
-    // 1. Upload de conteúdo para cada Kubo node
-    for (final p in kubo) {
-      try {
-        final c = await _kuboAdd(p.endpointUrl, content);
-        if (cid.isEmpty) cid = c;
-        providersOk.add(p.name);
-      } catch (e) {
-        providersFailed.add('${p.name}: $e');
-      }
-    }
-
-    if (cid.isEmpty) {
-      throw Exception(
-        'todos os providers Kubo falharam: ${providersFailed.join('; ')}',
-      );
-    }
-
-    // 2. Pinagem do CID em cada PSA provider
-    for (final p in psa) {
-      try {
-        await _psaPin(p.endpointUrl, p.apiKey, cid);
-        providersOk.add(p.name);
-      } catch (e) {
-        providersFailed.add('${p.name}: $e');
-      }
-    }
-
-    return PinResult(
-      cid: cid,
-      contentHash: contentHash,
-      providersOk: providersOk,
-      providersFailed: providersFailed,
-    );
-  }
-
   // Publica `content` (já cifrado) num nome IPNS derivado deterministicamente
   // de `sessionIdHex` — dead-drop da 13.9, fatia 2a. Só funciona com
   // providers `kind == 'kubo'` (PSA não tem garantia de suportar publish de
@@ -299,32 +230,6 @@ class IpfsPinClient {
         throw Exception('campo Hash ausente: $last');
       }
       return hash;
-    } finally {
-      client.close();
-    }
-  }
-
-  // POST `{endpoint}/pins` com `{ cid, name }`.
-  // 2xx ou 409 (já fixado) são tratados como sucesso.
-  Future<void> _psaPin(String endpointUrl, String apiKey, String cid) async {
-    final client = HttpClient();
-    try {
-      final url = Uri.parse('${_trimSlash(endpointUrl)}/pins');
-      final request = await client.postUrl(url);
-      request.headers.set('Content-Type', 'application/json');
-      if (apiKey.isNotEmpty) {
-        request.headers.set('Authorization', 'Bearer $apiKey');
-      }
-      request.add(utf8.encode(jsonEncode({'cid': cid, 'name': 'truthid-vault'})));
-
-      final response = await request.close();
-      final status = response.statusCode;
-      await response.drain();
-
-      final ok = (status >= 200 && status < 300) || status == 409;
-      if (!ok) {
-        throw Exception('PSA pin retornou $status');
-      }
     } finally {
       client.close();
     }

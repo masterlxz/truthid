@@ -89,7 +89,7 @@ void main() {
 
     test('vetor cross-checado: provas batem com arweave-js', () {
       final data = _repeat(0xAB, maxChunkSize * 2 + 500);
-      final (chunks, proofs) = chunkDataForUpload(data);
+      final (chunks, proofs, _) = chunkDataForUpload(data);
       expect(chunks.length, 3, reason: 'conteúdo não é múltiplo exato — não deve descartar nada');
       expect(proofs.length, 3);
 
@@ -117,7 +117,7 @@ void main() {
     // ausência de aliasing é o que garante o resultado acima.
     test('provas de folhas irmãs não compartilham buffer mutado', () {
       final data = _repeat(0xAB, maxChunkSize * 2 + 500);
-      final (_, proofs) = chunkDataForUpload(data);
+      final (_, proofs, _) = chunkDataForUpload(data);
       // Cada prova deve ter conteúdo distinto (uma mutação vazada faria
       // duas provas convergirem ou corromperem de forma correlata).
       final hexes = proofs.map((p) => _hex(p.proof)).toSet();
@@ -128,23 +128,27 @@ void main() {
       // Múltiplo exato de maxChunkSize: chunkData() cru produz 2 chunks (o
       // segundo vazio). chunkDataForUpload deve descartar esse par, sobrando 1.
       final data = _repeat(0x11, maxChunkSize);
-      final (chunks, proofs) = chunkDataForUpload(data);
+      final (chunks, proofs, root) = chunkDataForUpload(data);
       expect(chunks.length, 1);
       expect(proofs.length, 1);
       expect(chunks[0].maxByteRange, maxChunkSize);
+      // O root devolvido é da árvore completa (2 chunks, incluindo o vazio
+      // descartado do upload) — precisa bater com computeDataRoot sobre o
+      // chunkData() cru, não sobre os chunks já trimados.
+      expect(_hex(root), _hex(computeDataRoot(chunkData(data))));
     });
 
     test('chunkDataForUpload mantém chunks quando não é múltiplo exato', () {
       final data = _repeat(0xAB, maxChunkSize * 2 + 500);
-      final (chunks, proofs) = chunkDataForUpload(data);
+      final (chunks, proofs, root) = chunkDataForUpload(data);
       expect(chunks.length, 3);
       expect(proofs.length, 3);
+      expect(_hex(root), _hex(computeDataRoot(chunkData(data))));
     });
 
     test('validatePath aceita prova gerada por este módulo', () {
       final data = _repeat(0xAB, maxChunkSize * 2 + 500);
-      final (chunks, proofs) = chunkDataForUpload(data);
-      final root = computeDataRoot(chunkData(data));
+      final (chunks, proofs, root) = chunkDataForUpload(data);
 
       for (var i = 0; i < chunks.length; i++) {
         final chunk = chunks[i];
@@ -160,8 +164,7 @@ void main() {
 
     test('validatePath rejeita prova adulterada', () {
       final data = _repeat(0xAB, maxChunkSize * 2 + 500);
-      final (_, proofs) = chunkDataForUpload(data);
-      final root = computeDataRoot(chunkData(data));
+      final (_, proofs, root) = chunkDataForUpload(data);
 
       final tampered = Uint8List.fromList(proofs[0].proof);
       tampered[0] ^= 0xFF;

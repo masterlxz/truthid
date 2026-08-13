@@ -605,23 +605,26 @@ async fn vault_publish() -> Result<PublishResult, String> {
     }
 
     let mut v = vault::load()?;
-    let mut documents_changed = false;
-    for entry in &mut v.entries {
-        let Some(doc) = &mut entry.document else {
+    for i in 0..v.entries.len() {
+        let entry_id = v.entries[i].id.clone();
+        let Some(doc) = &v.entries[i].document else {
             continue;
         };
-        let Some(local_blob) = vault::read_document_blob(&entry.id)? else {
+        let Some(local_blob) = vault::read_document_blob(&entry_id)? else {
             continue;
         };
-        if vault::document_needs_pin(&local_blob, doc.content_hash.as_deref()) {
-            let result =
-                arweave::publish_document(&local_blob, &doc.file_name, &doc.mime_type).await?;
-            doc.cid = Some(result.cid);
-            doc.content_hash = Some(result.content_hash);
-            documents_changed = true;
+        if !vault::document_needs_pin(&local_blob, doc.content_hash.as_deref()) {
+            continue;
         }
-    }
-    if documents_changed {
+        let file_name = doc.file_name.clone();
+        let mime_type = doc.mime_type.clone();
+        let result = arweave::publish_document(&local_blob, &file_name, &mime_type).await?;
+        let doc = v.entries[i].document.as_mut().expect("checked above");
+        doc.cid = Some(result.cid);
+        doc.content_hash = Some(result.content_hash);
+        // Salva logo após cada documento pra não perder o CID de um publish
+        // já pago em AR real se um documento seguinte falhar no meio do loop
+        // (o AR gasto no anterior já está on-chain de qualquer forma).
         vault::save(&v)?;
     }
 

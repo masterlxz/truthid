@@ -16,7 +16,13 @@ import 'dart:typed_data';
 // só no modo permissivo, para
 // bead69cdfc63e9b6bdeae73d7329f7aa3e2176ca5ad2d963e6cd38b5fca2d70e).
 
-String b64UrlEncode(Uint8List bytes) => base64Url.encode(bytes).replaceAll('=', '');
+// `List<int>` (não `Uint8List`) de propósito — mesma assinatura de
+// `base64Url.encode`, aceita qualquer lista de bytes sem exigir conversão
+// no chamador. Também é o encoder base64url-sem-padding canônico do
+// projeto: `webauthn_service.dart`'s `base64UrlEncodeNoPad` delega pra cá
+// em vez de reimplementar (achado do `/code-review`, Sessão 195 — as duas
+// eram implementações idênticas independentes).
+String b64UrlEncode(List<int> bytes) => base64Url.encode(bytes).replaceAll('=', '');
 
 Uint8List b64UrlDecodeStrict(String s) {
   try {

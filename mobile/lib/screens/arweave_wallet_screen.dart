@@ -106,9 +106,9 @@ class _ArweaveWalletScreenState extends State<ArweaveWalletScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Text(
-                    'O blob principal do vault é publicado no Arweave — precisa de uma '
-                    'wallet local financiada com AR. (Documentos anexados continuam nos '
-                    'providers de pinning.)',
+                    'O vault (blob principal e documentos anexados) e os apps terceiros '
+                    'autorizados publicam no Arweave — precisa de uma wallet local '
+                    'financiada com AR.',
                     style: TextStyle(color: AppColors.textMuted, fontSize: 13),
                   ),
                   const SizedBox(height: 16),

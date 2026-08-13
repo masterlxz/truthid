@@ -1377,6 +1377,102 @@ pendência de benchmark da Sessão 190, acha uma regressão real de onboarding p
   já provam a lógica de forma determinística, fica como validação adicional possível antes de
   produção.
 
+**Sessão 196 (2026-08-13): lacuna de documentação da Sessão 195 corrigida — `/code-review` sobre
+`03c5828..HEAD` (mesma migração + o fix da própria S195) re-rodado pra registrar a lista completa
+de achados, não só os corrigidos.**
+
+- **Contexto da lacuna**: a S195 documentou só os 5 achados que viraram código; os outros 5 do
+  `/code-review` original nunca foram persistidos em lugar nenhum (nem roadmap, nem commit) —
+  ficaram só na conversa daquela sessão, que não é recuperável depois de encerrada. Re-rodar o
+  review foi a única forma de reconstruir a lista. **A partir de agora, todo `/code-review` deve
+  registrar os 10 achados completos no roadmap, corrigidos ou não, cada um com o motivo de ter
+  ficado de fora — não só o que virou commit.**
+- **Achados ainda não corrigidos (registrados aqui antes de decidir o que corrigir)**:
+  1. `desktop/src-tauri/src/lib.rs:609` — `vault_publish` só persiste os resultados de publish por
+     documento (`vault::save`) depois que o loop inteiro de documentos termina com sucesso; uma
+     falha no meio do loop descarta publishes já pagos em AR real — o próximo `document_needs_pin`
+     não vê o CID novo e republica (paga AR duas vezes) um documento já on-chain. O espelho em
+     Dart (`vault_publish_service.dart`) salva cada resultado dentro do próprio loop e não tem
+     esse problema — divergência real entre as duas implementações.
+  2. `desktop/src-tauri/src/arweave/mod.rs:31` — `http_client()` não define timeout (diferente do
+     `ipfs.rs`, que usa 15s deliberadamente); um node/gateway Arweave sem resposta trava qualquer
+     comando `arweave_*` indefinidamente.
+  3. `mobile/lib/screens/arweave_wallet_screen.dart:108` — texto de ajuda ainda diz que documentos
+     anexados usam pinning providers IPFS; falso desde que `vault_publish_service.dart` passou a
+     publicar documentos direto no Arweave sem fallback. Risco real: usuária não financia a wallet
+     Arweave por achar que não precisa.
+  4. `desktop/src-tauri/src/arweave/mod.rs:263` — `try_resume` recomputa a merkle data root do
+     zero (re-chunka e re-hasheia o conteúdo inteiro) em vez de reusar `chunks`/`proofs` que o
+     chamador já construiu e passou; custo extra O(tamanho do arquivo) a cada tentativa de resume.
+     Mesmo padrão espelhado em `arweave_client.dart::_tryResume`.
+  5. `desktop/src-tauri/src/arweave/wallet.rs:91` — `parse_jwk` reconstrói a chave privada RSA-4096
+     só pra validar e descarta; `publish()` reconstrói a mesma chave de novo pra assinar — dobra o
+     custo de CPU de reconstrução de chave por publish.
+  6. `desktop/src-tauri/src/arweave/mod.rs:235` — checkpoint salvo a cada chunk individual do
+     upload (não periodicamente); pra um arquivo grande (~4000 chunks) isso é ~4000 escritas de
+     arquivo no desktop e ~4000 round-trips de IPC pro secure storage no mobile.
+  7. `desktop/src-tauri/src/arweave/mod.rs:476` — `publish_vault_blob_with_jwk` e
+     `publish_pinned_content_with_jwk` são cópias byte a byte idênticas (mesma duplicação em
+     `arweave_client.dart`); mudança futura em uma tem boa chance de não propagar pra outra.
+  8. `mobile/lib/services/ipfs_pin_client.dart:66` — `IpfsPinClient.pinVault` ficou sem nenhum
+     chamador em produção depois da migração (só usado pelo próprio teste); o lado Rust já
+     deletou o equivalente (`pin_vault`/`kubo_add`/`psa_pin`) no mesmo diff, o Dart não.
+  9. `desktop/src-tauri/src/arweave/merkle.rs:7` — `MAX_CHUNK_SIZE`/`MIN_CHUNK_SIZE` (constantes
+     de protocolo do Arweave) hardcoded independentemente em Rust e Dart, sem spec compartilhada.
+  10. `mobile/lib/services/arweave_b64url.dart:19` — `b64UrlEncode` duplica
+      `base64UrlEncodeNoPad` já existente em `webauthn_service.dart` (mesma lógica exata).
+- **Decisão do dono do projeto**: registrar tudo primeiro (feito acima), decidir o que corrigir
+  depois — em seguida, decidiu corrigir os 10.
+- **Todos os 10 corrigidos, mesma sessão**:
+  1. `vault_publish` reescrito pra salvar (`vault::save`) logo após cada documento publicado com
+     sucesso (loop por índice em vez de `&mut v.entries`, pra poder salvar `v` sem conflito de
+     borrow) — não só no fim do loop. O lado Dart já estava correto, não precisou de mudança.
+  2. `http_client()` do Arweave ganhou timeout de 15s (mesmo valor do `ipfs.rs`). No Dart,
+     `arweave_client.dart` não tinha timeout em nenhuma das 7 chamadas `HttpClient()` — achado
+     equivalente não listado no review original mas corrigido do mesmo jeito, pra manter paridade
+     (helper `_newClient()` com `connectionTimeout` + `.timeout()` no request).
+  3. Texto da tela de wallet Arweave (Mobile) alinhado com o do Desktop (`VaultSettings.tsx`):
+     "o vault (blob principal e documentos anexados) e os apps terceiros autorizados publicam no
+     Arweave".
+  4. `chunk_data_for_upload`/`chunkDataForUpload` passaram a devolver também o `data_root` do
+     conjunto de chunks completo (calculado reusando os hashes que `chunk_data`/`chunkData` já
+     produziu, antes do descarte do chunk vazio final) — `try_resume`/`_tryResume` usam esse valor
+     em vez de rechunkar+rehashear o conteúdo inteiro de novo. Testes atualizados pra checar que o
+     root devolvido bate com `compute_data_root(&chunk_data(&data))`/`computeDataRoot(chunkData(data))`
+     calculado à parte.
+  5. Novo `wallet::deserialize_jwk` (desserializa + confere `kty`, sem reconstruir a chave RSA) usado
+     nos 4 pontos de entrada de publish (`publish_vault_blob`, `publish_document`,
+     `publish_pinned_content`, comando `arweave_publish`) no lugar de `parse_jwk` — a validação
+     completa (reconstrução da chave) continua acontecendo uma única vez, dentro de
+     `jwk_to_private_key` no caminho de `publish()`. `parse_jwk` continua igual (usado em
+     import/leitura, onde falhar rápido vale a pena). **Investigado e confirmado que o Dart não
+     tinha o mesmo problema** — `parseJwk` faz validação matemática (BigInt) sem construir os
+     objetos de chave; `jwkToKeyPair` (na hora de assinar) só constrói os objetos, não repete a
+     validação — não precisou de mudança.
+  6. Checkpoint agora salva a cada 16 chunks (`CHECKPOINT_SAVE_INTERVAL`/`_checkpointSaveInterval`)
+     e sempre no último, não mais a cada chunk individual — reenviar até 15 chunks já aceitos pelo
+     node numa segunda falha é aceitável (`POST /chunk` é idempotente pro mesmo conteúdo+prova).
+  7. Extraído `publish_generic_content_with_jwk`/`_publishGenericContent` como núcleo compartilhado;
+     `publish_vault_blob_with_jwk`/`publishVaultBlob` e `publish_pinned_content_with_jwk`/
+     `publishPinnedContent` viraram wrappers finos — mantidos como funções/métodos separados (não
+     um alias) porque já existe uma divergência futura conhecida (tag de app de origem no `/pin`).
+  8. `IpfsPinClient.pinVault`/`PinResult`/`_psaPin` removidos do Mobile (o Rust já tinha removido o
+     equivalente na S193) — o arquivo de teste `ipfs_pin_client_test.dart`, que testava só esse
+     método morto, foi deletado inteiro. `publishDeadDrop` e o resto do transporte LAN continuam
+     intactos, cobertos por outros arquivos de teste.
+  9. Sem como compartilhar a constante de verdade entre Rust e Dart (sem pipeline de codegen
+     cross-linguagem no projeto) — mitigação real foi documentar em comentário cruzado explícito
+     nos dois arquivos (`merkle.rs`/`arweave_merkle.dart`) que são constantes de protocolo Arweave,
+     não escolha de código, e que precisam ser atualizadas juntas se o protocolo mudar.
+  10. `arweave_b64url.dart::b64UrlEncode` teve a assinatura relaxada de `Uint8List` pra `List<int>`
+      (mesma assinatura de `base64Url.encode`) e virou o encoder canônico do projeto;
+      `webauthn_service.dart::base64UrlEncodeNoPad` passou a delegar pra ele em vez de reimplementar.
+- **Validação**: `cargo test --lib` 189/189, `cargo clippy` limpo (só o warning pré-existente de
+  `vault.rs`, corrigi um `manual_is_multiple_of` novo que o clippy acusou na minha própria mudança
+  do achado 6), `npx tsc --noEmit` limpo (nenhum arquivo TS tocado nesta sessão), `flutter test`
+  578/578 (removidos os 6 do arquivo deletado do achado 8, adicionados testes novos nos achados 4
+  e 9), `flutter analyze` limpo (só o ruído pré-existente já conhecido de `tool/`).
+
 ---
 
 ### Interface e identidade visual (UI/UX)

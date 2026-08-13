@@ -4,6 +4,15 @@ use sha2::{Digest, Sha256};
 /// merkle tree sobre chunks do conteúdo, usado só pra derivar `data_root`.
 /// Hash aqui é **SHA-256** (32 bytes) — distinto do SHA-384 do deep hash
 /// (`deep_hash::deep_hash`), que assina a tx em si, não o conteúdo.
+///
+/// `MAX_CHUNK_SIZE`/`MIN_CHUNK_SIZE` são constantes de **protocolo** do
+/// Arweave (mesmos valores de `arweave-js` `lib/merkle.ts`), não escolhas
+/// deste código — não dá pra extrair numa constante compartilhada de
+/// verdade entre Rust e Dart (sem pipeline de codegen cross-linguagem no
+/// projeto), então o par tem que ser mantido manualmente em sincronia com
+/// `mobile/lib/services/arweave_merkle.dart` (`maxChunkSize`/`minChunkSize`)
+/// — se um dia o protocolo mudar esses valores, atualize os dois junto,
+/// nunca só um (achado do `/code-review`, Sessão 195).
 pub(crate) const MAX_CHUNK_SIZE: usize = 256 * 1024;
 pub(crate) const MIN_CHUNK_SIZE: usize = 32 * 1024;
 const NOTE_SIZE: usize = 32;
@@ -183,9 +192,16 @@ fn resolve_branch_proofs(node: &MerkleNode, proof: Vec<u8>, out: &mut Vec<Proof>
 /// `MAX_CHUNK_SIZE` — ver `exactly_max_chunk_size_produces_two_chunks`).
 /// Mesmo splice que `generateTransactionChunks` faz em `arweave-js`: esse
 /// chunk vazio existe só pra fechar a árvore de merkle corretamente, nunca
-/// deve ser upado via `POST /chunk`.
-pub(crate) fn chunk_data_for_upload(data: &[u8]) -> (Vec<Chunk>, Vec<Proof>) {
+/// deve ser upado via `POST /chunk`. Devolve também o `data_root` do
+/// conjunto de chunks **completo** (antes do descarte acima — o chunk vazio
+/// final continua fazendo parte da árvore mesmo não sendo upado), computado
+/// aqui reusando os hashes já calculados por `chunk_data`, pra quem chama
+/// não precisar rechunkar/rehashear o conteúdo inteiro de novo só pra obter
+/// o mesmo root (ver `try_resume`, que consumia isso via `chunk_data(content)`
+/// duplicado — achado do `/code-review`, Sessão 195).
+pub(crate) fn chunk_data_for_upload(data: &[u8]) -> (Vec<Chunk>, Vec<Proof>, [u8; 32]) {
     let mut chunks = chunk_data(data);
+    let data_root = compute_data_root(&chunks);
     let mut proofs = generate_proofs(&chunks);
     if chunks.len() > 1 {
         if let Some(last) = chunks.last() {
@@ -195,7 +211,7 @@ pub(crate) fn chunk_data_for_upload(data: &[u8]) -> (Vec<Chunk>, Vec<Proof>) {
             }
         }
     }
-    (chunks, proofs)
+    (chunks, proofs, data_root)
 }
 
 fn buffer_to_usize(buffer: &[u8]) -> usize {
@@ -370,7 +386,7 @@ mod tests {
     #[test]
     fn cross_checked_proofs_match_arweave_js() {
         let data = vec![0xABu8; MAX_CHUNK_SIZE * 2 + 500];
-        let (chunks, proofs) = chunk_data_for_upload(&data);
+        let (chunks, proofs, _root) = chunk_data_for_upload(&data);
         assert_eq!(chunks.len(), 3, "conteúdo não é múltiplo exato — não deve descartar nada");
         assert_eq!(proofs.len(), 3);
 
@@ -390,25 +406,29 @@ mod tests {
         // resultado que `generateTransactionChunks` real (confirmado via
         // node: num_chunks_after_discard: 1 pro mesmo tamanho de conteúdo).
         let data = vec![0x11u8; MAX_CHUNK_SIZE];
-        let (chunks, proofs) = chunk_data_for_upload(&data);
+        let (chunks, proofs, root) = chunk_data_for_upload(&data);
         assert_eq!(chunks.len(), 1);
         assert_eq!(proofs.len(), 1);
         assert_eq!(chunks[0].max_byte_range, MAX_CHUNK_SIZE);
+        // O root devolvido é da árvore completa (2 chunks, incluindo o vazio
+        // descartado do upload) — precisa bater com compute_data_root sobre
+        // o chunk_data() cru, não sobre os chunks já trimados.
+        assert_eq!(root, compute_data_root(&chunk_data(&data)));
     }
 
     #[test]
     fn chunk_data_for_upload_keeps_non_exact_multiple_chunks() {
         let data = vec![0xABu8; MAX_CHUNK_SIZE * 2 + 500];
-        let (chunks, proofs) = chunk_data_for_upload(&data);
+        let (chunks, proofs, root) = chunk_data_for_upload(&data);
         assert_eq!(chunks.len(), 3);
         assert_eq!(proofs.len(), 3);
+        assert_eq!(root, compute_data_root(&chunk_data(&data)));
     }
 
     #[test]
     fn validate_path_accepts_proof_generated_by_this_module() {
         let data = vec![0xABu8; MAX_CHUNK_SIZE * 2 + 500];
-        let (chunks, proofs) = chunk_data_for_upload(&data);
-        let root = compute_data_root(&chunk_data(&data));
+        let (chunks, proofs, root) = chunk_data_for_upload(&data);
 
         for (chunk, proof) in chunks.iter().zip(proofs.iter()) {
             let result = validate_path(&root, proof.offset as i64, 0, data.len(), &proof.proof);
@@ -423,8 +443,7 @@ mod tests {
     #[test]
     fn validate_path_rejects_tampered_proof() {
         let data = vec![0xABu8; MAX_CHUNK_SIZE * 2 + 500];
-        let (_chunks, proofs) = chunk_data_for_upload(&data);
-        let root = compute_data_root(&chunk_data(&data));
+        let (_chunks, proofs, root) = chunk_data_for_upload(&data);
 
         let mut tampered = proofs[0].proof.clone();
         tampered[0] ^= 0xFF;

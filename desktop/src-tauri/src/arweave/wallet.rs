@@ -80,12 +80,30 @@ pub(crate) fn generate_jwk() -> Result<ArweaveJwk, String> {
     })
 }
 
-pub(crate) fn parse_jwk(json: &str) -> Result<ArweaveJwk, String> {
+/// Só desserializa e confere `kty` — sem reconstruir a chave RSA. Usado no
+/// caminho de publish (`publish_vault_blob`/`publish_document`/
+/// `publish_pinned_content` em `mod.rs`), que já reconstrói a chave logo em
+/// seguida via `jwk_to_private_key` pra assinar; usar `parse_jwk` (que
+/// reconstrói e descarta) ali faria a mesma reconstrução RSA-4096 duas vezes
+/// seguidas no mesmo call chain, à toa (achado do `/code-review`, Sessão
+/// 195). A validação completa continua acontecendo — só que uma vez, dentro
+/// de `jwk_to_private_key`, antes de qualquer chamada de rede.
+pub(crate) fn deserialize_jwk(json: &str) -> Result<ArweaveJwk, String> {
     let jwk: ArweaveJwk =
         serde_json::from_str(json).map_err(|e| format!("JWK inválido: {e}"))?;
     if jwk.kty != "RSA" {
         return Err(format!("kty inesperado (esperado RSA): {}", jwk.kty));
     }
+    Ok(jwk)
+}
+
+/// Desserializa e valida completamente (reconstrói a chave privada e
+/// descarta) — usado onde vale falhar rápido num JWK malformado/inconsistente
+/// sem chegar a assinar nada (import de wallet, comandos de leitura que não
+/// vão publicar). Ver `deserialize_jwk` pro caminho de publish, que evita
+/// essa reconstrução redundante.
+pub(crate) fn parse_jwk(json: &str) -> Result<ArweaveJwk, String> {
+    let jwk = deserialize_jwk(json)?;
     // Validação de round-trip: reconstrói a chave privada — falha aqui pega
     // JWKs malformados ou com componentes inconsistentes antes de qualquer uso.
     jwk_to_private_key(&jwk)?;

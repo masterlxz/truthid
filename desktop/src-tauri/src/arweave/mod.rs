@@ -28,8 +28,16 @@ pub struct TxStatus {
     pub number_of_confirmations: Option<u64>,
 }
 
+/// Mesmo timeout que `ipfs::fetch_from_gateway` usa pro mesmo motivo — sem
+/// isso, um node/gateway Arweave sem resposta trava qualquer comando
+/// `arweave_*` indefinidamente, sem forma de a UI se recuperar.
+const HTTP_TIMEOUT_SECS: u64 = 15;
+
 fn http_client() -> reqwest::Client {
-    reqwest::Client::new()
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(HTTP_TIMEOUT_SECS))
+        .build()
+        .expect("configuração estática de client HTTP nunca falha")
 }
 
 /// `GET /price/{bytes}` — reward estimado em winston pra publicar `bytes`.
@@ -191,10 +199,20 @@ pub(crate) async fn fetch_data(
         .map_err(|e| e.to_string())
 }
 
+/// A cada quantos chunks confirmados o checkpoint é regravado em disco —
+/// salvar em CADA chunk (era o comportamento antigo) significa milhares de
+/// `create_dir_all`+`fs::write` num arquivo grande (~4000 chunks pra 1GB),
+/// custo real sem benefício proporcional: reenviar até `CHECKPOINT_SAVE_INTERVAL
+/// - 1` chunks já aceitos pelo node numa segunda falha é barato (POST /chunk
+/// é idempotente pro mesmo conteúdo+prova) comparado ao I/O evitado (achado
+/// do `/code-review`, Sessão 195).
+const CHECKPOINT_SAVE_INTERVAL: usize = 16;
+
 /// Envia os chunks a partir de `cp.next_chunk_index` (0 numa publicação
-/// nova, > 0 ao retomar uma que falhou no meio) — salva o checkpoint depois
-/// de CADA chunk confirmado, não só no fim, pra uma segunda falha retomar
-/// do ponto certo em vez de voltar pro início.
+/// nova, > 0 ao retomar uma que falhou no meio) — salva o checkpoint a cada
+/// `CHECKPOINT_SAVE_INTERVAL` chunks confirmados (e sempre no último), não a
+/// cada chunk, pra uma segunda falha retomar perto do ponto certo sem regravar
+/// o arquivo de checkpoint a cada requisição.
 async fn submit_remaining_chunks(
     client: &reqwest::Client,
     node_url: &str,
@@ -232,7 +250,9 @@ async fn submit_remaining_chunks(
             })?;
 
         cp.next_chunk_index = i + 1;
-        checkpoint::save(cp)?;
+        if cp.next_chunk_index.is_multiple_of(CHECKPOINT_SAVE_INTERVAL) || cp.next_chunk_index == total {
+            checkpoint::save(cp)?;
+        }
     }
     Ok(())
 }
@@ -250,6 +270,7 @@ async fn try_resume(
     content: &[u8],
     chunks: &[merkle::Chunk],
     proofs: &[merkle::Proof],
+    data_root: &[u8; 32],
 ) -> Result<Option<String>, String> {
     let content_hash = checkpoint::content_hash_hex(content);
     let Some(mut cp) = checkpoint::load(&content_hash) else {
@@ -260,7 +281,7 @@ async fn try_resume(
     let recomputed_root = if content.is_empty() {
         String::new()
     } else {
-        transaction::b64url_encode(&merkle::compute_data_root(&merkle::chunk_data(content)))
+        transaction::b64url_encode(data_root)
     };
     let matches = cp.wallet_address == wallet_addr
         && cp.node_url == node_url
@@ -302,10 +323,12 @@ pub(crate) async fn publish(
     content: &[u8],
     tags: &[(String, String)],
 ) -> Result<String, String> {
-    let (chunks, proofs) = merkle::chunk_data_for_upload(content);
+    let (chunks, proofs, data_root) = merkle::chunk_data_for_upload(content);
 
     if chunks.len() > 1 {
-        if let Some(tx_id) = try_resume(client, node_url, jwk, content, &chunks, &proofs).await? {
+        if let Some(tx_id) =
+            try_resume(client, node_url, jwk, content, &chunks, &proofs, &data_root).await?
+        {
             return Ok(tx_id);
         }
     }
@@ -389,15 +412,15 @@ pub(crate) async fn get_wallet_balance(
     res.text().await.map_err(|e| e.to_string())
 }
 
-/// Publica `content` no Arweave já com um JWK em mãos — sem tocar o
-/// keyring/arquivo local, então é diretamente testável (ex.: contra ArLocal
-/// com um JWK gerado na hora, ver `arlocal_tests`). Devolve o mesmo formato
-/// que `ipfs::pin_vault`: `cid` prefixado `"ar://"` (ponteiro
-/// auto-descritivo — um `cid` sem esse prefixo continua significando "busca
-/// no IPFS", sem exigir migração de dado nem mudança no `VaultRegistry`,
-/// que só guarda uma string opaca), `content_hash` calculado igual
-/// (`keccak256`, independente de backend).
-pub(crate) async fn publish_vault_blob_with_jwk(
+/// Núcleo compartilhado de `publish_vault_blob_with_jwk`/
+/// `publish_pinned_content_with_jwk` — mesmas tags genéricas, mesmo formato
+/// de resultado (`ar://` + `keccak256`). As duas funções públicas existem
+/// separadas (em vez de uma só reexportada) porque representam conceitos
+/// diferentes pro chamador e já têm uma divergência futura conhecida: o
+/// `/pin` de apps terceiros deve ganhar uma tag de app de origem que o blob
+/// do vault não precisa (achado do `/code-review`, Sessão 195 — as duas
+/// eram cópias idênticas até aqui).
+async fn publish_generic_content_with_jwk(
     client: &reqwest::Client,
     node_url: &str,
     jwk: &ArweaveJwk,
@@ -416,6 +439,23 @@ pub(crate) async fn publish_vault_blob_with_jwk(
     })
 }
 
+/// Publica `content` no Arweave já com um JWK em mãos — sem tocar o
+/// keyring/arquivo local, então é diretamente testável (ex.: contra ArLocal
+/// com um JWK gerado na hora, ver `arlocal_tests`). Devolve o mesmo formato
+/// que `ipfs::pin_vault`: `cid` prefixado `"ar://"` (ponteiro
+/// auto-descritivo — um `cid` sem esse prefixo continua significando "busca
+/// no IPFS", sem exigir migração de dado nem mudança no `VaultRegistry`,
+/// que só guarda uma string opaca), `content_hash` calculado igual
+/// (`keccak256`, independente de backend).
+pub(crate) async fn publish_vault_blob_with_jwk(
+    client: &reqwest::Client,
+    node_url: &str,
+    jwk: &ArweaveJwk,
+    content: &[u8],
+) -> Result<crate::PublishResult, String> {
+    publish_generic_content_with_jwk(client, node_url, jwk, content).await
+}
+
 /// Ponto de entrada real do `vault_publish` (Etapa 2) — carrega a wallet
 /// local (erro claro se ausente, sem fallback pro IPFS: corte direto,
 /// mesmo padrão já usado na rotação de DEK) e delega pro core acima.
@@ -424,7 +464,7 @@ pub(crate) async fn publish_vault_blob(content: &[u8]) -> Result<crate::PublishR
         "nenhuma wallet Arweave configurada — gere ou importe uma antes de publicar o vault"
             .to_string()
     })?;
-    let jwk = wallet::parse_jwk(&json)?;
+    let jwk = wallet::deserialize_jwk(&json)?;
     publish_vault_blob_with_jwk(&http_client(), ARWEAVE_DEFAULT_NODE, &jwk, content).await
 }
 
@@ -466,7 +506,7 @@ pub(crate) async fn publish_document(
         "nenhuma wallet Arweave configurada — gere ou importe uma antes de publicar documentos"
             .to_string()
     })?;
-    let jwk = wallet::parse_jwk(&json)?;
+    let jwk = wallet::deserialize_jwk(&json)?;
     publish_document_with_jwk(&http_client(), ARWEAVE_DEFAULT_NODE, &jwk, content, file_name, mime_type).await
 }
 
@@ -479,17 +519,7 @@ pub(crate) async fn publish_pinned_content_with_jwk(
     jwk: &ArweaveJwk,
     content: &[u8],
 ) -> Result<crate::PublishResult, String> {
-    let tags = vec![
-        ("Content-Type".to_string(), "application/octet-stream".to_string()),
-        ("App-Name".to_string(), "TruthID".to_string()),
-    ];
-    let tx_id = publish(client, node_url, jwk, content, &tags).await?;
-    Ok(crate::PublishResult {
-        cid: format!("ar://{tx_id}"),
-        content_hash: crate::ipfs::keccak256_hex(content),
-        providers_ok: vec!["arweave".to_string()],
-        providers_failed: vec![],
-    })
+    publish_generic_content_with_jwk(client, node_url, jwk, content).await
 }
 
 /// Ponto de entrada real do canal `/truthid/v1/pin` (apps terceiros) —
@@ -501,7 +531,7 @@ pub(crate) async fn publish_pinned_content(content: &[u8]) -> Result<crate::Publ
         "nenhuma wallet Arweave configurada — gere ou importe uma antes de usar o /pin"
             .to_string()
     })?;
-    let jwk = wallet::parse_jwk(&json)?;
+    let jwk = wallet::deserialize_jwk(&json)?;
     publish_pinned_content_with_jwk(&http_client(), ARWEAVE_DEFAULT_NODE, &jwk, content).await
 }
 
@@ -566,7 +596,7 @@ pub async fn arweave_publish(
     tags: Vec<(String, String)>,
 ) -> Result<String, String> {
     let json = crate::get_arweave_wallet()?;
-    let jwk = wallet::parse_jwk(&json)?;
+    let jwk = wallet::deserialize_jwk(&json)?;
     let client = http_client();
     publish(&client, resolve_node_url(&node_url), &jwk, &content, &tags).await
 }

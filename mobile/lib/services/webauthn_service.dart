@@ -7,6 +7,7 @@ import 'package:elliptic/elliptic.dart' as ec;
 import 'package:pointycastle/asn1.dart' as pc;
 import 'package:pointycastle/export.dart' as pc;
 
+import 'arweave_b64url.dart' show b64UrlEncode;
 import 'cbor_util.dart' as cbor;
 
 /// Virtual WebAuthn authenticator — espelho funcional de
@@ -34,8 +35,7 @@ Uint8List fromHex(String hex) {
   return bytes;
 }
 
-String base64UrlEncodeNoPad(List<int> bytes) =>
-    base64Url.encode(bytes).replaceAll('=', '');
+String base64UrlEncodeNoPad(List<int> bytes) => b64UrlEncode(bytes);
 
 Uint8List _randomBytes(int length) {
   final random = Random.secure();
