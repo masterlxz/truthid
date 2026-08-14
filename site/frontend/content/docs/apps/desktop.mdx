@@ -1,0 +1,29 @@
+---
+title: Desktop
+description: "The primary controller app — identity creation, Ledger, device management, and full social recovery."
+---
+
+The desktop app (Tauri + Rust + React) is where an identity is actually set up and administered. If mobile is the device you carry and approve logins with day to day, desktop is where you go for anything that needs a hardware wallet or full control over the identity itself.
+
+## What it's for
+
+- **Identity creation** — the four-step setup flow described in [Smart Account & Gas](/docs/smart-account): sign consent, create the identity, deploy the smart account, fund it.
+- **Device management** — pairing new devices (see [How TruthID Works → Device pairing](/docs/concepts/how-it-works#device-pairing)), viewing and revoking existing ones.
+- **Social recovery, in full** — configuring guardians, proposing, approving, executing, and cancelling recovery all require a connected wallet talking to `RecoveryManager` directly. This only happens on desktop — see [Social Recovery → Who can actually do this](/docs/concepts/recovery#who-can-actually-do-this--desktop-only) for why mobile can't do this part.
+- **Vault management** — the full read/write UI for [TruthID Vault](/docs/concepts/vault): adding/editing entries, configuring per-device permissions, publishing updates, exporting `.truthid-backup` files.
+
+## Ledger support
+
+Desktop talks to a Ledger hardware wallet over real USB, not a browser API — WebHID/WebUSB aren't available in Tauri's Linux WebView, so the Rust backend implements the Ledger HID transport directly (`hidapi`, filtering by Ledger's USB vendor ID `0x2c97`, hand-rolling the packet framing and APDU protocol). A Ledger acts as the `owner`-tier signer described in [Smart Account & Gas](/docs/smart-account#how-it-works) — full access to the smart account, used for setup and for anything sensitive (guardian configuration, device revocation) that you'd rather not trust to a hot device.
+
+## The local server
+
+Desktop runs a small HTTP server on `localhost`, listening on one of ports `47950`–`47954`. This is what the [browser extension](/docs/apps/extension) and third-party integrators talk to for the delegated-signing flows described in [Cross-Device & Storage](/docs/concepts/cross-device-and-storage#delegated-signing-including-third-party-apps) — sign-message, sign-and-execute, and pin/publish — when desktop happens to be running on the same machine. Being loopback-only, it's implicitly trusted at the same level as those flows already are; there's no separate authentication layer on top; each request still surfaces its own approval screen.
+
+Desktop has no autofill or web-page injection code of its own — that's entirely the browser extension's job. Desktop's role in autofill is purely to answer the extension's loopback requests when both are running locally.
+
+## Next steps
+
+- [Mobile](/docs/apps/mobile) — the day-to-day pairing/login device
+- [Browser Extension](/docs/apps/extension) — what actually talks to desktop's local server
+- [Social Recovery](/docs/concepts/recovery) — the guardian flows desktop is the only place to run

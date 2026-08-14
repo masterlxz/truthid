@@ -1,3 +1,3 @@
 {
-  "pages": ["intro", "quickstart", "sdk", "security", "contracts", "smart-account"]
+  "pages": ["intro", "quickstart", "concepts", "apps", "security", "contracts", "smart-account", "structure", "sdk"]
 }

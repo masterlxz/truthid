@@ -3,7 +3,7 @@ title: Smart Account & Gas
 description: "How the ERC-4337 smart account works, one-time setup cost, and day-to-day gas."
 ---
 
-Every TruthID identity is controlled by an ERC-4337 smart account, not a plain wallet address. This page explains why, what it costs to set up, what day-to-day operations cost, and how to keep the account funded. Read it if you're curious why login doesn't need MetaMask, or you're deciding how much ETH to send during setup.
+Every TruthID identity is controlled by an ERC-4337 smart account, not a plain wallet address. This page explains why, what it costs to set up, what day-to-day operations cost, and how to keep the account funded. Read it if you're curious why login doesn't need MetaMask, or you're deciding how much ETH to send during setup. For where this fits into the rest of the protocol — identity creation, device pairing, login — see [How TruthID Works](/docs/concepts/how-it-works).
 
 ## How it works
 
@@ -37,7 +37,7 @@ The smart account is a regular address — send it ETH on Base the same way you'
 
 ## Addresses
 
-`TruthIDAccount` itself has no fixed address — each owner gets their own instance via `CREATE2`, deployed on demand by the factory. The factory and the EntryPoint do have fixed addresses:
+`TruthIDAccount` itself has no fixed address — each owner gets their own instance via `CREATE2`, deployed on demand by the factory. The factory and the EntryPoint do have fixed addresses — current as of the latest deployment; see [Security Model → Audit status](/docs/security#audit-status) for why these addresses have changed before and could again:
 
 ### Base Mainnet (production, chain ID 8453)
 

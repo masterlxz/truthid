@@ -1,0 +1,43 @@
+---
+title: Cross-Device & Storage
+description: "How devices reach each other without a server, how delegated signing works, and how the Vault is stored permanently on Arweave."
+---
+
+Two different problems, covered together because they share the same underlying transports: getting one of your own devices to talk to another (cross-device), and getting a piece of data (the Vault, a document) to persist somewhere permanent (storage).
+
+## Cross-device transport: LAN + dead-drop
+
+When the mobile app needs to respond to a request from another device — the browser extension pulling a credential, another device requesting a signature — it uses two channels **at the same time**, not one as a fallback for the other:
+
+- **LAN (fast path)** — the responding device runs a small local HTTP server for exactly one request, and the requester scans the local network for it. Fast when it works, but it needs both devices on the same network and reachable — which fails silently on some networks (corporate Wi-Fi with client isolation, some VPN configs) or browsers with restricted local-network APIs (see [Browser Extension → Brave](/docs/apps/extension#brave) for a concrete example).
+- **Dead-drop (best-effort fallback)** — the same content, encrypted, pushed to IPFS and published under a short-lived IPNS name (a mutable pointer, unlike a normal IPFS CID) embedded in the QR code the requester scanned. Because it runs in parallel rather than only kicking in after LAN times out, whichever channel answers first wins — you don't wait through a full LAN timeout before falling back.
+
+Dead-drop is deliberately kept on IPFS/IPNS permanently, even after the Vault's own permanent storage moved to Arweave (below) — Arweave has no concept of a mutable, short-TTL pointer, which is exactly what a one-time ephemeral handoff needs, and normal IPFS CIDs can't be updated in place either. Different job, different tool, on purpose.
+
+## Delegated signing (including third-party apps)
+
+A device — desktop or mobile — can act on a request from another party without that party ever holding your keys:
+
+- **Sign a message** — sign arbitrary data with the device key, no on-chain effect.
+- **Sign and execute** — sign *and* submit a `UserOperation` through the smart account via a bundler, for an actual on-chain action.
+- **Pin** (`POST /truthid/v1/pin`) — let a third-party app publish content permanently using your own already-configured storage, without that app needing its own storage/pinning setup. This is aimed at other apps you use that want to store something on your behalf, using your identity rather than their own infrastructure.
+
+All three show an approval screen naming the requesting app before anything happens — same principle as the origin check during login (see [How TruthID Works → Logging in](/docs/concepts/how-it-works#logging-in)). Desktop additionally remembers a per-app authorization after the first approval, with a rolling daily quota (50 pins/day by default, configurable) so a trusted app doesn't need re-approval on every single request; the mobile cross-device path has no persistent quota — every request gets its own approval.
+
+The route is still named `/truthid/v1/pin` and the field in responses is still called `cid` for backward compatibility with apps already integrated against it — but as of the Arweave migration below, what actually gets published is Arweave, not IPFS. Don't read the name literally.
+
+## Permanent storage: Arweave
+
+The Vault's encrypted blob and any documents in it need to live somewhere permanent that isn't tied to any one device being online. That used to be IPFS (via a pinning service), and is now Arweave — a pay-once, stored-permanently network, reached through a hand-written client (no third-party SDK dependency) that both the desktop (Rust) and mobile (Dart) apps implement to the same wire protocol.
+
+`VaultRegistry`'s on-chain pointer field is still literally named `cid` (see [Smart Contracts → VaultRegistry](/docs/contracts#vaultregistry)) — a holdover from when it only ever held an IPFS CID. Since the migration, a freshly-published Vault's `cid` value looks like `ar://<arweave-transaction-id>` instead; both apps check for that prefix and fetch from an Arweave gateway when they see it, falling back to an IPFS gateway for the bare-CID format older Vaults may still have.
+
+<Callout title="Known caveat: old Vaults and new-device onboarding" type="warn">
+An identity whose Vault hasn't been *republished* since the Arweave migration still points at its old IPFS CID — and the dedicated pinning infrastructure that used to keep old CIDs reachable has since been decommissioned, so pairing a brand-new device to that identity can fail to fetch the Vault (public IPFS gateways time out on unpinned content). This isn't data loss — any device that already has the Vault cached still has it — but there's no automatic fallback yet. If you're pairing a new device and it can't find your Vault, publish a fresh update from a device that already has it (any Vault edit republishes to Arweave) before pairing again.
+</Callout>
+
+## Next steps
+
+- [TruthID Vault](/docs/concepts/vault) — what's actually being stored and encrypted
+- [Browser Extension](/docs/apps/extension) — the primary consumer of the LAN/dead-drop transport
+- [Smart Contracts → VaultRegistry](/docs/contracts#vaultregistry) — the on-chain pointer, in full

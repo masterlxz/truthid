@@ -1,0 +1,39 @@
+---
+title: TruthID Vault
+description: "What the Vault stores, how it's encrypted, and how 2FA/passkey management for other services works."
+---
+
+TruthID Vault is an optional credential and personal-data manager built into the desktop and mobile apps. It's not part of TruthID's own login — see [Security Model → Scope](/docs/security#scope-this-page-is-about-logging-into-truthid-not-the-vault) for that distinction. This page defines what the Vault is; [Desktop](/docs/apps/desktop), [Mobile](/docs/apps/mobile), and [Browser Extension](/docs/apps/extension) each describe their own app's Vault actions and link back here rather than redefining any of this.
+
+## What it stores
+
+A Vault entry is one of four types:
+
+- **Credentials** — site, URL, username, password, notes, and optionally a TOTP secret and/or a passkey (see below).
+- **Addresses** — name, street, number, city, state, zip, country, phone — the fields autofill needs for shipping/billing forms.
+- **Credit cards** — cardholder name, number, expiry, CVV, issuing bank, network. Card number and CVV get field-level encryption within the entry (a second layer beyond the whole-Vault encryption below), and autofill exposes them with minimal on-screen persistence and no logging.
+- **Documents** — arbitrary files up to 50MB, published separately from the rest of the Vault (so a large document doesn't bloat every sync of your passwords).
+
+Every entry can carry tag-like "profiles" for grouping, a favorite flag, and timestamps. Devices have individual read/write permissions on the Vault — a device can be granted read-only access, useful for a device you trust to autofill but don't want able to overwrite entries.
+
+## Encryption and where content lives
+
+The whole Vault is one AES-256-GCM-encrypted blob. Its key isn't stored anywhere — it's derived on demand from a signature over a fixed message (`personal_sign` with your controller wallet, run through HKDF), so the same wallet always derives the same Vault key on any device, with no key-sharing step required at pairing time. (A device can *also* receive the key pre-wrapped at pairing time via the `encryptedVaultKey` field described in [How TruthID Works → Device pairing](/docs/concepts/how-it-works#device-pairing) — that's a convenience path, not the only way to get it.)
+
+The encrypted blob itself is published to Arweave, with only a pointer (and an integrity hash) recorded on-chain in `VaultRegistry` — see [Cross-Device & Storage](/docs/concepts/cross-device-and-storage) for exactly how publishing and fetching work, and a known caveat about older Vaults.
+
+## TOTP and passkeys — for *other* services, not TruthID
+
+The Vault includes a standard TOTP generator (RFC 6238 — HMAC-SHA1, 30-second step, 6 digits) and a virtual WebAuthn/passkey authenticator, so it can hold and use the 2FA method or passkey a *third-party* site issued you — the same way a password manager holds a saved password. TOTP secrets stay device-local by design and are deliberately excluded from what the browser extension can autofill; the passkey authenticator signs WebAuthn assertions locally, so a passkey's private key never leaves the device either.
+
+To be explicit about the boundary this implies: TruthID itself never asks you for a TOTP code or a passkey to log in — device-key possession plus the approval screen (see [How TruthID Works → Logging in](/docs/concepts/how-it-works#logging-in)) is the entire mechanism. These features let the Vault manage *your other accounts'* 2FA, they aren't a second factor for TruthID.
+
+## Backup and export
+
+Both apps can export the Vault to a standalone `.truthid-backup` file, independent of any wallet or device: `TIDVLTB1` magic bytes, a random salt, a PBKDF2-HMAC-SHA256 key (600,000 iterations — the current OWASP-recommended minimum) derived from a password you choose at export time, then AES-256-GCM over the contents. Because the encryption key comes from that password rather than from your wallet, restoring a backup doesn't require re-pairing a device or having wallet access at all — useful for cold storage, or moving a Vault to a brand-new setup. Export is available even from a read-only device, since it only needs to read what that device can already see.
+
+## Next steps
+
+- [How TruthID Works](/docs/concepts/how-it-works) — TruthID's own login, which the Vault is separate from
+- [Cross-Device & Storage](/docs/concepts/cross-device-and-storage) — how the Vault gets from one device to another, and how it's stored permanently
+- [Desktop](/docs/apps/desktop) / [Mobile](/docs/apps/mobile) — each app's Vault UI

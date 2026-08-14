@@ -1,9 +1,9 @@
 ---
 title: Dart SDK
-description: "Full API reference for truthid_sdk on pub.dev — verifier and cross-device requester roles."
+description: "Full API reference for truthid_sdk — verifier and cross-device requester roles."
 ---
 
-Full API reference for [`truthid_sdk`](https://pub.dev/packages/truthid_sdk) on pub.dev. New to TruthID? Start with the [Quickstart](/docs/quickstart) — this page is the detailed reference for every method and type once you're integrating for real.
+Full API reference for `truthid_sdk`. New to TruthID? Start with the [Quickstart](/docs/quickstart) — this page is the detailed reference for every method and type once you're integrating for real.
 
 Unlike the TypeScript/Python/Ruby SDKs — which are all **verifier**-only (the role a website's backend plays) — this package has two independent roles in one import:
 
@@ -14,9 +14,22 @@ Pure Dart — no `package:flutter` dependency. Works in Flutter apps and plain D
 
 ## Installation
 
+`truthid_sdk` isn't published to pub.dev yet — the other three SDKs are live on their respective registries (see [Introduction → Integrating TruthID](/docs/intro#integrating-truthid)), but Dart is still install-from-source only. Point at the package directly, either from a local clone or from GitHub with a path to the `sdk/dart` subdirectory:
+
 ```yaml
 dependencies:
-  truthid_sdk: ^0.1.0
+  truthid_sdk:
+    git:
+      url: https://github.com/masterlxz/truthid.git
+      path: sdk/dart
+```
+
+Or, if you already have the repo checked out locally:
+
+```yaml
+dependencies:
+  truthid_sdk:
+    path: ../path/to/truthid/sdk/dart
 ```
 
 ## `TruthIDClient` (verifier)

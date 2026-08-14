@@ -1,0 +1,30 @@
+---
+title: Repository Structure
+description: "Where everything lives in the TruthID monorepo, and what's core product versus internal tooling."
+---
+
+TruthID is one monorepo. This page maps the top level for anyone browsing the source or deciding where to look for something.
+
+| Path | What's there |
+|---|---|
+| [`contracts/`](https://github.com/masterlxz/truthid/tree/main/contracts) | The six Solidity contracts (Foundry) — see [Smart Contracts](/docs/contracts). The source of truth every other piece reads from. |
+| [`desktop/`](https://github.com/masterlxz/truthid/tree/main/desktop) | The desktop app (Tauri + Rust + React) — see [Desktop](/docs/apps/desktop). |
+| [`mobile/`](https://github.com/masterlxz/truthid/tree/main/mobile) | The mobile app (Flutter) — see [Mobile](/docs/apps/mobile). |
+| [`extension/`](https://github.com/masterlxz/truthid/tree/main/extension) | The browser extension (WXT) — see [Browser Extension](/docs/apps/extension). |
+| [`sdk/`](https://github.com/masterlxz/truthid/tree/main/sdk) | The four integration SDKs (TypeScript, Python, Ruby, Dart) — see [SDK Reference](/docs/sdk/typescript). What third-party developers actually install. |
+| [`site/`](https://github.com/masterlxz/truthid/tree/main/site) | This documentation site and the project's account/billing site — `site/backend` (Rails) and `site/frontend` (Next.js/Fumadocs, where `content/docs/` is what you're reading now). |
+| [`integration/`](https://github.com/masterlxz/truthid/tree/main/integration) | End-to-end tests (TypeScript + viem, against a local Anvil chain) exercising identity → device → login → recovery flows across the whole stack. Internal test tooling, not something you install. |
+
+## About the legacy `docs/` directory
+
+The repository root also still contains a `docs/` directory — an older Docusaurus site that this documentation (Fumadocs, under `site/frontend/content/docs/`) has fully replaced. It's no longer built or deployed; the GitHub Pages deployment now builds exclusively from `site/frontend`. The directory is left in place in the repository deliberately, to be removed once it has no remaining use — not because the migration is incomplete.
+
+## License
+
+TruthID is open source under the [MIT License](https://github.com/masterlxz/truthid/blob/main/LICENSE).
+
+## Next steps
+
+- [Why TruthID](/docs/concepts/vision) — the project's goals and principles
+- [Introduction](/docs/intro) — architecture overview and prerequisites
+- [SDK Reference](/docs/sdk/typescript) — start integrating

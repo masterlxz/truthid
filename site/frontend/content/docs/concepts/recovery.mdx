@@ -1,0 +1,37 @@
+---
+title: Social Recovery
+description: "How M-of-N guardians recover a lost controller wallet, and the real UI split between Desktop and Mobile."
+---
+
+Losing the wallet that controls your identity doesn't have to mean losing the identity — **if** you configured guardians in advance. Social recovery is entirely opt-in: there's no default guardian set, and `proposeRecovery` simply reverts if none was ever configured. This page covers the mechanics; see [Security Model](/docs/security#what-truthid-does-not-protect-against) for the blunt version of that trade-off.
+
+## The guardian model
+
+A guardian is just an address — a friend's wallet, another device you own, or anyone you trust to help you regain access without being able to take over your identity alone. `configureGuardians(username, guardians[], threshold)` sets an M-of-N policy: any number of guardians up to a cap of 20, and any threshold you choose (a common recommendation is 3-of-5, but nothing on-chain enforces that specific number). Only the current controller can set or change the guardian list, and it can't be changed while a recovery is already in progress.
+
+## The recovery lifecycle
+
+1. **Propose** — any configured guardian calls `proposeRecovery(username, newController)`, naming the wallet that should take over.
+2. **Approve** — each guardian can `approveRecovery(username)` once. The proposal needs at least `threshold` approvals before it can move forward.
+3. **Wait out the timelock** — even once the threshold is met, `executeRecovery` won't succeed until 7 days after the proposal was made. This window exists so the real controller — if they still have access and this is happening without their knowledge — has time to notice and cancel it.
+4. **Cancel, if needed** — the *current* controller can call `cancelRecovery(username)` any time during the timelock, no guardian involvement required. This is the check against a coordinated but wrong (or malicious) guardian majority.
+5. **Execute** — once the threshold and timelock are both satisfied, anyone can call `executeRecovery(username)` (it doesn't have to be a guardian) to actually apply the change.
+
+`executeRecovery` does four things, deliberately in this order — state changes first, external calls last (the same Checks-Effects-Interactions pattern used elsewhere in the contracts after a reentrancy bug was found here during a later security review; see [Security Model → Audit status](/docs/security#audit-status)):
+
+1. Marks the proposal executed and clears the entire guardian configuration, before anything else — so if the compromised old controller tries to reenter and start a new `proposeRecovery` mid-execution, it fails immediately (`GuardiansNotConfigured`) instead of leaving a second proposal alive.
+2. If the old controller was a smart account (not a plain wallet), attempts `emergencyWithdraw` on it to migrate its ETH balance to the new controller. This is a `try`/`catch` — a failure here (say, the old controller isn't a real `TruthIDAccount`, or the new controller rejects the transfer) doesn't block recovery from completing; it just emits an event so the stuck funds are visible on-chain.
+3. Calls `DeviceRegistry.revokeAllDevices` so every device the old controller had authorized stops working immediately — otherwise they'd keep being able to create sessions and authenticate after the identity was supposed to have changed hands.
+4. Updates `IdentityRegistry` to point the username at the new controller.
+
+The new controller starts with **no guardians configured** — the old set is wiped, not carried over, so recovery doesn't silently hand the same group of people standing recovery power over the new controller without being asked again.
+
+## Who can actually do this — Desktop only
+
+Guardian configuration, proposing, approving, executing, and cancelling all require a connected wallet talking to `RecoveryManager` directly — that's the desktop app's [Guardian Management](/docs/apps/desktop) screen, and only the desktop app. The mobile app's guardian screen is **read-only** — it shows the current guardian list, threshold, and the status/timelock countdown of any active proposal, but every action that actually changes something on-chain has to happen on desktop with a wallet (Ledger or WalletConnect) connected. If you're relying on social recovery, make sure whoever configures it — and whoever might need to act as a guardian — has access to the desktop app when it matters.
+
+## Next steps
+
+- [How TruthID Works](/docs/concepts/how-it-works) — the rest of the identity/device/login protocol
+- [Security Model](/docs/security) — what recovery does and doesn't protect against
+- [Smart Contracts → RecoveryManager](/docs/contracts#recoverymanager) — every function, gas costs

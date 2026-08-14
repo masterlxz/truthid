@@ -1,0 +1,78 @@
+---
+title: How TruthID Works
+description: "The full protocol walkthrough: identity, device pairing, login, sessions — exact message formats and what's on-chain versus local."
+---
+
+This is the canonical explanation of TruthID's protocol, end to end. [Introduction](/docs/intro) and [Security Model](/docs/security) both link here instead of repeating it. If you just want to integrate TruthID into a backend, you don't need this page — go to [Quickstart](/docs/quickstart) instead. Read this one if you want to understand exactly what happens, or you're implementing a TruthID client yourself.
+
+## Identity creation
+
+An identity is a username bound to a controller address, recorded in `IdentityRegistry`. Creating one is a single call — `createIdentity(username, controller, v, r, s)` — but the `(v, r, s)` isn't optional decoration: it's a signature from the `controller` address itself, proving it actually agreed to be bound to this username. Without that check, anyone could call `createIdentity` with someone else's address as the `controller` and squat on it — including the address a smart account is *about to* be deployed to, since `CREATE2` addresses are predictable before deployment. The consent signature closes that off: either the controller EOA signed directly, or, for a smart account that doesn't exist on-chain yet, its future owner signed a message proving they control the key that will own it.
+
+Usernames are restricted to lowercase letters, digits, `-`, and `.`, 1–64 bytes — enough to rule out visual homoglyph spoofing, not meant to be expressive.
+
+In practice, "create an identity" is the four-step setup flow described in [Smart Account & Gas](/docs/smart-account): sign consent, create the identity, deploy the smart account at the address just committed to, fund it. All on-chain steps are paid by the owner wallet once; after that, the smart account pays for itself.
+
+## Device pairing
+
+A device — the desktop app, the mobile app — is a keypair generated locally, whose private key never leaves that device. Getting it registered on `DeviceRegistry` is a two-step **commit-reveal**, not a single call, specifically to prevent front-running:
+
+1. **Commit** — `commitDevice(commitment)`, where `commitment = keccak256(devicePubKey ‖ salt ‖ msg.sender)`. This publishes a hash that reveals nothing about the actual device key yet.
+2. **Reveal** — in a *later* block, `registerDevice(devicePubKey, label, salt, encryptedVaultKey)` reveals the pre-image. Only the address that made the original commitment can reveal it — so someone watching the mempool for a pending `registerDevice` transaction can't copy the device key out of it and register it to their own identity first, which is exactly the attack the two-step scheme exists to prevent.
+
+`encryptedVaultKey` is optional — empty bytes if the [Vault](/docs/concepts/vault) isn't in use yet. When present, it's the Vault's decryption key, ECIES-encrypted specifically to this device's public key, so a newly-paired device can decrypt the Vault without the owner wallet being involved again.
+
+An identity can register up to 50 devices. A device that's been revoked can be re-registered later (people revoke by mistake, or want to reactivate an old phone) — but only by the same identity that owned it before; a device address that once belonged to identity A can never become identity B's device, even after revocation.
+
+## Logging in
+
+This is the part with no server in the middle at all. A website that wants someone to log in:
+
+1. Builds an `AuthChallenge` and embeds it in a QR code, next to the URL it wants the signed response POSTed back to:
+   ```json
+   { "type": "challenge", "nonce": "<uuid>", "issuedAt": 1234567890123, "origin": "https://example.com" }
+   ```
+2. The user's phone scans the QR, shows them `origin` so they can see exactly who's asking, and — if they approve — signs `JSON.stringify(challenge)` locally with the device key (`personal_sign`) and `POST`s an `AuthResponse` straight to the `callbackUrl` from the QR code, over HTTPS only:
+   ```json
+   {
+     "approved": true,
+     "nonce": "<same uuid>",
+     "signature": "0x...",
+     "deviceAddress": "0x...",
+     "sessionSignature": "0x..."
+   }
+   ```
+3. The website's backend — using a TruthID SDK, never talking to the chain directly by hand — verifies, in order: (a) `approved` is true; (b) the challenge hasn't expired (30-second default TTL); (c) the response's `nonce` matches the challenge's; (d) recovering the signer from `signature` over the challenge JSON yields exactly `deviceAddress`; (e) `DeviceRegistry.isDeviceActive(deviceAddress)` is true on-chain, i.e. the device hasn't been revoked since it was paired; (f) reads `getDevice(deviceAddress)` to learn which identity this device belongs to.
+
+Nothing in this exchange touches a TruthID-operated server — the challenge lives inside the QR code, and the signed response goes directly from the phone to the integrator's own backend.
+
+## Sessions
+
+Once a login is approved, the mobile app — not the website's backend, and not the SDK — separately registers a session on-chain, by submitting an ERC-4337 `UserOperation` through its own smart account. This is a deliberate design: earlier versions of the TypeScript SDK had a `registerSession` method, but it was removed once session registration moved to being something the mobile app does for itself.
+
+What actually gets stored is minimal: `SessionRegistry.createSession` takes a `hash` (just `keccak256(nonce)` — domain-separated with the chain ID and the `SessionRegistry` address itself, so a session hash from one deployment can't be replayed against another), the `identityId`, the device's public key, and an ECDSA signature from that device over the domain-separated hash. The contract checks the signature and that the signing device actually belongs to that identity and isn't revoked — nothing about *what* the session was for (which site, what time) is ever written on-chain; only the hash is. The plaintext that hash represents stays in the app's local storage.
+
+Revoking is symmetric and cheap: `revokeSession(hash)` for one session, or `revokeAllSessions()` — a single O(1) call that revokes everything up to the current moment by writing one timestamp, rather than iterating every session.
+
+## The signer behind all of this
+
+Every on-chain write above — creating an identity, registering a device, creating or revoking a session — is actually executed by an ERC-4337 smart account, not a plain EOA. It recognizes two tiers of signer (the owner wallet used at setup, and devices added afterward, with devices restricted from ever modifying who controls the account) and pays its own gas with no relayer or paymaster involved. That model, plus the full setup/funding flow, is its own page: [Smart Account & Gas](/docs/smart-account).
+
+## What's on-chain versus what stays local
+
+| Public, on-chain, permanent | Local only, never on-chain |
+|---|---|
+| Username ↔ controller mapping | Device private keys |
+| Device public keys, labels, revocation status | The raw challenge (`nonce`/`origin`/`issuedAt`) a session hash represents |
+| Session **hashes** (`keccak256(nonce)`, domain-separated) | Vault contents (encrypted, separately — see [TruthID Vault](/docs/concepts/vault)) |
+| Guardian addresses, threshold, recovery proposals | Anything about which site you logged into, or when |
+| Vault CID/pointer (not content) | The Vault's decryption key |
+
+If your controller wallet is ever lost, none of the above becomes unrecoverable by itself — that's what social recovery exists for.
+
+## Next steps
+
+- [Social Recovery](/docs/concepts/recovery) — recovering a lost controller wallet
+- [Smart Account & Gas](/docs/smart-account) — the two-tier signer model and gas
+- [Security Model](/docs/security) — what this protocol protects against, and what it doesn't
+- [Smart Contracts](/docs/contracts) — every function referenced above, with addresses and gas costs

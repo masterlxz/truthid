@@ -1,0 +1,45 @@
+---
+title: Why TruthID
+description: "The problem TruthID solves, who it's for, and the principles it won't compromise on."
+---
+
+## The problem
+
+Almost every login on the internet routes through one of a handful of centralized identity providers — "Login with Google," "Login with Apple," "Login with Microsoft." That convenience comes with real costs: an account lockout can cut you off from every service tied to it, the provider sees every site you log into, you depend on a company's continued goodwill and uptime, and a breach or policy change at that one company becomes everyone's problem at once.
+
+TruthID replaces that with something you own outright: a blockchain-backed identity, controlled by devices you hold, verified against a public chain instead of a company's servers.
+
+## What TruthID is — and isn't
+
+TruthID is decentralized authentication. Users own their identity through a wallet-backed root identity and authenticate using trusted devices instead of passwords. It prioritizes, in this order of what it won't trade away:
+
+- **User sovereignty** — your identity isn't rented from anyone. It keeps working even if TruthID the project stops existing (see [Principle: never charge for what's already yours](#never-charge-for-whats-already-yours) below).
+- **Privacy** — no central party sees your login activity across sites; there's no party in the login path to see it.
+- **Device trust** — a signature from a device you hold replaces a password you have to remember and a server has to store.
+- **Open source architecture** — every contract, app, and SDK is auditable, not a black box you're asked to trust.
+- **Blockchain as source of truth** — identity and device state live on a public chain, not a database only one company can read or write.
+
+It's deliberately **not** an NFT marketplace and not a crypto wallet product — those are means TruthID uses (a wallet-backed identity, an on-chain registry), not what it's building toward. The core focus is authentication and identity management. One optional module, TruthID Vault (a password/credential manager, covered in [TruthID Vault](/docs/concepts/vault)), was added later on top of that core — it's an extra, not the point.
+
+## Who it's for
+
+Two different people read these docs for two different reasons:
+
+- **People logging into a site** want sovereignty over their own login — a way to authenticate that isn't one more account a company can lock them out of, and that doesn't hand a third party a log of everywhere they sign in.
+- **Developers integrating TruthID** want passwordless authentication without having to run identity infrastructure themselves — no user database to secure, no password-reset flow to build, no breach of *your* database exposing anyone's credentials, because you never held any.
+
+If you're the first kind of reader, [How TruthID Works](/docs/concepts/how-it-works) is the best next page. If you're the second, go straight to [Quickstart](/docs/quickstart).
+
+## Never charge for what's already yours
+
+TruthID has an unimplemented, not-yet-live plan for an optional paid tier (convenience services like gas sponsorship for people who don't want to manage a wallet themselves) — it isn't described in these docs because it doesn't exist yet as a product. But the principle behind it is worth stating now, because it's the thing that makes the free, self-sovereign core trustworthy:
+
+> Never charge for what already belongs to the user. Identity, devices, the Vault, the smart account — all of it runs locally and on-chain, and keeps working even if TruthID as a company or service ceases to exist. Nothing that's free today becomes paid later. Any future monetization can only apply to additional services that cost the project real, ongoing money to keep running — never to the core product itself.
+
+This is a commitment about what TruthID *won't* become, not a description of a product you can sign up for today.
+
+## Next steps
+
+- [How TruthID Works](/docs/concepts/how-it-works) — the protocol, end to end
+- [Introduction](/docs/intro) — architecture overview and prerequisites
+- [Security Model](/docs/security) — what TruthID protects against, and what it doesn't

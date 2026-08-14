@@ -14,9 +14,9 @@ TruthID's security rests on cryptography enforced by smart contracts and on keys
 | Takeover of `RecoveryManager` during initialization | `setRecoveryManager` is `onlyOwner` — found and fixed in the [manual security review](#audit-status) before the mainnet deploy |
 | Phishing during login approval (a fake site requesting a login) | The mobile approval screen shows the requesting `origin` before the user can approve — a spoofed site shows a different, visibly wrong domain |
 | Interception of the signed response in transit | The mobile app refuses any `callbackUrl` that isn't `https://` — there's no way to point a QR code at a plaintext endpoint |
-| Device key extraction | Keys are generated and stored in the Android Keystore / iOS Secure Enclave; they never leave the device and are never sent to any server, including TruthID's SDKs |
+| Device key extraction | Keys are generated on-device and encrypted at rest by the OS credential store — Android Keystore-backed storage, iOS Keychain, the OS credential manager on desktop (macOS Keychain, Windows Credential Manager, Linux Secret Service). They never leave the device and are never sent to any server, including TruthID's SDKs. (Not the iOS Secure Enclave specifically — Secure Enclave only supports the P-256 curve, and TruthID's device keys are secp256k1, the same curve Ethereum uses. Software-encrypted-at-rest is still a real protection against, e.g., another app or a stolen unencrypted backup reading the key — it's just not hardware-isolated the way a Secure Enclave key would be.) |
 | Forged session creation | `createSession` requires an ECDSA signature from the device key plus a cross-check against `DeviceRegistry` — fixed during the [manual security review](#audit-status), which found the function originally permissionless |
-| A lost controller wallet, **if guardians were configured in advance** | M-of-N social recovery (default 3-of-5) with a 7-day timelock before it takes effect |
+| A lost controller wallet, **if guardians were configured in advance** | M-of-N social recovery (any threshold up to 20 guardians — there's no contract-enforced default; 3-of-5 is a common recommendation) with a 7-day timelock before it takes effect |
 | A stale guardian set being reused against a new controller after recovery | `executeRecovery` clears the old guardian configuration automatically — the new controller must opt back in |
 | Gas-griefing via an unbounded guardian list | `RecoveryManager` caps guardians at 20 |
 | Visual username spoofing (homoglyphs) | Usernames are restricted to ASCII letters, digits, `-`, and `.` |
@@ -30,20 +30,28 @@ TruthID's security rests on cryptography enforced by smart contracts and on keys
 - **A compromised, unlocked device.** If malware or an attacker has control of an already-unlocked phone or desktop, they can approve logins the same way the legitimate user would. This is the same limitation every device-based 2FA scheme has — TruthID protects the key in storage, not the device while it's in use.
 - **An untrusted RPC endpoint.** Every SDK reads device and session state (`isDeviceActive`, session hashes) from an RPC URL — a public one by default, or one the integrator configures. Nothing on the client cryptographically proves that RPC is telling the truth; a malicious or compromised RPC could falsely report a revoked device as active. Integrators with a high-value login flow should run their own node or pick an RPC provider they trust.
 - **Third-party professional audit.** The contracts have only had an internal manual review (see [Audit status](#audit-status) below) — no external firm has audited this code. Treat it as early-stage software.
-- **Bugs found after deployment.** All four contracts are immutable by design (no upgrade proxy) — see the [architecture decision](https://github.com/masterlxz/truthid/blob/main/PROJECT_STATE.md) for why. A bug discovered post-launch can't be patched in place; mitigating it would require migrating to a new contract deployment.
+- **Bugs found after deployment.** None of TruthID's contracts sit behind an upgrade proxy, by design — a bug can't be hot-patched in the deployed bytecode. What *can* change is which deployment an app points at: `TruthIDAccount` and `TruthIDAccountFactory` both have an owner-controlled `updateRegistries` function specifically so an existing smart account can be redirected after the project migrates to a fresh set of contracts, which has happened more than once as bugs like the reentrancy issue above were found and fixed. So "immutable" here means no silent upgrade, not that the deployed addresses are permanent forever — see [Smart Contracts](/docs/contracts) for the current addresses and [How TruthID Works](/docs/concepts/how-it-works) for how a migration actually happens.
 - **The integrator's own backend.** Rate-limiting challenge creation, securing secrets, and general server hardening are the integrator's responsibility — TruthID's SDKs verify a signature and a chain read, nothing more.
 - **A user being talked into approving a real request.** The phone shows the true `origin` of whoever is asking, but the decision to tap "Approve" is still a human one. Someone tricked by a convincing pretext (or simply not reading the screen) can still approve a login they shouldn't have — the same residual risk every approval-based 2FA carries.
 
+## Scope: this page is about logging into TruthID, not the Vault
+
+TruthID Vault (the optional password-manager module in the desktop and mobile apps) can generate TOTP codes and act as a WebAuthn/passkey authenticator — but those are for logging into *other* services whose credentials you've saved in the Vault, not for TruthID's own login. TruthID itself never asks for a password, a TOTP code, or a passkey — device-key possession plus the approval flow described above is the entire login mechanism. See [TruthID Vault](/docs/concepts/vault) for the Vault's own threat model (vault-key derivation, backup encryption, per-device permissions).
+
 ## Audit status
 
-The four contracts went through a **manual security review** (no automated tooling like Slither or Mythril) covering access control, reentrancy, front-running, timestamp dependence, DoS, and input validation. All 7 findings — including one critical issue (unprotected `setRecoveryManager`, the same class of bug behind the 2017 Parity multisig hack) — were fixed before the mainnet deploy. The full table of findings and fixes is in [`PROJECT_STATE.md`](https://github.com/masterlxz/truthid/blob/main/PROJECT_STATE.md), under "Fase 6".
+The contracts have gone through two rounds of manual security review (no automated tooling like Slither or Mythril): access control, reentrancy, front-running, timestamp dependence, DoS, and input validation.
 
-This project has **not** undergone a third-party professional audit.
+- **Before the mainnet launch**, an initial review found 7 issues, including one critical bug (unprotected `setRecoveryManager` — the same class of bug behind the 2017 Parity multisig hack). All 7 were fixed before deploying.
+- **During later development**, a follow-up review of `contracts/` found a critical reentrancy bug in `RecoveryManager.executeRecovery`: an attacker who'd compromised the old controller could re-enter `proposeRecovery` while `emergencyWithdraw` was moving funds out, and hijack the identity mid-recovery. Fixed by reordering `executeRecovery` to Checks-Effects-Interactions — state is finalized before any external call is made, rather than relying on a `ReentrancyGuard`. This is the same fix pattern the original `setRecoveryManager` finding used.
+
+Reviews like this happen periodically throughout development, not just once before launch — the project's own contribution guidelines call for a review pass per major area (contracts, desktop, mobile, SDKs) before any release. This project has **not** undergone a third-party professional audit.
 
 If you find a vulnerability, please report it privately via the repository's [GitHub Security tab](https://github.com/masterlxz/truthid/security) rather than opening a public issue.
 
 ## Next steps
 
+- [How TruthID Works](/docs/concepts/how-it-works) — the full protocol walkthrough this threat model assumes
+- [Social Recovery](/docs/concepts/recovery) — the reentrancy fix mentioned above, in context
 - [Quickstart](/docs/quickstart) — add TruthID login to your backend
-- [SDK Reference](/docs/sdk/typescript) — full API for TypeScript, Python, and Ruby
 - [Smart Contracts](/docs/contracts) — addresses, ABIs, and gas cost per operation

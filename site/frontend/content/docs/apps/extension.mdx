@@ -1,0 +1,28 @@
+---
+title: Browser Extension
+description: "Credential autofill and a WebAuthn/passkey bridge for the Vault — talks to Mobile and Desktop, never holds write authority itself."
+---
+
+The browser extension (Manifest V3, built with WXT) brings [TruthID Vault](/docs/concepts/vault) into your browser: autofilling saved credentials, addresses, and cards into web forms, and acting as a bridge for passkeys saved in the Vault. It supports Chrome-family browsers (including Brave, since it's Chromium-based) and Firefox 109+.
+
+## What it does — and doesn't hold
+
+The extension has no Vault data or write authority of its own. Scanning a QR code from the mobile app starts a short-lived session (kept only in `chrome.storage.session` — never written to disk, cleared if the browser's service worker restarts), and the counterpart device — mobile or desktop — pushes back an encrypted subset of the Vault over whichever transport answers first. The extension relays and autofills; it never independently decides what's in the Vault.
+
+It reaches **both** mobile and desktop, racing multiple channels in parallel:
+
+- **LAN** to mobile, scanning the local network for the same local HTTP server mobile uses to answer other cross-device requests (see [Cross-Device & Storage](/docs/concepts/cross-device-and-storage#cross-device-transport-lan--dead-drop)).
+- **Dead-drop (IPFS/IPNS)** to mobile, the same best-effort fallback described on that page.
+- **Desktop's local server**, if desktop happens to be running on the same machine — no QR or extra encryption needed, since loopback is already implicitly trusted (see [Desktop → The local server](/docs/apps/desktop#the-local-server)).
+
+For passkeys specifically, the extension holds the signing key only for the duration of a browser session and answers `navigator.credentials.get()` calls directly — this is the "virtual authenticator" side of the Vault's passkey feature described in [TruthID Vault](/docs/concepts/vault#totp-and-passkeys--for-other-services-not-truthid).
+
+## Brave
+
+Brave's anti-fingerprinting protections zero out the `chrome.system.*` API entirely, which breaks the automatic LAN-IP discovery the extension normally relies on. This is expected, detected explicitly, and has a permanent fix rather than a workaround: the extension falls back to manual IP entry, and that manual path is the correct, supported way to use LAN discovery on Brave — not a degraded temporary state waiting on a browser fix.
+
+## Next steps
+
+- [Mobile](/docs/apps/mobile) — the usual counterpart device for autofill
+- [Desktop](/docs/apps/desktop) — the same-machine counterpart, via the local server
+- [TruthID Vault](/docs/concepts/vault) — what's actually being autofilled
