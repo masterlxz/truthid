@@ -22,7 +22,7 @@ A device — desktop or mobile — can act on a request from another party witho
 - **Sign and execute** — sign *and* submit a `UserOperation` through the smart account via a bundler, for an actual on-chain action.
 - **Pin** (`POST /truthid/v1/pin`) — let a third-party app publish content permanently using your own already-configured storage, without that app needing its own storage/pinning setup. This is aimed at other apps you use that want to store something on your behalf, using your identity rather than their own infrastructure.
 
-All three show an approval screen naming the requesting app before anything happens — same principle as the origin check during login (see [How TruthID Works → Logging in](/docs/concepts/how-it-works#logging-in)). Desktop additionally remembers a per-app authorization after the first approval, with a rolling daily quota (50 pins/day by default, configurable) so a trusted app doesn't need re-approval on every single request; the mobile cross-device path has no persistent quota — every request gets its own approval.
+All three show an approval screen naming the requesting app before anything happens — same principle as the origin check during login (see [How TruthID Works → Logging in](/docs/concepts/how-it-works#logging-in)). Every single request gets its own individual approval, on both desktop and mobile — there's no persistent per-app authorization or quota that lets a trusted app skip the prompt on a later call.
 
 The route is still named `/truthid/v1/pin` and the field in responses is still called `cid` for backward compatibility with apps already integrated against it — but as of the Arweave migration below, what actually gets published is Arweave, not IPFS. Don't read the name literally.
 

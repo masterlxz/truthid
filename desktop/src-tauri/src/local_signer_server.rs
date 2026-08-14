@@ -352,10 +352,9 @@ async fn vault_edit_handler(
     (status, Json(body))
 }
 
-// Sem corpo no POST (ao contrário de vault_edit_handler) — o Rust já lê o
-// Vault local sozinho pra montar a lista de candidatos, a extensão não tem
-// nada pra enviar (mesmo raciocínio de `pin_handler`, mas sem a parte de
-// cota/autorização).
+// Sem corpo no POST (ao contrário de vault_edit_handler/pin_handler) — o
+// Rust já lê o Vault local sozinho pra montar a lista de candidatos, a
+// extensão não tem nada pra enviar.
 async fn autofill_address_handler(
     State(router_state): State<SignRequestRouterState>,
 ) -> (StatusCode, Json<autofill_address::AutofillAddressResponse>) {
@@ -559,22 +558,9 @@ mod tests {
         )
     }
 
-    // Caminho de arquivo único por teste (não $HOME global) pro estado do
-    // pin::PinState — mesmo motivo do helper equivalente em pin.rs::tests:
-    // cargo test roda em paralelo, e mexer em $HOME de verdade contaminaria
-    // outros módulos deste crate que também leem $HOME/.truthid/... nos
-    // próprios testes.
-    fn temp_pin_state() -> Arc<PinState> {
-        Arc::new(PinState::with_authorizations_path(
-            std::env::temp_dir().join(format!(
-                "truthid-lss-pin-test-{}.json",
-                rand::random::<u64>()
-            )),
-        ))
-    }
-
-    // VaultEditState não tem arquivo nenhum (tudo em memória) — sem
-    // isolamento de caminho pra fazer, ao contrário de temp_pin_state acima.
+    // VaultEditState/PinState não têm arquivo nenhum (tudo em memória, desde
+    // que a decisão de aprovação por chamada removeu a persistência de
+    // autorizações do pin::PinState) — sem isolamento de caminho pra fazer.
     fn temp_vault_edit_state() -> Arc<VaultEditState> {
         Arc::new(VaultEditState::default())
     }
@@ -596,7 +582,7 @@ mod tests {
         let config = ServerConfigBuilder::new()
             .sign_request(Arc::new(SignRequestState::default()), |_| {})
             .sign_message(Arc::new(SignMessageState::default()), |_| {})
-            .pin(temp_pin_state(), |_| {})
+            .pin(Arc::new(PinState::default()), |_| {})
             .vault_edit(temp_vault_edit_state(), |_| {})
             .autofill_address(temp_autofill_address_state(), |_| {})
             .autofill_creditcard(temp_autofill_creditcard_state(), |_| {})
@@ -720,7 +706,7 @@ mod tests {
         let config = ServerConfigBuilder::new()
             .sign_request(sign_requests.clone(), |_| {})
             .sign_message(Arc::new(SignMessageState::default()), |_| {})
-            .pin(temp_pin_state(), |_| {})
+            .pin(Arc::new(PinState::default()), |_| {})
             .vault_edit(temp_vault_edit_state(), |_| {})
             .autofill_address(temp_autofill_address_state(), |_| {})
             .autofill_creditcard(temp_autofill_creditcard_state(), |_| {})
@@ -771,7 +757,7 @@ mod tests {
         let config = ServerConfigBuilder::new()
             .sign_request(sign_requests.clone(), |_| {})
             .sign_message(Arc::new(SignMessageState::default()), |_| {})
-            .pin(temp_pin_state(), |_| {})
+            .pin(Arc::new(PinState::default()), |_| {})
             .vault_edit(temp_vault_edit_state(), |_| {})
             .autofill_address(temp_autofill_address_state(), |_| {})
             .autofill_creditcard(temp_autofill_creditcard_state(), |_| {})
@@ -822,7 +808,7 @@ mod tests {
         let config = ServerConfigBuilder::new()
             .sign_request(Arc::new(SignRequestState::default()), |_| {})
             .sign_message(sign_messages.clone(), |_| {})
-            .pin(temp_pin_state(), |_| {})
+            .pin(Arc::new(PinState::default()), |_| {})
             .vault_edit(temp_vault_edit_state(), |_| {})
             .autofill_address(temp_autofill_address_state(), |_| {})
             .autofill_creditcard(temp_autofill_creditcard_state(), |_| {})
@@ -875,7 +861,7 @@ mod tests {
         let config = ServerConfigBuilder::new()
             .sign_request(Arc::new(SignRequestState::default()), |_| {})
             .sign_message(sign_messages.clone(), |_| {})
-            .pin(temp_pin_state(), |_| {})
+            .pin(Arc::new(PinState::default()), |_| {})
             .vault_edit(temp_vault_edit_state(), |_| {})
             .autofill_address(temp_autofill_address_state(), |_| {})
             .autofill_creditcard(temp_autofill_creditcard_state(), |_| {})
@@ -923,10 +909,10 @@ mod tests {
     // ponta a ponta sem depender de infraestrutura externa.
 
     #[tokio::test]
-    async fn pin_endpoint_new_app_request_parks_and_can_be_rejected() {
+    async fn pin_endpoint_request_parks_and_can_be_rejected() {
         let _guard = PORT_TEST_LOCK.lock().await;
         let state = LocalSignerServerState::default();
-        let pin_requests = temp_pin_state();
+        let pin_requests = Arc::new(PinState::default());
         let config = ServerConfigBuilder::new()
             .sign_request(Arc::new(SignRequestState::default()), |_| {})
             .sign_message(Arc::new(SignMessageState::default()), |_| {})
@@ -968,7 +954,7 @@ mod tests {
     async fn pin_endpoint_rejects_concurrent_second_request() {
         let _guard = PORT_TEST_LOCK.lock().await;
         let state = LocalSignerServerState::default();
-        let pin_requests = temp_pin_state();
+        let pin_requests = Arc::new(PinState::default());
         let config = ServerConfigBuilder::new()
             .sign_request(Arc::new(SignRequestState::default()), |_| {})
             .sign_message(Arc::new(SignMessageState::default()), |_| {})
@@ -1021,7 +1007,7 @@ mod tests {
         let config = ServerConfigBuilder::new()
             .sign_request(Arc::new(SignRequestState::default()), |_| {})
             .sign_message(Arc::new(SignMessageState::default()), |_| {})
-            .pin(temp_pin_state(), |_| {})
+            .pin(Arc::new(PinState::default()), |_| {})
             .vault_edit(vault_edit_requests.clone(), |_| {})
             .autofill_address(temp_autofill_address_state(), |_| {})
             .autofill_creditcard(temp_autofill_creditcard_state(), |_| {})
@@ -1068,7 +1054,7 @@ mod tests {
         let config = ServerConfigBuilder::new()
             .sign_request(Arc::new(SignRequestState::default()), |_| {})
             .sign_message(Arc::new(SignMessageState::default()), |_| {})
-            .pin(temp_pin_state(), |_| {})
+            .pin(Arc::new(PinState::default()), |_| {})
             .vault_edit(vault_edit_requests.clone(), |_| {})
             .autofill_address(temp_autofill_address_state(), |_| {})
             .autofill_creditcard(temp_autofill_creditcard_state(), |_| {})
@@ -1114,7 +1100,7 @@ mod tests {
         let config = ServerConfigBuilder::new()
             .sign_request(Arc::new(SignRequestState::default()), |_| {})
             .sign_message(Arc::new(SignMessageState::default()), |_| {})
-            .pin(temp_pin_state(), |_| {})
+            .pin(Arc::new(PinState::default()), |_| {})
             .vault_edit(vault_edit_requests.clone(), |_| {})
             .autofill_address(temp_autofill_address_state(), |_| {})
             .autofill_creditcard(temp_autofill_creditcard_state(), |_| {})

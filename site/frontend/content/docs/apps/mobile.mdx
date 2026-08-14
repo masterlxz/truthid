@@ -15,7 +15,7 @@ Full read/write access to [TruthID Vault](/docs/concepts/vault) — credentials,
 
 ## Cross-device role
 
-Mobile is usually the *responder* in the LAN/dead-drop transport described in [Cross-Device & Storage](/docs/concepts/cross-device-and-storage#cross-device-transport-lan--dead-drop) — it's the device other devices and the browser extension are trying to reach. It also handles delegated-signing requests (sign-message, sign-and-execute, pin/publish) the same way desktop does, with one difference: mobile has no persistent per-app authorization or daily quota — every cross-device request gets its own individual approval, every time.
+Mobile is usually the *responder* in the LAN/dead-drop transport described in [Cross-Device & Storage](/docs/concepts/cross-device-and-storage#cross-device-transport-lan--dead-drop) — it's the device other devices and the browser extension are trying to reach. It also handles delegated-signing requests (sign-message, sign-and-execute, pin/publish) the same way desktop does: every request gets its own individual approval, every time — there's no persistent per-app authorization or quota on either side.
 
 ## Social recovery — read-only
 

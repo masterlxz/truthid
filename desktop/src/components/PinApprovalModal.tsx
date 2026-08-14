@@ -5,12 +5,11 @@ import { useRequestExpiry } from "../hooks/useRequestExpiry";
 import { respondToRequest } from "../services/respondToRequest";
 
 /**
- * Aprovação de /truthid/v1/pin — só aparece quando o app precisa de
- * aprovação humana (app novo, ou cota diária estourada). Um app já
- * autorizado e dentro da cota pina direto no Rust, sem popup nenhum;
- * aprovar aqui autoriza o app a publicar no Arweave usando a wallet local já
- * configurada no TruthID (ver VaultSettings) pelo limite diário indicado —
- * a chave privada da wallet nunca sai do Rust.
+ * Aprovação de /truthid/v1/pin — toda requisição passa por aqui, sempre
+ * (decisão do dono do projeto: aprovação por chamada, mesmo padrão do
+ * SignMessageModal, sem autorização persistida por app). Aprovar publica o
+ * conteúdo no Arweave usando a wallet local já configurada no TruthID (ver
+ * VaultSettings) — a chave privada da wallet nunca sai do Rust.
  */
 export function PinApprovalModal() {
   const { request, clear } = useIncomingPinRequest();
@@ -46,25 +45,11 @@ export function PinApprovalModal() {
         </div>
 
         <div className="card">
-          {request.reason === "newApp" ? (
-            <p>
-              <strong>{request.appName || "An app"}</strong> wants to use your configured IPFS
-              pinning providers. Content is always sent already encrypted — TruthID never sees
-              or stores it in plain text, and provider API keys never leave this device.
-            </p>
-          ) : (
-            <p>
-              <strong>{request.appName || "An app"}</strong> reached its daily pinning limit.
-              Approving grants a fresh {request.dailyLimit}-pin window starting now.
-            </p>
-          )}
-
-          {request.reason === "newApp" && (
-            <p className="muted" style={{ marginTop: "0.5rem" }}>
-              Suggested daily limit: {request.dailyLimit} pins. After approving, further
-              requests from this app won't need approval until the limit is reached.
-            </p>
-          )}
+          <p>
+            <strong>{request.appName || "An app"}</strong> wants to publish content using your
+            configured Arweave wallet. Content is always sent already encrypted — TruthID never
+            sees or stores it in plain text.
+          </p>
 
           {expired && <p className="error-text">This request has expired.</p>}
           {error && <p className="error-text">{error}</p>}

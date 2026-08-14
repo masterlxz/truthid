@@ -1877,6 +1877,70 @@ republish + guarda contra publicar vault vazio, nos dois lados.**
   `_fallbackToCache()`; deixado de fora por não ser o cenário relatado (esse device já tem cache
   bom o bastante pra funcionar offline).
 
+**Sessão 202 (2026-08-14): duas decisões do dono do projeto — fecha P46 (investigação do bug do
+⭐) e decide P11 (modelo de consentimento do `/pin` vira aprovação por chamada) — `pin.rs`
+reescrito no padrão de `sign_message.rs`.**
+
+- **P46 fechado por decisão, não por fix**: a investigação da Sessão 182 já tinha esgotado o que
+  dava pra provar sem clique físico real ou devtools acessíveis — mecanismo confirmado funcionando
+  quando o clique acerta, causa raiz (fragilidade do alvo, suspeita de Pango/WebKitGTK medindo o
+  glifo ★/☆ errado) não fechável neste ambiente. Sem hardware/ambiente novo pra seguir investigando,
+  o dono do projeto decidiu encerrar a linha de investigação — risco aceito e documentado, não
+  escondido. Não desbloqueia o P37 (mesma fragilidade de clique continua impedindo a validação de
+  leitura de documentos via UI) — só fecha o P46 em si.
+- **P11 decidido: aprovação por chamada, mesmo padrão do `/sign-message`/`/sign-request`.** Achado
+  ao investigar antes de implementar: o modelo até então vigente no Desktop — autorização
+  persistida por app + `DEFAULT_DAILY_LIMIT=50`/dia (`pin.rs`, "fatia 3", implementado na Sessão
+  106-108, 2026-07-17) — nunca tinha sido registrado como resolvido neste arquivo, apesar de já
+  estar em produção há quase um mês; o Mobile (fluxo cross-device via QR, `pin_approval_screen.
+  dart`) sempre foi por chamada, então os dois lados já divergiam de fato antes desta sessão. A
+  decisão desta sessão unifica os dois no modelo mais simples, que já era o do Mobile.
+- **`pin.rs` reescrito seguindo `sign_message.rs` como referência estrutural**: `PinState` deixa de
+  ser um struct próprio com `authorizations_path`/`quota: Mutex<()>` e vira só
+  `type PinState = SingleSlotChannel<PinApprovalPayload, PinDecision>` — sem arquivo
+  `pin_authorizations.json`, sem `try_consume_quota`/`record_approval`/`list_authorizations`/
+  `revoke_authorization`/`set_daily_limit`/`reset_if_new_day`. `PinApprovalPayload` perde `reason`
+  (`PinApprovalReason::NewApp`/`QuotaExceeded`, removido) e `daily_limit` — toda requisição pede
+  aprovação, sem distinção de motivo. `normalize_app_name` (que existia especificamente pra evitar
+  bypass de cota por casing, achado de segurança da Sessão ~140) também removido — a classe de
+  bypass que ele mitigava deixou de existir junto com a cota; `handle_incoming_with_timeout` troca
+  `body.app_name` só por `.trim()`, mesmo tratamento do `sign_message.rs`.
+- **`lib.rs`**: comandos Tauri `pin_get_authorizations`/`pin_revoke_authorization`/
+  `pin_set_daily_limit` removidos (ficaram órfãos, alimentavam só a tela de Settings removida
+  abaixo) e desregistrados do `invoke_handler`.
+- **`local_signer_server.rs`**: helper de teste `temp_pin_state()` (isolava
+  `pin_authorizations.json` por teste, mesmo motivo do equivalente em `pin.rs::tests`) removido —
+  todo call site vira `Arc::new(PinState::default())`, igual ao `SignMessageState::default()` já
+  usado ao lado. Comentário em `autofill_address_handler` que comparava com "o mesmo raciocínio de
+  `pin_handler`, mas sem a parte de cota/autorização" corrigido (`pin_handler` também não tem mais
+  essa parte).
+- **Frontend**: `useIncomingPinRequest.ts` perde `PinApprovalReason`/`reason`/`dailyLimit` do tipo
+  `IncomingPinRequest`. `PinApprovalModal.tsx` simplificado pro texto único (sem a bifurcação
+  "app novo" vs "cota estourada" do JSX), mirror direto de `SignMessageModal.tsx` — também
+  aproveitado pra corrigir o texto, que ainda dizia "IPFS pinning providers" (desatualizado desde a
+  migração pro Arweave, Sessão 193). `VaultSettings.tsx` perde `PinAuthorizationsSection` inteira
+  (interface `PinAuthorization`, load/revoke/set-limit, lista de apps autorizados) — ficou órfã sem
+  o comando Tauri que alimentava; `ArweaveWalletSection` fica sozinha no componente, texto ajustado
+  ("apps terceiros aprovados via /pin" em vez de "autorizados abaixo", já que não há mais lista
+  abaixo).
+- **Doc pública corrigida** (escrita há poucas sessões, P48, agora desatualizada por esta decisão):
+  `concepts/cross-device-and-storage.mdx` e `apps/mobile.mdx` descreviam o modelo antigo (Desktop
+  com cota de 50 pins/dia, Mobile sem) como fato atual — corrigidas pra "toda requisição pede
+  aprovação, nos dois lados, sem autorização/cota persistida".
+- **Testes**: `pin.rs` foi de 13 pra 6 testes — os 7 de autorização/cota (existência do arquivo,
+  revogação, reset diário, etc.) removidos, os que sobraram adaptados pro
+  `SingleSlotChannel::default()` sem path injetado; teste novo
+  `same_app_requires_approval_again_on_a_second_call` prova a regressão do modelo antigo
+  diretamente (duas chamadas seguidas do mesmo app pedem aprovação as duas vezes — se existisse um
+  caminho rápido pós-1ª-aprovação, o teste travaria até o timeout esperando um parking que nunca
+  aconteceria). `local_signer_server.rs` teve um teste renomeado (`pin_endpoint_new_app_request_
+  parks_and_can_be_rejected` → `..._request_parks_and_can_be_rejected`, "new app" não faz mais
+  sentido) sem mudar comportamento. `cargo test --lib` 182/182, `cargo clippy` limpo (mesmo warning
+  pré-existente de `vault.rs:629`), `tsc --noEmit`/`npx vitest run` (101/101) limpos, `npm run
+  build` do site limpo (nenhum link/âncora quebrado pelas duas correções de doc).
+- **Fora de escopo**: Mobile não mudou (já era por chamada); SDKs não mudaram (nunca expunham
+  `reason`/`dailyLimit`, só consomem `PinResponse` — `cid`/`contentHash`, inalterado).
+
 ---
 
 ### Interface e identidade visual (UI/UX)
