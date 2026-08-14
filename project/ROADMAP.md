@@ -1681,6 +1681,46 @@ em hardware real na mesma sessão.**
 
 ---
 
+**Sessão 200 (2026-08-14): migração da doc pra `/docs` (Fumadocs) e decisão de sequenciamento —
+doc primeiro, monetização continua em desenvolvimento mas sem lançamento ao vivo.**
+
+- **Migração de `docs/` (Docusaurus) pro `site/frontend/docs`, começo do "aos poucos" citado no
+  fim do v1 do `site/`.** Formato escolhido: **Fumadocs** (não Nextra), montado como rota `/docs`
+  dentro do `site/frontend` já existente — MDX-based, integra oficialmente como docs num app
+  Next.js App Router, Tailwind-nativo. Visual: tema padrão do Fumadocs com as fontes que já
+  estavam no site (Geist) — decisão explícita de não recriar agora a paleta teal/cyan/Inter+Space
+  Grotesk do Docusaurus antigo, já que o site ainda não tem design system próprio (refinamento
+  visual fica pra depois). As 10 páginas de conteúdo (intro, quickstart, security, contracts,
+  smart-account, sdk/{typescript,python,ruby,dart}) foram portadas com paridade total, incluindo
+  tradução de `:::admonition:::` → `<Callout>`, `<Tabs>` do Docusaurus → `<Tabs>` do Fumadocs, e
+  ordem do sidebar via `meta.json` (substitui `sidebar_position`/`_category_.json`). Busca ganha
+  de graça (Fumadocs/Orama) — Docusaurus não tinha nenhuma configurada.
+- Achado técnico verificado: os anchors de heading do Fumadocs batem byte-a-byte com os do
+  Docusaurus (mesmo algoritmo de slug estilo github-slugger) — confirmado contra todos os links
+  internos `/docs/...#anchor` que já existiam, nenhum quebrou. Não é garantia geral pra qualquer
+  heading futuro, mas vale como precedente.
+- Decisão técnica não prevista no plano original: o `RootProvider` do Fumadocs (tema/next-themes)
+  e os dois imports de CSS (`fumadocs-ui/css/neutral.css` + `preset.css`) foram parar no
+  `app/layout.tsx`/`globals.css` **raiz** (afetando `/` e `/dashboard` também), não escopados só a
+  `/docs` — o preset do Fumadocs define `body { background-color; color }` via seletor global
+  (`@layer base`), então uma segunda folha de CSS só-pra-docs entraria em conflito de cascata com
+  o `globals.css` existente, e `next-themes` sempre mexe em `document.documentElement` (não dá pra
+  escopar por subtree). Impacto visual medido é imperceptível (bg `#ffffff`→`hsl(0,0%,96%)`), já
+  que o resto do site não tinha design system definido mesmo — registrado caso o dono do projeto
+  note diferença visual no login/dashboard depois de definir um design system próprio.
+- Fora de escopo, não migrado: landing page do Docusaurus (`docs/src/pages/index.tsx`) e
+  `/donate` (usa `QRCodeSVG`, não é doc). O `docs/` antigo (Docusaurus, GitHub Pages) continua no
+  ar — nenhum redirect/decommission feito, decisão de cutover fica pra depois.
+- **Decisão de sequenciamento, pedida explicitamente pelo dono do projeto**: continuar
+  desenvolvendo o Épico 2 (tier facilitado / monetização, ver P47 e a seção "Onboarding
+  facilitado" acima) normalmente, mas **sem colocar no ar por um bom tempo** — fica pronto/testado
+  porém não lançado/exposto publicamente. Ordem combinada: (1) doc primeiro — continuar
+  migrando/melhorando `/docs`; (2) seguir usando GitHub normalmente como repositório; (3) só depois
+  retomar o avanço da monetização, sabendo que o lançamento de fato demora. Nenhuma rota de
+  billing deve ser exposta publicamente nem anunciada sem pedido explícito do dono do projeto.
+
+---
+
 ### Interface e identidade visual (UI/UX)
 
 **Quando**: após Fase 4 (Mobile App completo) — pode ser uma Fase 5.5 intercalada com SDKs, ou uma Fase 8 dedicada pós-lançamento. A definir pelo dono do projeto.
