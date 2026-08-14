@@ -1,0 +1,75 @@
+---
+title: Introduction
+description: "Decentralized authentication that replaces logins with Google, Apple, or Microsoft — no password, no third-party identity provider."
+---
+
+TruthID is decentralized authentication that replaces "Login with Google/Apple/Microsoft." Users own their identity through a blockchain wallet and authenticate with trusted devices — no password, no email, no third-party identity provider sitting in the middle.
+
+## Why
+
+Centralized identity providers create account lockouts, data collection, and a single point of failure. TruthID gives users sovereignty over their own identity (a wallet they control) while giving integrators a simple SDK to verify logins against a public blockchain.
+
+## Prerequisites
+
+TruthID has two kinds of users — people logging into a site, and developers adding TruthID to one. Each side needs different things.
+
+**To log in with TruthID:**
+- An identity registered on-chain — created once with any EVM wallet (MetaMask, Rabby, Ledger, Trezor, WalletConnect) holding a small amount of ETH on [Base](https://base.org) to cover setup gas (typically well under a cent). That wallet becomes the owner of a smart account created during setup, and isn't needed again after that — the smart account pays its own gas from then on. See [Smart Account & Gas](/docs/smart-account) for the full setup flow and cost.
+- A trusted device paired to that identity — the desktop app or the mobile app. The device's own private key never leaves it; the wallet above is only needed once, to create the identity, not for day-to-day logins.
+
+**To integrate TruthID into your app:**
+- A backend that can receive an HTTPS `POST` request (the signed login response). Any language works — official SDKs exist for TypeScript, Python, and Ruby (see [Integrating TruthID](#integrating-truthid) below), and other languages can verify directly against the public contracts.
+- A way to render a QR code on your login page — the SDK builds the payload, your frontend just needs any QR rendering library.
+- Nothing else to provision: no database, no server, no third-party account.
+
+## Architecture
+
+TruthID is a set of independent pieces that all read and write the same four contracts on Base Mainnet — there's no central server tying them together.
+
+| Component | Stack | Path |
+|---|---|---|
+| Smart contracts | Solidity (Foundry) | [`contracts/`](https://github.com/masterlxz/truthid/tree/main/contracts) |
+| Desktop app | Tauri + Rust + React + TypeScript | [`desktop/`](https://github.com/masterlxz/truthid/tree/main/desktop) |
+| Mobile app | Flutter | [`mobile/`](https://github.com/masterlxz/truthid/tree/main/mobile) |
+| SDKs | TypeScript, Python, Ruby | [`sdk/`](https://github.com/masterlxz/truthid/tree/main/sdk) |
+| Integration tests | viem + tsx, against local Anvil | [`integration/`](https://github.com/masterlxz/truthid/tree/main/integration) |
+
+There is no relay, signaling server, or backend operated by TruthID — every off-chain message either travels inside a QR code or goes directly between the user's phone and the integrator's own backend.
+
+## How it works
+
+- **Identity** — a username bound to a controller wallet, created on-chain (`IdentityRegistry`).
+- **Trusted devices** — each device (desktop, phone) generates its own keypair locally; private keys never leave the device. Devices are registered on-chain (`DeviceRegistry`) via a commit-reveal scheme that prevents front-running.
+- **Login** — a website embeds a signed challenge directly in a QR code along with a callback URL. The user's phone scans it, signs locally, and `POST`s the response straight to that callback. The integrator's backend verifies the signature and device status on-chain using a TruthID SDK.
+- **Sessions** — only a `keccak256` hash of session data is stored on-chain (`SessionRegistry`); what the hash represents stays local to the user's device. Revoking a session (or all of them) is a single on-chain call.
+- **Recovery** — identities can configure M-of-N guardians (default 3-of-5) to recover a lost controller wallet, with a 7-day timelock before the recovery takes effect (`RecoveryManager`).
+
+No TruthID-operated server sits in this path — the challenge travels inside the QR code, and the signed response goes straight from the phone to your own backend over HTTPS.
+
+## Integrating TruthID
+
+Use one of the official SDKs — they wrap challenge creation, signature verification, and on-chain reads so your backend never talks to the blockchain directly:
+
+| SDK | Package |
+|---|---|
+| TypeScript | [`truthid-sdk`](https://www.npmjs.com/package/truthid-sdk) on npm |
+| Python | [`truthid-sdk`](https://pypi.org/project/truthid-sdk/) on PyPI |
+| Ruby | [`truthid-sdk`](https://rubygems.org/gems/truthid-sdk) on RubyGems |
+
+Full API reference for each SDK — every method, type, and security note — lives in the [SDK Reference](/docs/sdk/typescript). Framework examples (Express / Flask / Sinatra) are in [`sdk/README.md`](https://github.com/masterlxz/truthid/blob/main/sdk/README.md#full-examples).
+
+## Smart contracts (Base Mainnet, chain 8453)
+
+| Contract | Address |
+|---|---|
+| `IdentityRegistry` | [`0x97787D6EE3EfD76962dc7E3Bf143E659D9961962`](https://basescan.org/address/0x97787D6EE3EfD76962dc7E3Bf143E659D9961962) |
+| `DeviceRegistry` | [`0x937702CBABDab0EEBD1A29f0a7A658FeF4582543`](https://basescan.org/address/0x937702CBABDab0EEBD1A29f0a7A658FeF4582543) |
+| `RecoveryManager` | [`0x42Ca394c23aB027e877B9900B384f59E2Af23470`](https://basescan.org/address/0x42Ca394c23aB027e877B9900B384f59E2Af23470) |
+| `SessionRegistry` | [`0x8C65527eDA3ce7754Bf87B34aC4ec8ce74D647e2`](https://basescan.org/address/0x8C65527eDA3ce7754Bf87B34aC4ec8ce74D647e2) |
+| `TruthIDAccountFactory` | [`0xc2C86cB7d8694EcA8BaAdD95B14842E8643aB262`](https://basescan.org/address/0xc2C86cB7d8694EcA8BaAdD95B14842E8643aB262) |
+
+All contracts are immutable (no upgrade proxy) and verified on Basescan. Each identity's controller is itself a smart account (ERC-4337) deployed by the factory above — it pays its own gas after a one-time setup, so day-to-day logins never touch the owner wallet. Testnet addresses, ABIs, function reference, and real gas costs: [Smart Contracts](/docs/contracts). Setup flow and the smart account model: [Smart Account & Gas](/docs/smart-account).
+
+## Source code
+
+TruthID is open source under the MIT license: [github.com/masterlxz/truthid](https://github.com/masterlxz/truthid).

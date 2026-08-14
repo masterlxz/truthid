@@ -1,0 +1,154 @@
+---
+title: Smart Contracts
+description: "Addresses, ABIs, function reference, and real gas costs for TruthID's four Solidity contracts on Base."
+---
+
+TruthID is four Solidity contracts on [Base](https://base.org) — no backend, no database. Everything described below is on the public chain and independently checkable; this page exists for integrators who want to read on-chain data directly, write their own SDK, or just verify what's actually deployed.
+
+All four contracts are **immutable** (no upgrade proxy) and **verified** on Basescan.
+
+## Addresses
+
+### Base Mainnet (production, chain ID 8453)
+
+| Contract | Address |
+|---|---|
+| `IdentityRegistry` | [`0x97787D6EE3EfD76962dc7E3Bf143E659D9961962`](https://basescan.org/address/0x97787D6EE3EfD76962dc7E3Bf143E659D9961962) |
+| `DeviceRegistry` | [`0x937702CBABDab0EEBD1A29f0a7A658FeF4582543`](https://basescan.org/address/0x937702CBABDab0EEBD1A29f0a7A658FeF4582543) |
+| `RecoveryManager` | [`0x42Ca394c23aB027e877B9900B384f59E2Af23470`](https://basescan.org/address/0x42Ca394c23aB027e877B9900B384f59E2Af23470) |
+| `SessionRegistry` | [`0x8C65527eDA3ce7754Bf87B34aC4ec8ce74D647e2`](https://basescan.org/address/0x8C65527eDA3ce7754Bf87B34aC4ec8ce74D647e2) |
+| `TruthIDAccountFactory` | [`0xc2C86cB7d8694EcA8BaAdD95B14842E8643aB262`](https://basescan.org/address/0xc2C86cB7d8694EcA8BaAdD95B14842E8643aB262) |
+
+### Base Sepolia (testnet, chain ID 84532)
+
+| Contract | Address |
+|---|---|
+| `IdentityRegistry` | [`0xb56DbCB7580c097d3f64808064C2d5609dD6B243`](https://sepolia.basescan.org/address/0xb56DbCB7580c097d3f64808064C2d5609dD6B243) |
+| `DeviceRegistry` | [`0xe40e10627D307B0994f1856584bcc5DC323a4330`](https://sepolia.basescan.org/address/0xe40e10627D307B0994f1856584bcc5DC323a4330) |
+| `RecoveryManager` | [`0x97787D6EE3EfD76962dc7E3Bf143E659D9961962`](https://sepolia.basescan.org/address/0x97787D6EE3EfD76962dc7E3Bf143E659D9961962) |
+| `SessionRegistry` | [`0xc2C86cB7d8694EcA8BaAdD95B14842E8643aB262`](https://sepolia.basescan.org/address/0xc2C86cB7d8694EcA8BaAdD95B14842E8643aB262) |
+| `TruthIDAccountFactory` | [`0xc4Ca3A79BAb993C4B7cFD312C80c20b2182F8c1e`](https://sepolia.basescan.org/address/0xc4Ca3A79BAb993C4B7cFD312C80c20b2182F8c1e) |
+
+Use testnet while developing — see [Networks](/docs/sdk/typescript#networks) in the SDK reference for how to point a client at Sepolia. `TruthIDAccount` itself isn't listed here — every identity gets its own instance, deployed on demand by the factory; see [Smart Account & Gas](/docs/smart-account) for how that address is computed.
+
+## Getting the ABI
+
+You probably don't need this — the [SDKs](/docs/sdk/typescript) already wrap every contract call behind plain functions. Reach for the raw ABI only if you're reading state from a language without an official SDK, or auditing the deployment yourself.
+
+- **Basescan** — since every contract is verified, each address page above has a "Contract" tab with the full ABI and source, plus a one-click "Export ABI" button. This is the easiest source and always matches what's actually deployed.
+- **GitHub source** — the canonical `.sol` interfaces: [`IdentityRegistry.sol`](https://github.com/masterlxz/truthid/blob/main/contracts/src/IdentityRegistry.sol), [`DeviceRegistry.sol`](https://github.com/masterlxz/truthid/blob/main/contracts/src/DeviceRegistry.sol), [`RecoveryManager.sol`](https://github.com/masterlxz/truthid/blob/main/contracts/src/RecoveryManager.sol), [`SessionRegistry.sol`](https://github.com/masterlxz/truthid/blob/main/contracts/src/SessionRegistry.sol).
+
+There's no published npm/PyPI/RubyGems package containing the full ABI JSON — the SDKs only embed the minimal fragment each function needs internally. To generate the full artifact yourself: `git clone` the repo, then `cd contracts && forge build` (output lands in the gitignored `out/` directory).
+
+## Contract reference
+
+A quick map of what each contract does and who's allowed to call what. Full behavior (commit-reveal, guardian thresholds, session hashing) is covered in [Introduction](/docs/intro#how-it-works) and [Security Model](/docs/security) — this is just the function list.
+
+### IdentityRegistry
+
+Username ↔ controller wallet mapping. The root of every other contract — `DeviceRegistry`, `RecoveryManager`, and `SessionRegistry` all resolve a caller's identity by asking this contract who controls which username.
+
+| Function | Caller | Purpose |
+|---|---|---|
+| `createIdentity(username)` | anyone (becomes controller) | Mint a new identity |
+| `transferController(username, newController)` | current controller | Move control to another wallet |
+| `setRecoveryManager(rm)` | deploy owner, once | Wire up the `RecoveryManager` address |
+| `recoverController(username, newController)` | `RecoveryManager` only | Change controller via social recovery |
+| `getIdentity(username)` / `getUsernameByController(addr)` / `isUsernameTaken(username)` / `totalIdentities()` | anyone, free | Reads |
+
+### DeviceRegistry
+
+Device public keys per identity, registered via commit-reveal to prevent front-running.
+
+| Function | Caller | Purpose |
+|---|---|---|
+| `commitDevice(commitment)` | the future device owner | Step 1/2 — commit a hidden hash |
+| `registerDevice(devicePubKey, label, salt)` | same caller as the commit | Step 2/2 — reveal and register |
+| `revokeDevice(devicePubKey)` | the identity's controller | Deactivate a device |
+| `isDeviceActive(devicePubKey)` / `getDevice(devicePubKey)` / `getDevicesByIdentity(id)` / `deviceCount(id)` | anyone, free | Reads |
+
+### RecoveryManager
+
+M-of-N guardian recovery with a 7-day timelock (`TIMELOCK` constant) and a 20-guardian cap (`MAX_GUARDIANS` constant).
+
+| Function | Caller | Purpose |
+|---|---|---|
+| `configureGuardians(username, guardians[], threshold)` | the identity's controller | Set or replace the guardian set |
+| `proposeRecovery(username, newController)` | a configured guardian | Start a recovery |
+| `approveRecovery(username)` | a configured guardian | Vote on the active proposal |
+| `executeRecovery(username)` | anyone, after threshold + 7 days | Apply the new controller |
+| `cancelRecovery(username)` | the current controller | Abort during the timelock window |
+| `getGuardianConfig(username)` / `getProposal(username)` / `hasGuardianApproved(username, guardian)` | anyone, free | Reads |
+
+### SessionRegistry
+
+Stores only a `keccak256` hash per session — never the data it represents.
+
+| Function | Caller | Purpose |
+|---|---|---|
+| `createSession(hash, identityId, devicePubKey, r, s, v)` | anyone can submit, but requires the device's own ECDSA signature over `hash` | Record a session hash |
+| `revokeSession(hash)` | the session's identity controller | Revoke one session |
+| `revokeAllSessions()` | the identity's controller | Revoke every session up to now, in one O(1) call |
+| `isSessionRevoked(hash)` / `getSession(hash)` / `getSessionsByIdentity(id)` / `getRevokedBefore(id)` | anyone, free | Reads |
+
+### TruthIDAccount
+
+The ERC-4337 smart account that controls an identity — one instance per owner, deployed via `TruthIDAccountFactory`. Full explanation of the two signer tiers, setup flow, and cost is in [Smart Account & Gas](/docs/smart-account); this is just the function list.
+
+| Function | Caller | Purpose |
+|---|---|---|
+| `validateUserOp(userOp, userOpHash, missingFunds)` | `EntryPoint` only | Verify a UserOperation's signature and pay the prefund |
+| `execute(dest, value, data)` / `executeBatch(dest[], value[], data[])` | `EntryPoint`, the owner, or the account itself | Perform one or more calls — the only entry point available to device-tier signers |
+| `addDevice(device)` / `removeDevice(device)` | owner (directly or via a UserOp) | Authorize or deauthorize a device-tier signer |
+| `blockDestinationForDevices(dest)` / `unblockDestinationForDevices(dest)` | owner | Extend or shrink the set of contracts devices can't target via `execute` |
+| `emergencyWithdraw(recipient)` | `RecoveryManager` only | Move the account's ETH balance out during social recovery |
+| `owner()` / `authorizedDevices(addr)` / `blockedForDevices(addr)` | anyone, free | Reads |
+
+### TruthIDAccountFactory
+
+Deploys `TruthIDAccount` instances at deterministic `CREATE2` addresses, one per owner (or per owner + index, for multiple accounts).
+
+| Function | Caller | Purpose |
+|---|---|---|
+| `createAccount(owner, index)` | anyone | Deploy the account if it doesn't exist yet; idempotent — returns the existing address otherwise |
+| `getAddress(owner, index)` | anyone, free | Predict the `CREATE2` address before deployment |
+
+## Cost per operation
+
+Real gas numbers from the project's own test suite (`forge test --gas-report`), not estimates — the four original contracts have 140 tests passing; `TruthIDAccount`/`TruthIDAccountFactory` (rows below `revokeAllSessions`) have their own 62. Read functions (`view`) are free when called the normal way — directly via an RPC `eth_call`, exactly how every SDK reads them. The "free" label below stops applying only if another contract calls them mid-transaction, which no part of TruthID does today.
+
+| Operation | Min gas | Median gas | Max gas |
+|---|---|---|---|
+| `createIdentity` | 22,153 | 141,483 | 142,832 |
+| `commitDevice` | 44,211 | 44,211 | 44,211 |
+| `registerDevice` | 23,757 | 195,037 | 218,286 |
+| `revokeDevice` | 24,411 | 40,767 | 40,767 |
+| `configureGuardians` | 37,894 | 340,329 | 1,028,006 |
+| `proposeRecovery` | 22,532 | 162,839 | 162,839 |
+| `approveRecovery` | 39,187 | 71,787 | 88,887 |
+| `executeRecovery` | 39,349 | 126,801 | 126,801 |
+| `cancelRecovery` | 36,929 | 43,951 | 43,951 |
+| `createSession` | 27,061 | 183,605 | 183,605 |
+| `revokeSession` | 24,501 | 43,157 | 45,501 |
+| `revokeAllSessions` | 27,961 | 54,446 | 54,446 |
+| `TruthIDAccountFactory.createAccount` (already deployed) | 24,996 | — | — |
+| `TruthIDAccountFactory.createAccount` (first deploy) | — | — | 1,774,511 |
+| `TruthIDAccount.execute` | 23,135 | 71,519 | 71,544 |
+| `TruthIDAccount.addDevice` | 21,924 | 45,812 | 45,812 |
+| `TruthIDAccount.removeDevice` | 22,148 | 23,854 | 24,573 |
+
+<Callout title="Why configureGuardians has such a wide range" type="info">
+Gas scales with the size of the `guardians` array. The low end is a couple of guardians; the high end in this table comes from a test that exercises the full `MAX_GUARDIANS` cap of 20. A typical 3-of-5 setup lands well below the median shown here.
+</Callout>
+
+**What that costs in ETH**: at the ~0.011 gwei gas price observed during the [mainnet deploy](https://basescan.org/address/0x97787D6EE3EfD76962dc7E3Bf143E659D9961962), the heaviest of the four original contracts' operations (`registerDevice`, ~195k gas) comes out to roughly 0.0000021 ETH — a small fraction of a cent. `TruthIDAccountFactory.createAccount`'s first-deploy row is heavier still (it deploys a whole contract via `CREATE2`, not just a state update) — see [Smart Account & Gas → Cost](/docs/smart-account#cost) for that conversion. Gas price moves with network demand; check [Base's live gas tracker](https://basescan.org/gastracker) for the current rate before assuming these numbers hold exactly.
+
+## Audit status
+
+See [Security Model → Audit status](/docs/security#audit-status) for the manual review findings and what's not yet covered by a third-party audit.
+
+## Next steps
+
+- [Smart Account & Gas](/docs/smart-account) — how the ERC-4337 account works, setup flow, and funding
+- [Security Model](/docs/security) — threat model and what TruthID does and doesn't protect against
+- [SDK Reference](/docs/sdk/typescript) — the typed, documented way to call these contracts from TypeScript, Python, or Ruby
