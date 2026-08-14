@@ -1367,4 +1367,21 @@ void main() {
       expect(await repo.pendingChanges(), 0);
     });
   });
+
+  group('hasLocalVault', () {
+    test('false quando o vault.enc ainda não existe (device recém-pareado, sem cache)',
+        () async {
+      expect(await repo.hasLocalVault(), isFalse);
+    });
+
+    test('true depois de qualquer escrita local', () async {
+      await repo.addEntry(site: 'github.com', username: 'fab', password: 'x');
+      expect(await repo.hasLocalVault(), isTrue);
+    });
+
+    test('true depois de overwriteCache (blob sincronizado doutro device)', () async {
+      await repo.overwriteCache(Uint8List.fromList(utf8.encode('fake-encrypted-blob')));
+      expect(await repo.hasLocalVault(), isTrue);
+    });
+  });
 }

@@ -102,6 +102,7 @@ class _VaultScreenState extends State<VaultScreen> {
   bool _canWrite = false;
   String? _identityId;
   int _pendingChanges = 0;
+  bool _legacyIpfsCid = false;
   EthereumAddress? _smartAccountAddress;
   bool _publishing = false;
   String? _publishError;
@@ -191,6 +192,7 @@ class _VaultScreenState extends State<VaultScreen> {
         _canWrite = canWrite;
         _identityId = identityId;
         _pendingChanges = pending;
+        _legacyIpfsCid = outcome.legacyIpfsCid;
       });
       _iosAutofillIdentityService.syncIdentities(_entries);
       _syncIosAutofillVault();
@@ -267,7 +269,14 @@ class _VaultScreenState extends State<VaultScreen> {
       await _publishService!.publish(smartAccountAddress);
       final pending = await _repository.pendingChanges();
       if (mounted) {
-        setState(() { _publishing = false; _pendingChanges = pending; _justPublished = true; });
+        setState(() {
+          _publishing = false;
+          _pendingChanges = pending;
+          _justPublished = true;
+          // publish() sempre sobe pro Arweave (sem fallback pro IPFS, ver
+          // ArweaveVaultPublisher) — republicar sempre resolve um cid legado.
+          _legacyIpfsCid = false;
+        });
         Future.delayed(const Duration(seconds: 3), () {
           if (mounted) setState(() => _justPublished = false);
         });
@@ -440,6 +449,10 @@ class _VaultScreenState extends State<VaultScreen> {
             const SizedBox(height: 12),
             _buildPublishBanner(),
           ],
+          if (_canWrite && _legacyIpfsCid) ...[
+            const SizedBox(height: 12),
+            _buildLegacyStorageBanner(),
+          ],
           const SizedBox(height: 12),
           if (_status == VaultSyncStatus.offlineUsingCache) ...[
             Card(
@@ -520,6 +533,41 @@ class _VaultScreenState extends State<VaultScreen> {
               ),
           ],
         ],
+      ),
+    );
+  }
+
+  // Nudge de migração: um vault ainda apontando pro esquema IPFS antigo (sem
+  // prefixo "ar://") não tem mais pinning dedicado desde a remoção dos
+  // Providers no Desktop (Sessão 193) — um device novo sem cache local falha
+  // ao carregar esse cid (achado real, Sessão 194). Só um device que já
+  // sincronizou (como este, pra ter chegado a `synced`) consegue republicar
+  // — republish sempre lê o cache local, nunca a rede. Reaproveita _publish()
+  // (o mesmo publish() sempre sobe pro Arweave, sem opção de ficar no IPFS).
+  Widget _buildLegacyStorageBanner() {
+    return Card(
+      color: AppColors.infoBg,
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'This vault is still on legacy IPFS storage, which no longer has '
+              'dedicated pinning — a new device without a local cache may fail '
+              'to load it. Republish to migrate to Arweave.',
+              style: TextStyle(color: AppColors.info, fontSize: 12),
+            ),
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerRight,
+              child: ElevatedButton(
+                onPressed: _publishing ? null : _publish,
+                child: Text(_publishing ? 'Publishing...' : 'Migrate to Arweave'),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

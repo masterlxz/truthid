@@ -1824,6 +1824,59 @@ mesma sessão.**
 - Fecha P48 por completo. Nenhuma decisão de arquitetura nova ficou pendente — próximo trabalho
   de doc, se houver, é lapidação/expansão incremental, não um pilar em falta.
 
+**Sessão 201 (2026-08-14): fallback automático pro risco de onboarding registrado na Sessão 194
+(vault ainda no esquema IPFS antigo falha ao carregar num device sem cache) — nudge proativo de
+republish + guarda contra publicar vault vazio, nos dois lados.**
+
+- **Investigação prévia confirmou a tensão real do problema**: republish (`vault_publish` no
+  Desktop, `VaultPublishService.publish()` no Mobile) sempre lê o conteúdo do **cache local do
+  próprio device** — nunca da rede. Um device sem cache (justamente o cenário quebrado da Sessão
+  194) não tem como se autocurar sozinho republicando; a correção precisa acontecer num device que
+  **já tem** o vault sincronizado, antes que outro device tente parear e falhe. Achado por um
+  agente de pesquisa (fase de investigação, sem código): o guard contra publicar vault vazio já
+  existia no Desktop (`vault_publish`, `lib.rs`: `if !path.exists() { return Err(...) }`), mas
+  **não existia no Mobile** — `VaultPublishService.publish()` chamava `readRawBlob()` sem checagem,
+  que teria estourado exceção de arquivo inexistente em vez de um erro claro (não chegava a
+  publicar vazio de fato, mas sem mensagem acionável).
+- **Nudge proativo (Desktop, `VaultManagement.tsx`)**: novo card condicional — `hasVault &&
+  vaultRef.cid` sem prefixo `"ar://"` — reaproveita o `handleEnviar`/botão já existente do
+  `useVaultPublish`, só com rótulo "Migrar para Arweave". Autodefensivo mesmo se aparecer num
+  device sem cache local: o guard existente em `vault_publish` já devolve erro claro em vez de
+  publicar vazio.
+- **Nudge proativo (Mobile)**: `VaultSyncOutcome` ganhou `legacyIpfsCid` (bool, default `false`),
+  setado em `VaultSyncService.sync()` nos dois pontos que retornam `status: synced` — `!ref.cid.
+  startsWith('ar://')` — o `ref` on-chain já estava em escopo nesses dois pontos, sem precisar de
+  leitura on-chain nova. `vault_screen.dart` guarda em `_legacyIpfsCid`, mostra
+  `_buildLegacyStorageBanner()` (mesmo padrão visual do banner `offlineUsingCache` já existente,
+  `AppColors.infoBg`/`info`) quando `_canWrite && _legacyIpfsCid`, reaproveitando o `_publish()` já
+  existente — zeta `_legacyIpfsCid` otimisticamente ao publicar com sucesso (republish sempre sobe
+  pro Arweave, sem fallback pro IPFS, então sempre resolve um cid legado).
+- **Guarda contra publicar vault vazio (Mobile, gap real fechado)**: `VaultRepository.
+  hasLocalVault()` novo (mirror do `path.exists()` do Rust) + guard no topo de
+  `VaultPublishService.publish()`, lançando `Exception` clara antes de tocar em qualquer coisa
+  (publisher Arweave, on-chain) quando não há `vault.enc` local — mesmo texto de erro do Desktop.
+  Teste existente que não chamava `addEntry()` antes de publicar (`'lança quando a wallet Arweave
+  não está configurada'`) precisou ganhar um `addEntry()` pra continuar exercitando o que o nome
+  promete, já que o guard novo passou a interceptar antes; teste novo dedicado cobre o guard em si
+  (`verifyNever` no publisher/session creator).
+- **Testes**: `mobile/test/services/vault_repository_test.dart` — group novo `hasLocalVault` (3
+  casos: sem arquivo, depois de `addEntry`, depois de `overwriteCache`).
+  `vault_publish_service_test.dart` — 1 teste novo do guard + 1 teste existente ajustado. Suíte
+  completa do Mobile: 86/86 em `vault_repository_test.dart` (1 falha isolada e não-determinística
+  em `publicar não cria pendência fantasma...`, confirmada como flakiness pré-existente e não
+  relacionada — mesmo teste passa/falha em runs repetidos tanto no código novo quanto no `main`
+  antes desta sessão), 25/25 em `vault_edit_approval_screen_test.dart`, 10/10 em
+  `vault_screen_test.dart`. `flutter analyze` limpo (mesmos 6 avisos pré-existentes). Desktop: `tsc
+  --noEmit` limpo, `npx vitest run` 101/101 (sem mudança em Rust — o guard do Desktop já existia,
+  só a UI do nudge é nova).
+- **Fora de escopo, decidido explicitamente com o dono do projeto**: nudge não verifica liveness
+  de gateway nenhum (não tenta "provar" que o CID está morto) — só olha o prefixo do cid on-chain,
+  suficiente pra identificar qualquer vault que nunca foi republicado desde a migração (Sessão
+  193), sem precisar de round-trip de rede extra. Não cobre o caso `offlineUsingCache` no Mobile
+  (device com cache mas que falhou o fetch on-chain agora) — `ref` não está em escopo no catch de
+  `_fallbackToCache()`; deixado de fora por não ser o cenário relatado (esse device já tem cache
+  bom o bastante pra funcionar offline).
+
 ---
 
 ### Interface e identidade visual (UI/UX)

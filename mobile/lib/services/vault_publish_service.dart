@@ -36,6 +36,16 @@ class VaultPublishService {
         _arweavePublisher = arweavePublisher ?? ArweaveVaultPublisher();
 
   Future<VaultPublishResult> publish(EthereumAddress smartAccountAddress) async {
+    // Mirror do guard do Desktop (vault_publish, lib.rs) — sem isso, um
+    // device sem cache local (ex: pareamento novo que falhou ao sincronizar)
+    // publicaria um vault vazio por cima do vault de verdade on-chain.
+    if (!await _repository.hasLocalVault()) {
+      throw Exception(
+        'vault ainda não existe localmente — adicione ao menos uma entrada '
+        'antes de publicar',
+      );
+    }
+
     // Fase 15.7: antes de publicar o blob principal, publica separadamente o
     // conteúdo (cache local cifrado) de cada documento que ainda não tem
     // cid ou cujo conteúdo local mudou desde a última publicação — o blob

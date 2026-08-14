@@ -22,6 +22,12 @@ class VaultSyncOutcome {
   final List<String> profileNames;
   final DateTime? updatedAt; // on-chain updatedAt, só quando status == synced
   final String? error; // motivo, pros banners de offline/falha
+  /// true quando status == synced e o cid on-chain ainda é do esquema IPFS
+  /// antigo (sem prefixo "ar://") — sem pinning dedicado desde a Sessão 193,
+  /// um device novo sem cache falha ao carregar esse cid (achado real,
+  /// Sessão 194). Sinaliza pra UI oferecer republish proativo, já que só um
+  /// device com cache (como este, que chegou até `synced`) consegue migrar.
+  final bool legacyIpfsCid;
 
   const VaultSyncOutcome({
     required this.status,
@@ -29,6 +35,7 @@ class VaultSyncOutcome {
     this.profileNames = const [],
     this.updatedAt,
     this.error,
+    this.legacyIpfsCid = false,
   });
 }
 
@@ -128,6 +135,7 @@ class VaultSyncService {
           entries: entries,
           profileNames: profileNames,
           updatedAt: ref.updatedAt,
+          legacyIpfsCid: !ref.cid.startsWith('ar://'),
         );
       }
 
@@ -154,6 +162,7 @@ class VaultSyncService {
         entries: entries,
         profileNames: profileNames,
         updatedAt: ref.updatedAt,
+        legacyIpfsCid: !ref.cid.startsWith('ar://'),
       );
     } catch (e) {
       return _fallbackToCache('$e');

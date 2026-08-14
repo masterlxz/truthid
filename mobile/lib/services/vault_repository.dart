@@ -810,6 +810,17 @@ class VaultRepository {
     return File(path).readAsBytes();
   }
 
+  // Mirror do guard já existente no Desktop (vault_publish, lib.rs: `if
+  // !path.exists() { return Err(...) }`) — sem isso, um device sem cache
+  // local (ex: um pareamento novo que falhou ao sincronizar, ver
+  // VaultSyncStatus.syncFailedNoCache) que tentasse publicar sobrescreveria
+  // o vault on-chain com um blob vazio, apagando o vault de verdade doutro
+  // device pra sempre.
+  Future<bool> hasLocalVault() async {
+    final path = await _vaultPath();
+    return File(path).exists();
+  }
+
   // Rastreio de publicação — mirror de mark_published/pending_changes do
   // Desktop (desktop/src-tauri/src/vault.rs), guardado localmente via
   // flutter_secure_storage em vez de um arquivo separado.

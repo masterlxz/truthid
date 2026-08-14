@@ -89,6 +89,10 @@ void main() {
   });
 
   test('lança quando a wallet Arweave não está configurada', () async {
+    // Precisa de vault local (mesmo guard de hasLocalVault() testado abaixo)
+    // pra chegar de fato até a chamada do publisher, que é o que este teste
+    // quer exercitar.
+    await repo.addEntry(site: 'github.com', username: 'fab', password: 'x');
     when(() => mockArweavePublisher.publishVaultBlob(any()))
         .thenThrow(Exception('nenhuma wallet Arweave configurada — gere ou importe uma antes de publicar'));
 
@@ -96,6 +100,23 @@ void main() {
       publishService.publish(smartAccountAddress),
       throwsA(isA<Exception>()),
     );
+  });
+
+  test(
+      'lança sem chamar o publisher quando não há vault local (device sem '
+      'cache, ex: pareamento novo que falhou ao sincronizar) — mirror do '
+      'guard já existente no Desktop (vault_publish, lib.rs)', () async {
+    await expectLater(
+      publishService.publish(smartAccountAddress),
+      throwsA(isA<Exception>()),
+    );
+
+    verifyNever(() => mockArweavePublisher.publishVaultBlob(any()));
+    verifyNever(() => mockSessionCreator.updateVault(
+          smartAccountAddress: any(named: 'smartAccountAddress'),
+          cid: any(named: 'cid'),
+          contentHashHex: any(named: 'contentHashHex'),
+        ));
   });
 
   test('publica no Arweave, publica on-chain e marca a versão como publicada', () async {

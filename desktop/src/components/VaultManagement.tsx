@@ -1271,6 +1271,26 @@ export function VaultManagement() {
         )}
       </div>
 
+      {/* Nudge de migração: um vault ainda apontando pro esquema IPFS antigo
+          (sem prefixo "ar://") não tem mais pinning dedicado desde a
+          remoção dos Providers (Sessão 193) — um device novo sem cache local
+          falha ao carregar esse CID (achado real, Sessão 194). Como
+          republish só pode ser feito por um device que já tem o vault em
+          cache (vault_publish lê só o arquivo local), a correção precisa
+          acontecer aqui, num device saudável, antes que outro tente parear. */}
+      {hasVault && typeof (vaultRef as any)?.cid === "string" && !(vaultRef as any).cid.startsWith("ar://") && (
+        <div className="card" style={{ marginBottom: "1rem" }}>
+          <p style={{ margin: 0 }}>
+            Este vault ainda está publicado no armazenamento antigo (IPFS), que não tem
+            mais pinning dedicado — um device novo sem cache local pode falhar ao
+            parear. Republique para migrar para o Arweave.
+          </p>
+          <button onClick={handleEnviar} disabled={buttonDisabled} style={{ marginTop: "0.5rem" }}>
+            {buttonLabel === "Enviar" ? "Migrar para Arweave" : buttonLabel}
+          </button>
+        </div>
+      )}
+
       {/* Pesquisa */}
       {entries.length > 0 && (
         <input
