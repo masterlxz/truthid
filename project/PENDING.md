@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-08-13 (redeploy em cascata do débito #52 — migração real da identidade Mainnet, P1/P2/P26 fechados)
+> Última atualização: 2026-08-13 (v1 do `site/` — Rails+Next.js+Postgres, login Google validado em hardware real, P47 novo registrado)
 
 ---
 
@@ -37,6 +37,7 @@ Nenhuma pendência aberta nesta categoria no momento.
 |---|---|---|---|
 | P9 | **Phase 15 — Autofill SO (Android/iOS)** — implementar `AutofillService` e `ASCredentialProviderViewController`. **Android (15.5) concluído na Sessão 174** — `TruthIdAutofillService.kt` detecta campos e delega a leitura/aprovação pra Activity Flutter existente (mesmo Vault/AppLockGate/picker da Fase 15.4), sem duplicar acesso ao vault em Kotlin. **iOS (15.6) concluído por completo na Sessão 176** — target `AutofillExtension` (fatia 1, S175) + decifra real dentro da extensão via Keychain Access Group/App Group compartilhados (fatia 2, S176, `CredentialProviderViewController.swift`/`SharedVaultAccess.swift`), só credencial (endereço/cartão não têm extension point público no iOS, achado real da fatia 1). Falta só validar em Mac real (P35). | `PHASE.md` (Fase 15, etapas 15.5/15.6) | 🟠 Média |
 | P11 | **`/truthid/v1/pin`** — endpoint para apps terceiros usarem os providers de pin do TruthID. Modelo de consentimento em aberto. | `ROADMAP.md` (Sessão 106, item 2) | 🟡 Baixa |
+| P47 | **`site/` — próximas fatias, fora do escopo do v1** — billing (Stripe/Mercado Pago) + Entitlement Service, bootstrap de identidade TruthID sem Ledger (item 2.1 do épico de tier facilitado), GitHub e o próprio TruthID como provider adicional de login (modelo `Identity` já suporta), migração gradual de `docs/` (Docusaurus) pro site. Nenhuma dessas fatias tem `/plan` rodado ainda. | `SESSIONS.md`/`ROADMAP.md` (Sessão 199) | 🟡 Baixa |
 | P28 | **SDK Dart: transporte deep link no `TruthIDRequester`** — só cross-device (QR) implementado. Deep link (mesmo aparelho) exigiria o app host registrar seu próprio esquema de URI, específico de plataforma — decidido deixar de fora de um pacote Dart puro por ora. Reavaliado na Sessão 165: hoje nem o Mobile aceita deep link pra `pin`/`vault-edit` (só `sign-message`/`sign-request`), e um pacote Dart puro não consegue automatizar o registro de URI scheme do app hospedeiro nem depende de `url_launcher` — decisão confirmada, segue de fora. | `SESSIONS.md` (Sessão 161, reavaliado 165) | 🟡 Baixa |
 
 ### Pendências de Arquitetura / Decisões em Aberto

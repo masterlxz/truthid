@@ -1567,6 +1567,118 @@ identidade Mainnet, primeira vez que uma cascata acontece com valor de verdade e
   de versão (correção de doc/exemplo, não mudança de API). `dart analyze` limpo, `dart test` 69/69,
   build do Docusaurus validado. Commit `d775318`.
 
+**Sessão 199 (2026-08-13): desenho refinado do Épico 2 (tier facilitado) — documento novo
+`truthid-onboarding-sponsorship.md` (raiz do repo, sessão de arquitetura externa), registrado aqui
+e removido da raiz. Ainda nada implementado.**
+
+- **Continuação direta do Épico 2 registrado na Sessão 184** (ver acima) — não substitui aquele
+  desenho, aprofunda as peças que ainda estavam vagas: como o customer que paga vira uma
+  identidade TruthID de fato, e como o storage relay funciona especificamente contra **Arweave**
+  (o desenho de 184 ainda citava Storacha; a migração real, decidida e executada depois, foi pra
+  Arweave — Sessões 184-198. Este documento novo já nasceu escrito em cima de Arweave, sem
+  precisar de correção).
+- **Duas identidades separadas, só se conectam depois do bootstrap**: `Customer` (registro no
+  backend de billing — email, customer id do Stripe/Mercado Pago, status de assinatura; criado via
+  login social/magic link no site, sem nada de TruthID ainda) vs. **identidade TruthID** (a smart
+  account ERC-4337 on-chain, só passa a existir no bootstrap).
+- **Fluxo de onboarding**: (1) login social/magic link cria só o `Customer`; (2) paga assinatura
+  recorrente, webhook de pagamento confirmado dispara o bootstrap; (3) **bootstrap**: device gera o
+  keypair localmente (nunca sai do device), calcula o endereço counterfactual da smart account, e
+  manda o primeiro UserOp (deploy + registro no `IdentityRegistry`) — sponsorizado, porque a conta
+  ainda não tem ETH. **Elo pendente, não desenhado em detalhe**: como associar
+  `smart_account_address` ↔ `customer_id` do Stripe — existe uma janela entre "pagou" e "identidade
+  criada" onde o customer existe mas ainda não tem endereço pra vincular; precisa de um
+  token/nonce de sessão emitido no passo 2 e consumido no passo 3.
+- **Gas sponsorship via Verifying Paymaster (ERC-4337 padrão)**: signer off-chain do dono do
+  projeto assina a autorização de sponsorship por UserOp; o contrato Paymaster só verifica a
+  assinatura, não olha se a smart account tem fundos. Signer checa `isEntitled()` (ver abaixo)
+  antes de assinar. **Opção descartada de novo, mesma linha da Sessão 184**: custódia temporária de
+  chave pelo backend durante o bootstrap — quebraria self-sovereign desde o dia zero; o device já
+  assina o próprio UserOp de deploy, backend só autoriza o gas. **Inativo não é "troca de dono"**:
+  não existe transferência de controle — o signer só para de assinar sponsorship pro endereço; a
+  conta continua on-chain, usuário continua dono da chave, só perde o gas grátis (fallback:
+  self-funded, já grátis pra sempre desde a Fase 14).
+- **Storage relay (Arweave), 2 chaves separadas**: chave TruthID (smart account, ERC-4337) cuida de
+  identidade/auth/vault registry; **JWK Arweave local**, gerado no device, separado da smart
+  account, serve só pra assinar/pagar upload. **Free tier**: usuário financia o próprio JWK
+  (compra AR ou carrega crédito no bundler Irys/Turbo vinculado a ele), device assina e sobe direto,
+  sem passar pelo backend. **Paid tier**: JWK do usuário fica ocioso; device manda o blob cifrado
+  pro backend (`POST /vault/upload`), backend checa `isEntitled()` e sobe pro bundler usando a
+  **conta do bundler do dono do projeto** (créditos pré-pagos), devolve o tx id pro device, que
+  segue o commit normal no `VaultRegistry` (UserOp sponsorizado). **Por que relay e não financiar a
+  chave do usuário diretamente**: transferência de AR/crédito pro JWK do usuário é on-chain e
+  irreversível — se a pessoa exportar a chave, o saldo é dela pra sempre mesmo cancelando; não dá
+  pra revogar valor já transferido. Relay evita isso porque o custo nunca sai da conta do usuário,
+  cortar acesso ao expirar é trivial (mesmo padrão do paymaster). **Sem dimensionamento ainda**: como
+  não há metering incremental por usuário (decisão: manter simples), precisa de um soft cap por
+  usuário (MB/mês ou tamanho total do vault) pra evitar abuso do pool de créditos — não
+  dimensionado.
+- **Entitlement Service único, compartilhado entre gas e storage** — decisão explícita de não
+  duplicar a lógica de "assinatura ativa" em dois lugares. Fonte de verdade: webhook Stripe/Mercado
+  Pago atualizando uma tabela `subscriptions` (`customer_id`, `smart_account_address`, `status`,
+  `expires_at`). Interface tipo `isEntitled(smartAccountAddress) → bool`, cache curto (Redis, TTL de
+  minutos — paymaster signer e storage relay batem nele com frequência, latência importa nos dois).
+  Consumidores: paymaster signer (antes de assinar sponsorship) e storage relay (antes de aceitar o
+  blob). Benefício: um lugar único pra debugar perda de acesso e evoluir regras (grace period,
+  planos com limites diferentes) depois.
+- **4 pendências abertas, registradas no documento, nenhuma resolvida ainda**: (1) desenhar o
+  token/nonce que fecha o elo `customer_id` ↔ `smart_account_address` na janela entre pagamento e
+  bootstrap; (2) confirmar suporte a EIP-1271 nos bundlers candidatos (Irys/Turbo) — não é
+  bloqueador porque o JWK Arweave é uma chave local separada da smart account, mas vale confirmar
+  pra um fluxo futuro onde a smart account pagasse storage diretamente; (3) dimensionar o soft cap
+  de storage por usuário no tier pago; (4) especificar o schema da tabela `subscriptions` e o cache
+  do Entitlement Service.
+- Documento fonte (`truthid-onboarding-sponsorship.md`, raiz do repo) removido depois de
+  confirmado que todo o conteúdo está espelhado aqui — mesmo padrão já usado com
+  `truthid-storacha-tier-facilitado.md` na Sessão 184.
+- **Nada implementado ainda** — as 2.1-2.7 da Sessão 184 continuam de pé como estavam (2.5 rotação
+  de device e 2.6 recovery seguem 100% composição do que já existe; 2.7 guardian-on-cancel segue
+  sem desenho de contrato). Este documento adiciona detalhe de implementação a 2.1 (bootstrap),
+  2.2 (paymaster) e ao lado de storage do tier pago, mas ainda é plano — a debater com o dono do
+  projeto antes de qualquer `/plan` ou código.
+
+**Sessão 199, continuação — novo `site/` no monorepo (v1: esqueleto + OAuth), fechado e validado
+em hardware real na mesma sessão.**
+
+- Decisão de arquitetura: `site/backend` (Ruby on Rails 8, API-only) + `site/frontend` (Next.js
+  16, TypeScript, Tailwind) + Postgres, tudo via `site/docker-compose.yml` (decisão explícita do
+  dono do projeto — tudo em Docker desde o início, mesma motivação de sempre: evitar fadiga de
+  setup de novo, como já aconteceu ao trocar de PC). Rails é a fonte da verdade do login (OmniAuth
+  google_oauth2) — Next.js só redireciona pro backend e consome a sessão via cookie
+  (`credentials: "include"` + CORS com origin explícito, obrigatório porque `credentials: true`
+  não aceita wildcard).
+- Modelagem: `Customer` (email/nome/avatar — vira o `customer_id` de billing quando essa fase
+  chegar) e `Identity` (`provider`+`uid`, `belongs_to :customer`, índice único), desenhada desde o
+  início pra múltiplos providers por pessoa (Google agora; GitHub e o próprio TruthID como
+  provider ficam de fora do v1, mas a modelagem já suporta sem migração nova). Sem Devise — um
+  único fluxo de callback (`SessionsController`) e a futura strategy custom do TruthID
+  (challenge-response, não OAuth2 padrão) encaixa mais fácil em OmniAuth puro.
+- Simplificação deliberada, documentada em `site/README.md` pra revisitar antes de billing real:
+  o link "Entrar com Google" é uma navegação GET simples (não passa por
+  `omniauth-rails_csrf_protection`, que exigiria form POST coordenado entre origens diferentes) —
+  mitigado com `OmniAuth.config.allowed_request_methods = [:get, :post]`, aceitando o risco baixo
+  de login CSRF enquanto `Customer` não carrega billing nem dado sensível.
+- Achado real no caminho: `config/database.yml` do Rails 8 gerado não dá pra usar com
+  `DATABASE_URL` fixo no `docker-compose.yml` — a URL bakeia um nome de banco só, então um
+  `RAILS_ENV=test` bateria no mesmo banco físico do dev. Corrigido usando
+  `DATABASE_HOST`/`DATABASE_USERNAME`/`DATABASE_PASSWORD`/`DATABASE_NAME`/`DATABASE_NAME_TEST`
+  separados, cada ambiente (`development`/`test`) resolvendo seu próprio nome de banco a partir do
+  `database.yml`.
+- Testado com `OmniAuth.config.test_mode`/`mock_auth` (sem precisar de credencial Google real):
+  callback cria `Customer`+`Identity`, login duas vezes com a mesma conta reusa o `Customer`,
+  `/api/me` retorna 401 sem sessão. 4/4 passando (`bin/rails test` dentro do container).
+- **Validado em hardware real, mesma sessão**: dono do projeto criou o OAuth Client ID de verdade
+  no Google Cloud Console, preencheu `site/.env`, e logou de ponta a ponta no navegador —
+  `/auth/google_oauth2` redirecionou pro Google de verdade (confirmado também via `curl -L`, sem
+  `invalid_client`/`redirect_uri_mismatch`), voltou autenticado pro `/dashboard`, `Customer` real
+  criado no Postgres (`fabio.anjos.junior@gmail.com`). Achado real e corrigido na hora: a foto de
+  perfil do Google veio esticada — `<img>` do avatar não tinha `object-fit`, corrigido com
+  `object-cover` no `app/dashboard/page.tsx`.
+- Fora de escopo deste v1, explícito no `site/README.md`: billing (Stripe/Mercado Pago),
+  Entitlement Service, bootstrap de identidade TruthID, GitHub/TruthID como provider adicional,
+  migração de `docs/` (Docusaurus) pro site — essa última decidida como "aos poucos", não
+  bloqueia nada.
+
 ---
 
 ### Interface e identidade visual (UI/UX)

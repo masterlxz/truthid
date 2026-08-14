@@ -1,0 +1,68 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-truthid}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-truthid}
+      - POSTGRES_DB=${POSTGRES_DB:-truthid_site_development}
+    volumes:
+      - site_pgdata:/var/lib/postgresql/data # dado sobrevive a `docker compose down`
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-truthid}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    volumes:
+      - ./backend:/app # código fonte
+      - backend_bundle:/usr/local/bundle # cache de gems (senão reinstala tudo a cada rebuild)
+    working_dir: /app
+    environment:
+      # Not DATABASE_URL: it bakes in one fixed db name, which would make a test
+      # run (RAILS_ENV=test) hit the same physical database as dev. database.yml
+      # picks the db name per environment from these instead.
+      - DATABASE_HOST=db
+      - DATABASE_USERNAME=${POSTGRES_USER:-truthid}
+      - DATABASE_PASSWORD=${POSTGRES_PASSWORD:-truthid}
+      - DATABASE_NAME=${POSTGRES_DB:-truthid_site_development}
+      - DATABASE_NAME_TEST=${POSTGRES_DB_TEST:-truthid_site_test}
+      - RAILS_ENV=${RAILS_ENV:-development}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+      - FRONTEND_ORIGIN=${FRONTEND_ORIGIN:-http://localhost:3000}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+    ports:
+      - "3001:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    stdin_open: true
+    tty: true
+    command: sh -c "bundle install && bin/rails db:prepare && bin/rails server -b 0.0.0.0 -p 3000"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    volumes:
+      - ./frontend:/app # código fonte
+      - frontend_node_modules:/app/node_modules # cache de deps (senão reinstala tudo a cada rebuild)
+    working_dir: /app
+    environment:
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:3001}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    stdin_open: true
+    tty: true
+    command: sh -c "npm install && npm run dev -- -H 0.0.0.0"
+
+volumes:
+  site_pgdata:
+  backend_bundle:
+  frontend_node_modules:

@@ -41,6 +41,7 @@ Centralized identity providers create account lockouts, data collection, and a s
 | Mobile app | Flutter | [`mobile/`](mobile/) |
 | SDKs | TypeScript, Python, Ruby | [`sdk/`](sdk/) |
 | E2E integration tests | viem + tsx, against local Anvil | [`integration/`](integration/) |
+| Site (account + future billing) | Ruby on Rails + Next.js + Postgres | [`site/`](site/) |
 
 There is no relay, signaling server, or backend operated by TruthID — every off-chain message either travels inside a QR code or goes directly between the user's phone and the integrator's own backend.
 
@@ -94,6 +95,12 @@ flutter run
 cd integration
 npm install
 npx tsx e2e.ts
+```
+
+**Site** (Rails + Next.js + Postgres, runs entirely in Docker — see [`site/README.md`](site/README.md)):
+```
+cd site
+docker compose up --build
 ```
 
 ## Security
