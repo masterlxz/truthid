@@ -1719,6 +1719,61 @@ doc primeiro, monetização continua em desenvolvimento mas sem lançamento ao v
   retomar o avanço da monetização, sabendo que o lançamento de fato demora. Nenhuma rota de
   billing deve ser exposta publicamente nem anunciada sem pedido explícito do dono do projeto.
 
+**Sessão 200, continuação — identidade visual na doc Fumadocs + deploy estático no GitHub Pages,
+mesma sessão.**
+
+- **Decisão sobre escopo do deploy, perguntada explicitamente ao dono do projeto**: a doc agora
+  mora dentro do mesmo app Next.js do `site/` (que também tem `/dashboard` e OAuth via Rails), mas
+  GitHub Pages só serve estático — sem Rails, sem rota dinâmica. Decisão: **só a documentação vai
+  pro Pages**, não o app inteiro. `/` (landing com botão de login) e `/dashboard` continuam de fora
+  de qualquer deploy público por enquanto — consistente com a decisão de sequenciamento acima (nada
+  de OAuth/billing exposto).
+- **Identidade visual**: reaplicado o mesmo brand do Docusaurus antigo (`docs/src/css/custom.css`)
+  — teal/cyan (`#0e7490` claro / `#4dd0e1` escuro) e Inter (corpo) + Space Grotesk (títulos) — via
+  overrides de `--color-fd-*` (variáveis de tema do Fumadocs) em `app/globals.css`, usando `.dark`
+  como seletor (não mais `@media (prefers-color-scheme)`) porque o `RootProvider` do Fumadocs já
+  aplica tema via `next-themes` com `attribute: "class"` — confirmado lendo
+  `node_modules/fumadocs-ui/dist/provider/base.js`. Fontes trocadas de Geist para Inter/Space
+  Grotesk via `next/font/google` em `app/layout.tsx` (Geist Mono mantido pro código). Logo (o
+  mesmo escudo-com-check do Docusaurus antigo) virou componente `components/logo.tsx` reusável,
+  colorido via `currentColor`, usado no nav (`lib/layout.shared.tsx`) e como `app/icon.svg`
+  (favicon, convenção do Next App Router). Validado visualmente com Playwright CLI
+  (`npx playwright screenshot --color-scheme=light|dark`) — headings, cor de destaque e logo
+  batendo com o brand em ambos os temas, nada quebrado.
+- **Busca do Fumadocs trocada pra `staticGET`** (`fumadocs-core/search/server`, índice completo
+  exportado como arquivo estático e buscado client-side via Orama) em vez do `GET` dinâmico
+  original — necessário porque uma rota que lê query string por request não é compatível com
+  `output: "export"`. Precisa de `export const dynamic = "force-static"` explícito na rota (Next
+  não infere isso sozinho, erro de build claro quando falta). `RootProvider` ganhou
+  `search={{ options: { type: "static" } }}` pra usar esse índice no cliente. Efeito colateral
+  positivo: essa mudança vale também pro build normal (Docker) — não é código exclusivo do export.
+- **`next.config.ts`**: `output: "export"` + `basePath` só ligam quando a env var
+  `NEXT_BASE_PATH` está setada (usada só pelo workflow do GitHub Pages) — o build normal
+  (`next start`/Docker) continua sem export, dinâmico, sem basePath. Testado local com uma cópia
+  isolada de `site/frontend` (fora do worktree, `npm ci` limpo — testar com `node_modules`
+  symlinkado quebra o Turbopack: "Symlink [project]/node_modules is invalid, it points out of the
+  filesystem root") simulando exatamente o que o CI roda.
+- **Workflow `deploy-docs.yml` reescrito**: builda `site/frontend` em vez de `docs/`, remove
+  `app/page.tsx` e `app/dashboard` antes do build (routes que dependem do Rails, não fazem sentido
+  num export estático), builda com `NEXT_BASE_PATH=/truthid` (mesmo `baseUrl` que o Docusaurus já
+  usava — `masterlxz.github.io/truthid`, sem domínio próprio), e promove `out/docs/intro.html` a
+  `out/index.html` no final (não existe página em `/docs` vazio — só `/docs/intro` — e todo link
+  interno já é absoluto com o basePath, então copiar o HTML pra raiz funciona sem quebrar nada).
+  Trigger trocado de `docs/**` pra `site/frontend/**` (a doc depende de vários arquivos
+  compartilhados do app — layout, tema, `lib/source.ts` — não só do conteúdo MDX).
+- **`docs/` (Docusaurus) mantido intocado por enquanto** — só para de ser o que é publicado no
+  Pages (o workflow antigo apontava pra ele; o novo aponta pro Fumadocs). Dono do projeto confirmou
+  explicitamente: vai ser removido quando não tiver mais utilidade nenhuma, não antes.
+- **Achado de ambiente, não é bug de código**: `site/frontend/.next/dev/` tem arquivos donos de
+  `root` (sobra de alguma execução anterior via Docker, que roda como root por padrão) —
+  impede `next dev` local (erro de lockfile) mesmo depois de `rm -rf .next` (também barrado por
+  permissão). `next build`/`next start` não tocam `.next/dev/` então não são afetados. Registrado
+  caso o dono do projeto quera limpar com `sudo rm -rf site/frontend/.next` em algum momento; não
+  bloqueia nada do que foi feito nesta sessão.
+- Próximo passo, ainda não feito: conteúdo da doc. Dono do projeto pediu expansão grande — como o
+  app funciona, objetivos, tudo sobre o software — bem além das 10 páginas atuais (paridade com o
+  Docusaurus antigo, não cobertura completa do projeto).
+
 ---
 
 ### Interface e identidade visual (UI/UX)
