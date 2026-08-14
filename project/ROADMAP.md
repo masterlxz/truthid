@@ -1774,6 +1774,56 @@ mesma sessão.**
   app funciona, objetivos, tudo sobre o software — bem além das 10 páginas atuais (paridade com o
   Docusaurus antigo, não cobertura completa do projeto).
 
+**Sessão 200, continuação — expansão de conteúdo da doc (P48), mesma sessão.**
+
+- **Metodologia**: 3 buscas de pesquisa em paralelo (Explore) leram o código-fonte de verdade
+  (`contracts/src/*.sol`, `mobile/`, `desktop/`, `extension/`, `project/CONTEXT.md`) antes de
+  qualquer linha de doc ser escrita — pedido explícito do dono do projeto ("cuidado com
+  informações incorretas") tratado como restrição real, não figura de linguagem. Um agente de
+  planejamento (Plan) desenhou a arquitetura de informação (lista de páginas, agrupamento,
+  dono canônico de cada tópico) a partir dos achados, revisada e ajustada antes de escrever.
+- **Achados reais nas 10 páginas antigas, todos corrigidos**: `VaultRegistry` (6º contrato,
+  `0x07449b0c8dAE1252f59A5C0992D1413113a849B4` na Mainnet) nunca esteve documentado — `intro.mdx`/
+  `contracts.mdx` diziam "quatro contratos"; claim de que os device keys ficam no "iOS Secure
+  Enclave" é tecnicamente impossível (Secure Enclave só suporta P-256, os device keys são
+  secp256k1 — corrigido pra "iOS Keychain", cifrado em repouso, sem isolamento de hardware);
+  link quebrado pro `PROJECT_STATE.md` (arquivo não existe mais no repo); seção "Audit status"
+  cobria só a revisão pré-mainnet, faltava o achado crítico de reentrância (C1) no
+  `RecoveryManager.executeRecovery` de uma revisão posterior (Sessão 140, corrigido Sessão 150,
+  deployado Sessão 197) — reescrita pra cobrir os dois; instruções de instalação do SDK Dart
+  apontavam pro pub.dev, mas o pacote nunca foi publicado lá (confirmado ao vivo, 404) — trocado
+  por instalação via git/path; claim de "todos os contratos são imutáveis" suavizado pra precisão
+  real (sem proxy de upgrade, mas `TruthIDAccount`/`TruthIDAccountFactory` têm
+  `updateRegistries` justamente pra permitir redeploys, dos quais já houve 4 no histórico do
+  projeto); e o guardian default "3-de-5" documentado como se fosse padrão do contrato, quando na
+  verdade não há default nenhum on-chain (achado ao verificar `configureGuardians` diretamente).
+- **8 páginas novas**, cada uma com dono canônico do próprio tópico (as outras linkam em vez de
+  duplicar): `concepts/vision.mdx` (objetivos, direto do PRD em `project/CONTEXT.md`, incluindo o
+  princípio "nunca cobrar pelo que já é do usuário" citado só como filosofia, nunca como feature
+  existente — decisão de sequenciamento da mesma sessão respeitada aqui também), `concepts/
+  how-it-works.mdx` (walkthrough canônico do protocolo — criação de identidade, pareamento
+  commit-reveal, formato exato de `AuthChallenge`/`AuthResponse`, sessões registradas pelo próprio
+  Mobile via UserOp, não pelo SDK), `concepts/vault.mdx`, `concepts/recovery.mdx`, `concepts/
+  cross-device-and-storage.mdx` (LAN+dead-drop em paralelo, não sequencial; migração Arweave;
+  achado real não resolvido do onboarding de device novo com vault não republicado desde a
+  migração, registrado como aviso explícito, não escondido), `apps/{desktop,mobile,extension}.mdx`,
+  `structure.mdx` (mapa do repo, nota sobre o `docs/` legado continuar no repo até não ter mais
+  utilidade — mesma decisão já registrada acima).
+- **Precisão verificada, não assumida**: toda âncora interna (`#secao`) checada contra o HTML
+  gerado pelo build antes de considerar pronto (Fumadocs não valida links internos no build —
+  descoberto que um `grep` ingênuo pra checar isso precisa incluir `_` no regex, senão perde
+  headings tipo `verify_session` silenciosamente). Trechos de código citados (assinaturas de
+  função, constantes como `MAX_DEVICES=50`, `DEFAULT_DAILY_LIMIT=50`, magic bytes `TIDVLTB1` do
+  backup) conferidos linha a linha contra o `.sol`/`.rs`/`.dart` real, não reconstituídos de
+  memória da pesquisa.
+- `npm run build`/`npm run lint` limpos; validado visualmente via Playwright CLI (`next start`,
+  não `next dev` — mesmo motivo do achado de ambiente da sessão anterior) contra 3 páginas
+  representativas (`contracts`, `concepts/how-it-works`, `apps/desktop`) — sidebar com os grupos
+  novos ("Concepts", "Client Apps"), tabelas, `<Callout>` e navegação prev/next todos renderizando
+  certo.
+- Fecha P48 por completo. Nenhuma decisão de arquitetura nova ficou pendente — próximo trabalho
+  de doc, se houver, é lapidação/expansão incremental, não um pilar em falta.
+
 ---
 
 ### Interface e identidade visual (UI/UX)
