@@ -180,8 +180,25 @@ class _VaultScreenState extends State<VaultScreen> {
     }
 
     final outcome = await _syncService.sync(BigInt.parse(identityId));
-    final canWrite = await _repository.canWriteVault(address);
-    final pending = await _repository.pendingChanges();
+    // Achado real (Sessão 205): ao contrário de `_syncService.sync()` (que já
+    // cai pra `syncFailedNoCache`/cache offline quando a decifra local
+    // falha), essas duas chamadas liam o `vault.enc` local direto, sem
+    // nenhuma proteção — um cache local corrompido ou cifrado com uma chave
+    // que não bate mais (`SecretBoxAuthenticationError`, ex: sobra de uma
+    // sessão de teste anterior) derrubava a função inteira ANTES do
+    // `setState` abaixo, deixando a tela travada em "loading" pra sempre —
+    // mesmo quando `sync()` tinha resolvido tudo certo. Mesmo fallback
+    // seguro do resto do app: sem permissão de escrita conhecida, sem
+    // pendência conhecida, mas o resultado real do sync ainda chega na tela.
+    bool canWrite;
+    int pending;
+    try {
+      canWrite = await _repository.canWriteVault(address);
+      pending = await _repository.pendingChanges();
+    } catch (_) {
+      canWrite = false;
+      pending = 0;
+    }
     if (mounted) {
       setState(() {
         _isPaired = true;

@@ -189,6 +189,26 @@ void main() {
     expect(find.text('Could not load your vault'), findsOneWidget);
   });
 
+  testWidgets(
+      'canWriteVault() lançando (cache local corrompido/MAC inválido) não trava a tela — '
+      'achado real, Sessão 205: mostra o resultado do sync em vez de ficar carregando pra sempre',
+      (tester) async {
+    when(() => mockSyncService.sync(any())).thenAnswer((_) async =>
+        VaultSyncOutcome(
+            status: VaultSyncStatus.synced,
+            entries: [buildEntry('example.com')]));
+    when(() => repo.canWriteVault(any()))
+        .thenThrow(Exception('SecretBoxAuthenticationError'));
+    when(() => repo.pendingChanges())
+        .thenThrow(Exception('SecretBoxAuthenticationError'));
+
+    await tester.pumpWidget(buildScreen());
+    await tester.pumpAndSettle();
+
+    expect(find.text('example.com'), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+  });
+
   testWidgets('synced renderiza entradas com senha sempre mascarada',
       (tester) async {
     when(() => mockSyncService.sync(any())).thenAnswer((_) async =>

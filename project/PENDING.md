@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-08-16 (Sessão 205: P52 FECHADO — vault de @masterlxz destravado do CID IPFS morto, confirmado on-chain. Achado + fechado no caminho: P53, gap sistêmico onde nenhum device conseguia assinar UserOp pra essa identidade desde a cascata da Sessão 197 — `migrateDevices()` nunca chamou `addDevice()` na smart account nova; nova UI de reautorização em lote em `ManageDevices.tsx`, validada ao vivo)
+> Última atualização: 2026-08-16 (Sessão 205: P52/P53 fechados (vault destravado do CID morto + reautorização de devices). Validando num celular físico, achado P55 — crash real no Mobile por `canWriteVault`/`pendingChanges` sem try/catch, corrigido e validado em hardware. No caminho, achado P54 — mismatch real entre a vault key do Desktop e a que o device consegue recuperar via `deviceVaultKeys`, causa raiz ainda não confirmada, registrado pra investigação dedicada)
 
 ---
 
@@ -35,6 +35,12 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 ---
 
 ## Não Resolvidas
+
+### Chave do Vault
+
+| ID | Item | Onde se originou | Prioridade |
+|---|---|---|---|
+| P54 | **Mismatch real entre a vault key que o Desktop usa e a que um device pareado consegue recuperar via `deviceVaultKeys`** — achado ao vivo (Sessão 205) tentando validar o vault no celular físico (Z Flip, `SM-S731B`, device on-chain rotulado "S25 FE teste", endereço `0x9f0E2AF37dcEA864F9F5DA7891AcdDC3d4A0A545`) depois do P52/P53 destravarem o republish. Sintoma: `vault_screen.dart` mostrava "Could not load your vault — SecretBoxAuthenticationError: SecretBox has wrong message authentication code (MAC)" — travando a tela pra sempre (ver P55 abaixo, já corrigido) e, mesmo depois de apagar o `vault.enc` local do celular (via `adb run-as ... rm`, autorizado pelo dono do projeto), o app buscou o blob certo do Arweave (hash bateu contra o `contentHash` on-chain, então o conteúdo É o publicado de verdade) mas `markPublished()` continuou falhando ao decifrar com a chave que o celular tem. **Rastro investigado, causa raiz ainda não confirmada**: (1) a vault key deste Desktop no keyring do SO (`secret-tool search service truthid`) não muda desde `2026-07-07T00:46:31` — é a mesma chave usada pra publicar hoje; (2) esse device foi registrado on-chain em `12/08/2026 21:52 UTC` (`getDevice().addedAt`) — **depois** da chave já estar fixa desde julho, então a explicação óbvia ("pareou antes da chave mudar") não bate; (3) `cast logs` pro evento `DeviceVaultKeyUpdated` no `DeviceRegistry` atual (pós-cascata S197) não achou nenhuma ocorrência pra esse device — mas como `migrateDevices()` preserva `addedAt` do registro antigo, isso só prova que não houve rotação *depois* da cascata, não descarta um bug no pareamento original (antes da cascata) que teria cifrado a chave errada pro device na hora. (4) Confirmado por leitura de código: não existe HOJE nenhum caminho que redistribua a vault key atual pros devices já pareados quando ela é (re)derivada via `derive_vault_key_from_wallet` — a única rotação de chave do projeto é disparada por revogar outro device (`desktop/src/services/rotateVaultKeyOnRevoke.ts`), nunca por "a chave do dono mudou". **Próximo passo real**: decifrar o blob ECIES de `deviceVaultKeys` desse device (precisa da chave privada do device, extraível só com acesso mais profundo ao Android Keystore/app do celular, não tentado ainda por prudência) pra confirmar se o problema é na hora do pareamento ou em outro lugar; e desenhar com calma um mecanismo de "redistribuir a vault key atual pra todos os devices ativos" (mesmo padrão de batching que `rotateVaultKeyOnRevoke.ts` já usa), não só na revogação. **Nota importante pra quem retomar** (ver [[project-vault]]): o mecanismo ECIES de pareamento em si já foi provado funcionando corretamente em hardware real na Sessão 123 (device 100% novo, `adb uninstall`+reinstalar, decifrou na hora) — então P54 provavelmente NÃO é uma recorrência dos 3 bugs de ECIES/MAC da Sessão 92 (já fechados e validados 2x). Suspeita mais forte: o `adb install -r` usado nesta sessão pra reinstalar o APK **não limpa dados do app** (diferente do `adb uninstall` da Sessão 123) — o device key/endereço `0x9f0E2AF37...` pode já existir há mais tempo no Keystore deste aparelho do que o `addedAt` on-chain sugere, o que muda a linha do tempo da investigação. | conversa direta (Sessão 205) | 🔴 Alta — bloqueia o Vault em qualquer device pareado que não seja este Desktop, mesmo com o conteúdo certo publicado |
 
 ### Validações em Hardware Real
 
@@ -85,6 +91,12 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 ---
 
 ## Resolvidas
+
+### P55 — crash real no Mobile: `canWriteVault()`/`pendingChanges()` sem proteção travavam a tela do Vault pra sempre (Sessão 205)
+
+| ID | Item | Resolvida em |
+|---|---|---|
+| ~~P55~~ | ~~Achado ao vivo validando o P52 num celular físico (Z Flip): `_VaultScreenState._load()` (`vault_screen.dart`) chama `_syncService.sync(...)` primeiro — que já trata decifra local falhando graciosamente (`syncFailedNoCache`) — mas logo depois chamava `_repository.canWriteVault(address)` e `_repository.pendingChanges()` **sem nenhum try/catch**, cada uma fazendo sua própria leitura+decifra do `vault.enc` local. Com o cache local desse celular ilegível (ver P54), essas duas chamadas lançavam `SecretBoxAuthenticationError` direto, derrubando `_load()` inteira ANTES do `setState` — a tela ficava girando o spinner pra sempre, mesmo quando `sync()` já tinha resolvido tudo certo. Corrigido envolvendo as duas chamadas num try/catch com fallback seguro (`canWrite = false`, `pending = 0`), mesma filosofia que `VaultSyncService._fallbackToCache` já usa. `flutter analyze` limpo, `flutter test` 584/584 (1 teste novo, simula as duas chamadas lançando e confirma que a tela mostra o resultado do sync em vez de travar). **Validado em hardware real**: rebuild do APK debug + `adb install -r` no celular físico — a tela passou a mostrar "Could not load your vault" com o erro real em vez de ficar carregando pra sempre.~~ | **Sessão 205** |
 
 ### P52/P53 — vault de `@masterlxz` destravado do CID IPFS morto; achado sistêmico de devices não reautorizados pós-cascata (Sessão 205)
 
