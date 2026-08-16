@@ -1,10 +1,14 @@
 /* Reestilização do popup pra alinhar com a identidade visual de
    Desktop/Mobile — mesma paleta/tipografia (ver ../../src/ui/theme.css),
    mesmas convenções de componente (.card/.field/.muted/.error-text/
-   .actions-row/.status-badge) usadas em desktop/src/App.css. */
+   .actions-row/.status-badge) usadas em desktop/src/App.css. Estrutura de
+   views (lista compacta + busca + detalhe, inspirada no Bitwarden — ver
+   project/PENDING.md/plano da Sessão 205) sem trocar a paleta. */
 
 body {
-  width: 340px;
+  width: 380px;
+  max-height: 560px;
+  overflow-y: auto;
   margin: 0;
   padding: 16px;
   font-family: var(--font-body);
@@ -53,6 +57,10 @@ h1 img {
   margin-bottom: 0.75rem;
 }
 
+.field:last-child {
+  margin-bottom: 0;
+}
+
 .field label {
   font-size: 0.85em;
   color: var(--color-text-muted);
@@ -77,6 +85,7 @@ h1 img {
 }
 
 input,
+textarea,
 button {
   border-radius: 8px;
   border: 1px solid var(--color-border);
@@ -89,7 +98,13 @@ button {
   transition: border-color 0.2s, color 0.2s, background-color 0.2s;
 }
 
-input::placeholder {
+textarea {
+  resize: vertical;
+  font-weight: 400;
+}
+
+input::placeholder,
+textarea::placeholder {
   color: var(--color-text-muted);
 }
 
@@ -111,12 +126,14 @@ button:disabled {
 }
 
 input:focus,
+textarea:focus,
 button:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;
 }
 
-#qr-canvas {
+#qr-canvas,
+#pending-edit-qr-canvas {
   display: block;
   margin: 12px auto;
   border-radius: 8px;
@@ -151,7 +168,8 @@ button:focus-visible {
   text-align: center;
 }
 
-.secondary-action button {
+.secondary-action button,
+.secondary-action-button {
   width: auto;
   border-color: var(--color-border);
   color: var(--color-text-muted);
@@ -159,46 +177,191 @@ button:focus-visible {
   font-size: 0.85em;
 }
 
-.secondary-action button:hover:not(:disabled) {
+.secondary-action button:hover:not(:disabled),
+.secondary-action-button:hover:not(:disabled) {
   background-color: var(--color-surface);
   color: var(--color-text);
 }
 
-.entry-site {
-  font-family: var(--font-heading);
-  font-weight: 600;
-  margin-bottom: 0.5rem;
-}
+/* ── Botões-ícone (copiar/revelar/editar/voltar/+/engrenagem) ────────────── */
 
-.entry-field {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 0.9em;
-  margin: 4px 0;
-}
-
-.entry-field span {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: 'SF Mono', 'Menlo', monospace;
-  font-size: 0.9em;
-  color: var(--color-text-muted);
-}
-
-.entry-field button {
-  width: auto;
-  padding: 0.3em 0.7em;
-  font-size: 0.8em;
+.icon-button {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  padding: 0;
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  color: var(--color-text-muted);
+  background: transparent;
 }
 
-#settings-section summary {
+.icon-button:hover:not(:disabled) {
+  background-color: var(--color-surface);
+  color: var(--color-accent);
+  border-color: var(--color-border);
+}
+
+/* ── Faixa fina de "N pending" acima das views ────────────────────────────── */
+
+/* `[hidden]` é atributo IDL padrão do navegador (`display: none` via
+   user-agent stylesheet) — mas qualquer regra de autor com a mesma
+   especificidade que defina `display` nesse elemento ganha por ordem de
+   declaração (author CSS sempre bate UA CSS, independente de
+   especificidade), anulando o `hidden` silenciosamente. Achado ao vivo
+   (Sessão 205): a faixa de pending aparecia com "0 pending" mesmo com
+   `hidden` setado, porque `.pending-banner { display: block }` tinha
+   prioridade sobre o `[hidden]` do navegador. `[hidden]` explícito aqui
+   reafirma o comportamento padrão sem depender de ordem de declaração. */
+.pending-banner[hidden] {
+  display: none;
+}
+
+.pending-banner {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: none;
+  border-radius: 8px;
+  padding: 0.5em 0.75em;
+  margin-bottom: 0.75rem;
+  font-size: 0.85em;
+  font-weight: 500;
+  color: var(--color-accent);
+  background-color: rgba(77, 208, 225, 0.1);
   cursor: pointer;
 }
 
-#settings-section .field {
-  margin-bottom: 0;
+.pending-banner:hover {
+  background-color: rgba(77, 208, 225, 0.18);
+}
+
+/* ── Vault view: busca + lista compacta ───────────────────────────────────── */
+
+.vault-view-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.search-field {
+  flex: 1;
+  min-width: 0;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.search-field .search-icon {
+  position: absolute;
+  left: 0.65rem;
+  display: inline-flex;
+  color: var(--color-text-muted);
+  pointer-events: none;
+}
+
+.search-field input {
+  width: 100%;
+  padding-left: 2rem;
+}
+
+#vault-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.vault-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.4rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.vault-row:hover,
+.vault-row:focus-visible {
+  background-color: var(--color-surface);
+  outline: none;
+}
+
+.vault-avatar {
+  width: 30px;
+  height: 30px;
+  min-width: 30px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.85em;
+  color: #fff;
+}
+
+.vault-row-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.vault-row-site {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vault-row-username {
+  font-size: 0.85em;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Detail / form views ───────────────────────────────────────────────────── */
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.detail-title {
+  font-family: var(--font-heading);
+  font-size: 1em;
+  font-weight: 600;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-field-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.detail-field-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.detail-field-value.monospace {
+  font-family: 'SF Mono', 'Menlo', monospace;
+}
+
+.entry-form .field {
+  margin-bottom: 0.6rem;
 }

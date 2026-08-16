@@ -32,6 +32,12 @@ export interface VaultEditProposal {
   notes: string;
   passkey?: Passkey;
   createdAtMs: number;
+  // Preenchido só quando a proposta edita uma VaultEntry já existente (vinda
+  // da própria popup, ver ui/entryForm.ts) — o Device faz upsert por esse id
+  // em vez de sempre criar uma entrada nova. Ausente/undefined em todo o
+  // resto do fluxo (passkey via navigator.credentials.create(), captura de
+  // formulário de cadastro), que continua create-only como sempre foi.
+  targetEntryId?: string;
 }
 
 async function loadAll(): Promise<VaultEditProposal[]> {

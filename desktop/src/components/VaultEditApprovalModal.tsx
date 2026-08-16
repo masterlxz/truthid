@@ -58,7 +58,7 @@ export function VaultEditApprovalModal({
       // publish de sempre, só que cobrindo N entradas em vez de 1.
       for (const proposal of request.entries) {
         const entry: VaultEntry = {
-          id: "",
+          id: proposal.targetEntryId ?? "",
           site: proposal.site,
           url: proposal.url,
           username: proposal.username,
@@ -126,6 +126,9 @@ export function VaultEditApprovalModal({
                 <label>Site</label>
                 <input value={entry.site} readOnly />
               </div>
+              <p className="muted" style={{ marginTop: "0.35rem", marginBottom: 0 }}>
+                {entry.targetEntryId ? "Updating existing entry" : "New entry"}
+              </p>
               {entry.username && (
                 <div className="field" style={{ marginTop: "0.5rem" }}>
                   <label>Username</label>

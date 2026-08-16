@@ -9,6 +9,9 @@ export interface VaultEditEntryProposal {
   notes: string;
   passkey?: Passkey;
   pubKey?: string;
+  // Preenchido só quando a proposta edita uma VaultEntry já existente (vinda
+  // do formulário "Edit" da popup da extensão) — ver VaultEditApprovalModal.
+  targetEntryId?: string;
 }
 
 // Sync em lote (P29) — uma sessão de aprovação cobre 1+ credenciais

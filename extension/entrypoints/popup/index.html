@@ -9,7 +9,11 @@
   <body>
     <h1><img src="/icon/32.png" alt="" /> TruthID Vault</h1>
 
-    <section id="qr-section">
+    <div id="pending-banner" class="pending-banner" hidden>
+      <span id="pending-banner-text"></span>
+    </div>
+
+    <section id="pairing-view">
       <div class="card">
         <p class="muted">Scan this QR code from the TruthID Mobile app.</p>
         <canvas id="qr-canvas"></canvas>
@@ -25,18 +29,35 @@
       </div>
     </section>
 
-    <section id="entries-section" hidden>
-      <div id="entries-list"></div>
+    <section id="vault-view" hidden>
+      <div class="vault-view-header">
+        <div class="search-field">
+          <span class="search-icon" aria-hidden="true"></span>
+          <input id="vault-search" type="search" placeholder="Search" />
+        </div>
+        <button id="new-entry-button" class="icon-button" aria-label="New password"></button>
+        <button id="settings-button" class="icon-button" aria-label="Settings"></button>
+      </div>
+      <div id="vault-list"></div>
       <div class="secondary-action">
         <button id="new-session-2">Start a new session</button>
       </div>
     </section>
 
-    <section id="pending-edits-section" hidden>
+    <section id="entry-detail-view" hidden></section>
+
+    <section id="entry-form-view" hidden></section>
+
+    <section id="pending-view" hidden>
+      <div class="detail-header">
+        <button id="pending-back" class="icon-button" aria-label="Back to vault"></button>
+        <h2 class="detail-title">Pending changes</h2>
+      </div>
       <div class="card">
         <span class="status-badge" id="pending-edits-badge">0 pending</span>
         <p class="muted" style="margin: 0.5rem 0 0.75rem">
-          New credentials created on sites you visit — send them to a device you trust to save.
+          New or updated credentials waiting to be saved — send them to a device you trust to
+          approve.
         </p>
         <div class="actions-row">
           <button id="send-to-desktop">Send to this computer</button>
@@ -63,10 +84,13 @@
       </div>
     </section>
 
-    <section id="settings-section">
-      <details class="card">
-        <summary class="muted">Cross-network delivery settings</summary>
-        <div class="field" style="margin-top: 0.75rem">
+    <section id="settings-view" hidden>
+      <div class="detail-header">
+        <button id="settings-back" class="icon-button" aria-label="Back to vault"></button>
+        <h2 class="detail-title">Settings</h2>
+      </div>
+      <div class="card">
+        <div class="field">
           <label for="kubo-endpoint">
             Kubo endpoint (lets "Send to phone" reach a phone on a different network)
           </label>
@@ -76,7 +100,7 @@
           </div>
         </div>
         <p id="kubo-endpoint-status" class="muted" style="margin: 0.35rem 0 0"></p>
-      </details>
+      </div>
     </section>
 
     <script type="module" src="./main.ts"></script>

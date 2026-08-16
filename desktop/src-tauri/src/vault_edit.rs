@@ -57,6 +57,14 @@ pub struct VaultEditRequestBody {
     pub passkey: Option<PasskeyProposal>,
     #[serde(default)]
     pub pub_key: Option<String>,
+    /// Preenchido só quando a proposta edita uma `VaultEntry` já existente
+    /// (originada do formulário "Edit" da própria popup da extensão, não da
+    /// captura de formulário/passkey). `vault::Vault::upsert` já é keyed por
+    /// id — passar esse valor adiante em vez de `""` é o suficiente pra
+    /// atualizar em vez de sempre criar (ver `handleApprove` no
+    /// `VaultEditApprovalModal.tsx`).
+    #[serde(default)]
+    pub target_entry_id: Option<String>,
 }
 
 /// O que vai pro evento Tauri e pro comando get_pending_vault_edit_request.
@@ -285,7 +293,22 @@ mod tests {
             notes: String::new(),
             passkey: None,
             pub_key: None,
+            target_entry_id: None,
         }
+    }
+
+    #[test]
+    fn target_entry_id_deserializes_from_camel_case() {
+        let json = r#"{"site":"example.com","username":"user","password":"hunter2","targetEntryId":"existing-id"}"#;
+        let parsed: VaultEditRequestBody = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.target_entry_id, Some("existing-id".to_string()));
+    }
+
+    #[test]
+    fn target_entry_id_defaults_to_none_when_absent() {
+        let json = r#"{"site":"example.com","username":"user","password":"hunter2"}"#;
+        let parsed: VaultEditRequestBody = serde_json::from_str(json).unwrap();
+        assert_eq!(parsed.target_entry_id, None);
     }
 
     async fn wait_for_pending(state: &VaultEditState) -> VaultEditApprovalPayload {

@@ -385,14 +385,32 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
         if (_persistedIndices.contains(i)) continue;
         final proposal = proposals[i];
         final passkeyJson = proposal['passkey'] as Map<String, dynamic>?;
-        await _repository.addEntry(
-          site: proposal['site'] as String? ?? '',
-          url: proposal['url'] as String? ?? '',
-          username: proposal['username'] as String? ?? '',
-          password: proposal['password'] as String? ?? '',
-          notes: proposal['notes'] as String? ?? '',
-          passkey: passkeyJson != null ? Passkey.fromJson(passkeyJson) : null,
-        );
+        final targetEntryId = proposal['targetEntryId'] as String?;
+        if (targetEntryId != null && targetEntryId.isNotEmpty) {
+          // Edição de uma entrada já existente (formulário "Edit" da popup da
+          // extensão) — busca a entrada real pra reusar `copyWith` (mesmo
+          // padrão de `vault_entry_form_screen.dart::_save()` no branch de
+          // edição), preservando id/createdAt e só renovando os campos
+          // propostos + updatedAt.
+          final existing = (await _repository.listEntries())
+              .firstWhere((e) => e.id == targetEntryId);
+          await _repository.updateEntry(existing.copyWith(
+            site: proposal['site'] as String? ?? '',
+            url: proposal['url'] as String? ?? '',
+            username: proposal['username'] as String? ?? '',
+            password: proposal['password'] as String? ?? '',
+            notes: proposal['notes'] as String? ?? '',
+          ));
+        } else {
+          await _repository.addEntry(
+            site: proposal['site'] as String? ?? '',
+            url: proposal['url'] as String? ?? '',
+            username: proposal['username'] as String? ?? '',
+            password: proposal['password'] as String? ?? '',
+            notes: proposal['notes'] as String? ?? '',
+            passkey: passkeyJson != null ? Passkey.fromJson(passkeyJson) : null,
+          );
+        }
         _persistedIndices.add(i);
       }
 
@@ -488,6 +506,8 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
     final password = proposal['password'] as String? ?? '';
     final hasPasskey = proposal['passkey'] != null;
     final showPassword = _visiblePasswords.contains(index);
+    final targetEntryId = proposal['targetEntryId'] as String?;
+    final isUpdate = targetEntryId != null && targetEntryId.isNotEmpty;
 
     return Card(
       child: Padding(
@@ -497,6 +517,11 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
           children: [
             Text('Site', style: const TextStyle(color: AppColors.textMuted)),
             Text(site, style: const TextStyle(fontSize: 16)),
+            const SizedBox(height: 4),
+            Text(
+              isUpdate ? 'Updating existing entry' : 'New entry',
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
+            ),
             const SizedBox(height: 12),
             Text('Username', style: const TextStyle(color: AppColors.textMuted)),
             Text(username, style: const TextStyle(fontSize: 16)),

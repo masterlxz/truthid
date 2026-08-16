@@ -22,10 +22,14 @@ import {
   loadSession,
   saveSession,
 } from '../../src/storage/sessionStore';
-import { renderEntries } from '../../src/ui/renderEntries';
+import { icons } from '../../src/ui/icons';
+import { renderVaultList } from '../../src/ui/vaultList';
+import { renderEntryDetail } from '../../src/ui/entryDetail';
+import { renderEntryForm, type EntryFormSubmitValue } from '../../src/ui/entryForm';
 import { renderQrToCanvas } from '../../src/ui/renderQr';
 import { base64ToBytes, bytesToHex, hexToBytes } from '../../src/util/bytes';
 import {
+  addPendingEdit,
   listPendingEdits,
   removePendingEdits,
   type VaultEditProposal,
@@ -66,47 +70,99 @@ async function createNewSession(): Promise<SessionState> {
   return state;
 }
 
+// ---------------------------------------------------------------------------
+// Navegação entre views — sem framework/router de propósito (popup pequena
+// demais pra justificar), só um `hidden` centralizado em vez de espalhado
+// pelos handlers como no design anterior. `pairing`/`vault` são as 2 "views
+// base" (controladas pela máquina de estados showingQr/received de sempre);
+// `entry-detail`/`entry-form`/`pending`/`settings` são overlays que sempre
+// voltam pra `baseView` corrente ao fechar (ver `goBack`).
+// ---------------------------------------------------------------------------
+type ViewName = 'pairing' | 'vault' | 'entry-detail' | 'entry-form' | 'pending' | 'settings';
+
+let baseView: 'pairing' | 'vault' = 'pairing';
+// Só relevante quando a view corrente é 'entry-form': volta pra
+// 'entry-detail' se veio do botão "Edit" de uma entrada, ou pra `baseView`
+// se veio do "+ New" (não existe entrada nenhuma pra voltar a mostrar).
+let formReturnsToDetail = false;
+let selectedEntry: VaultEntry | null = null;
+
 const els = {
-  qrSection: document.getElementById('qr-section') as HTMLElement,
+  pendingBanner: document.getElementById('pending-banner') as HTMLElement,
+  pendingBannerText: document.getElementById('pending-banner-text') as HTMLElement,
+
+  pairingView: document.getElementById('pairing-view') as HTMLElement,
   qrCanvas: document.getElementById('qr-canvas') as HTMLCanvasElement,
   statusText: document.getElementById('status-text') as HTMLElement,
   findButton: document.getElementById('find-button') as HTMLButtonElement,
   manualIpInput: document.getElementById('manual-ip') as HTMLInputElement,
-  manualConnectButton: document.getElementById(
-    'manual-connect',
-  ) as HTMLButtonElement,
-  entriesSection: document.getElementById('entries-section') as HTMLElement,
-  entriesList: document.getElementById('entries-list') as HTMLElement,
+  manualConnectButton: document.getElementById('manual-connect') as HTMLButtonElement,
   newSessionButton: document.getElementById('new-session') as HTMLButtonElement,
-  newSessionButton2: document.getElementById(
-    'new-session-2',
-  ) as HTMLButtonElement,
-  pendingEditsSection: document.getElementById('pending-edits-section') as HTMLElement,
+
+  vaultView: document.getElementById('vault-view') as HTMLElement,
+  vaultSearchInput: document.getElementById('vault-search') as HTMLInputElement,
+  searchIcon: document.querySelector('#vault-view .search-icon') as HTMLElement,
+  vaultList: document.getElementById('vault-list') as HTMLElement,
+  newEntryButton: document.getElementById('new-entry-button') as HTMLButtonElement,
+  settingsButton: document.getElementById('settings-button') as HTMLButtonElement,
+  newSessionButton2: document.getElementById('new-session-2') as HTMLButtonElement,
+
+  entryDetailView: document.getElementById('entry-detail-view') as HTMLElement,
+  entryFormView: document.getElementById('entry-form-view') as HTMLElement,
+
+  pendingView: document.getElementById('pending-view') as HTMLElement,
+  pendingBackButton: document.getElementById('pending-back') as HTMLButtonElement,
   pendingEditsBadge: document.getElementById('pending-edits-badge') as HTMLElement,
   pendingEditsStatus: document.getElementById('pending-edits-status') as HTMLElement,
   sendToDesktopButton: document.getElementById('send-to-desktop') as HTMLButtonElement,
   sendToPhoneButton: document.getElementById('send-to-phone') as HTMLButtonElement,
   pendingEditQrWrapper: document.getElementById('pending-edit-qr-wrapper') as HTMLElement,
   pendingEditQrCanvas: document.getElementById('pending-edit-qr-canvas') as HTMLCanvasElement,
-  pendingEditRetryButton: document.getElementById(
-    'pending-edit-retry',
-  ) as HTMLButtonElement,
-  pendingEditManualIpInput: document.getElementById(
-    'pending-edit-manual-ip',
-  ) as HTMLInputElement,
+  pendingEditRetryButton: document.getElementById('pending-edit-retry') as HTMLButtonElement,
+  pendingEditManualIpInput: document.getElementById('pending-edit-manual-ip') as HTMLInputElement,
   pendingEditManualConnectButton: document.getElementById(
     'pending-edit-manual-connect',
   ) as HTMLButtonElement,
+
+  settingsView: document.getElementById('settings-view') as HTMLElement,
+  settingsBackButton: document.getElementById('settings-back') as HTMLButtonElement,
   kuboEndpointInput: document.getElementById('kubo-endpoint') as HTMLInputElement,
   kuboEndpointSaveButton: document.getElementById('kubo-endpoint-save') as HTMLButtonElement,
   kuboEndpointStatus: document.getElementById('kubo-endpoint-status') as HTMLElement,
 };
 
+const viewSections: Record<ViewName, HTMLElement> = {
+  pairing: els.pairingView,
+  vault: els.vaultView,
+  'entry-detail': els.entryDetailView,
+  'entry-form': els.entryFormView,
+  pending: els.pendingView,
+  settings: els.settingsView,
+};
+
+function showView(name: ViewName): void {
+  for (const [key, section] of Object.entries(viewSections)) {
+    section.hidden = key !== name;
+  }
+  if (name === 'pairing' || name === 'vault') baseView = name;
+}
+
+function goBack(): void {
+  showView(baseView);
+}
+
+// Ícones injetados via JS (SVG inline, ver src/ui/icons.ts) em vez de markup
+// duplicado no HTML.
+els.newEntryButton.innerHTML = icons.plus;
+els.settingsButton.innerHTML = icons.gear;
+els.pendingBackButton.innerHTML = icons.back;
+els.settingsBackButton.innerHTML = icons.back;
+els.searchIcon.innerHTML = icons.search;
+
 let currentState: SessionState | null = null;
 
 async function showQr(state: SessionState): Promise<void> {
-  els.qrSection.hidden = false;
-  els.entriesSection.hidden = true;
+  showView('pairing');
   els.statusText.textContent = isNetworkDiscoverySupported()
     ? 'A backup delivery is already trying in the background — click "Find" ' +
       "for a faster local-network delivery once you've scanned the code."
@@ -123,11 +179,62 @@ async function showQr(state: SessionState): Promise<void> {
   await renderQrToCanvas(els.qrCanvas, JSON.stringify(payload));
 }
 
-function showEntries(entries: VaultEntry[]): void {
-  els.qrSection.hidden = true;
-  els.entriesSection.hidden = false;
-  renderEntries(els.entriesList, entries);
+let currentEntries: VaultEntry[] = [];
+
+function renderCurrentVaultList(): void {
+  renderVaultList(els.vaultList, currentEntries, {
+    query: els.vaultSearchInput.value,
+    onSelect: openEntryDetail,
+  });
 }
+
+function showEntries(entries: VaultEntry[]): void {
+  currentEntries = entries;
+  showView('vault');
+  renderCurrentVaultList();
+}
+
+function openEntryDetail(entry: VaultEntry): void {
+  selectedEntry = entry;
+  renderEntryDetail(els.entryDetailView, entry, {
+    onBack: goBack,
+    onEdit: openEntryForm,
+  });
+  showView('entry-detail');
+}
+
+function openEntryForm(entry?: VaultEntry): void {
+  formReturnsToDetail = !!entry;
+  renderEntryForm(els.entryFormView, {
+    entry,
+    onSubmit: handleEntryFormSubmit,
+    onCancel: () => {
+      if (formReturnsToDetail && selectedEntry) openEntryDetail(selectedEntry);
+      else goBack();
+    },
+  });
+  showView('entry-form');
+}
+
+async function handleEntryFormSubmit(value: EntryFormSubmitValue): Promise<void> {
+  await addPendingEdit({
+    site: value.site,
+    url: value.url,
+    username: value.username,
+    password: value.password,
+    notes: value.notes,
+    targetEntryId: value.targetEntryId,
+  });
+  await refreshPendingEdits();
+  showView('pending');
+}
+
+els.vaultSearchInput.addEventListener('input', renderCurrentVaultList);
+els.newEntryButton.addEventListener('click', () => openEntryForm());
+els.settingsButton.addEventListener('click', () => showView('settings'));
+els.settingsBackButton.addEventListener('click', goBack);
+els.pendingBackButton.addEventListener('click', goBack);
+els.pendingBanner.addEventListener('click', () => showView('pending'));
 
 // Ponto comum pra "cheguei num blob cifrado, decifra e mostra" — o LAN
 // entrega um JSON `{blob: base64}` (ver `handleBlob` abaixo), o dead-drop
@@ -272,25 +379,36 @@ els.newSessionButton.addEventListener('click', () => void startNewSession());
 els.newSessionButton2.addEventListener('click', () => void startNewSession());
 
 // ---------------------------------------------------------------------------
-// Propostas de credencial nova (Sessão 134, item 6 do roadmap) — enfileiradas
+// Propostas de credencial nova/edição (Sessão 134, item 6 do roadmap;
+// Sessão 205, formulário manual + edição de entrada existente) — enfileiradas
 // por webauthn.content.ts/webauthn-bridge.content.ts quando um site chama
-// navigator.credentials.create(). Seção independente do fluxo de QR/entries
-// acima (mostrada sempre que há pendências, não faz parte da máquina de
-// estados showingQr/received).
+// navigator.credentials.create(), por newCredentialCapture.ts (formulário de
+// cadastro detectado numa página real), ou agora também por
+// handleEntryFormSubmit acima (formulário "+ New"/"Edit" da própria popup).
+// View própria (`pending`), aberta pela faixa fina no topo ou logo após
+// enfileirar uma proposta pelo formulário — não é mais uma seção sempre
+// visível junto da lista.
 // ---------------------------------------------------------------------------
 
 async function refreshPendingEdits(): Promise<void> {
   const pending = await listPendingEdits();
-  els.pendingEditsSection.hidden = pending.length === 0;
   els.pendingEditsBadge.textContent = `${pending.length} pending`;
+  els.pendingBanner.hidden = pending.length === 0;
+  els.pendingBannerText.textContent =
+    pending.length === 1 ? '1 pending change — tap to review' : `${pending.length} pending changes — tap to review`;
   if (pending.length === 0) {
     els.pendingEditQrWrapper.hidden = true;
     els.pendingEditsStatus.textContent = '';
+    // Achado real (Sessão 135, preservado no redesenho da Sessão 205): se a
+    // view de pending estava aberta mostrando a mensagem terminal ("Saved.",
+    // "Sent to your phone..."), só volta pra baseView depois do delay em
+    // `scheduleRefreshAfterTerminalMessage` — nunca no meio da leitura.
+    if (!els.pendingView.hidden) goBack();
   }
 }
 
-// Achado real (Sessão 135): `refreshPendingEdits()` esconde a seção inteira
-// (e limpa `pendingEditsStatus`) assim que `pending.length === 0` — se a
+// Achado real (Sessão 135): `refreshPendingEdits()` escondia a seção inteira
+// (e limpava `pendingEditsStatus`) assim que `pending.length === 0` — se a
 // proposta acabou de ser removida (approve/reject/send bem-sucedido), isso
 // acontecia no mesmo instante em que a mensagem terminal ("Saved.", "Sent to
 // your phone...") era escrita, apagando-a antes de o usuário ter qualquer

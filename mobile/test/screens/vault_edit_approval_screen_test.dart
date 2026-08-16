@@ -72,6 +72,16 @@ void main() {
     registerFallbackValue(Uint8List(0));
     registerFallbackValue(DateTime.now());
     registerFallbackValue(smartAccountAddress);
+    registerFallbackValue(VaultEntry(
+      id: 'fallback-id',
+      site: 'fallback.example',
+      url: '',
+      username: 'fallback',
+      password: 'fallback',
+      notes: '',
+      createdAt: DateTime.now().toUtc(),
+      updatedAt: DateTime.now().toUtc(),
+    ));
   });
 
   setUp(() {
@@ -427,6 +437,63 @@ void main() {
             notes: '',
             passkey: null,
           )).called(1);
+      verify(() => mockPublishService.publish(smartAccountAddress)).called(1);
+      expect(find.text('Saved'), findsOneWidget);
+    });
+
+    testWidgets(
+        'proposta com targetEntryId atualiza a entrada existente em vez de criar uma nova',
+        (tester) async {
+      final existingEntry = VaultEntry(
+        id: 'existing-id',
+        site: 'old-site.example',
+        url: '',
+        username: 'old-username',
+        password: 'old-password',
+        notes: 'old-notes',
+        createdAt: DateTime.utc(2026, 1, 1),
+        updatedAt: DateTime.utc(2026, 1, 1),
+      );
+      when(() => mockRepository.listEntries())
+          .thenAnswer((_) async => [existingEntry]);
+      when(() => mockRepository.updateEntry(any()))
+          .thenAnswer((invocation) async => invocation.positionalArguments[0] as VaultEntry);
+
+      final encrypted = await encryptProposal({
+        'id': 'proposal-1',
+        'site': 'example.com',
+        'url': '',
+        'username': 'alice',
+        'password': 'hunter2',
+        'notes': '',
+        'targetEntryId': 'existing-id',
+        'createdAtMs': 0,
+      });
+      when(() => mockLanServer.receiveOnce(
+            sessionId: any(named: 'sessionId'),
+            expiresAt: any(named: 'expiresAt'),
+          )).thenAnswer((_) async => encrypted);
+
+      await pumpAndOpen(tester, validPayload());
+
+      await tester.tap(find.text('Approve'));
+      await tester.pumpAndSettle();
+
+      verifyNever(() => mockRepository.addEntry(
+            site: any(named: 'site'),
+            url: any(named: 'url'),
+            username: any(named: 'username'),
+            password: any(named: 'password'),
+            notes: any(named: 'notes'),
+            passkey: any(named: 'passkey'),
+          ));
+      final captured = verify(() => mockRepository.updateEntry(captureAny()))
+          .captured
+          .single as VaultEntry;
+      expect(captured.id, 'existing-id');
+      expect(captured.site, 'example.com');
+      expect(captured.username, 'alice');
+      expect(captured.password, 'hunter2');
       verify(() => mockPublishService.publish(smartAccountAddress)).called(1);
       expect(find.text('Saved'), findsOneWidget);
     });
