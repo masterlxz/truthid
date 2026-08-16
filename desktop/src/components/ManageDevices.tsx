@@ -12,10 +12,10 @@ import {
   DEVICE_REGISTRY_ABI,
   TRUTHID_ACCOUNT_ABI,
 } from "../config/contracts";
+import { buildAccountCalls } from "../utils/buildAccountCalls";
 import type { DeviceInfo } from "../types";
 import { useIdentity } from "../contexts/IdentityContext";
 import { useWalletModal } from "../contexts/WalletModalContext";
-import { buildAccountCalls } from "../utils/buildAccountCalls";
 import { buildRotationBatch } from "../services/rotateVaultKeyOnRevoke";
 import { DeviceList } from "./DeviceList";
 import { PairDevice } from "./PairDevice";
@@ -50,6 +50,72 @@ export function ManageDevices() {
   const devices = (deviceResults ?? [])
     .map((r) => r.result)
     .filter(Boolean) as DeviceInfo[];
+
+  // ── Leitura 3: `authorizedDevices` é estado próprio da smart account
+  // (`TruthIDAccount`), separado do registro global no `DeviceRegistry`
+  // acima — um redeploy em cascata (débito #52, ver
+  // `migrateDevices()`/CASCADE.md) migra os registros do DeviceRegistry pra
+  // uma smart account nova, mas nunca chamou `addDevice()` nela: um device
+  // pode aparecer "ativo" no DeviceRegistry e mesmo assim não conseguir
+  // assinar nenhum UserOp pra essa conta (achado real, P52, Sessão 205 —
+  // `authorizedDevices` batia `false` pros 7 devices migrados). Detectado
+  // aqui pra oferecer a reautorização em lote abaixo.
+  const { data: authorizedResults, refetch: refetchAuthorized } = useReadContracts({
+    contracts: devices.map((d) => ({
+      address: smartAccountAddress ?? undefined,
+      abi: TRUTHID_ACCOUNT_ABI,
+      functionName: "authorizedDevices" as const,
+      args: [d.pubKey as `0x${string}`] as const,
+    })),
+    query: { enabled: !!smartAccountAddress && devices.length > 0 },
+  });
+
+  const devicesNeedingReauth = devices.filter((d, i) => {
+    if (d.revoked) return false;
+    const authorized = authorizedResults?.[i]?.result;
+    return authorized === false;
+  });
+
+  const {
+    writeContract: sendReauthorize,
+    data: reauthorizeTxHash,
+    isPending: isReauthorizePending,
+    isError: isReauthorizeError,
+    error: reauthorizeError,
+  } = useWriteContract();
+
+  const { isLoading: isReauthorizeConfirming, isSuccess: isReauthorizeSuccess } =
+    useWaitForTransactionReceipt({ hash: reauthorizeTxHash });
+
+  useEffect(() => {
+    if (!isReauthorizeSuccess) return;
+    queryClient.invalidateQueries();
+    setTimeout(() => refetchAuthorized(), 3000);
+  }, [isReauthorizeSuccess]);
+
+  function handleReauthorize() {
+    if (!isConnected) { openConnectModal(); return; }
+    if (!smartAccountAddress || devicesNeedingReauth.length === 0) return;
+
+    // Um só `executeBatch`, uma só confirmação na Ledger — sem re-pareamento
+    // físico dos outros devices, o pubkey de cada um já é conhecido on-chain
+    // (`getDevicesByIdentity`), só falta o `addDevice()` que a migração
+    // pulou.
+    const { dest, value, func } = buildAccountCalls(
+      devicesNeedingReauth.map((d) => ({
+        address: smartAccountAddress,
+        abi: TRUTHID_ACCOUNT_ABI,
+        functionName: "addDevice",
+        args: [d.pubKey as `0x${string}`],
+      }))
+    );
+    sendReauthorize({
+      address: smartAccountAddress,
+      abi: TRUTHID_ACCOUNT_ABI,
+      functionName: "executeBatch",
+      args: [dest, value, func],
+    });
+  }
 
   // ── Revogar device ────────────────────────────────────────────────────────
   const [revokingPubKey, setRevokingPubKey] = useState<string | null>(null);
@@ -158,6 +224,31 @@ export function ManageDevices() {
   return (
     <div>
       <h2>@{username}</h2>
+
+      {devicesNeedingReauth.length > 0 && (
+        <div className="card" style={{ marginBottom: "1rem", borderColor: "var(--warning, #c99a2e)" }}>
+          <p style={{ marginTop: 0 }}>
+            <strong>{devicesNeedingReauth.length}</strong>{" "}
+            {devicesNeedingReauth.length === 1 ? "device está" : "devices estão"} registrado
+            {devicesNeedingReauth.length === 1 ? "" : "s"} mas não consegue
+            {devicesNeedingReauth.length === 1 ? "" : "m"} assinar por essa conta —
+            provavelmente sobrou de um redeploy da smart account. Reautorizar não exige
+            re-parear nada, só uma confirmação na Ledger.
+          </p>
+          <button onClick={handleReauthorize} disabled={isReauthorizePending || isReauthorizeConfirming}>
+            {isReauthorizePending
+              ? "Confirmar na carteira..."
+              : isReauthorizeConfirming
+              ? "Aguardando rede..."
+              : `Reautorizar ${devicesNeedingReauth.length} device${devicesNeedingReauth.length === 1 ? "" : "s"}`}
+          </button>
+          {isReauthorizeError && (
+            <p className="error-text" style={{ marginBottom: 0 }}>
+              {reauthorizeError?.message?.split("\n")[0]}
+            </p>
+          )}
+        </div>
+      )}
 
       <DeviceList
         devices={devices}

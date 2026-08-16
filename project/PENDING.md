@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-08-16 (Sessão 204: validação prática pós-lançamento — P50 corrigido e validado em hardware real (bug de scan de QR no Mobile); P51 registrado (lacuna real no aviso de vault legado pra devices read-only); P52 registrado (vault real de @masterlxz ainda preso no CID IPFS morto, tentativas de republish não confirmaram on-chain))
+> Última atualização: 2026-08-16 (Sessão 205: P52 FECHADO — vault de @masterlxz destravado do CID IPFS morto, confirmado on-chain. Achado + fechado no caminho: P53, gap sistêmico onde nenhum device conseguia assinar UserOp pra essa identidade desde a cascata da Sessão 197 — `migrateDevices()` nunca chamou `addDevice()` na smart account nova; nova UI de reautorização em lote em `ManageDevices.tsx`, validada ao vivo)
 
 ---
 
@@ -35,12 +35,6 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 ---
 
 ## Não Resolvidas
-
-### Deploy e Redeploy
-
-| ID | Item | Onde se originou | Prioridade |
-|---|---|---|---|
-| P52 | **Vault real de `@masterlxz` (identityId 1) ainda preso no CID IPFS morto** — `getVault(1)` on-chain (`VaultRegistry` `0x0744...849b4`, Base Mainnet) confirmado via `cast call` continua devolvendo `QmeY4noxFdjwfi3zij5T4WuVjd2fDAPXrkG7gQBRRNmuBT` (versão 1, mesmo `updatedAt` de 13/08/2026), mesmo depois de 2 tentativas de republish pelo dono do projeto no Desktop nativo (Sessão 204). 1ª tentativa via "Publicar via device key (sem Ledger)" mostrou erro **"Nenhuma identidade carregada"** (`useVaultPublish.ts:139`, `smartAccountAddress` do `IdentityContext` nulo mesmo com a carteira já aparecendo "Disconnect wallet" no header — parece problema de timing/resolução do contexto, não investigado a fundo). 2ª tentativa ("publiquei dnv") também não mudou nada on-chain — não confirmado se bateu no mesmo erro ou falhou de outra forma, sessão encerrada por limite de uso antes de investigar. **Efeito prático**: qualquer device sem cache local do vault (ex: o celular físico usado nesta sessão) não consegue carregar o vault real — achado que expôs o P51 abaixo. | conversa direta (Sessão 204) | 🔴 Alta — bloqueia uso real do Vault em qualquer device novo/sem cache |
 
 ### Validações em Hardware Real
 
@@ -91,6 +85,13 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 ---
 
 ## Resolvidas
+
+### P52/P53 — vault de `@masterlxz` destravado do CID IPFS morto; achado sistêmico de devices não reautorizados pós-cascata (Sessão 205)
+
+| ID | Item | Resolvida em |
+|---|---|---|
+| ~~P52~~ | ~~**Vault real de `@masterlxz` (identityId 1) preso no CID IPFS morto**~~ — causa raiz era dupla, as duas corrigidas e validadas ao vivo. **(1)** `IdentityContext.tsx` só expunha `smartAccountAddress` derivado de `useAccount().address` (CREATE2 síncrono, passado de `App.tsx`) — só existe se uma wallet estiver conectada *nesta sessão do app*. O botão "Publicar via device key (sem Ledger)" herdava esse mesmo valor; sem wallet conectada (justo o cenário que o botão promete cobrir), `smartAccountAddress` ficava `null` → "Nenhuma identidade carregada". Corrigido priorizando `identity.controller` — já devolvido pela leitura on-chain de `getIdentity(username)` que o contexto já fazia, é o mesmo endereço da smart account e só depende do username em cache local. **(2)** Corrigido esse ponto, apareceu um erro novo e mais fundo — `AA24 signature error` — ver P53 abaixo. Depois do fix do P53, republish confirmado on-chain de ponta a ponta, independente do app: `getVault(1)` no `VaultRegistry` (`0x0744...849b4`, Base Mainnet) foi de `QmeY4no...` (versão 1, IPFS morto) pra `ar://9_sUbYf4K9w9bOxqkzjIf_r8v4OvhbMTEcwDNHGq-TM` (versão 2, Arweave), `updatedAt` batendo com o horário real do teste (16/08/2026 19:03 UTC).~~ | **Sessão 205** |
+| ~~P53~~ | ~~**Achado sistêmico: nenhum device consegue assinar UserOp pra `@masterlxz` desde a cascata da Sessão 197** — `DeviceRegistry.migrateDevices()` (ver [[project-cascade-migration-197]]) migrou os *registros* (label/addedAt/revoked/chave ECIES) pro `DeviceRegistry` novo, mas nunca chamou `TruthIDAccount.addDevice()` na smart account nova, que é uma mapping separada (`authorizedDevices`) dentro do próprio contrato da conta — é ela, não o `DeviceRegistry`, que `_validateSignature` checa de fato. Confirmado via `cast call` num RPC público: dos 7 devices listados em `getDevicesByIdentity(1)`, todos vinham `authorizedDevices() == false` na smart account atual (`0xAa45...eDa05`) antes do fix — só a Ledger (owner) conseguia assinar qualquer coisa; Mobile e Desktop via device key estavam quebrados pra essa identidade desde 13/08/2026, não só o publish do vault. Achado colateral: `DesktopDevice.tsx` só checava `DeviceRegistry.isDeviceActive()` (global) pra decidir se mostrava "✓ Registered" ou o botão de registro — como isso já vinha `true` da migração, o botão nem aparecia, sem nenhum caminho de UI pra corrigir. Corrigido em `ManageDevices.tsx`: nova leitura de `authorizedDevices()` por device na smart account atual (`useReadContracts`), filtrando os já revogados; se detectar a lacuna, mostra banner + botão "Reautorizar N devices" — um `executeBatch` só, uma confirmação na Ledger, sem re-parear nada (pubkeys já conhecidos on-chain). `tsc --noEmit` limpo, `npx vitest run` 101/101. **Validado ao vivo pelo dono do projeto**: dos 7 devices, os 4 ativos (3 já revogados antes da migração corretamente ignorados pelo lote) foram de `false` pra `true` em `authorizedDevices()`, confirmado via `cast call` independente do app.~~ | **Sessão 205** |
 
 ### P50 — bug real de scan de QR no Mobile, corrigido e validado em hardware (Sessão 204)
 
