@@ -145,10 +145,11 @@ class _PinningProvidersScreenState extends State<PinningProvidersScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Text(
-                    'O vault em si agora publica direto no Arweave (veja "Arweave '
-                    'wallet"). Estes providers seguem em uso só pro canal de entrega '
-                    'cross-device (LAN/dead-drop) das aprovações com a extensão de '
-                    'navegador — não fazem mais parte da publicação do vault.',
+                    'The vault itself now publishes directly to Arweave (see '
+                    '"Arweave wallet"). These providers are still used only for '
+                    'the cross-device delivery channel (LAN/dead-drop) for '
+                    'approvals with the browser extension — they are no longer '
+                    'part of publishing the vault.',
                     style: TextStyle(color: AppColors.textMuted, fontSize: 13),
                   ),
                   const SizedBox(height: 16),
@@ -160,12 +161,12 @@ class _PinningProvidersScreenState extends State<PinningProvidersScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const Text('Nenhum provider configurado.',
+                          const Text('No providers configured.',
                               style: TextStyle(color: AppColors.textMuted)),
                           const SizedBox(height: 12),
                           OutlinedButton(
                             onPressed: _handleAddKuboDefault,
-                            child: const Text('+ Adicionar Kubo local'),
+                            child: const Text('+ Add local Kubo'),
                           ),
                         ],
                       ),
@@ -193,14 +194,14 @@ class _PinningProvidersScreenState extends State<PinningProvidersScreen> {
                             children: [
                               IconButton(
                                 icon: const Icon(Icons.refresh),
-                                tooltip: 'Testar',
+                                tooltip: 'Test',
                                 onPressed: status == _HealthStatus.checking
                                     ? null
                                     : () => _handleCheck(i),
                               ),
                               IconButton(
                                 icon: const Icon(Icons.delete_outline, color: AppColors.danger),
-                                tooltip: 'Remover',
+                                tooltip: 'Remove',
                                 onPressed: () => _handleRemove(i),
                               ),
                             ],
@@ -212,7 +213,7 @@ class _PinningProvidersScreenState extends State<PinningProvidersScreen> {
                   if (!_addOpen)
                     OutlinedButton(
                       onPressed: () => setState(() => _addOpen = true),
-                      child: const Text('+ Adicionar provider'),
+                      child: const Text('+ Add provider'),
                     )
                   else
                     Column(
@@ -220,15 +221,15 @@ class _PinningProvidersScreenState extends State<PinningProvidersScreen> {
                       children: [
                         TextField(
                           controller: _nameCtrl,
-                          decoration: const InputDecoration(labelText: 'Nome', hintText: 'ex: Pinata'),
+                          decoration: const InputDecoration(labelText: 'Name', hintText: 'e.g. Pinata'),
                           onChanged: (_) => setState(() {}),
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
                           initialValue: _kind,
-                          decoration: const InputDecoration(labelText: 'Tipo'),
+                          decoration: const InputDecoration(labelText: 'Type'),
                           items: const [
-                            DropdownMenuItem(value: 'kubo', child: Text('kubo — nó IPFS (upload)')),
+                            DropdownMenuItem(value: 'kubo', child: Text('kubo — IPFS node (upload)')),
                             DropdownMenuItem(value: 'psa', child: Text('psa — Pinning Service API')),
                           ],
                           onChanged: (v) => setState(() => _kind = v ?? 'kubo'),
@@ -249,8 +250,8 @@ class _PinningProvidersScreenState extends State<PinningProvidersScreen> {
                           controller: _apiKeyCtrl,
                           obscureText: !_showKey,
                           decoration: InputDecoration(
-                            labelText: _kind == 'kubo' ? 'API key (opcional)' : 'API key',
-                            hintText: _kind == 'kubo' ? 'deixe vazio para Kubo local' : 'Bearer token',
+                            labelText: _kind == 'kubo' ? 'API key (optional)' : 'API key',
+                            hintText: _kind == 'kubo' ? 'leave empty for local Kubo' : 'Bearer token',
                             suffixIcon: IconButton(
                               icon: Icon(_showKey ? Icons.visibility_off : Icons.visibility),
                               onPressed: () => setState(() => _showKey = !_showKey),
@@ -268,14 +269,14 @@ class _PinningProvidersScreenState extends State<PinningProvidersScreen> {
                                   backgroundColor: AppColors.accent,
                                   foregroundColor: AppColors.background,
                                 ),
-                                child: const Text('Adicionar'),
+                                child: const Text('Add'),
                               ),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: OutlinedButton(
                                 onPressed: () => setState(() { _addOpen = false; _showKey = false; }),
-                                child: const Text('Cancelar'),
+                                child: const Text('Cancel'),
                               ),
                             ),
                           ],

@@ -695,7 +695,7 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                   if (_type == EntryType.credential) ...[
                     TextField(
                       controller: _siteCtrl,
-                      decoration: const InputDecoration(labelText: 'Site *', hintText: 'ex: github.com'),
+                      decoration: const InputDecoration(labelText: 'Site *', hintText: 'e.g. github.com'),
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 12),
@@ -740,7 +740,7 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                   if (_type == EntryType.document) ...[
                     TextField(
                       controller: _docNameCtrl,
-                      decoration: const InputDecoration(labelText: 'Name *', hintText: 'ex: ID card, Passport, Contract'),
+                      decoration: const InputDecoration(labelText: 'Name *', hintText: 'e.g. ID card, Passport, Contract'),
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 12),
@@ -765,7 +765,7 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                   if (_type == EntryType.address) ...[
                     TextField(
                       controller: _addrLabelCtrl,
-                      decoration: const InputDecoration(labelText: 'Label *', hintText: 'ex: Home, Work, Delivery'),
+                      decoration: const InputDecoration(labelText: 'Label *', hintText: 'e.g. Home, Work, Delivery'),
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 12),
@@ -831,7 +831,7 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                   if (_type == EntryType.creditCard) ...[
                     TextField(
                       controller: _cardLabelCtrl,
-                      decoration: const InputDecoration(labelText: 'Label *', hintText: 'ex: Nubank, Itaú Platinum'),
+                      decoration: const InputDecoration(labelText: 'Label *', hintText: 'e.g. Nubank, Itaú Platinum'),
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 12),

@@ -97,7 +97,7 @@ class _ArweaveWalletScreenState extends State<ArweaveWalletScreen> {
         : null;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Wallet Arweave')),
+      appBar: AppBar(title: const Text('Arweave Wallet')),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -106,9 +106,9 @@ class _ArweaveWalletScreenState extends State<ArweaveWalletScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const Text(
-                    'O vault (blob principal e documentos anexados) e os apps terceiros '
-                    'autorizados publicam no Arweave — precisa de uma wallet local '
-                    'financiada com AR.',
+                    'The vault (main blob and attached documents) and authorized '
+                    'third-party apps publish to Arweave — this requires a local '
+                    'wallet funded with AR.',
                     style: TextStyle(color: AppColors.textMuted, fontSize: 13),
                   ),
                   const SizedBox(height: 16),
@@ -120,7 +120,7 @@ class _ArweaveWalletScreenState extends State<ArweaveWalletScreen> {
                   if (!_exists)
                     ElevatedButton(
                       onPressed: _generating ? null : _handleGenerate,
-                      child: Text(_generating ? 'Gerando...' : 'Gerar wallet Arweave'),
+                      child: Text(_generating ? 'Generating...' : 'Generate Arweave wallet'),
                     )
                   else
                     Column(
@@ -136,14 +136,14 @@ class _ArweaveWalletScreenState extends State<ArweaveWalletScreen> {
                             OutlinedButton.icon(
                               onPressed: _handleCopy,
                               icon: Icon(_copied ? Icons.check : Icons.copy, size: 16),
-                              label: Text(_copied ? '✓ Copiado!' : 'Copiar endereço'),
+                              label: Text(_copied ? '✓ Copied!' : 'Copy address'),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
                                 balanceAr != null
-                                    ? 'Saldo: $balanceAr AR'
-                                    : 'Saldo indisponível no momento',
+                                    ? 'Balance: $balanceAr AR'
+                                    : 'Balance unavailable right now',
                                 style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
                               ),
                             ),
@@ -153,8 +153,8 @@ class _ArweaveWalletScreenState extends State<ArweaveWalletScreen> {
                           Padding(
                             padding: const EdgeInsets.only(top: 12),
                             child: Text(
-                              'Sem saldo ainda — compre AR numa exchange e envie pro '
-                              'endereço acima antes de publicar.',
+                              'No balance yet — buy AR on an exchange and send it to '
+                              'the address above before publishing.',
                               style: TextStyle(color: AppColors.textMuted, fontSize: 13),
                             ),
                           ),

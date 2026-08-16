@@ -46,7 +46,7 @@ export function VaultEditApprovalModal({
   async function handleApprove() {
     if (!request) return;
     if (!smartAccountAddress) {
-      setError("Nenhuma identidade carregada — não é possível publicar.");
+      setError("No identity loaded — cannot publish.");
       setStage("error");
       return;
     }

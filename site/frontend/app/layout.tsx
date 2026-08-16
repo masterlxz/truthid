@@ -21,7 +21,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "TruthID",
-  description: "TruthID — identidade self-sovereign",
+  description: "TruthID — self-sovereign identity",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

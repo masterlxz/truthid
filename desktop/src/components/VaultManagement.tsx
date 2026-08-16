@@ -117,10 +117,10 @@ type FormState = {
 };
 
 const ENTRY_TYPE_OPTIONS: { value: EntryType; label: string; icon: string }[] = [
-  { value: "credential", label: "Senha", icon: "🔑" },
-  { value: "document", label: "Documento", icon: "📄" },
-  { value: "address", label: "Endereço", icon: "🏠" },
-  { value: "creditCard", label: "Cartão", icon: "💳" },
+  { value: "credential", label: "Password", icon: "🔑" },
+  { value: "document", label: "Document", icon: "📄" },
+  { value: "address", label: "Address", icon: "🏠" },
+  { value: "creditCard", label: "Card", icon: "💳" },
 ];
 
 const ENTRY_TYPE_ICON: Record<EntryType, string> = {
@@ -313,7 +313,7 @@ function ProfilePicker({
     onChange(value.includes(p) ? value.filter((x) => x !== p) : [...value, p]);
   }
   if (options.length === 0) {
-    return <p className="muted" style={{ margin: 0, fontSize: "0.85em" }}>Nenhum perfil criado ainda — crie um em "Gerenciar perfis" abaixo.</p>;
+    return <p className="muted" style={{ margin: 0, fontSize: "0.85em" }}>No profiles created yet — create one in "Manage profiles" below.</p>;
   }
   return (
     <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
@@ -430,7 +430,7 @@ function EntryForm({
     if (!path || Array.isArray(path)) return;
     const bytes = await readFile(path);
     if (bytes.byteLength > MAX_DOCUMENT_BYTES) {
-      setDocError(`Arquivo muito grande (${formatBytes(bytes.byteLength)}) — limite de ${formatBytes(MAX_DOCUMENT_BYTES)}.`);
+      setDocError(`File too large (${formatBytes(bytes.byteLength)}) — limit is ${formatBytes(MAX_DOCUMENT_BYTES)}.`);
       return;
     }
     setDocError(null);
@@ -574,11 +574,11 @@ function EntryForm({
               <input value={form.url} onChange={(e) => set("url", e.target.value)} placeholder="https://..." />
             </div>
             <div className="field">
-              <label>Usuário *</label>
-              <input value={form.username} onChange={(e) => set("username", e.target.value)} placeholder="@usuário ou email" />
+              <label>Username *</label>
+              <input value={form.username} onChange={(e) => set("username", e.target.value)} placeholder="@username or email" />
             </div>
             <div className="field">
-              <label>Senha *</label>
+              <label>Password *</label>
               <div style={{ display: "flex", gap: "0.4rem" }}>
                 <input
                   type={showPw ? "text" : "password"}
@@ -594,7 +594,7 @@ function EntryForm({
                   type="button"
                   onClick={() => (genOpen ? setGenOpen(false) : handleOpenGenerator())}
                   style={{ padding: "0.3em 0.6em", fontSize: "0.9em" }}
-                  title="Gerar senha"
+                  title="Generate password"
                 >
                   🎲
                 </button>
@@ -620,14 +620,14 @@ function EntryForm({
       {form.type === "document" && (
         <>
           <div className="field">
-            <label>Nome *</label>
-            <input value={form.document.name} onChange={(e) => setDoc("name", e.target.value)} placeholder="ex: RG, CNH, Contrato..." />
+            <label>Name *</label>
+            <input value={form.document.name} onChange={(e) => setDoc("name", e.target.value)} placeholder="e.g. ID, passport, contract..." />
           </div>
           <div className="field">
-            <label>Arquivo *</label>
+            <label>File *</label>
             <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
               <button type="button" onClick={handleUploadDocument} style={{ padding: "0.3em 0.8em", fontSize: "0.85em" }}>
-                📎 {form.document.file_name ? "Trocar arquivo" : "Escolher arquivo"}
+                📎 {form.document.file_name ? "Change file" : "Choose file"}
               </button>
               {form.document.file_name && (
                 <span className="muted" style={{ fontSize: "0.85em" }}>
@@ -643,47 +643,47 @@ function EntryForm({
       {form.type === "address" && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
           <div className="field">
-            <label>Rótulo *</label>
-            <input value={form.address.label} onChange={(e) => setAddr("label", e.target.value)} placeholder="ex: Casa, Trabalho, Entrega" />
+            <label>Label *</label>
+            <input value={form.address.label} onChange={(e) => setAddr("label", e.target.value)} placeholder="e.g. Home, Work, Delivery" />
           </div>
           <div className="field">
-            <label>Nome completo *</label>
+            <label>Full name *</label>
             <input value={form.address.full_name} onChange={(e) => setAddr("full_name", e.target.value)} />
           </div>
           <div className="field">
-            <label>Rua *</label>
+            <label>Street *</label>
             <input value={form.address.street} onChange={(e) => setAddr("street", e.target.value)} />
           </div>
           <div className="field">
-            <label>Número *</label>
+            <label>Number *</label>
             <input value={form.address.number} onChange={(e) => setAddr("number", e.target.value)} />
           </div>
           <div className="field">
-            <label>Complemento</label>
+            <label>Complement</label>
             <input value={form.address.complement} onChange={(e) => setAddr("complement", e.target.value)} />
           </div>
           <div className="field">
-            <label>Bairro *</label>
+            <label>Neighborhood *</label>
             <input value={form.address.neighborhood} onChange={(e) => setAddr("neighborhood", e.target.value)} />
           </div>
           <div className="field">
-            <label>Cidade *</label>
+            <label>City *</label>
             <input value={form.address.city} onChange={(e) => setAddr("city", e.target.value)} />
           </div>
           <div className="field">
-            <label>Estado *</label>
+            <label>State *</label>
             <input value={form.address.state} onChange={(e) => setAddr("state", e.target.value)} />
           </div>
           <div className="field">
-            <label>CEP *</label>
+            <label>ZIP code *</label>
             <input value={form.address.zip_code} onChange={(e) => setAddr("zip_code", e.target.value)} />
           </div>
           <div className="field">
-            <label>País *</label>
+            <label>Country *</label>
             <input value={form.address.country} onChange={(e) => setAddr("country", e.target.value)} />
           </div>
           <div className="field">
-            <label>Telefone</label>
+            <label>Phone</label>
             <input value={form.address.phone} onChange={(e) => setAddr("phone", e.target.value)} />
           </div>
         </div>
@@ -692,15 +692,15 @@ function EntryForm({
       {form.type === "creditCard" && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
           <div className="field">
-            <label>Rótulo *</label>
-            <input value={form.credit_card.label} onChange={(e) => setCard("label", e.target.value)} placeholder="ex: Nubank, Itaú Platinum" />
+            <label>Label *</label>
+            <input value={form.credit_card.label} onChange={(e) => setCard("label", e.target.value)} placeholder="e.g. Chase Sapphire, Amex Gold" />
           </div>
           <div className="field">
-            <label>Titular *</label>
+            <label>Cardholder *</label>
             <input value={form.credit_card.card_holder_name} onChange={(e) => setCard("card_holder_name", e.target.value)} />
           </div>
           <div className="field">
-            <label>Número *</label>
+            <label>Number *</label>
             <div style={{ display: "flex", gap: "0.4rem" }}>
               <input
                 type={showCardNumber ? "text" : "password"}
@@ -715,18 +715,18 @@ function EntryForm({
             </div>
           </div>
           <div className="field">
-            <label>Bandeira *</label>
+            <label>Network *</label>
             <select value={form.credit_card.card_network} onChange={(e) => setCard("card_network", e.target.value)}>
               {CARD_NETWORK_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
           </div>
           <div className="field">
-            <label>Mês de validade *</label>
+            <label>Expiry month *</label>
             <input value={form.credit_card.expiry_month} onChange={(e) => setCard("expiry_month", e.target.value)} placeholder="MM" />
           </div>
           <div className="field">
-            <label>Ano de validade *</label>
-            <input value={form.credit_card.expiry_year} onChange={(e) => setCard("expiry_year", e.target.value)} placeholder="AAAA" />
+            <label>Expiry year *</label>
+            <input value={form.credit_card.expiry_year} onChange={(e) => setCard("expiry_year", e.target.value)} placeholder="YYYY" />
           </div>
           <div className="field">
             <label>CVV *</label>
@@ -744,35 +744,35 @@ function EntryForm({
             </div>
           </div>
           <div className="field">
-            <label>Banco</label>
+            <label>Bank</label>
             <input value={form.credit_card.bank} onChange={(e) => setCard("bank", e.target.value)} />
           </div>
         </div>
       )}
 
       <div className="field">
-        <label>Notas</label>
-        <input value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="notas opcionais" />
+        <label>Notes</label>
+        <input value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="optional notes" />
       </div>
       <div className="field">
-        <label>Grupos</label>
+        <label>Groups</label>
         <ProfilePicker value={form.profiles} onChange={(v) => set("profiles", v)} options={profileOptions} />
       </div>
       {form.type === "credential" && (
         <>
           <div className="field">
-            <label>Segredo 2FA (opcional)</label>
+            <label>2FA secret (optional)</label>
             <div style={{ display: "flex", gap: "0.4rem" }}>
               <input
                 style={{ flex: 1 }}
                 value={form.totp_secret}
                 onChange={(e) => handleTotpChange(e.target.value)}
-                placeholder="Segredo base32 ou URI otpauth://..."
+                placeholder="Base32 secret or otpauth:// URI..."
               />
               <button
                 type="button"
                 onClick={() => setQrScannerOpen(true)}
-                title="Escanear QR pela webcam"
+                title="Scan QR via webcam"
                 style={{ padding: "0.2em 0.6em", fontSize: "0.9em" }}
               >
                 📷
@@ -780,7 +780,7 @@ function EntryForm({
               <button
                 type="button"
                 onClick={handleUploadQrImage}
-                title="Carregar QR de uma imagem"
+                title="Load QR from an image"
                 style={{ padding: "0.2em 0.6em", fontSize: "0.9em" }}
               >
                 🖼
@@ -792,19 +792,19 @@ function EntryForm({
             <TotpQrScanner onDetected={handleQrDetected} onClose={() => setQrScannerOpen(false)} />
           )}
           <div className="field">
-            <label>Passkey (opcional)</label>
+            <label>Passkey (optional)</label>
             {form.passkey ? (
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                 <span className="muted" style={{ fontSize: "0.85em" }}>
                   🔑 {form.passkey.rp_id}
                 </span>
                 <button type="button" onClick={handleGeneratePasskey} style={{ padding: "0.2em 0.6em", fontSize: "0.8em" }}>
-                  Recriar
+                  Regenerate
                 </button>
               </div>
             ) : (
               <button type="button" onClick={handleGeneratePasskey} style={{ padding: "0.3em 0.8em", fontSize: "0.85em", alignSelf: "flex-start" }}>
-                Gerar passkey
+                Generate passkey
               </button>
             )}
           </div>
@@ -815,13 +815,13 @@ function EntryForm({
           onClick={handleSave}
           disabled={saving || !canSaveForm(form) || (form.type === "credential" && !!totpError)}
         >
-          {saving ? "Salvando..." : "Salvar"}
+          {saving ? "Saving..." : "Save"}
         </button>
         <button
           onClick={onCancel}
           style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)" }}
         >
-          Cancelar
+          Cancel
         </button>
       </div>
     </div>
@@ -1085,7 +1085,7 @@ export function VaultManagement() {
   }
 
   async function handleRenameProfile(oldName: string) {
-    const newName = window.prompt(`Renomear perfil "${oldName}" para:`, oldName)?.trim();
+    const newName = window.prompt(`Rename profile "${oldName}" to:`, oldName)?.trim();
     if (!newName || newName === oldName) return;
     setProfileError(null);
     try {
@@ -1097,7 +1097,7 @@ export function VaultManagement() {
   }
 
   async function handleDeleteProfile(name: string) {
-    if (!window.confirm(`Apagar o perfil "${name}"? Ele será removido de todas as senhas que o usam.`)) return;
+    if (!window.confirm(`Delete profile "${name}"? It will be removed from all passwords that use it.`)) return;
     setProfileError(null);
     try {
       await invoke<void>("vault_delete_profile", { name });
@@ -1135,7 +1135,7 @@ export function VaultManagement() {
           >
             ← Vault
           </button>
-          <h2 style={{ margin: 0 }}>Wallet Arweave</h2>
+          <h2 style={{ margin: 0 }}>Arweave Wallet</h2>
         </div>
         <VaultSettings />
       </div>
@@ -1222,16 +1222,16 @@ export function VaultManagement() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
             {hasVault === undefined ? (
-              <span className="muted">Verificando status on-chain...</span>
+              <span className="muted">Checking on-chain status...</span>
             ) : hasVault ? (
               <span className="muted">
-                Versão <strong>{String((vaultRef as any)?.version ?? "?")}</strong> registrada on-chain
+                Version <strong>{String((vaultRef as any)?.version ?? "?")}</strong> registered on-chain
                 {(vaultRef as any)?.updatedAt
-                  ? ` · atualizado em ${formatTs(Number((vaultRef as any).updatedAt))}`
+                  ? ` · updated on ${formatTs(Number((vaultRef as any).updatedAt))}`
                   : ""}
               </span>
             ) : (
-              <span className="muted">Vault ainda não registrado on-chain</span>
+              <span className="muted">Vault not yet registered on-chain</span>
             )}
           </div>
           <div style={{ display: "flex", gap: "0.5rem" }}>
@@ -1245,11 +1245,11 @@ export function VaultManagement() {
             <button
               onClick={handleEnviarViaDeviceKey}
               disabled={deviceKeyDisabled}
-              title="Publica o vault assinando com a device key local, sem toque na Ledger — requer ~/.truthid/bundler_config.json configurado"
+              title="Publishes the vault signing with the local device key, without touching the Ledger — requires ~/.truthid/bundler_config.json configured"
             >
               {deviceKeyPublishState === "publishing"
-                ? "Publicando via device key..."
-                : "Publicar via device key (sem Ledger)"}
+                ? "Publishing via device key..."
+                : "Publish via device key (no Ledger)"}
             </button>
           </div>
         </div>
@@ -1281,12 +1281,12 @@ export function VaultManagement() {
       {hasVault && typeof (vaultRef as any)?.cid === "string" && !(vaultRef as any).cid.startsWith("ar://") && (
         <div className="card" style={{ marginBottom: "1rem" }}>
           <p style={{ margin: 0 }}>
-            Este vault ainda está publicado no armazenamento antigo (IPFS), que não tem
-            mais pinning dedicado — um device novo sem cache local pode falhar ao
-            parear. Republique para migrar para o Arweave.
+            This vault is still published on the old storage (IPFS), which no longer
+            has dedicated pinning — a new device without a local cache may fail to
+            pair. Republish to migrate to Arweave.
           </p>
           <button onClick={handleEnviar} disabled={buttonDisabled} style={{ marginTop: "0.5rem" }}>
-            {buttonLabel === "Enviar" ? "Migrar para Arweave" : buttonLabel}
+            {buttonLabel === "Enviar" ? "Migrate to Arweave" : buttonLabel}
           </button>
         </div>
       )}
@@ -1296,7 +1296,7 @@ export function VaultManagement() {
         <input
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          placeholder="Pesquisar por site, usuário ou grupo..."
+          placeholder="Search by site, username, or group..."
           style={{ width: "100%", boxSizing: "border-box", marginBottom: "0.75rem" }}
         />
       )}
@@ -1305,9 +1305,9 @@ export function VaultManagement() {
 
       {/* Lista de entradas */}
       {loadingEntries ? (
-        <p className="muted">Carregando...</p>
+        <p className="muted">Loading...</p>
       ) : filtered.length === 0 && !addOpen ? (
-        <p className="muted">{entries.length === 0 ? "Nenhuma senha salva ainda." : "Nenhuma entrada encontrada."}</p>
+        <p className="muted">{entries.length === 0 ? "No passwords saved yet." : "No entries found."}</p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", marginBottom: "0.75rem" }}>
           {filtered.map((entry) => {
@@ -1333,7 +1333,7 @@ export function VaultManagement() {
                       <button
                         type="button"
                         onClick={() => handleToggleFavorite(entry.id, !entry.favorite)}
-                        title={entry.favorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
+                        title={entry.favorite ? "Remove from favorites" : "Add to favorites"}
                         style={{
                           padding: "0.25em",
                           minWidth: "1.8em",
@@ -1349,9 +1349,9 @@ export function VaultManagement() {
                       </button>
                       <span style={{ fontSize: "0.9em" }}>{ENTRY_TYPE_ICON[entry.type]}</span>
                       <strong>
-                        {entry.type === "document" ? (entry.document?.name ?? "Documento")
-                          : entry.type === "address" ? (entry.address?.label ?? "Endereço")
-                          : entry.type === "creditCard" ? (entry.credit_card?.label ?? "Cartão")
+                        {entry.type === "document" ? (entry.document?.name ?? "Document")
+                          : entry.type === "address" ? (entry.address?.label ?? "Address")
+                          : entry.type === "creditCard" ? (entry.credit_card?.label ?? "Card")
                           : entry.site}
                       </strong>
                       {entry.profiles.map((p) => (
@@ -1389,7 +1389,7 @@ export function VaultManagement() {
                           onClick={() => handleDownloadDocument(entry.id, entry.document!)}
                           style={{ padding: "0.35em 0.7em", fontSize: "0.82em", minHeight: "1.8em" }}
                         >
-                          💾 Baixar
+                          💾 Download
                         </button>
                       </div>
                     )}
@@ -1422,13 +1422,13 @@ export function VaultManagement() {
                           disabled={mutating}
                           style={{ padding: "0.3em 0.6em", fontSize: "0.82em", borderColor: "var(--color-danger)", color: "var(--color-danger)" }}
                         >
-                          Sim
+                          Yes
                         </button>
                         <button
                           onClick={() => setDeletingId(null)}
                           style={{ padding: "0.3em 0.6em", fontSize: "0.82em", borderColor: "var(--color-border)", color: "var(--color-text-muted)" }}
                         >
-                          Não
+                          No
                         </button>
                       </>
                     ) : (
@@ -1450,11 +1450,11 @@ export function VaultManagement() {
       {/* Formulário de adição */}
       {!addOpen ? (
         <button onClick={() => setAddOpen(true)} style={{ marginBottom: "1.5rem" }}>
-          + Nova entrada
+          + New entry
         </button>
       ) : (
         <div className="card" style={{ marginBottom: "1.5rem" }}>
-          <h3 style={{ marginTop: 0 }}>Nova entrada</h3>
+          <h3 style={{ marginTop: 0 }}>New entry</h3>
           <EntryForm
             initial={emptyForm()}
             onSave={handleAdd}
@@ -1473,17 +1473,17 @@ export function VaultManagement() {
           onClick={() => setProfilesOpen((v) => !v)}
           style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)", fontSize: "0.9em", padding: "0.4em 1em" }}
         >
-          {profilesOpen ? "▼" : "▶"} Gerenciar perfis ({profiles.length})
+          {profilesOpen ? "▼" : "▶"} Manage profiles ({profiles.length})
         </button>
 
         {profilesOpen && (
           <div className="card" style={{ marginTop: "0.75rem" }}>
             <p className="muted" style={{ marginTop: 0 }}>
-              Crie perfis com o nome que quiser e marque cada senha em quantos perfis fizer sentido.
+              Create profiles with any name you want, and tag each password with as many profiles as makes sense.
             </p>
             {profileError && <p className="error-text">{profileError}</p>}
             {profiles.length === 0 ? (
-              <p className="muted">Nenhum perfil criado ainda.</p>
+              <p className="muted">No profiles created yet.</p>
             ) : (
               <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
                 {profiles.map((p) => (
@@ -1495,14 +1495,14 @@ export function VaultManagement() {
                     <button
                       onClick={() => handleRenameProfile(p)}
                       style={{ border: "none", background: "none", padding: 0, font: "inherit", color: "inherit", cursor: "pointer" }}
-                      title="Renomear"
+                      title="Rename"
                     >
                       {p}
                     </button>
                     <button
                       onClick={() => handleDeleteProfile(p)}
                       style={{ border: "none", background: "none", padding: 0, font: "inherit", color: "var(--color-danger)", cursor: "pointer" }}
-                      title="Apagar"
+                      title="Delete"
                     >
                       ✕
                     </button>
@@ -1515,11 +1515,11 @@ export function VaultManagement() {
                 value={newProfileName}
                 onChange={(e) => setNewProfileName(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") handleAddProfile(); }}
-                placeholder="Nome do novo perfil"
+                placeholder="New profile name"
                 style={{ flex: 1 }}
               />
               <button onClick={handleAddProfile} disabled={!newProfileName.trim()}>
-                Adicionar
+                Add
               </button>
             </div>
           </div>
@@ -1532,18 +1532,18 @@ export function VaultManagement() {
           onClick={() => setPermsOpen((v) => !v)}
           style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)", fontSize: "0.9em", padding: "0.4em 1em" }}
         >
-          {permsOpen ? "▼" : "▶"} Permissões por device ({activeDevices.length})
+          {permsOpen ? "▼" : "▶"} Permissions by device ({activeDevices.length})
         </button>
 
         {permsOpen && (
           <div className="card" style={{ marginTop: "0.75rem" }}>
             <p className="muted" style={{ marginTop: 0 }}>
-              Controla se um device mobile pode <strong>escrever</strong> no vault (por padrão, só leitura).
-              Este desktop sempre tem permissão total.
+              Controls whether a mobile device can <strong>write</strong> to the vault (read-only by default).
+              This desktop always has full permission.
             </p>
             {permError && <p className="error-text">{permError}</p>}
             {activeDevices.length === 0 ? (
-              <p className="muted">Nenhum device ativo registrado.</p>
+              <p className="muted">No active devices registered.</p>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                 {activeDevices.map((d) => {
@@ -1555,7 +1555,7 @@ export function VaultManagement() {
                       style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
                     >
                       <div>
-                        <span style={{ fontWeight: 500 }}>{d.label || "Device sem nome"}</span>
+                        <span style={{ fontWeight: 500 }}>{d.label || "Unnamed device"}</span>
                         <span className="address muted" style={{ fontSize: "0.8em", marginLeft: "0.5rem" }}>
                           {truncate(d.pubKey, 8)}
                         </span>
@@ -1569,7 +1569,7 @@ export function VaultManagement() {
                           color: canWrite ? "var(--color-accent)" : "var(--color-text-muted)",
                         }}
                       >
-                        {canWrite ? "✓ Pode escrever" : "Só leitura"}
+                        {canWrite ? "✓ Can write" : "Read-only"}
                       </button>
                     </div>
                   );

@@ -50,7 +50,7 @@ export default function DashboardPage() {
   if (status === "loading") {
     return (
       <main className="flex flex-1 items-center justify-center">
-        <p className="text-sm text-gray-500">Carregando…</p>
+        <p className="text-sm text-gray-500">Loading…</p>
       </main>
     );
   }
@@ -58,9 +58,9 @@ export default function DashboardPage() {
   if (status === "anonymous") {
     return (
       <main className="flex flex-1 flex-col items-center justify-center gap-4">
-        <p>Você não está logado.</p>
+        <p>You are not signed in.</p>
         <Link href="/" className="text-sm underline">
-          Voltar
+          Back
         </Link>
       </main>
     );
@@ -77,14 +77,14 @@ export default function DashboardPage() {
         />
       )}
       <h1 className="text-xl font-semibold">
-        Olá, {customer?.name ?? customer?.email}
+        Hello, {customer?.name ?? customer?.email}
       </h1>
       <p className="text-sm text-gray-500">{customer?.email}</p>
       <button
         onClick={handleLogout}
         className="rounded-full border px-6 py-2 text-sm font-medium transition hover:bg-gray-100"
       >
-        Sair
+        Sign out
       </button>
     </main>
   );

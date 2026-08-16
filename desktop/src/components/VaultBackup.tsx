@@ -22,7 +22,7 @@ export function VaultBackup() {
     if (!importPassword.trim()) return;
     if (
       !window.confirm(
-        "Isso vai sobrescrever TODO o vault local deste device com o conteúdo do arquivo de backup. Não pode ser desfeito. Continuar?"
+        "This will overwrite the ENTIRE local vault on this device with the contents of the backup file. This cannot be undone. Continue?"
       )
     ) {
       return;
@@ -34,16 +34,16 @@ export function VaultBackup() {
     <div>
       <h2>Backup</h2>
       <p className="muted" style={{ marginBottom: "1.25rem" }}>
-        Exporta ou restaura o vault inteiro (senhas, 2FA, passkeys, perfis) num
-        arquivo <code>.truthid-backup</code>. Cifrado com uma senha própria,
-        separada da sua wallet — guarde essa senha em lugar seguro, ela não
-        pode ser recuperada.
+        Exports or restores the entire vault (passwords, 2FA, passkeys, profiles) to a
+        <code>.truthid-backup</code> file. Encrypted with its own password,
+        separate from your wallet — keep this password somewhere safe, it
+        cannot be recovered.
       </p>
 
       <div className="card" style={{ marginBottom: "1.5rem" }}>
-        <h3 style={{ marginTop: 0 }}>Exportar</h3>
+        <h3 style={{ marginTop: 0 }}>Export</h3>
         <div className="field">
-          <label>Senha de exportação</label>
+          <label>Export password</label>
           <input
             type="password"
             value={exportPassword}
@@ -51,7 +51,7 @@ export function VaultBackup() {
           />
         </div>
         <div className="field" style={{ marginTop: "0.5rem" }}>
-          <label>Confirmar senha</label>
+          <label>Confirm password</label>
           <input
             type="password"
             value={exportPasswordConfirm}
@@ -59,25 +59,25 @@ export function VaultBackup() {
           />
         </div>
         {exportError && <p className="error-text">{exportError}</p>}
-        {exportState === "done" && <p className="muted">Backup salvo ✓</p>}
+        {exportState === "done" && <p className="muted">Backup saved ✓</p>}
         <div className="actions-row">
           <button
             onClick={handleExport}
             disabled={exportInvalid || exportState === "exporting"}
           >
-            {exportState === "exporting" ? "Exportando..." : "Exportar backup"}
+            {exportState === "exporting" ? "Exporting..." : "Export backup"}
           </button>
         </div>
       </div>
 
       <div className="card">
-        <h3 style={{ marginTop: 0 }}>Importar</h3>
+        <h3 style={{ marginTop: 0 }}>Import</h3>
         <p className="muted" style={{ marginTop: 0 }}>
-          Escolha o arquivo <code>.truthid-backup</code> e digite a senha usada
-          na exportação.
+          Choose the <code>.truthid-backup</code> file and enter the password used
+          at export time.
         </p>
         <div className="field">
-          <label>Senha do backup</label>
+          <label>Backup password</label>
           <input
             type="password"
             value={importPassword}
@@ -85,14 +85,14 @@ export function VaultBackup() {
           />
         </div>
         {importError && <p className="error-text">{importError}</p>}
-        {importState === "done" && <p className="muted">Backup importado ✓</p>}
+        {importState === "done" && <p className="muted">Backup imported ✓</p>}
         <div className="actions-row">
           <button
             onClick={handleImport}
             disabled={!importPassword.trim() || importState === "importing"}
             style={{ borderColor: "var(--color-danger)", color: "var(--color-danger)" }}
           >
-            {importState === "importing" ? "Importando..." : "Escolher arquivo e importar"}
+            {importState === "importing" ? "Importing..." : "Choose file and import"}
           </button>
         </div>
       </div>
