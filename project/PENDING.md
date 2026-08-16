@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-08-16 (Sessão 203: decisão do dono do projeto — lançar em produção hoje a parte core/gratuita e soberana do app, sem a parte paga; ver nota de lançamento logo abaixo)
+> Última atualização: 2026-08-16 (Sessão 204: validação prática pós-lançamento — P50 corrigido e validado em hardware real (bug de scan de QR no Mobile); P51 registrado (lacuna real no aviso de vault legado pra devices read-only); P52 registrado (vault real de @masterlxz ainda preso no CID IPFS morto, tentativas de republish não confirmaram on-chain))
 
 ---
 
@@ -38,7 +38,9 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 
 ### Deploy e Redeploy
 
-Nenhuma pendência aberta nesta categoria no momento.
+| ID | Item | Onde se originou | Prioridade |
+|---|---|---|---|
+| P52 | **Vault real de `@masterlxz` (identityId 1) ainda preso no CID IPFS morto** — `getVault(1)` on-chain (`VaultRegistry` `0x0744...849b4`, Base Mainnet) confirmado via `cast call` continua devolvendo `QmeY4noxFdjwfi3zij5T4WuVjd2fDAPXrkG7gQBRRNmuBT` (versão 1, mesmo `updatedAt` de 13/08/2026), mesmo depois de 2 tentativas de republish pelo dono do projeto no Desktop nativo (Sessão 204). 1ª tentativa via "Publicar via device key (sem Ledger)" mostrou erro **"Nenhuma identidade carregada"** (`useVaultPublish.ts:139`, `smartAccountAddress` do `IdentityContext` nulo mesmo com a carteira já aparecendo "Disconnect wallet" no header — parece problema de timing/resolução do contexto, não investigado a fundo). 2ª tentativa ("publiquei dnv") também não mudou nada on-chain — não confirmado se bateu no mesmo erro ou falhou de outra forma, sessão encerrada por limite de uso antes de investigar. **Efeito prático**: qualquer device sem cache local do vault (ex: o celular físico usado nesta sessão) não consegue carregar o vault real — achado que expôs o P51 abaixo. | conversa direta (Sessão 204) | 🔴 Alta — bloqueia uso real do Vault em qualquer device novo/sem cache |
 
 ### Validações em Hardware Real
 
@@ -69,6 +71,7 @@ Nenhuma pendência aberta nesta categoria no momento.
 
 | ID | Item | Onde se originou | Prioridade |
 |---|---|---|---|
+| P51 | **Aviso de "vault legado" (S201) não cobre devices read-only sem cache** — `_buildLegacyStorageBanner()` em `vault_screen.dart` (Mobile) só renderiza atrás de `if (_canWrite && _legacyIpfsCid)` — um device pareado sem permissão de escrita (não pode republicar mesmo) e sem cache local do vault cai direto no erro cru `VaultSyncStatus.syncFailedNoCache` ("Could not load your vault" + stack de exceção técnica dos gateways IPFS), sem nenhuma explicação do que está acontecendo. Achado ao vivo na Sessão 204 tentando validar o pareamento de leitura da extensão contra a identidade real `@masterlxz` num celular físico read-only. Fix provável: mostrar uma versão informativa do banner (sem o botão de republicar) também pra devices sem `_canWrite`, ou pelo menos trocar o texto de `syncFailedNoCache` quando `legacyIpfsCid` for detectável. | conversa direta (Sessão 204) | 🟠 Média |
 | P14 | **Interface e identidade visual (UI/UX)** — app e desktop funcionais mas sem polish de produto final. Identidade visual já aplicada (Fase 9), mas fluxos e polish de produto pendentes. | `ARCHITECTURE.md` (tabela de decisões) | 🟡 Baixa |
 | P15 | **Session key com limite de gasto** — desenho para evitar gas por mensagem (IA). Em aberto: onde registrar consumo on-chain vs off-chain, revogação em cascata. | `ROADMAP.md` (Monetização) | 🟡 Baixa |
 | P16 | **Monetização — definições finais** — precificação ETH/BRL, modelo de consentimento do /pin, session key spending limit, margem de cada fonte de receita. Nada implementado. | `ROADMAP.md` (Monetização) | 🟡 Baixa |
@@ -88,6 +91,12 @@ Nenhuma pendência aberta nesta categoria no momento.
 ---
 
 ## Resolvidas
+
+### P50 — bug real de scan de QR no Mobile, corrigido e validado em hardware (Sessão 204)
+
+| ID | Item | Resolvida em |
+|---|---|---|
+| ~~P50~~ | ~~Abrir a câmera de QR no Mobile (`mobile/lib/screens/scan_screen.dart`, usado pelo pareamento de leitura da extensão entre outros fluxos) sempre falhava com "Unexpected error occurred" em hardware real (Samsung Galaxy S25 FE, Android 16/API 36) — confirmado via `logcat` que não era permissão (já concedida): `NoSuchMethodException: com.google.mlkit.vision.common.internal.VisionCommonRegistrar.<init>`, causado por um bug conhecido do pacote `mobile_scanner` 6.x onde o R8 (modo full, padrão desde AGP 8.0) corrompe/obfusca classes do ML Kit acessadas via reflexão — corrigido oficialmente rio-acima na versão 7.2.1 (`CHANGELOG.md` do pacote, confirmado via fetch direto do GitHub). Corrigido atualizando `mobile_scanner: ^6.0.0` → `^7.4.0` (mais recente, sem breaking change relevante pro uso deste projeto — só `MobileScanner`/`BarcodeCapture`/`analyzeImage`, nenhuma API removida/alterada em uso). Aproveitado pra adicionar um `errorBuilder` de verdade em `ScanScreen` (não existia nenhum tratamento de erro antes, caía no fallback genérico do pacote sem nenhum diagnóstico). `flutter analyze` limpo, `flutter test` 582/582. **Validado em hardware real**: rebuild do APK debug + reinstalação via `adb install -r` no device físico, scan de QR real confirmado funcionando pela pessoa dona do projeto.~~ | **Sessão 204** |
 
 ### P46/P11 — decisões do dono do projeto: fecha investigação do bug do ⭐, define modelo de consentimento do /pin (Sessão 202)
 

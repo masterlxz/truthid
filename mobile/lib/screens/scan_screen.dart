@@ -56,7 +56,22 @@ class _ScanScreenState<T> extends State<ScanScreen<T>> {
       appBar: AppBar(title: Text(widget.title)),
       body: Stack(
         children: [
-          MobileScanner(onDetect: _onDetect),
+          MobileScanner(
+            onDetect: _onDetect,
+            errorBuilder: (context, error) => ColoredBox(
+              color: Colors.black,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    'Camera error: ${error.errorCode.name}\n${error.errorDetails?.message ?? ''}',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ),
+              ),
+            ),
+          ),
           IgnorePointer(
             child: CustomPaint(
               painter: _ScanOverlayPainter(),
