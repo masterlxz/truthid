@@ -1,4 +1,5 @@
 import { secp256k1 } from '@noble/curves/secp256k1';
+import { browser } from 'wxt/browser';
 
 import { decrypt } from '../../src/crypto/ecies';
 import {
@@ -44,6 +45,33 @@ const DEAD_DROP_RESOLVED_MESSAGE = 'truthid-dead-drop-resolved';
 const HOST_PERMISSION: chrome.permissions.Permissions = {
   origins: ['http://*/*'],
 };
+
+// Chave dos data-i18n* no HTML é lida em runtime (string genérica, não um
+// literal conhecido em tempo de compilação) — só aqui, na ponte HTML↔chrome.i18n,
+// que o tipo estrito de `getMessage` precisa ser contornado.
+type I18nMessageKey = Parameters<typeof browser.i18n.getMessage>[0];
+function getMessageByKey(key: string): string {
+  return browser.i18n.getMessage(key as I18nMessageKey);
+}
+
+// Traduz o markup estático do popup.html via chrome.i18n — só os atributos
+// `data-i18n*` marcados no HTML, não o texto montado dinamicamente aqui
+// (esse já chama `browser.i18n.getMessage` direto nos handlers abaixo).
+function localizePopup(): void {
+  document.title = browser.i18n.getMessage('popupTitle');
+  for (const el of document.querySelectorAll<HTMLElement>('[data-i18n]')) {
+    el.textContent = getMessageByKey(el.dataset.i18n!);
+  }
+  for (const el of document.querySelectorAll<HTMLInputElement>('[data-i18n-placeholder]')) {
+    el.placeholder = getMessageByKey(el.dataset.i18nPlaceholder!);
+  }
+  for (const el of document.querySelectorAll<HTMLElement>('[data-i18n-aria-label]')) {
+    const message = getMessageByKey(el.dataset.i18nAriaLabel!);
+    el.setAttribute('aria-label', message);
+    el.title = message;
+  }
+}
+localizePopup();
 
 async function createNewSession(): Promise<SessionState> {
   const privKey = secp256k1.utils.randomPrivateKey();
@@ -164,12 +192,8 @@ let currentState: SessionState | null = null;
 async function showQr(state: SessionState): Promise<void> {
   showView('pairing');
   els.statusText.textContent = isNetworkDiscoverySupported()
-    ? 'A backup delivery is already trying in the background — click "Find" ' +
-      "for a faster local-network delivery once you've scanned the code."
-    : "Your browser doesn't support automatic local-network discovery " +
-      '(this is expected on Brave — it disables that API for privacy). ' +
-      "A backup delivery is trying in the background, or enter your phone's " +
-      "IP manually below once you've scanned the code.";
+    ? browser.i18n.getMessage('statusFindHintSupported')
+    : browser.i18n.getMessage('statusFindHintUnsupported');
 
   const payload = toQrPayload(
     state.sessionId,
@@ -302,7 +326,7 @@ async function init(): Promise<void> {
 els.findButton.addEventListener('click', async () => {
   if (!currentState) return;
   if (isExpired(currentState)) {
-    els.statusText.textContent = 'This session expired — generate a new QR code.';
+    els.statusText.textContent = browser.i18n.getMessage('statusSessionExpired');
     return;
   }
 
@@ -315,8 +339,7 @@ els.findButton.addEventListener('click', async () => {
   // once..." sem nenhum caminho real de concessão nesses browsers.
   const granted = await ensureHostPermission();
   if (!granted) {
-    els.statusText.textContent =
-      "Permission denied — enter your phone's IP manually below.";
+    els.statusText.textContent = browser.i18n.getMessage('statusPermissionDeniedManualIp');
     return;
   }
 
@@ -326,13 +349,11 @@ els.findButton.addEventListener('click', async () => {
   // `sweepLan` já devolveria `null` de qualquer forma, mas pular direto pra
   // mensagem certa evita prometer uma busca que nunca ia rodar de verdade.
   if (!isNetworkDiscoverySupported()) {
-    els.statusText.textContent =
-      "This browser doesn't support automatic local-network discovery — " +
-      "enter your phone's IP manually below.";
+    els.statusText.textContent = browser.i18n.getMessage('statusDiscoveryUnsupported');
     return;
   }
 
-  els.statusText.textContent = 'Looking for your phone on the local network...';
+  els.statusText.textContent = browser.i18n.getMessage('statusLookingForPhone');
 
   const blob = await sweepLan(currentState.sessionId);
   if (blob) {
@@ -342,23 +363,20 @@ els.findButton.addEventListener('click', async () => {
 
   if (currentState.status === 'received') return; // dead-drop já resolveu em background enquanto o sweep rodava
 
-  els.statusText.textContent =
-    "Couldn't find your phone automatically. Enter its IP manually below, or " +
-    'wait — a backup delivery is still trying in the background (can take a ' +
-    'couple of minutes).';
+  els.statusText.textContent = browser.i18n.getMessage('statusCouldNotFindPhone');
 });
 
 els.manualConnectButton.addEventListener('click', async () => {
   if (!currentState) return;
   if (isExpired(currentState)) {
-    els.statusText.textContent = 'This session expired — generate a new QR code.';
+    els.statusText.textContent = browser.i18n.getMessage('statusSessionExpired');
     return;
   }
 
   const ip = els.manualIpInput.value.trim();
   if (!ip) return;
 
-  els.statusText.textContent = `Trying ${ip}...`;
+  els.statusText.textContent = browser.i18n.getMessage('statusTryingIp', [ip]);
   for (const port of CANDIDATE_PORTS) {
     const blob = await fetchSessionBlob(ip, port, currentState.sessionId);
     if (blob) {
@@ -366,7 +384,7 @@ els.manualConnectButton.addEventListener('click', async () => {
       return;
     }
   }
-  els.statusText.textContent = "Couldn't reach your phone at that address.";
+  els.statusText.textContent = browser.i18n.getMessage('statusCouldNotReachPhone');
 });
 
 async function startNewSession(): Promise<void> {
@@ -392,10 +410,14 @@ els.newSessionButton2.addEventListener('click', () => void startNewSession());
 
 async function refreshPendingEdits(): Promise<void> {
   const pending = await listPendingEdits();
-  els.pendingEditsBadge.textContent = `${pending.length} pending`;
+  els.pendingEditsBadge.textContent = browser.i18n.getMessage('pendingCountBadge', [
+    String(pending.length),
+  ]);
   els.pendingBanner.hidden = pending.length === 0;
   els.pendingBannerText.textContent =
-    pending.length === 1 ? '1 pending change — tap to review' : `${pending.length} pending changes — tap to review`;
+    pending.length === 1
+      ? browser.i18n.getMessage('pendingBannerTextSingular')
+      : browser.i18n.getMessage('pendingBannerTextPlural', [String(pending.length)]);
   if (pending.length === 0) {
     els.pendingEditQrWrapper.hidden = true;
     els.pendingEditsStatus.textContent = '';
@@ -427,7 +449,7 @@ els.sendToDesktopButton.addEventListener('click', async () => {
   const pending = await listPendingEdits();
   if (pending.length === 0) return;
 
-  els.pendingEditsStatus.textContent = 'Looking for TruthID Desktop on this computer...';
+  els.pendingEditsStatus.textContent = browser.i18n.getMessage('pendingStatusLookingForDesktop');
   els.sendToDesktopButton.disabled = true;
   els.sendToPhoneButton.disabled = true;
   let removed = false;
@@ -435,17 +457,18 @@ els.sendToDesktopButton.addEventListener('click', async () => {
     const result = await sendToDesktop(pending);
     if (result.status === 'approved') {
       await removePendingEdits(pending.map((p) => p.id));
-      els.pendingEditsStatus.textContent = 'Saved.';
+      els.pendingEditsStatus.textContent = browser.i18n.getMessage('savedStatus');
       removed = true;
     } else if (result.status === 'rejected') {
       await removePendingEdits(pending.map((p) => p.id));
-      els.pendingEditsStatus.textContent = 'Rejected on the Desktop.';
+      els.pendingEditsStatus.textContent = browser.i18n.getMessage('pendingStatusRejectedOnDesktop');
       removed = true;
     } else if (result.status === 'not-found') {
-      els.pendingEditsStatus.textContent =
-        "Couldn't find TruthID Desktop running on this computer.";
+      els.pendingEditsStatus.textContent = browser.i18n.getMessage('pendingStatusNotFoundDesktop');
     } else {
-      els.pendingEditsStatus.textContent = `Failed: ${result.status}${result.error ? ` (${result.error})` : ''}`;
+      els.pendingEditsStatus.textContent = result.error
+        ? browser.i18n.getMessage('pendingStatusFailedWithError', [result.status, result.error])
+        : browser.i18n.getMessage('pendingStatusFailed', [result.status]);
     }
     // Achado real (Sessão 135, agora por leva inteira depois do P29): se
     // essa MESMA leva também tinha um QR de celular pendente (usuário
@@ -501,7 +524,7 @@ async function attemptMobileDelivery(
       // marca como enviada assim que o PUT chega, mesmo espírito best-effort
       // já aceito em outros lugares do projeto (dead-drop, por exemplo).
       await removePendingEdits(proposals.map((p) => p.id));
-      els.pendingEditsStatus.textContent = 'Sent to your phone — check it to approve.';
+      els.pendingEditsStatus.textContent = browser.i18n.getMessage('pendingStatusSentToPhone');
       els.pendingEditQrWrapper.hidden = true;
       activeMobileDelivery = null;
       delivered = true;
@@ -511,9 +534,9 @@ async function attemptMobileDelivery(
       // primeira tentativa, não por TTL vencido. `activeMobileDelivery`
       // continua de pé pro botão de retry tentar de novo com a MESMA sessão,
       // depois que o celular já escaneou e está com o servidor no ar.
-      els.pendingEditsStatus.textContent =
-        "Couldn't reach your phone on the local network — scan the QR, then " +
-        'try again.';
+      els.pendingEditsStatus.textContent = browser.i18n.getMessage(
+        'pendingStatusCouldNotReachPhoneRetry',
+      );
     }
   } finally {
     els.sendToDesktopButton.disabled = false;
@@ -542,7 +565,7 @@ els.sendToPhoneButton.addEventListener('click', async () => {
 
   const granted = await ensureHostPermission();
   if (!granted) {
-    els.pendingEditsStatus.textContent = 'Permission denied.';
+    els.pendingEditsStatus.textContent = browser.i18n.getMessage('permissionDenied');
     els.sendToDesktopButton.disabled = false;
     els.sendToPhoneButton.disabled = false;
     return;
@@ -559,11 +582,11 @@ els.sendToPhoneButton.addEventListener('click', async () => {
     activeMobileDelivery = { session, proposals: pending };
     els.pendingEditQrWrapper.hidden = false;
     await renderQrToCanvas(els.pendingEditQrCanvas, JSON.stringify(session.qrPayload));
-    els.pendingEditsStatus.textContent = 'Scan with your phone...';
+    els.pendingEditsStatus.textContent = browser.i18n.getMessage('pendingStatusScanWithPhone');
   } catch (e) {
     activeMobileDelivery = null;
     els.pendingEditQrWrapper.hidden = true;
-    els.pendingEditsStatus.textContent = `Failed to generate the QR code: ${e}`;
+    els.pendingEditsStatus.textContent = browser.i18n.getMessage('failedToGenerateQr', [String(e)]);
     els.sendToDesktopButton.disabled = false;
     els.sendToPhoneButton.disabled = false;
     return;
@@ -600,7 +623,7 @@ async function loadKuboEndpointIntoForm(): Promise<void> {
 
 els.kuboEndpointSaveButton.addEventListener('click', async () => {
   await savePinningProviderConfig(els.kuboEndpointInput.value);
-  els.kuboEndpointStatus.textContent = 'Saved.';
+  els.kuboEndpointStatus.textContent = browser.i18n.getMessage('savedStatus');
 });
 
 void loadKuboEndpointIntoForm();

@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="./popup.css" />
   </head>
   <body>
-    <h1><img src="/icon/32.png" alt="" /> TruthID Vault</h1>
+    <h1><img src="/icon/32.png" alt="" /> <span data-i18n="popupTitle">TruthID Vault</span></h1>
 
     <div id="pending-banner" class="pending-banner" hidden>
       <span id="pending-banner-text"></span>
@@ -15,17 +15,26 @@
 
     <section id="pairing-view">
       <div class="card">
-        <p class="muted">Scan this QR code from the TruthID Mobile app.</p>
+        <p class="muted" data-i18n="pairingScanInstruction">
+          Scan this QR code from the TruthID Mobile app.
+        </p>
         <canvas id="qr-canvas"></canvas>
         <p id="status-text"></p>
-        <button id="find-button">I scanned it — look for my phone</button>
+        <button id="find-button" data-i18n="pairingFindButton">
+          I scanned it — look for my phone
+        </button>
         <div class="manual-row">
-          <input id="manual-ip" type="text" placeholder="Phone IP (e.g. 192.168.1.42)" />
-          <button id="manual-connect">Connect</button>
+          <input
+            id="manual-ip"
+            type="text"
+            data-i18n-placeholder="manualIpPlaceholder"
+            placeholder="Phone IP (e.g. 192.168.1.42)"
+          />
+          <button id="manual-connect" data-i18n="connectButton">Connect</button>
         </div>
       </div>
       <div class="secondary-action">
-        <button id="new-session">Generate a new QR code</button>
+        <button id="new-session" data-i18n="generateNewQrButton">Generate a new QR code</button>
       </div>
     </section>
 
@@ -33,14 +42,29 @@
       <div class="vault-view-header">
         <div class="search-field">
           <span class="search-icon" aria-hidden="true"></span>
-          <input id="vault-search" type="search" placeholder="Search" />
+          <input
+            id="vault-search"
+            type="search"
+            data-i18n-placeholder="searchPlaceholder"
+            placeholder="Search"
+          />
         </div>
-        <button id="new-entry-button" class="icon-button" aria-label="New password"></button>
-        <button id="settings-button" class="icon-button" aria-label="Settings"></button>
+        <button
+          id="new-entry-button"
+          class="icon-button"
+          data-i18n-aria-label="newPasswordAriaLabel"
+          aria-label="New password"
+        ></button>
+        <button
+          id="settings-button"
+          class="icon-button"
+          data-i18n-aria-label="settingsAriaLabel"
+          aria-label="Settings"
+        ></button>
       </div>
       <div id="vault-list"></div>
       <div class="secondary-action">
-        <button id="new-session-2">Start a new session</button>
+        <button id="new-session-2" data-i18n="startNewSessionButton">Start a new session</button>
       </div>
     </section>
 
@@ -50,35 +74,47 @@
 
     <section id="pending-view" hidden>
       <div class="detail-header">
-        <button id="pending-back" class="icon-button" aria-label="Back to vault"></button>
-        <h2 class="detail-title">Pending changes</h2>
+        <button
+          id="pending-back"
+          class="icon-button"
+          data-i18n-aria-label="backToVaultAriaLabel"
+          aria-label="Back to vault"
+        ></button>
+        <h2 class="detail-title" data-i18n="pendingTitle">Pending changes</h2>
       </div>
       <div class="card">
-        <span class="status-badge" id="pending-edits-badge">0 pending</span>
-        <p class="muted" style="margin: 0.5rem 0 0.75rem">
+        <span class="status-badge" id="pending-edits-badge"></span>
+        <p class="muted" style="margin: 0.5rem 0 0.75rem" data-i18n="pendingDescription">
           New or updated credentials waiting to be saved — send them to a device you trust to
           approve.
         </p>
         <div class="actions-row">
-          <button id="send-to-desktop">Send to this computer</button>
-          <button id="send-to-phone">Send to phone</button>
+          <button id="send-to-desktop" data-i18n="sendToDesktopButton">Send to this computer</button>
+          <button id="send-to-phone" data-i18n="sendToPhoneButton">Send to phone</button>
         </div>
         <p id="pending-edits-status" class="muted" style="margin-top: 0.5rem"></p>
       </div>
       <div id="pending-edit-qr-wrapper" hidden>
         <div class="card">
-          <p class="muted" style="margin: 0 0 0.5rem">Scan with the TruthID Mobile app.</p>
+          <p class="muted" style="margin: 0 0 0.5rem" data-i18n="pendingEditScanInstruction">
+            Scan with the TruthID Mobile app.
+          </p>
           <canvas id="pending-edit-qr-canvas"></canvas>
-          <button id="pending-edit-retry" style="margin-top: 0.75rem">
+          <button
+            id="pending-edit-retry"
+            style="margin-top: 0.75rem"
+            data-i18n="pendingEditRetryButton"
+          >
             I scanned it — try sending again
           </button>
           <div class="manual-row" style="margin-top: 0.75rem">
             <input
               id="pending-edit-manual-ip"
               type="text"
+              data-i18n-placeholder="manualIpPlaceholder"
               placeholder="Phone IP (e.g. 192.168.1.42)"
             />
-            <button id="pending-edit-manual-connect">Send</button>
+            <button id="pending-edit-manual-connect" data-i18n="sendButton">Send</button>
           </div>
         </div>
       </div>
@@ -86,17 +122,27 @@
 
     <section id="settings-view" hidden>
       <div class="detail-header">
-        <button id="settings-back" class="icon-button" aria-label="Back to vault"></button>
-        <h2 class="detail-title">Settings</h2>
+        <button
+          id="settings-back"
+          class="icon-button"
+          data-i18n-aria-label="backToVaultAriaLabel"
+          aria-label="Back to vault"
+        ></button>
+        <h2 class="detail-title" data-i18n="settingsTitle">Settings</h2>
       </div>
       <div class="card">
         <div class="field">
-          <label for="kubo-endpoint">
+          <label for="kubo-endpoint" data-i18n="kuboEndpointLabel">
             Kubo endpoint (lets "Send to phone" reach a phone on a different network)
           </label>
           <div class="manual-row">
-            <input id="kubo-endpoint" type="text" placeholder="http://192.168.1.53:5001" />
-            <button id="kubo-endpoint-save">Save</button>
+            <input
+              id="kubo-endpoint"
+              type="text"
+              data-i18n-placeholder="kuboEndpointPlaceholder"
+              placeholder="http://192.168.1.53:5001"
+            />
+            <button id="kubo-endpoint-save" data-i18n="saveButton">Save</button>
           </div>
         </div>
         <p id="kubo-endpoint-status" class="muted" style="margin: 0.35rem 0 0"></p>

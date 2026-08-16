@@ -16,9 +16,9 @@ export default defineConfig({
   // host concedida em runtime). Firefox 109+ já suporta MV3.
   manifestVersion: 3,
   manifest: {
-    name: 'TruthID Vault',
-    description:
-      'Recebe um subconjunto do seu vault de senhas do app TruthID Mobile via LAN ou IPFS/IPNS.',
+    name: '__MSG_extName__',
+    description: '__MSG_extDescription__',
+    default_locale: 'en',
     permissions: ['storage', 'alarms'],
     optional_host_permissions: ['http://*/*'],
     icons: {

@@ -1,0 +1,109 @@
+{
+  "extName": { "message": "TruthID Vault" },
+  "extDescription": {
+    "message": "通过局域网或 IPFS/IPNS 从 TruthID Mobile 应用接收密码库的部分内容。"
+  },
+  "popupTitle": { "message": "TruthID Vault" },
+  "pairingScanInstruction": { "message": "用 TruthID Mobile 应用扫描此二维码。" },
+  "pairingFindButton": { "message": "已扫描 — 查找我的手机" },
+  "manualIpPlaceholder": { "message": "手机 IP（例如 192.168.1.42）" },
+  "connectButton": { "message": "连接" },
+  "generateNewQrButton": { "message": "生成新的二维码" },
+  "searchPlaceholder": { "message": "搜索" },
+  "newPasswordAriaLabel": { "message": "新密码" },
+  "settingsAriaLabel": { "message": "设置" },
+  "startNewSessionButton": { "message": "开始新会话" },
+  "backToVaultAriaLabel": { "message": "返回密码库" },
+  "pendingTitle": { "message": "待处理的更改" },
+  "pendingDescription": {
+    "message": "新增或更新的凭据正等待保存 — 发送到您信任的设备进行批准。"
+  },
+  "sendToDesktopButton": { "message": "发送到这台电脑" },
+  "sendToPhoneButton": { "message": "发送到手机" },
+  "pendingEditScanInstruction": { "message": "用 TruthID Mobile 应用扫描。" },
+  "pendingEditRetryButton": { "message": "已扫描 — 重新尝试发送" },
+  "sendButton": { "message": "发送" },
+  "settingsTitle": { "message": "设置" },
+  "kuboEndpointLabel": {
+    "message": "Kubo 节点地址（让\"发送到手机\"可以连接到不同网络中的手机）"
+  },
+  "kuboEndpointPlaceholder": { "message": "http://192.168.1.53:5001" },
+  "saveButton": { "message": "保存" },
+  "statusFindHintSupported": {
+    "message": "备用发送已经在后台尝试 — 扫描代码后点击\"查找\"以获得更快的局域网发送。"
+  },
+  "statusFindHintUnsupported": {
+    "message": "您的浏览器不支持自动局域网发现（Brave 浏览器预期如此 — 出于隐私考虑禁用了该 API）。备用发送正在后台尝试，或在扫描代码后于下方手动输入手机 IP。"
+  },
+  "statusSessionExpired": { "message": "此会话已过期 — 请生成新的二维码。" },
+  "statusPermissionDeniedManualIp": {
+    "message": "权限被拒绝 — 请在下方手动输入手机 IP。"
+  },
+  "statusDiscoveryUnsupported": {
+    "message": "您的浏览器不支持自动局域网发现 — 请在下方手动输入手机 IP。"
+  },
+  "statusLookingForPhone": { "message": "正在局域网中查找您的手机..." },
+  "statusCouldNotFindPhone": {
+    "message": "未能自动找到您的手机。请在下方手动输入其 IP，或等待 — 备用发送仍在后台尝试（可能需要几分钟）。"
+  },
+  "statusTryingIp": {
+    "message": "正在尝试 $IP$...",
+    "placeholders": { "ip": { "content": "$1" } }
+  },
+  "statusCouldNotReachPhone": { "message": "无法连接到该地址的手机。" },
+  "pendingCountBadge": {
+    "message": "$COUNT$ 项待处理",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "pendingBannerTextSingular": { "message": "1 项待处理更改 — 点击查看" },
+  "pendingBannerTextPlural": {
+    "message": "$COUNT$ 项待处理更改 — 点击查看",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "pendingStatusLookingForDesktop": { "message": "正在这台电脑上查找 TruthID Desktop..." },
+  "savedStatus": { "message": "已保存。" },
+  "pendingStatusRejectedOnDesktop": { "message": "已在 Desktop 上拒绝。" },
+  "pendingStatusNotFoundDesktop": { "message": "未能找到在这台电脑上运行的 TruthID Desktop。" },
+  "pendingStatusFailed": {
+    "message": "失败：$STATUS$",
+    "placeholders": { "status": { "content": "$1" } }
+  },
+  "pendingStatusFailedWithError": {
+    "message": "失败：$STATUS$（$ERROR$）",
+    "placeholders": { "status": { "content": "$1" }, "error": { "content": "$2" } }
+  },
+  "pendingStatusSentToPhone": { "message": "已发送到您的手机 — 请在手机上查看并批准。" },
+  "pendingStatusCouldNotReachPhoneRetry": {
+    "message": "无法在局域网中连接到您的手机 — 请扫描二维码后重试。"
+  },
+  "permissionDenied": { "message": "权限被拒绝。" },
+  "failedToGenerateQr": {
+    "message": "生成二维码失败：$ERROR$",
+    "placeholders": { "error": { "content": "$1" } }
+  },
+  "pendingStatusScanWithPhone": { "message": "请用手机扫描..." },
+  "entryFormEditTitle": { "message": "编辑密码" },
+  "entryFormNewTitle": { "message": "新密码" },
+  "fieldSite": { "message": "网站" },
+  "fieldUrl": { "message": "网址" },
+  "urlPlaceholder": { "message": "https://example.com" },
+  "fieldUsername": { "message": "用户名" },
+  "fieldNotes": { "message": "备注" },
+  "fieldPassword": { "message": "密码" },
+  "entryFormSaveChanges": { "message": "保存更改" },
+  "entryFormAddPassword": { "message": "添加密码" },
+  "cancelButton": { "message": "取消" },
+  "generateButton": { "message": "生成" },
+  "untitledEntry": { "message": "（未命名）" },
+  "passkeyBadge": {
+    "message": "🔑 $RP_ID$ 的通行密钥",
+    "placeholders": { "rp_id": { "content": "$1" } }
+  },
+  "editButton": { "message": "编辑" },
+  "showPasswordAriaLabel": { "message": "显示密码" },
+  "hidePasswordAriaLabel": { "message": "隐藏密码" },
+  "copyAriaLabel": { "message": "复制" },
+  "noEntriesInProfile": { "message": "此配置文件中没有条目。" },
+  "noEntriesMatchSearch": { "message": "没有条目匹配您的搜索。" },
+  "copyPasswordAriaLabel": { "message": "复制密码" }
+}

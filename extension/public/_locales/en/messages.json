@@ -1,0 +1,109 @@
+{
+  "extName": { "message": "TruthID Vault" },
+  "extDescription": {
+    "message": "Receives a subset of your password vault from the TruthID Mobile app via LAN or IPFS/IPNS."
+  },
+  "popupTitle": { "message": "TruthID Vault" },
+  "pairingScanInstruction": { "message": "Scan this QR code from the TruthID Mobile app." },
+  "pairingFindButton": { "message": "I scanned it — look for my phone" },
+  "manualIpPlaceholder": { "message": "Phone IP (e.g. 192.168.1.42)" },
+  "connectButton": { "message": "Connect" },
+  "generateNewQrButton": { "message": "Generate a new QR code" },
+  "searchPlaceholder": { "message": "Search" },
+  "newPasswordAriaLabel": { "message": "New password" },
+  "settingsAriaLabel": { "message": "Settings" },
+  "startNewSessionButton": { "message": "Start a new session" },
+  "backToVaultAriaLabel": { "message": "Back to vault" },
+  "pendingTitle": { "message": "Pending changes" },
+  "pendingDescription": {
+    "message": "New or updated credentials waiting to be saved — send them to a device you trust to approve."
+  },
+  "sendToDesktopButton": { "message": "Send to this computer" },
+  "sendToPhoneButton": { "message": "Send to phone" },
+  "pendingEditScanInstruction": { "message": "Scan with the TruthID Mobile app." },
+  "pendingEditRetryButton": { "message": "I scanned it — try sending again" },
+  "sendButton": { "message": "Send" },
+  "settingsTitle": { "message": "Settings" },
+  "kuboEndpointLabel": {
+    "message": "Kubo endpoint (lets \"Send to phone\" reach a phone on a different network)"
+  },
+  "kuboEndpointPlaceholder": { "message": "http://192.168.1.53:5001" },
+  "saveButton": { "message": "Save" },
+  "statusFindHintSupported": {
+    "message": "A backup delivery is already trying in the background — click \"Find\" for a faster local-network delivery once you've scanned the code."
+  },
+  "statusFindHintUnsupported": {
+    "message": "Your browser doesn't support automatic local-network discovery (this is expected on Brave — it disables that API for privacy). A backup delivery is trying in the background, or enter your phone's IP manually below once you've scanned the code."
+  },
+  "statusSessionExpired": { "message": "This session expired — generate a new QR code." },
+  "statusPermissionDeniedManualIp": {
+    "message": "Permission denied — enter your phone's IP manually below."
+  },
+  "statusDiscoveryUnsupported": {
+    "message": "This browser doesn't support automatic local-network discovery — enter your phone's IP manually below."
+  },
+  "statusLookingForPhone": { "message": "Looking for your phone on the local network..." },
+  "statusCouldNotFindPhone": {
+    "message": "Couldn't find your phone automatically. Enter its IP manually below, or wait — a backup delivery is still trying in the background (can take a couple of minutes)."
+  },
+  "statusTryingIp": {
+    "message": "Trying $IP$...",
+    "placeholders": { "ip": { "content": "$1" } }
+  },
+  "statusCouldNotReachPhone": { "message": "Couldn't reach your phone at that address." },
+  "pendingCountBadge": {
+    "message": "$COUNT$ pending",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "pendingBannerTextSingular": { "message": "1 pending change — tap to review" },
+  "pendingBannerTextPlural": {
+    "message": "$COUNT$ pending changes — tap to review",
+    "placeholders": { "count": { "content": "$1" } }
+  },
+  "pendingStatusLookingForDesktop": { "message": "Looking for TruthID Desktop on this computer..." },
+  "savedStatus": { "message": "Saved." },
+  "pendingStatusRejectedOnDesktop": { "message": "Rejected on the Desktop." },
+  "pendingStatusNotFoundDesktop": { "message": "Couldn't find TruthID Desktop running on this computer." },
+  "pendingStatusFailed": {
+    "message": "Failed: $STATUS$",
+    "placeholders": { "status": { "content": "$1" } }
+  },
+  "pendingStatusFailedWithError": {
+    "message": "Failed: $STATUS$ ($ERROR$)",
+    "placeholders": { "status": { "content": "$1" }, "error": { "content": "$2" } }
+  },
+  "pendingStatusSentToPhone": { "message": "Sent to your phone — check it to approve." },
+  "pendingStatusCouldNotReachPhoneRetry": {
+    "message": "Couldn't reach your phone on the local network — scan the QR, then try again."
+  },
+  "permissionDenied": { "message": "Permission denied." },
+  "failedToGenerateQr": {
+    "message": "Failed to generate the QR code: $ERROR$",
+    "placeholders": { "error": { "content": "$1" } }
+  },
+  "pendingStatusScanWithPhone": { "message": "Scan with your phone..." },
+  "entryFormEditTitle": { "message": "Edit password" },
+  "entryFormNewTitle": { "message": "New password" },
+  "fieldSite": { "message": "Site" },
+  "fieldUrl": { "message": "URL" },
+  "urlPlaceholder": { "message": "https://example.com" },
+  "fieldUsername": { "message": "Username" },
+  "fieldNotes": { "message": "Notes" },
+  "fieldPassword": { "message": "Password" },
+  "entryFormSaveChanges": { "message": "Save changes" },
+  "entryFormAddPassword": { "message": "Add password" },
+  "cancelButton": { "message": "Cancel" },
+  "generateButton": { "message": "Generate" },
+  "untitledEntry": { "message": "(untitled)" },
+  "passkeyBadge": {
+    "message": "🔑 Passkey for $RP_ID$",
+    "placeholders": { "rp_id": { "content": "$1" } }
+  },
+  "editButton": { "message": "Edit" },
+  "showPasswordAriaLabel": { "message": "Show password" },
+  "hidePasswordAriaLabel": { "message": "Hide password" },
+  "copyAriaLabel": { "message": "Copy" },
+  "noEntriesInProfile": { "message": "No entries in this profile." },
+  "noEntriesMatchSearch": { "message": "No entries match your search." },
+  "copyPasswordAriaLabel": { "message": "Copy password" }
+}

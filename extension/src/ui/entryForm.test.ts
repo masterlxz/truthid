@@ -2,6 +2,32 @@
 import { describe, expect, it, vi } from 'vitest';
 import { renderEntryForm } from './entryForm';
 import type { VaultEntry } from '../session/sessionState';
+import enMessages from '../../public/_locales/en/messages.json';
+
+type MessageEntry = { message: string; placeholders?: Record<string, { content: string }> };
+
+// Fake mínimo de `browser.i18n.getMessage`, lendo do dicionário `en` real —
+// mantém as asserções abaixo testando o texto de verdade que o usuário vê,
+// não uma chave arbitrária, sem precisar de todo o setup do WxtVitest.
+// `browser` (`wxt/browser`) é um `const` avaliado uma vez no import do
+// módulo a partir de `globalThis.chrome` — stubar `globalThis.chrome` num
+// `beforeEach` chegaria tarde demais (o binding já teria capturado
+// `undefined`), então mocka-se o módulo inteiro em vez disso.
+function fakeGetMessage(key: string, substitutions?: string | string[]): string {
+  const entry = (enMessages as Record<string, MessageEntry>)[key];
+  if (!entry) return key;
+  let text = entry.message;
+  const subs = Array.isArray(substitutions) ? substitutions : substitutions ? [substitutions] : [];
+  for (const [name, { content }] of Object.entries(entry.placeholders ?? {})) {
+    const match = /^\$(\d+)$/.exec(content);
+    if (match) text = text.replaceAll(`$${name.toUpperCase()}$`, subs[Number(match[1]) - 1] ?? '');
+  }
+  return text;
+}
+
+vi.mock('wxt/browser', () => ({
+  browser: { i18n: { getMessage: fakeGetMessage } },
+}));
 
 // Elemento solto, nunca anexado ao document.body: `querySelector('#id')`
 // funciona igual num nó desconectado, e evita colisão de ids duplicados

@@ -1,3 +1,5 @@
+import { browser } from 'wxt/browser';
+
 import type { VaultEntry } from '../session/sessionState';
 import { icons, iconButton } from './icons';
 
@@ -12,12 +14,12 @@ export function renderEntryDetail(
 
   const header = document.createElement('div');
   header.className = 'detail-header';
-  const back = iconButton('back', { label: 'Back to vault' });
+  const back = iconButton('back', { label: browser.i18n.getMessage('backToVaultAriaLabel') });
   back.addEventListener('click', options.onBack);
   header.appendChild(back);
   const title = document.createElement('h2');
   title.className = 'detail-title';
-  title.textContent = entry.site || entry.url || '(untitled)';
+  title.textContent = entry.site || entry.url || browser.i18n.getMessage('untitledEntry');
   header.appendChild(title);
   container.appendChild(header);
 
@@ -25,17 +27,17 @@ export function renderEntryDetail(
   card.className = 'card';
 
   if (entry.username) {
-    card.appendChild(fieldRow('Username', entry.username, () => entry.username));
+    card.appendChild(fieldRow(browser.i18n.getMessage('fieldUsername'), entry.username, () => entry.username));
   }
   card.appendChild(passwordRow(entry.password));
   if (entry.url) {
-    card.appendChild(fieldRow('URL', entry.url, () => entry.url));
+    card.appendChild(fieldRow(browser.i18n.getMessage('fieldUrl'), entry.url, () => entry.url));
   }
   if (entry.notes) {
     const notesWrap = document.createElement('div');
     notesWrap.className = 'field';
     const label = document.createElement('label');
-    label.textContent = 'Notes';
+    label.textContent = browser.i18n.getMessage('fieldNotes');
     notesWrap.appendChild(label);
     const notes = document.createElement('p');
     notes.className = 'muted';
@@ -48,14 +50,14 @@ export function renderEntryDetail(
   if (entry.passkey) {
     const badge = document.createElement('p');
     badge.className = 'muted';
-    badge.textContent = `🔑 Passkey for ${entry.passkey.rp_id}`;
+    badge.textContent = browser.i18n.getMessage('passkeyBadge', [entry.passkey.rp_id]);
     card.appendChild(badge);
   }
 
   container.appendChild(card);
 
   const editButton = document.createElement('button');
-  editButton.textContent = 'Edit';
+  editButton.textContent = browser.i18n.getMessage('editButton');
   editButton.style.marginTop = '0.75rem';
   editButton.addEventListener('click', () => options.onEdit(entry));
   container.appendChild(editButton);
@@ -86,7 +88,7 @@ function passwordRow(password: string): HTMLElement {
   wrap.className = 'field';
 
   const label = document.createElement('label');
-  label.textContent = 'Password';
+  label.textContent = browser.i18n.getMessage('fieldPassword');
   wrap.appendChild(label);
 
   const row = document.createElement('div');
@@ -98,13 +100,14 @@ function passwordRow(password: string): HTMLElement {
   text.textContent = '•'.repeat(10);
   row.appendChild(text);
 
-  const toggle = iconButton('eye', { label: 'Show password' });
+  const toggle = iconButton('eye', { label: browser.i18n.getMessage('showPasswordAriaLabel') });
   toggle.addEventListener('click', () => {
     revealed = !revealed;
     text.textContent = revealed ? password : '•'.repeat(10);
     toggle.innerHTML = revealed ? icons.eyeOff : icons.eye;
-    toggle.setAttribute('aria-label', revealed ? 'Hide password' : 'Show password');
-    toggle.title = revealed ? 'Hide password' : 'Show password';
+    const label = browser.i18n.getMessage(revealed ? 'hidePasswordAriaLabel' : 'showPasswordAriaLabel');
+    toggle.setAttribute('aria-label', label);
+    toggle.title = label;
   });
   row.appendChild(toggle);
   row.appendChild(copyIconButton(() => password));
@@ -114,7 +117,7 @@ function passwordRow(password: string): HTMLElement {
 }
 
 function copyIconButton(getValue: () => string): HTMLElement {
-  const button = iconButton('copy', { label: 'Copy' });
+  const button = iconButton('copy', { label: browser.i18n.getMessage('copyAriaLabel') });
   const original = button.innerHTML;
   button.addEventListener('click', async () => {
     await navigator.clipboard.writeText(getValue());
