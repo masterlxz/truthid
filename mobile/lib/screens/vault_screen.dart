@@ -505,11 +505,22 @@ class _VaultScreenState extends State<VaultScreen> {
                     ),
             )
           else if (_status == VaultSyncStatus.syncFailedNoCache)
-            _buildEmptyState(
-              icon: Icons.cloud_off,
-              title: 'Could not load your vault',
-              subtitle: _error ?? 'Check your connection and try again.',
-            )
+            _legacyIpfsCid
+                ? _buildEmptyState(
+                    icon: Icons.cloud_off,
+                    title: 'Vault on legacy storage',
+                    subtitle:
+                        'This vault is still on legacy IPFS storage, which no '
+                        'longer has dedicated pinning, and this device has no '
+                        'local cache to fall back on. Ask a device that '
+                        'already has this vault synced to republish it to '
+                        'Arweave.',
+                  )
+                : _buildEmptyState(
+                    icon: Icons.cloud_off,
+                    title: 'Could not load your vault',
+                    subtitle: _error ?? 'Check your connection and try again.',
+                  )
           else if (showList) ...[
             TextField(
               decoration: const InputDecoration(

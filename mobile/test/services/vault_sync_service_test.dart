@@ -217,6 +217,33 @@ void main() {
     expect(outcome.status, VaultSyncStatus.syncFailedNoCache);
     expect(outcome.entries, isEmpty);
     expect(await File(vaultPath).exists(), isFalse);
+    // P51: `ref` já tinha sido lido on-chain quando o hash-check falhou —
+    // dá pra saber que o cid é o esquema IPFS legado mesmo sem cache local.
+    expect(outcome.legacyIpfsCid, isTrue);
+  });
+
+  test(
+      'hash não bate, cid já no Arweave e não há cache prévio — syncFailedNoCache sem sinalizar legado',
+      () async {
+    final bytes = _plaintextBlob([_entry('example.com')]);
+
+    when(() => mockBlockchain.hasVault(identityId))
+        .thenAnswer((_) async => true);
+    when(() => mockBlockchain.getVault(identityId)).thenAnswer((_) async =>
+        VaultRef(
+            cid: 'ar://someArweaveTxId',
+            contentHashHex: wrongHash,
+            updatedAt: updatedAt,
+            version: 1));
+    when(() => mockGateway.fetch('ar://someArweaveTxId'))
+        .thenAnswer((_) async => bytes);
+
+    final outcome = await syncService.sync(identityId);
+
+    expect(outcome.status, VaultSyncStatus.syncFailedNoCache);
+    // Prova que a detecção do P51 é real (olha o prefixo do cid), não um
+    // `true` incondicional assim que `ref` existe.
+    expect(outcome.legacyIpfsCid, isFalse);
   });
 
   test(
@@ -362,5 +389,8 @@ void main() {
 
     expect(outcome.status, VaultSyncStatus.syncFailedNoCache);
     expect(outcome.entries, isEmpty);
+    // `hasVault` falhou antes de `getVault` rodar — sem `ref`, não há como
+    // saber se o cid é legado, então não deve sinalizar como tal.
+    expect(outcome.legacyIpfsCid, isFalse);
   });
 }

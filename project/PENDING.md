@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-08-16 (Sessão 206: P54 FECHADO — mismatch de vault key Desktop↔device pareado corrigido via `RedistributeVaultKey.tsx`/`get_current_vault_key_strict()` e validado ao vivo no celular físico, Vault decifrando de verdade. No caminho, achado e corrigido o P56 — rotação de DEK ao revogar device nunca funcional, sem validação em hardware ainda)
+> Última atualização: 2026-08-16 (Sessão 207: P51 FECHADO — `syncFailedNoCache` agora sinaliza quando o cid on-chain é o esquema IPFS legado, mesmo sem `ref` disponível no fluxo antigo de fallback, e mostra mensagem acionável em vez do erro técnico cru)
 
 ---
 
@@ -71,7 +71,6 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 
 | ID | Item | Onde se originou | Prioridade |
 |---|---|---|---|
-| P51 | **Aviso de "vault legado" (S201) não cobre devices read-only sem cache** — `_buildLegacyStorageBanner()` em `vault_screen.dart` (Mobile) só renderiza atrás de `if (_canWrite && _legacyIpfsCid)` — um device pareado sem permissão de escrita (não pode republicar mesmo) e sem cache local do vault cai direto no erro cru `VaultSyncStatus.syncFailedNoCache` ("Could not load your vault" + stack de exceção técnica dos gateways IPFS), sem nenhuma explicação do que está acontecendo. Achado ao vivo na Sessão 204 tentando validar o pareamento de leitura da extensão contra a identidade real `@masterlxz` num celular físico read-only. Fix provável: mostrar uma versão informativa do banner (sem o botão de republicar) também pra devices sem `_canWrite`, ou pelo menos trocar o texto de `syncFailedNoCache` quando `legacyIpfsCid` for detectável. | conversa direta (Sessão 204) | 🟠 Média |
 | P14 | **Interface e identidade visual (UI/UX)** — app e desktop funcionais mas sem polish de produto final. Identidade visual já aplicada (Fase 9), mas fluxos e polish de produto pendentes. | `ARCHITECTURE.md` (tabela de decisões) | 🟡 Baixa |
 | P15 | **Session key com limite de gasto** — desenho para evitar gas por mensagem (IA). Em aberto: onde registrar consumo on-chain vs off-chain, revogação em cascata. | `ROADMAP.md` (Monetização) | 🟡 Baixa |
 | P16 | **Monetização — definições finais** — precificação ETH/BRL, modelo de consentimento do /pin, session key spending limit, margem de cada fonte de receita. Nada implementado. | `ROADMAP.md` (Monetização) | 🟡 Baixa |
@@ -91,6 +90,12 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 ---
 
 ## Resolvidas
+
+### P51 — aviso de "vault legado" não cobria o caso de falha total (sem cache, sem permissão de escrita) (Sessão 207)
+
+| ID | Item | Onde se originou | Prioridade |
+|---|---|---|---|
+| ~~P51~~ | ~~`_buildLegacyStorageBanner()` em `vault_screen.dart` (Mobile) só renderiza atrás de `if (_canWrite && _legacyIpfsCid)`, escrito pra outro cenário (S201: device que **já tem** cache e só quer o nudge de republish). O caso real achado na Sessão 204 é diferente — um device sem cache local (read-only ou não) tentando resolver um vault ainda no cid IPFS legado cai direto em `VaultSyncStatus.syncFailedNoCache`, mostrando o erro técnico cru dos gateways IPFS sem nenhuma explicação. Causa raiz em `VaultSyncService.sync()`: a variável `ref` (que tem o cid on-chain) só existia dentro do escopo do `try`, invisível no `catch` que chama `_fallbackToCache()` — não tinha como saber ali se a falha era por causa do esquema legado ou de outra coisa qualquer.~~ **Corrigido**: ~~`ref` foi hoisted pra fora do `try` (`VaultRef? ref;` antes do bloco, atribuído sem `final` dentro dele) — o `catch` agora consegue checar `ref != null && !ref.cid.startsWith('ar://')` e propaga isso como `legacyIpfsCid` pro `_fallbackToCache()`, que passou a aceitar o parâmetro e repassá-lo pros dois outcomes que produz (`offlineUsingCache` e `syncFailedNoCache` — antes só os dois caminhos de sucesso setavam o campo). Em `vault_screen.dart`, o branch de `syncFailedNoCache` bifurca: com `legacyIpfsCid` verdadeiro, mostra "Vault on legacy storage" com instrução acionável (pedir pra outro device com cache sincronizado republicar pro Arweave) em vez do erro cru — independente de `_canWrite`, já que mesmo um device com permissão de escrita não consegue republicar sem ter cache nenhum pra ler.~~ **Fora de escopo, decidido por ser o fix mais estreito que cobre o cenário real relatado**: ~~não foi criada uma variante do banner informativo pra devices read-only com cache (a 2ª alternativa cogitada no achado original) — o caso descrito na S204 era falha total (sem cache), não um device read-only que já sincroniza normalmente.~~ ~~`flutter test` 586/586 (2 novos: um em `vault_sync_service_test.dart` provando que a detecção olha o prefixo do cid — não fica `true` incondicional só por `ref` existir — e um em `vault_screen_test.dart` confirmando a mensagem nova substitui a antiga), `flutter analyze` limpo (mesmos 6 avisos pré-existentes).~~ | conversa direta (Sessão 204), corrigido Sessão 207 | **Sessão 207** |
 
 ### P54 — mismatch real de vault key Desktop↔device pareado, fechado e validado em hardware (Sessões 205/206)
 

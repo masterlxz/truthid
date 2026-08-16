@@ -107,8 +107,9 @@ class VaultSyncService {
       );
     }
 
+    VaultRef? ref;
     try {
-      final ref = await _blockchain.getVault(identityId);
+      ref = await _blockchain.getVault(identityId);
 
       // O cache local pode ter mudanças escritas neste device e ainda não
       // publicadas (ver Sessão 97/124-125, VaultScreen chama sync() toda vez
@@ -165,11 +166,22 @@ class VaultSyncService {
         legacyIpfsCid: !ref.cid.startsWith('ar://'),
       );
     } catch (e) {
-      return _fallbackToCache('$e');
+      // `ref` só fica disponível aqui quando o fetch/hash-check falhou depois
+      // de já ler a referência on-chain (não quando `getVault` em si falhou)
+      // — o suficiente pro cenário real (P51): device sem cache tentando
+      // resolver um vault que já leu a ref, mas que aponta pro esquema IPFS
+      // legado sem pinning dedicado.
+      return _fallbackToCache(
+        '$e',
+        legacyIpfsCid: ref != null && !ref.cid.startsWith('ar://'),
+      );
     }
   }
 
-  Future<VaultSyncOutcome> _fallbackToCache(String error) async {
+  Future<VaultSyncOutcome> _fallbackToCache(
+    String error, {
+    bool legacyIpfsCid = false,
+  }) async {
     try {
       final entries = await _repository.listEntries();
       if (entries.isNotEmpty) {
@@ -179,6 +191,7 @@ class VaultSyncService {
           entries: entries,
           profileNames: profileNames,
           error: error,
+          legacyIpfsCid: legacyIpfsCid,
         );
       }
     } catch (_) {
@@ -188,6 +201,7 @@ class VaultSyncService {
       status: VaultSyncStatus.syncFailedNoCache,
       entries: const [],
       error: error,
+      legacyIpfsCid: legacyIpfsCid,
     );
   }
 }

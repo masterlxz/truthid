@@ -190,6 +190,24 @@ void main() {
   });
 
   testWidgets(
+      'syncFailedNoCache com legacyIpfsCid explica o cenário do P51 em vez '
+      'do erro técnico cru — device read-only/sem cache tentando resolver '
+      'um vault ainda no esquema IPFS antigo', (tester) async {
+    when(() => mockSyncService.sync(any())).thenAnswer((_) async =>
+        const VaultSyncOutcome(
+            status: VaultSyncStatus.syncFailedNoCache,
+            entries: [],
+            error: 'some IPFS gateway error',
+            legacyIpfsCid: true));
+
+    await tester.pumpWidget(buildScreen());
+    await tester.pumpAndSettle();
+
+    expect(find.text('Vault on legacy storage'), findsOneWidget);
+    expect(find.text('Could not load your vault'), findsNothing);
+  });
+
+  testWidgets(
       'canWriteVault() lançando (cache local corrompido/MAC inválido) não trava a tela — '
       'achado real, Sessão 205: mostra o resultado do sync em vez de ficar carregando pra sempre',
       (tester) async {
