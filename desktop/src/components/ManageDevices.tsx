@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import type { Address } from "viem";
 import {
   useAccount,
   useReadContract,
@@ -16,10 +17,11 @@ import { buildAccountCalls } from "../utils/buildAccountCalls";
 import type { DeviceInfo } from "../types";
 import { useIdentity } from "../contexts/IdentityContext";
 import { useWalletModal } from "../contexts/WalletModalContext";
-import { buildRotationBatch } from "../services/rotateVaultKeyOnRevoke";
+import { buildRotationBatch, type RemainingDevice } from "../services/rotateVaultKeyOnRevoke";
 import { DeviceList } from "./DeviceList";
 import { PairDevice } from "./PairDevice";
 import { DesktopDevice } from "./DesktopDevice";
+import { RedistributeVaultKey } from "./RedistributeVaultKey";
 
 export function ManageDevices() {
   const { username, identityId, smartAccountAddress } = useIdentity();
@@ -132,7 +134,7 @@ export function ManageDevices() {
   function handleRevoke(pubKey: string) {
     if (!isConnected) { openConnectModal(); return; }
     if (!smartAccountAddress) return;
-    if (rotationPhase !== "idle") return; // evita duas rotações correndo em paralelo
+    if (rotationPhase !== "idle" || pendingRemaining !== null) return; // evita duas rotações correndo em paralelo
     setRevokingPubKey(pubKey);
 
     // Mesma razão da 14.8 em PairDevice/DesktopDevice: msg.sender do
@@ -161,10 +163,22 @@ export function ManageDevices() {
     });
   }
 
-  // ── Rotação de DEK, disparada logo depois da revogação confirmar ──────────
+  // ── Rotação de DEK, oferecida logo depois da revogação confirmar ──────────
   // Fecha o gap onde um device revogado continuava com a cópia da chave do
   // vault que já tinha decifrado antes — gera uma DEK nova, republica o
   // vault sob ela, e redistribui só pros devices que restaram ativos.
+  //
+  // Diferente da versão anterior, NÃO dispara sozinha: `DeviceRegistry` só
+  // guarda o endereço de cada device, nunca a chave pública crua que o
+  // ECIES precisa (ver nota em `rotateVaultKeyOnRevoke.ts`) — sem ela, a
+  // cifra pra cada device restante sempre falharia, e a versão antiga já
+  // tinha commitado a rotação local (keyring + vault.enc) antes desse erro
+  // acontecer, deixando o Desktop dessincronizado do que estava publicado
+  // (achado real, P54/Sessão 205). Agora quem revoga precisa colar a chave
+  // pública crua de cada device restante antes de confirmar — mesmo dado
+  // que `PairDevice.tsx` já pede no pareamento inicial.
+  const [pendingRemaining, setPendingRemaining] = useState<Address[] | null>(null);
+  const [rawPubkeys, setRawPubkeys] = useState<Record<string, string>>({});
   const [rotationPhase, setRotationPhase] = useState<"idle" | "rotating" | "confirming">("idle");
   const [rotationError, setRotationError] = useState<string | null>(null);
 
@@ -172,26 +186,37 @@ export function ManageDevices() {
   const { isSuccess: isRotationSuccess } = useWaitForTransactionReceipt({ hash: rotationTxHash });
 
   useEffect(() => {
-    if (!isRevokeSuccess || !revokingPubKey || !smartAccountAddress) return;
+    if (!isRevokeSuccess || !revokingPubKey) return;
 
     // `devices` ainda reflete o estado antes do refetch (que só roda depois
     // de um delay) — filtra localmente pra excluir o device que acabou de
     // ser revogado, mesmo com a leitura on-chain ainda desatualizada.
     const remaining = devices
-      .filter(
-        (d) =>
-          !d.revoked && d.pubKey.toLowerCase() !== revokingPubKey.toLowerCase()
-      )
-      .map((d) => d.pubKey);
+      .filter((d) => !d.revoked && d.pubKey.toLowerCase() !== revokingPubKey.toLowerCase())
+      .map((d) => d.pubKey as Address);
 
-    const justRevoked = revokingPubKey;
     setRevokingPubKey(null);
     queryClient.invalidateQueries();
     setTimeout(() => { refetchDevices(); refetchDeviceDetails(); }, 3000);
 
+    if (remaining.length > 0) {
+      setPendingRemaining(remaining);
+      setRawPubkeys({});
+      setRotationError(null);
+    }
+  }, [isRevokeSuccess]);
+
+  function handleConfirmRotation() {
+    if (!pendingRemaining || !smartAccountAddress) return;
+    const remainingActiveDevices: RemainingDevice[] = pendingRemaining.map((pubKey) => ({
+      pubKey,
+      rawPubkeyHex: rawPubkeys[pubKey] ?? "",
+    }));
+    if (remainingActiveDevices.some((d) => !d.rawPubkeyHex)) return;
+
     setRotationPhase("rotating");
     setRotationError(null);
-    buildRotationBatch(remaining as `0x${string}`[])
+    buildRotationBatch(remainingActiveDevices)
       .then(({ dest, value, func }) => {
         setRotationPhase("confirming");
         sendRotation({
@@ -202,16 +227,16 @@ export function ManageDevices() {
         });
       })
       .catch((e) => {
-        setRotationError(
-          `Falha ao rotacionar a chave do vault depois de revogar ${justRevoked}: ${String(e)}`
-        );
+        setRotationError(`Falha ao rotacionar a chave do vault: ${String(e)}`);
         setRotationPhase("idle");
       });
-  }, [isRevokeSuccess]);
+  }
 
   useEffect(() => {
     if (isRotationSuccess) {
       setRotationPhase("idle");
+      setPendingRemaining(null);
+      setRawPubkeys({});
       queryClient.invalidateQueries();
     }
   }, [isRotationSuccess]);
@@ -258,19 +283,65 @@ export function ManageDevices() {
         onRevoke={handleRevoke}
       />
 
-      {rotationPhase === "rotating" && (
-        <p className="muted">Re-cifrando o vault com uma chave nova...</p>
+      {pendingRemaining && pendingRemaining.length > 0 && (
+        <div className="card" style={{ marginBottom: "1rem", borderColor: "var(--warning, #c99a2e)" }}>
+          <p style={{ marginTop: 0 }}>
+            Device revogado — a chave do vault deveria ser rotacionada agora,
+            pra que o device revogado perca acesso ao conteúdo que já tinha
+            decifrado. Isso exige a chave pública crua de cada um dos{" "}
+            <strong>{pendingRemaining.length}</strong> devices restantes
+            (mesmo campo que aparece no pareamento — reveja a tela
+            &quot;Show QR to pair&quot; de cada um).
+          </p>
+          {pendingRemaining.map((pubKey) => {
+            const device = devices.find((d) => d.pubKey.toLowerCase() === pubKey.toLowerCase());
+            return (
+              <div className="field" key={pubKey}>
+                <label>{device?.label ?? pubKey}</label>
+                <input
+                  value={rawPubkeys[pubKey] ?? ""}
+                  onChange={(e) =>
+                    setRawPubkeys((prev) => ({ ...prev, [pubKey]: e.target.value.trim() }))
+                  }
+                  placeholder="0x03... or 0x04..."
+                  disabled={rotationPhase !== "idle"}
+                  style={{ fontFamily: "monospace", fontSize: "0.8rem" }}
+                />
+              </div>
+            );
+          })}
+          <div className="actions-row">
+            <button
+              onClick={handleConfirmRotation}
+              disabled={
+                rotationPhase !== "idle" ||
+                pendingRemaining.some((pk) => !rawPubkeys[pk])
+              }
+            >
+              {rotationPhase === "rotating"
+                ? "Re-cifrando o vault com uma chave nova..."
+                : rotationPhase === "confirming"
+                ? "Confirmar na carteira..."
+                : "Rotate & redistribute"}
+            </button>
+            <button
+              onClick={() => { setPendingRemaining(null); setRawPubkeys({}); }}
+              disabled={rotationPhase !== "idle"}
+            >
+              Postpone
+            </button>
+          </div>
+          {rotationError && <p className="error-text">{rotationError}</p>}
+        </div>
       )}
-      {rotationPhase === "confirming" && (
-        <p className="muted">Confirmar na carteira e distribuir a chave nova pros devices restantes...</p>
-      )}
-      {rotationError && <p className="error-text">{rotationError}</p>}
 
       <hr />
 
       <PairDevice onDeviceRegistered={handleDeviceRegistered} />
 
       <DesktopDevice onRegistered={handleDeviceRegistered} />
+
+      <RedistributeVaultKey devices={devices} />
     </div>
   );
 }

@@ -126,6 +126,42 @@ fn vault_key_path() -> Result<std::path::PathBuf, String> {
     crate::config::truthid_file_path("vault.key")
 }
 
+/// Igual a `get_vault_key()`, mas sem o fallback legado (tier 3). Usada
+/// sempre que a chave vai ser entregue a OUTRO device (ECIES) ou usada pra
+/// decidir o que está publicado — nesses casos, cair silenciosamente pra
+/// chave legada (derivada da device key, não da wallet) entrega uma chave
+/// que nunca vai bater com o conteúdo real do vault, sem nenhum erro visível
+/// até a decifra falhar do outro lado. Achado real (P54, Sessão 205):
+/// evidência forte de que `get_vault_key()` caiu pro tier 3 durante o
+/// pareamento de um device, num contexto em que o keyring do SO não estava
+/// acessível (arquivo de fallback `vault.key` criado na mesma data, dono
+/// diferente do usuário normal — sinal de sessão/processo diferente).
+pub(crate) fn get_current_vault_key_strict() -> Result<[u8; 32], String> {
+    if let Ok(entry) = Entry::new(SERVICE, VAULT_KEY_ACCOUNT) {
+        if let Ok(hex) = entry.get_password() {
+            let bytes = hex::decode(&hex).map_err(|e| e.to_string())?;
+            if bytes.len() == 32 {
+                let mut key = [0u8; 32];
+                key.copy_from_slice(&bytes);
+                return Ok(key);
+            }
+        }
+    }
+
+    let path = vault_key_path()?;
+    if path.exists() {
+        let hex = crate::config::read_text(&path)?;
+        let bytes = hex::decode(hex.trim()).map_err(|e| e.to_string())?;
+        if bytes.len() == 32 {
+            let mut key = [0u8; 32];
+            key.copy_from_slice(&bytes);
+            return Ok(key);
+        }
+    }
+
+    Err("no wallet-derived vault key available (only the legacy device-key-derived fallback) — connect the wallet and derive it before sharing with another device".to_string())
+}
+
 pub(crate) fn set_vault_key(key: &[u8; 32]) -> Result<(), String> {
     let hex_key = hex::encode(key);
 
@@ -423,8 +459,32 @@ fn vault_delete_profile(name: String) -> Result<(), String> {
 /// derivar a mesma chave AES e decifrar a vault_key.
 #[tauri::command]
 fn encrypt_vault_key_for_device(device_pubkey_hex: String) -> Result<String, String> {
-    let vault_key = get_vault_key()?;
+    let vault_key = get_current_vault_key_strict()?;
     encrypt_bytes_for_device(&vault_key, &device_pubkey_hex)
+}
+
+/// Igual a `encrypt_vault_key_for_device`, mas cifra uma chave explícita em
+/// vez de ler `get_vault_key()` — usada pela rotação de DEK: a chave nova
+/// ainda não foi commitada localmente (keyring/disco) no momento em que
+/// precisamos cifrá-la pra cada device restante, então não dá pra depender
+/// de `get_current_vault_key_strict()` encontrá-la.
+#[tauri::command]
+fn encrypt_key_for_device(key_hex: String, device_pubkey_hex: String) -> Result<String, String> {
+    let key_bytes = hex::decode(key_hex.trim_start_matches("0x")).map_err(|e| e.to_string())?;
+    if key_bytes.len() != 32 {
+        return Err("key must be 32 bytes".to_string());
+    }
+    encrypt_bytes_for_device(&key_bytes, &device_pubkey_hex)
+}
+
+/// Gera uma chave AES-256 aleatória nova, sem persistir nada — usada como
+/// primeiro passo da rotação de DEK no lado TS, que precisa cifrar a chave
+/// nova pra cada device restante (`encrypt_key_for_device`) ANTES de
+/// commitá-la localmente (`rotate_vault_key`, chamado só depois que todas as
+/// cifras ECIES tiverem sucesso — ver nota em `rotate_vault_key`).
+#[tauri::command]
+fn generate_vault_key_hex() -> String {
+    hex::encode(vault::generate_vault_key())
 }
 
 // Lógica pura (sem keyring/filesystem) extraída de encrypt_vault_key_for_device
@@ -548,11 +608,26 @@ fn decrypt_and_set_vault_key(blob_b64: String) -> Result<(), String> {
 /// permanece ativo, chama `updateDeviceVaultKey` on-chain pra cada um, e só
 /// então publica o vault re-cifrado (`vault_publish`) — esta função só cuida
 /// da parte local, não toca em rede nem em contrato.
+/// Commita localmente (keyring + `vault.enc` + documentos) uma chave nova
+/// já conhecida — `new_key_hex` vem de `generate_vault_key_hex()`, gerada
+/// ANTES desta chamada e já cifrada via `encrypt_key_for_device` pra cada
+/// device restante. Ordem importa (achado real, P54/Sessão 205): a versão
+/// anterior desta função gerava a chave nova E já commitava localmente
+/// antes de tentar cifrar pra cada device — se a cifra falhasse no meio
+/// (como sempre falhava, bug separado do endereço vs. chave pública crua),
+/// o Desktop já tinha rotacionado local e ficava dessincronizado do que
+/// estava publicado on-chain, sem nenhuma transação ter sido enviada. Agora
+/// quem chama só invoca isto depois que TODAS as cifras ECIES pros devices
+/// restantes já tiverem sucesso.
 #[tauri::command]
-fn rotate_vault_key() -> Result<String, String> {
-    let new_key = vault::generate_vault_key();
-    vault::rotate_vault_key(&new_key)?;
-    Ok(hex::encode(new_key))
+fn rotate_vault_key(new_key_hex: String) -> Result<(), String> {
+    let bytes = hex::decode(new_key_hex.trim_start_matches("0x")).map_err(|e| e.to_string())?;
+    if bytes.len() != 32 {
+        return Err("new key must be 32 bytes".to_string());
+    }
+    let mut new_key = [0u8; 32];
+    new_key.copy_from_slice(&bytes);
+    vault::rotate_vault_key(&new_key)
 }
 
 /// Cifra dados com AES-256-GCM usando a chave do vault.
@@ -1162,6 +1237,8 @@ pub fn run() {
             vault_key_exists,
             derive_vault_key_from_wallet,
             encrypt_vault_key_for_device,
+            encrypt_key_for_device,
+            generate_vault_key_hex,
             decrypt_and_set_vault_key,
             rotate_vault_key,
             vault_list_entries,

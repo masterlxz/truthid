@@ -32,6 +32,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
   String? _deviceAddress;
   String? _pairedIdentityId;
   String? _pairedUsername;
+  String? _encryptionPubKey;
   bool _isLoading = true;
 
   @override
@@ -86,6 +87,27 @@ class _DevicesScreenState extends State<DevicesScreen> {
       _pairedUsername = username;
       _isLoading = false;
     });
+  }
+
+  Future<void> _showEncryptionKey() async {
+    // `getDevicePublicKeyHex()` só deriva a chave crua a partir da já
+    // existente device key local — não é segredo novo, é o mesmo valor
+    // que `ShowDeviceQrScreen` já mostra pra um device ainda não pareado.
+    // Um device já pareado nunca tinha como reexibir esse valor (achado
+    // real, P54/Sessão 206): sem ele, não dá pra redistribuir a vault key
+    // atual pra este device via `RedistributeVaultKey` (Desktop) sem
+    // revogar e parear tudo de novo.
+    final key = await _keyService.getDevicePublicKeyHex();
+    if (!mounted) return;
+    setState(() => _encryptionPubKey = key);
+  }
+
+  void _copyEncryptionKey() {
+    if (_encryptionPubKey == null) return;
+    Clipboard.setData(ClipboardData(text: _encryptionPubKey!));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Encryption key copied!')),
+    );
   }
 
   // Abre a tela que mostra o QR deste device. Quando ela fecha com
@@ -192,7 +214,39 @@ class _DevicesScreenState extends State<DevicesScreen> {
                           : '#$_pairedIdentityId',
                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                     ),
-                    const SizedBox(height: 12),
+
+                    if (_encryptionPubKey != null) ...[
+                      const Divider(height: 24),
+                      const Text(
+                        'Encryption key',
+                        style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: SelectableText(
+                              _encryptionPubKey!,
+                              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.copy, size: 18),
+                            onPressed: _copyEncryptionKey,
+                            tooltip: 'Copy encryption key',
+                          ),
+                        ],
+                      ),
+                    ] else ...[
+                      const SizedBox(height: 12),
+                      TextButton.icon(
+                        onPressed: _showEncryptionKey,
+                        icon: const Icon(Icons.key, size: 18),
+                        label: const Text('Show encryption key'),
+                      ),
+                    ],
+
+                    const SizedBox(height: 4),
                     TextButton.icon(
                       onPressed: () async {
                         final confirmed = await showDialog<bool>(
