@@ -4,7 +4,33 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-08-14 (Sessão 202: P46 fechado por decisão do dono do projeto — sem hardware/ambiente pra investigar mais fundo, risco de clique aceito como conhecido; P11 decidido — /pin vira aprovação por chamada, sem autorização/cota persistida, `pin.rs` reescrito no padrão de `sign_message.rs`, doc pública corrigida; P49 registrado — i18n/seleção de idioma no software e na doc, ainda sem escopo definido)
+> Última atualização: 2026-08-16 (Sessão 203: decisão do dono do projeto — lançar em produção hoje a parte core/gratuita e soberana do app, sem a parte paga; ver nota de lançamento logo abaixo)
+
+---
+
+## Nota de lançamento — Sessão 203 (2026-08-16)
+
+Levantamento completo de pendências pedido pelo dono do projeto pra decidir sobre colocar o app em
+produção hoje — **excluindo explicitamente a parte paga** (tier facilitado/billing). Conclusão: o
+core do produto (protocolo de identidade, `IdentityRegistry`/`DeviceRegistry`/`RecoveryManager`/
+`SessionRegistry`/`TruthIDAccountFactory`/`VaultRegistry`, Desktop, Mobile, extensão, Vault, 2FA,
+passkeys, backup, social recovery, 4 SDKs) já está deployado na Base Mainnet (cascata da Sessão
+197) e validado com hardware real (Ledger + celular físico) em sessões anteriores — sem débito de
+segurança em aberto (S1-S7, C1-C9 todos fechados) e sem achado de `/code-review` pendente. O site
+de documentação também já está no ar (GitHub Pages, v1 fechado nas Sessões 199-200).
+
+**Decisão do dono do projeto**: as pendências de validação em hardware real desta seção (P3, P6,
+P7, P30, P31, P32, P33, P34, P35, P37, P38 — autofill de SO em Android/iOS, leitura de documentos/
+cartões do Vault, cliques reais no fluxo de Social Recovery, validação cross-network do dead-drop)
+são **aceitas como risco conhecido** e não bloqueiam o lançamento de hoje — são todas validações de
+recursos secundários (Fases 15/16), não do protocolo core de autenticação, que já roda em produção
+real desde a Sessão 179 em diante. Ficam registradas como estavam, sem fechamento — continuam
+valendo pra retomar quando houver hardware/ambiente disponível (Mac pro iOS, device Android físico,
+2 redes de fato diferentes).
+
+**Fora do escopo de hoje, por decisão já registrada em sessões anteriores**: P47 (billing/tier
+facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polish de UI/UX), P49
+(i18n, recém-registrado), P18-P24 (ideias de expansão, brainstorm puro).
 
 ---
 
