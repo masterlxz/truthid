@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:web3dart/web3dart.dart';
 
+import '../l10n/l10n_extensions.dart';
 import '../services/blockchain_service.dart';
 import '../services/bundler_config_service.dart';
 import '../services/device_key_service.dart';
@@ -162,20 +163,19 @@ class _SessionsScreenState extends State<SessionsScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Revoke session?'),
-        content: const Text(
-          'Any website using this session will be signed out immediately. '
-          'This cannot be undone.',
+        title: Text(context.l10n.sessionsScreenRevokeDialogTitle),
+        content: Text(
+          context.l10n.sessionsScreenRevokeDialogContent,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('Cancel'),
+            child: Text(context.l10n.sessionsScreenCancelButton),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
             style: TextButton.styleFrom(foregroundColor: AppColors.danger),
-            child: const Text('Revoke'),
+            child: Text(context.l10n.sessionsScreenRevokeConfirmButton),
           ),
         ],
       ),
@@ -186,7 +186,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
   Future<void> _revoke(SessionInfo session) async {
     final smartAccountAddress = _smartAccountAddress;
     if (smartAccountAddress == null) {
-      _showSnackBar('Could not resolve your smart account. Check your connection.');
+      _showSnackBar(context.l10n.sessionsScreenSmartAccountUnresolvedError);
       return;
     }
 
@@ -218,7 +218,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
     } catch (_) {
       if (mounted) setState(() => _revokingHash = null);
       _showSnackBar(
-        'Could not revoke the session. Make sure your account has enough ETH for gas.',
+        context.l10n.sessionsScreenRevokeFailedError,
       );
     }
   }
@@ -244,15 +244,15 @@ class _SessionsScreenState extends State<SessionsScreen> {
             children: [
               const Icon(Icons.link_off, size: 64, color: AppColors.textMuted),
               const SizedBox(height: 16),
-              const Text(
-                'Device not paired',
-                style: TextStyle(fontSize: 18, color: AppColors.textMuted),
+              Text(
+                context.l10n.sessionsScreenNotPairedTitle,
+                style: const TextStyle(fontSize: 18, color: AppColors.textMuted),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Pair this device with an identity to see active sessions.',
+              Text(
+                context.l10n.sessionsScreenNotPairedBody,
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: AppColors.textMuted),
+                style: const TextStyle(fontSize: 14, color: AppColors.textMuted),
               ),
             ],
           ),
@@ -272,21 +272,21 @@ class _SessionsScreenState extends State<SessionsScreen> {
             children: [
               Text(
                 _pairedUsername != null
-                    ? '@$_pairedUsername'
-                    : 'Identity #$_pairedIdentityId',
+                    ? context.l10n.sessionsScreenUsernameHandle(_pairedUsername!)
+                    : context.l10n.sessionsScreenIdentityFallback(_pairedIdentityId!),
                 style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const Spacer(),
               Text(
-                '$activeSessions active',
+                context.l10n.sessionsScreenActiveCount(activeSessions),
                 style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
               ),
             ],
           ),
           const SizedBox(height: 4),
-          const Text(
-            'Sessions are created by websites when you approve a login.',
-            style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+          Text(
+            context.l10n.sessionsScreenDescription,
+            style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
           ),
           const SizedBox(height: 12),
 
@@ -297,7 +297,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Text(
-                  'Error loading sessions: $_error',
+                  context.l10n.sessionsScreenLoadErrorPrefix(_error!),
                   style: const TextStyle(color: AppColors.danger),
                 ),
               ),
@@ -309,8 +309,8 @@ class _SessionsScreenState extends State<SessionsScreen> {
               padding: const EdgeInsets.symmetric(vertical: 32),
               child: Center(
                 child: Text(
-                  'No sessions found',
-                  style: TextStyle(color: AppColors.textMuted),
+                  context.l10n.sessionsScreenEmptyState,
+                  style: const TextStyle(color: AppColors.textMuted),
                 ),
               ),
             )
@@ -377,7 +377,7 @@ class _SessionCard extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     isCurrentDevice
-                        ? 'This device · $dateStr'
+                        ? context.l10n.sessionsScreenCurrentDeviceDate(dateStr)
                         : dateStr,
                     style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                   ),
@@ -385,10 +385,10 @@ class _SessionCard extends StatelessWidget {
               ),
             ),
             if (session.isRevoked)
-              const Chip(
-                label: Text('Revoked'),
+              Chip(
+                label: Text(context.l10n.sessionsScreenRevokedChip),
                 backgroundColor: AppColors.surfaceAlt,
-                labelStyle: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                labelStyle: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                 padding: EdgeInsets.zero,
               )
             else if (isRevoking)
@@ -400,7 +400,7 @@ class _SessionCard extends StatelessWidget {
             else
               IconButton(
                 icon: const Icon(Icons.logout, size: 20, color: AppColors.danger),
-                tooltip: 'Revoke session',
+                tooltip: context.l10n.sessionsScreenRevokeTooltip,
                 onPressed: revokeDisabled ? null : onRevoke,
               ),
           ],

@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../l10n/l10n_extensions.dart';
 import '../services/blockchain_service.dart';
 import '../services/device_key_service.dart';
 import '../services/local_storage_service.dart';
@@ -113,7 +114,7 @@ class _ShowDeviceQrScreenState extends State<ShowDeviceQrScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Pair device'),
+        title: Text(context.l10n.showDeviceQrScreenTitle),
       ),
       body: Padding(
         padding: const EdgeInsets.all(24),
@@ -132,9 +133,8 @@ class _ShowDeviceQrScreenState extends State<ShowDeviceQrScreen> {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        const Text(
-          'On your computer, open "Add device" and scan this QR code '
-          '(or paste the fields below — the Desktop app has no camera):',
+        Text(
+          context.l10n.showDeviceQrScreenInstructions,
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 24),
@@ -149,9 +149,9 @@ class _ShowDeviceQrScreenState extends State<ShowDeviceQrScreen> {
           child: QrImageView(data: _qrPayload, size: 220),
         ),
         const SizedBox(height: 24),
-        const Text(
-          'Device address',
-          style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+        Text(
+          context.l10n.showDeviceQrScreenAddressLabel,
+          style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
         ),
         const SizedBox(height: 4),
         SelectableText(
@@ -168,9 +168,9 @@ class _ShowDeviceQrScreenState extends State<ShowDeviceQrScreen> {
         // DeviceAlreadyRegistered numa 2a tentativa pro mesmo endereço).
         if (_encryptionPubKey != null) ...[
           const SizedBox(height: 16),
-          const Text(
-            'Encryption key (needed to receive the Vault key)',
-            style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+          Text(
+            context.l10n.showDeviceQrScreenEncryptionKeyLabel,
+            style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
           ),
           const SizedBox(height: 4),
           SelectableText(
@@ -182,28 +182,35 @@ class _ShowDeviceQrScreenState extends State<ShowDeviceQrScreen> {
         const SizedBox(height: 32),
         const CircularProgressIndicator(),
         const SizedBox(height: 12),
-        const Text(
-          'Waiting for the computer to register this device...',
+        Text(
+          context.l10n.showDeviceQrScreenWaitingMessage,
           textAlign: TextAlign.center,
-          style: TextStyle(color: AppColors.textMuted),
+          style: const TextStyle(color: AppColors.textMuted),
         ),
         const SizedBox(height: 8),
         TextButton.icon(
           onPressed: _isChecking ? null : () => _checkIfRegistered(_address!),
           icon: const Icon(Icons.refresh, size: 16),
-          label: Text(_isChecking ? 'Checking...' : 'Check now'),
+          label: Text(
+            _isChecking
+                ? context.l10n.showDeviceQrScreenCheckingButton
+                : context.l10n.showDeviceQrScreenCheckNowButton,
+          ),
         ),
       ],
     );
   }
 
   Widget _buildConfirmedUI() {
-    return const Column(
+    return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(Icons.check_circle, size: 72, color: AppColors.success),
-        SizedBox(height: 16),
-        Text('Paired successfully!', style: TextStyle(fontSize: 20)),
+        const Icon(Icons.check_circle, size: 72, color: AppColors.success),
+        const SizedBox(height: 16),
+        Text(
+          context.l10n.showDeviceQrScreenPairedSuccessMessage,
+          style: const TextStyle(fontSize: 20),
+        ),
       ],
     );
   }

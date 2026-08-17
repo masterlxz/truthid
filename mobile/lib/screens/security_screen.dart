@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n_extensions.dart';
 import '../services/app_lock_service.dart';
 import '../theme.dart';
 
@@ -52,8 +53,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
       if (!_deviceSupported) {
         setState(() {
           _busy = false;
-          _error = 'Your device has no biometrics or PIN/pattern/password '
-              'set up. Set one up in your phone\'s system settings first.';
+          _error = context.l10n.securityScreenNoBiometricsError;
         });
         return;
       }
@@ -67,7 +67,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
         if (mounted) {
           setState(() {
             _busy = false;
-            _error = 'Authentication failed or cancelled — app lock was not enabled.';
+            _error = context.l10n.securityScreenAuthFailedError;
           });
         }
         return;
@@ -86,7 +86,7 @@ class _SecurityScreenState extends State<SecurityScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Security')),
+      appBar: AppBar(title: Text(context.l10n.securityScreenTitle)),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
@@ -94,12 +94,10 @@ class _SecurityScreenState extends State<SecurityScreen> {
               children: [
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('App lock'),
-                  subtitle: const Text(
-                    'Require your phone\'s biometrics or PIN/pattern/password '
-                    'to open TruthID. TruthID never sees or stores this — it '
-                    'just asks your device to confirm it\'s you.',
-                    style: TextStyle(fontSize: 13),
+                  title: Text(context.l10n.securityScreenAppLockTitle),
+                  subtitle: Text(
+                    context.l10n.securityScreenAppLockSubtitle,
+                    style: const TextStyle(fontSize: 13),
                   ),
                   value: _enabled,
                   onChanged: (_busy || (!_enabled && !_deviceSupported))
@@ -114,11 +112,9 @@ class _SecurityScreenState extends State<SecurityScreen> {
                       color: AppColors.warningBg,
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: const Text(
-                      'No biometrics or device PIN/pattern/password '
-                      'detected — set one up in your phone\'s system '
-                      'settings to use app lock.',
-                      style: TextStyle(color: AppColors.warning, fontSize: 13),
+                    child: Text(
+                      context.l10n.securityScreenNoBiometricsWarning,
+                      style: const TextStyle(color: AppColors.warning, fontSize: 13),
                     ),
                   ),
                 ],
