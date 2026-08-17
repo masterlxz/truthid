@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'l10n/generated/app_localizations.dart';
+import 'l10n/l10n_extensions.dart';
 import 'screens/devices_screen.dart';
 import 'screens/scan_screen.dart';
 import 'screens/sessions_screen.dart';
@@ -40,6 +42,13 @@ class TruthIDApp extends StatelessWidget {
       navigatorKey: navigatorKey,
       title: 'TruthID',
       theme: appTheme,
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: const [
+        Locale('en'),
+        Locale('pt', 'BR'),
+        Locale('es'),
+        Locale('zh', 'CN'),
+      ],
       home: const AppLockGate(),
     );
   }
@@ -183,15 +192,15 @@ class _LockOverlay extends StatelessWidget {
           children: [
             const Icon(Icons.lock_outline, size: 64, color: AppColors.accent),
             const SizedBox(height: 16),
-            const Text(
-              'TruthID is locked',
-              style: TextStyle(fontSize: 18, color: AppColors.textPrimary),
+            Text(
+              context.l10n.appLockedMessage,
+              style: const TextStyle(fontSize: 18, color: AppColors.textPrimary),
             ),
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: onUnlock,
               icon: const Icon(Icons.fingerprint),
-              label: const Text('Unlock'),
+              label: Text(context.l10n.appUnlockButton),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.accent,
                 foregroundColor: AppColors.background,
@@ -345,11 +354,11 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('TruthID'),
+        title: Text(context.l10n.appTitle),
         actions: [
           IconButton(
             icon: const Icon(Icons.settings),
-            tooltip: 'Settings',
+            tooltip: context.l10n.appSettingsTooltip,
             onPressed: () {
               Navigator.of(context).push(
                 MaterialPageRoute(builder: (_) => const SettingsScreen()),
@@ -358,7 +367,7 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
           ),
           IconButton(
             icon: const Icon(Icons.favorite_border),
-            tooltip: 'Support TruthID',
+            tooltip: context.l10n.appSupportTooltip,
             onPressed: _showDonationSheet,
           ),
         ],
@@ -394,7 +403,7 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
         onPressed: _openScanner,
         backgroundColor: AppColors.accent,
         foregroundColor: AppColors.background,
-        tooltip: 'Scan QR',
+        tooltip: context.l10n.appScanTooltip,
         child: const Icon(Icons.qr_code_scanner, size: 26),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
@@ -407,7 +416,7 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
             Expanded(
               child: _NavTab(
                 icon: Icons.phonelink_lock,
-                label: 'Devices',
+                label: context.l10n.appNavDevicesTab,
                 selected: _currentIndex == 0,
                 onTap: () => _selectTab(0),
               ),
@@ -415,7 +424,7 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
             Expanded(
               child: _NavTab(
                 icon: Icons.verified_user,
-                label: 'Sessions',
+                label: context.l10n.appNavSessionsTab,
                 selected: _currentIndex == 1,
                 onTap: () => _selectTab(1),
               ),
@@ -425,7 +434,7 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
             Expanded(
               child: _NavTab(
                 icon: Icons.account_balance_wallet,
-                label: 'Wallet',
+                label: context.l10n.appNavWalletTab,
                 selected: _currentIndex == 2,
                 onTap: () => _selectTab(2),
               ),
@@ -433,7 +442,7 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
             Expanded(
               child: _NavTab(
                 icon: Icons.lock_outline,
-                label: 'Vault',
+                label: context.l10n.appNavVaultTab,
                 selected: _currentIndex == 3,
                 onTap: () => _selectTab(3),
               ),
@@ -506,8 +515,8 @@ class _DonationSheet extends StatelessWidget {
           ),
           const SizedBox(height: 20),
           Text(
-            'Support TruthID',
-            style: TextStyle(
+            context.l10n.appDonationSheetTitle,
+            style: const TextStyle(
               fontFamily: 'SpaceGrotesk',
               fontSize: 18,
               fontWeight: FontWeight.w600,
@@ -516,9 +525,9 @@ class _DonationSheet extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            'TruthID is open source and free.\nIf it helps you, consider sending a tip.',
+            context.l10n.appDonationSheetBody,
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
               color: AppColors.textMuted,
               fontSize: 13,
             ),
@@ -554,12 +563,16 @@ class _DonationSheet extends StatelessWidget {
           ElevatedButton.icon(
             onPressed: onCopy,
             icon: Icon(copied ? Icons.check : Icons.copy, size: 18),
-            label: Text(copied ? 'Copied!' : 'Copy address'),
+            label: Text(
+              copied
+                  ? context.l10n.appDonationSheetCopiedButton
+                  : context.l10n.appDonationSheetCopyButton,
+            ),
           ),
           const SizedBox(height: 10),
           Text(
-            'Any EVM chain · 0.001 ETH suggested',
-            style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+            context.l10n.appDonationSheetFootnote,
+            style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
           ),
         ],
       ),
@@ -590,7 +603,7 @@ class _UpdateBanner extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text(
-                'TruthID $version available',
+                context.l10n.appUpdateBannerAvailable(version),
                 style: const TextStyle(
                   color: AppColors.accent,
                   fontSize: 13,
@@ -608,9 +621,9 @@ class _UpdateBanner extends StatelessWidget {
                 minimumSize: Size.zero,
                 tapTargetSize: MaterialTapTargetSize.shrinkWrap,
               ),
-              child: const Text(
-                'Download',
-                style: TextStyle(color: AppColors.accent, fontSize: 13),
+              child: Text(
+                context.l10n.appUpdateBannerDownloadButton,
+                style: const TextStyle(color: AppColors.accent, fontSize: 13),
               ),
             ),
             IconButton(

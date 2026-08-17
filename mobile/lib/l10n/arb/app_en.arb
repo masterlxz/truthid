@@ -1,0 +1,76 @@
+{
+  "@@locale": "en",
+  "appTitle": "TruthID",
+  "@appTitle": {
+    "description": "App name, shown in the AppBar title"
+  },
+  "appSettingsTooltip": "Settings",
+  "@appSettingsTooltip": {
+    "description": "Tooltip for the settings icon button in the app bar"
+  },
+  "appSupportTooltip": "Support TruthID",
+  "@appSupportTooltip": {
+    "description": "Tooltip for the donation/support icon button in the app bar"
+  },
+  "appScanTooltip": "Scan QR",
+  "@appScanTooltip": {
+    "description": "Tooltip for the central floating action button that opens the QR scanner"
+  },
+  "appNavDevicesTab": "Devices",
+  "@appNavDevicesTab": {
+    "description": "Bottom navigation tab label for the Devices screen"
+  },
+  "appNavSessionsTab": "Sessions",
+  "@appNavSessionsTab": {
+    "description": "Bottom navigation tab label for the Sessions screen"
+  },
+  "appNavWalletTab": "Wallet",
+  "@appNavWalletTab": {
+    "description": "Bottom navigation tab label for the Wallet screen"
+  },
+  "appNavVaultTab": "Vault",
+  "@appNavVaultTab": {
+    "description": "Bottom navigation tab label for the Vault screen"
+  },
+  "appLockedMessage": "TruthID is locked",
+  "@appLockedMessage": {
+    "description": "Message shown on the lock overlay when the app is locked"
+  },
+  "appUnlockButton": "Unlock",
+  "@appUnlockButton": {
+    "description": "Button label to trigger biometric/PIN authentication on the lock overlay"
+  },
+  "appUpdateBannerAvailable": "TruthID {version} available",
+  "@appUpdateBannerAvailable": {
+    "description": "Banner text shown when a newer app version is available for download",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "appUpdateBannerDownloadButton": "Download",
+  "@appUpdateBannerDownloadButton": {
+    "description": "Button label in the update banner to open the download page"
+  },
+  "appDonationSheetTitle": "Support TruthID",
+  "@appDonationSheetTitle": {
+    "description": "Title of the bottom sheet asking for donations"
+  },
+  "appDonationSheetBody": "TruthID is open source and free.\nIf it helps you, consider sending a tip.",
+  "@appDonationSheetBody": {
+    "description": "Body text of the donation bottom sheet"
+  },
+  "appDonationSheetCopyButton": "Copy address",
+  "@appDonationSheetCopyButton": {
+    "description": "Button label to copy the donation wallet address to the clipboard"
+  },
+  "appDonationSheetCopiedButton": "Copied!",
+  "@appDonationSheetCopiedButton": {
+    "description": "Button label shown briefly after the donation address was copied"
+  },
+  "appDonationSheetFootnote": "Any EVM chain · 0.001 ETH suggested",
+  "@appDonationSheetFootnote": {
+    "description": "Footnote below the donation QR code explaining accepted chains/suggested amount"
+  }
+}
