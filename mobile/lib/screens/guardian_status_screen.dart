@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../l10n/l10n_extensions.dart';
 import '../services/blockchain_service.dart';
 import '../services/local_storage_service.dart';
 import '../services/paired_username_resolver.dart';
@@ -69,25 +70,25 @@ class _GuardianStatusScreenState extends State<GuardianStatusScreen> {
     const timelockSecs = Duration(days: 7);
     final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
     final deadline = proposedAt.toInt() + timelockSecs.inSeconds;
-    if (now >= deadline) return 'Ready to execute';
+    if (now >= deadline) return context.l10n.guardianStatusScreenReadyToExecute;
     final diff = deadline - now;
     final d = diff ~/ 86400;
     final h = (diff % 86400) ~/ 3600;
     final m = (diff % 3600) ~/ 60;
-    return '${d}d ${h}h ${m}m remaining';
+    return context.l10n.guardianStatusScreenTimeRemaining(d, h, m);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Social Recovery')),
+      appBar: AppBar(title: Text(context.l10n.guardianStatusScreenTitle)),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _username == null
-              ? const Center(
+              ? Center(
                   child: Text(
-                    'No paired identity found. Pair this device first.',
-                    style: TextStyle(color: AppColors.textMuted),
+                    context.l10n.guardianStatusScreenNoIdentity,
+                    style: const TextStyle(color: AppColors.textMuted),
                   ),
                 )
               : RefreshIndicator(
@@ -96,7 +97,7 @@ class _GuardianStatusScreenState extends State<GuardianStatusScreen> {
                     padding: const EdgeInsets.all(24),
                     children: [
                       Text(
-                        '@$_username',
+                        context.l10n.guardianStatusScreenUsernameHandle(_username!),
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.bold,
@@ -104,9 +105,9 @@ class _GuardianStatusScreenState extends State<GuardianStatusScreen> {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      const Text(
-                        'Guardians can help recover your identity if you lose access to your wallet.',
-                        style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+                      Text(
+                        context.l10n.guardianStatusScreenSubtitle,
+                        style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
                       ),
                       const SizedBox(height: 24),
 
@@ -121,15 +122,15 @@ class _GuardianStatusScreenState extends State<GuardianStatusScreen> {
                               color: Colors.orange.withValues(alpha: 0.3),
                             ),
                           ),
-                          child: const Row(
+                          child: Row(
                             children: [
-                              Icon(Icons.warning_amber_rounded,
+                              const Icon(Icons.warning_amber_rounded,
                                   color: Colors.orange),
-                              SizedBox(width: 12),
+                              const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  'No guardians configured. Without guardians, losing your wallet means permanent loss of identity.',
-                                  style: TextStyle(fontSize: 13),
+                                  context.l10n.guardianStatusScreenNoGuardiansWarning,
+                                  style: const TextStyle(fontSize: 13),
                                 ),
                               ),
                             ],
@@ -152,7 +153,8 @@ class _GuardianStatusScreenState extends State<GuardianStatusScreen> {
                                       color: AppColors.accent, size: 20),
                                   const SizedBox(width: 8),
                                   Text(
-                                    'Guardians (${_threshold ?? '?'} of ${_guardians!.length})',
+                                    context.l10n.guardianStatusScreenGuardiansCount(
+                                        (_threshold ?? '?').toString(), _guardians!.length),
                                     style: const TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
@@ -185,7 +187,8 @@ class _GuardianStatusScreenState extends State<GuardianStatusScreen> {
                               if (_timelock != null) ...[
                                 const SizedBox(height: 8),
                                 Text(
-                                  'Timelock: ${_timelock! ~/ BigInt.from(86400)} days',
+                                  context.l10n.guardianStatusScreenTimelockDays(
+                                      (_timelock! ~/ BigInt.from(86400)).toString()),
                                   style: const TextStyle(
                                     color: AppColors.textMuted,
                                     fontSize: 12,
@@ -213,13 +216,13 @@ class _GuardianStatusScreenState extends State<GuardianStatusScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Row(
+                              Row(
                                 children: [
-                                  Icon(Icons.warning, color: Colors.red, size: 20),
-                                  SizedBox(width: 8),
+                                  const Icon(Icons.warning, color: Colors.red, size: 20),
+                                  const SizedBox(width: 8),
                                   Text(
-                                    'Recovery Proposed',
-                                    style: TextStyle(
+                                    context.l10n.guardianStatusScreenProposedTitle,
+                                    style: const TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
                                       fontFamily: 'SpaceGrotesk',
@@ -229,14 +232,15 @@ class _GuardianStatusScreenState extends State<GuardianStatusScreen> {
                                 ],
                               ),
                               const SizedBox(height: 12),
-                              _propRow('Proposed by', _proposal!.proposedBy),
-                              _propRow('New controller', _proposal!.newController),
+                              _propRow(context.l10n.guardianStatusScreenProposedByLabel, _proposal!.proposedBy),
+                              _propRow(context.l10n.guardianStatusScreenNewControllerLabel, _proposal!.newController),
                               _propRow(
-                                'Approvals',
-                                '${_proposal!.approvalCount} of ${_threshold ?? '?'}',
+                                context.l10n.guardianStatusScreenApprovalsLabel,
+                                context.l10n.guardianStatusScreenApprovalsValue(
+                                    _proposal!.approvalCount.toString(), (_threshold ?? '?').toString()),
                               ),
                               _propRow(
-                                'Timelock',
+                                context.l10n.guardianStatusScreenTimelockLabel,
                                 _timeRemaining(_proposal!.proposedAt),
                               ),
                             ],
@@ -253,15 +257,15 @@ class _GuardianStatusScreenState extends State<GuardianStatusScreen> {
                               color: AppColors.success.withValues(alpha: 0.3),
                             ),
                           ),
-                          child: const Row(
+                          child: Row(
                             children: [
-                              Icon(Icons.check_circle,
+                              const Icon(Icons.check_circle,
                                   color: AppColors.success, size: 20),
-                              SizedBox(width: 12),
+                              const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  'Recovery executed. The identity controller has been changed.',
-                                  style: TextStyle(fontSize: 13),
+                                  context.l10n.guardianStatusScreenRecoveryExecuted,
+                                  style: const TextStyle(fontSize: 13),
                                 ),
                               ),
                             ],
@@ -278,14 +282,14 @@ class _GuardianStatusScreenState extends State<GuardianStatusScreen> {
                               color: AppColors.textMuted.withValues(alpha: 0.3),
                             ),
                           ),
-                          child: const Row(
+                          child: Row(
                             children: [
-                              Icon(Icons.cancel, color: AppColors.textMuted),
-                              SizedBox(width: 12),
+                              const Icon(Icons.cancel, color: AppColors.textMuted),
+                              const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  'Recovery cancelled. No action needed.',
-                                  style: TextStyle(fontSize: 13),
+                                  context.l10n.guardianStatusScreenRecoveryCancelled,
+                                  style: const TextStyle(fontSize: 13),
                                 ),
                               ),
                             ],
@@ -295,9 +299,9 @@ class _GuardianStatusScreenState extends State<GuardianStatusScreen> {
                       const SizedBox(height: 20),
                       const Divider(),
                       const SizedBox(height: 8),
-                      const Text(
-                        'Recovery can only be managed from TruthID Desktop with your Ledger wallet connected.',
-                        style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                      Text(
+                        context.l10n.guardianStatusScreenDesktopOnlyFootnote,
+                        style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
                       ),
                     ],
                   ),

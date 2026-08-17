@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:web3dart/web3dart.dart';
 
+import '../l10n/l10n_extensions.dart';
 import '../models/smart_account_activity.dart';
 import '../services/activity_cache_service.dart';
 import '../services/blockchain_service.dart';
@@ -69,13 +70,20 @@ class _WalletScreenState extends State<WalletScreen> {
   ScanProgress? _scanProgress;
   String? _scanError;
 
-  static const _activityLabels = {
-    SmartAccountActivityType.sessionCreated: 'Session created',
-    SmartAccountActivityType.sessionRevoked: 'Session revoked',
-    SmartAccountActivityType.sessionRevokedAll: 'All sessions revoked',
-    SmartAccountActivityType.deviceRegistered: 'Device registered',
-    SmartAccountActivityType.deviceRevoked: 'Device revoked',
-  };
+  String _activityLabel(BuildContext context, SmartAccountActivityType type) {
+    switch (type) {
+      case SmartAccountActivityType.sessionCreated:
+        return context.l10n.walletScreenActivitySessionCreated;
+      case SmartAccountActivityType.sessionRevoked:
+        return context.l10n.walletScreenActivitySessionRevoked;
+      case SmartAccountActivityType.sessionRevokedAll:
+        return context.l10n.walletScreenActivitySessionRevokedAll;
+      case SmartAccountActivityType.deviceRegistered:
+        return context.l10n.walletScreenActivityDeviceRegistered;
+      case SmartAccountActivityType.deviceRevoked:
+        return context.l10n.walletScreenActivityDeviceRevoked;
+    }
+  }
 
   static const _revokedTypes = {
     SmartAccountActivityType.sessionRevoked,
@@ -280,12 +288,12 @@ class _WalletScreenState extends State<WalletScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('Deposit', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Text(context.l10n.walletScreenDepositButton, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              const Text(
-                'Send ETH to your smart account address to fund future operations.',
+              Text(
+                context.l10n.walletScreenDepositSheetBody,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
               ),
               const SizedBox(height: 20),
               Container(
@@ -312,11 +320,11 @@ class _WalletScreenState extends State<WalletScreen> {
                   });
                 },
                 icon: Icon(copied ? Icons.check : Icons.copy, size: 18),
-                label: Text(copied ? 'Copied!' : 'Copy address'),
+                label: Text(copied ? context.l10n.walletScreenCopiedButton : context.l10n.walletScreenCopyAddressButton),
               ),
               const SizedBox(height: 10),
-              const Text('Base Mainnet only',
-                  style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+              Text(context.l10n.walletScreenBaseMainnetOnly,
+                  style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
             ],
           ),
         ),
@@ -382,15 +390,15 @@ class _WalletScreenState extends State<WalletScreen> {
               const Icon(Icons.account_balance_wallet_outlined,
                   size: 64, color: AppColors.textMuted),
               const SizedBox(height: 16),
-              const Text(
-                'Device not paired',
-                style: TextStyle(fontSize: 18, color: AppColors.textMuted),
+              Text(
+                context.l10n.walletScreenNotPairedTitle,
+                style: const TextStyle(fontSize: 18, color: AppColors.textMuted),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Pair this device with an identity to see your smart account.',
+              Text(
+                context.l10n.walletScreenNotPairedBody,
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: AppColors.textMuted),
+                style: const TextStyle(fontSize: 14, color: AppColors.textMuted),
               ),
             ],
           ),
@@ -420,7 +428,9 @@ class _WalletScreenState extends State<WalletScreen> {
         padding: const EdgeInsets.all(16),
         children: [
           Text(
-            _pairedUsername != null ? '@$_pairedUsername' : 'Identity #$_pairedIdentityId',
+            _pairedUsername != null
+                ? context.l10n.walletScreenUsernameHandle(_pairedUsername!)
+                : context.l10n.walletScreenIdentityFallback(_pairedIdentityId ?? ''),
             style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 12),
@@ -432,7 +442,7 @@ class _WalletScreenState extends State<WalletScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Balance', style: TextStyle(fontSize: 13, color: AppColors.textMuted)),
+                  Text(context.l10n.walletScreenBalanceLabel, style: const TextStyle(fontSize: 13, color: AppColors.textMuted)),
                   const SizedBox(height: 4),
                   if (_balanceLoading && _balanceWei == null)
                     const SizedBox(
@@ -451,7 +461,7 @@ class _WalletScreenState extends State<WalletScreen> {
                       Expanded(
                         child: OutlinedButton(
                           onPressed: _smartAccountAddress == null ? null : _showDepositSheet,
-                          child: const Text('Deposit'),
+                          child: Text(context.l10n.walletScreenDepositButton),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -461,7 +471,7 @@ class _WalletScreenState extends State<WalletScreen> {
                               (_balanceWei == null || _balanceWei == BigInt.zero)
                                   ? null
                                   : _showWithdrawSheet,
-                          child: const Text('Withdraw'),
+                          child: Text(context.l10n.walletScreenWithdrawButton),
                         ),
                       ),
                     ],
@@ -479,12 +489,12 @@ class _WalletScreenState extends State<WalletScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Cost by type', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
+                  Text(context.l10n.walletScreenCostByTypeTitle, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 12),
                   Row(
                     children: [
-                      Expanded(child: _CostByTypeTile(label: 'Sessions', count: sessionCount, costWei: sessionCostWei, formatEth: _formatEth)),
-                      Expanded(child: _CostByTypeTile(label: 'Devices', count: deviceCount, costWei: deviceCostWei, formatEth: _formatEth)),
+                      Expanded(child: _CostByTypeTile(label: context.l10n.walletScreenSessionsLabel, count: sessionCount, costWei: sessionCostWei, formatEth: _formatEth)),
+                      Expanded(child: _CostByTypeTile(label: context.l10n.walletScreenDevicesLabel, count: deviceCount, costWei: deviceCostWei, formatEth: _formatEth)),
                     ],
                   ),
                 ],
@@ -496,11 +506,11 @@ class _WalletScreenState extends State<WalletScreen> {
           // ── Atividade ────────────────────────────────────────────────────
           Row(
             children: [
-              const Text('Activity', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              Text(context.l10n.walletScreenActivityTitle, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const Spacer(),
               TextButton(
                 onPressed: _isScanning ? null : _rescan,
-                child: const Text('Refresh', style: TextStyle(fontSize: 13)),
+                child: Text(context.l10n.walletScreenRefreshButton, style: const TextStyle(fontSize: 13)),
               ),
             ],
           ),
@@ -509,15 +519,16 @@ class _WalletScreenState extends State<WalletScreen> {
               padding: const EdgeInsets.symmetric(vertical: 16),
               child: Text(
                 _scanProgress != null
-                    ? 'Scanning transaction history (block ${_scanProgress!.scannedTo} of ${_scanProgress!.latest})...'
-                    : 'Scanning transaction history...',
+                    ? context.l10n.walletScreenScanningProgress(
+                        _scanProgress!.scannedTo, _scanProgress!.latest)
+                    : context.l10n.walletScreenScanningInProgress,
                 style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
               ),
             )
           else if (_isScanning)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 8),
-              child: Text('Updating...', style: TextStyle(color: AppColors.textMuted, fontSize: 13)),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Text(context.l10n.walletScreenUpdating, style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
             ),
           if (_scanError != null)
             Card(
@@ -527,19 +538,19 @@ class _WalletScreenState extends State<WalletScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Failed to load activity: $_scanError',
+                    Text(context.l10n.walletScreenActivityLoadError(_scanError!),
                         style: const TextStyle(color: AppColors.danger, fontSize: 13)),
                     const SizedBox(height: 8),
-                    TextButton(onPressed: _rescan, child: const Text('Retry')),
+                    TextButton(onPressed: _rescan, child: Text(context.l10n.walletScreenRetryButton)),
                   ],
                 ),
               ),
             )
           else if (!_isScanning && _activities.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 24),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 24),
               child: Center(
-                child: Text('No activity yet.', style: TextStyle(color: AppColors.textMuted)),
+                child: Text(context.l10n.walletScreenNoActivity, style: const TextStyle(color: AppColors.textMuted)),
               ),
             )
           else
@@ -556,7 +567,7 @@ class _WalletScreenState extends State<WalletScreen> {
                       Row(
                         children: [
                           Chip(
-                            label: Text(_activityLabels[activity.type] ?? activity.type.name),
+                            label: Text(_activityLabel(context, activity.type)),
                             backgroundColor: isRevoked ? AppColors.surfaceAlt : AppColors.successBg,
                             labelStyle: TextStyle(
                               fontSize: 11,
@@ -685,7 +696,7 @@ class _WithdrawSheetState extends State<_WithdrawSheet> {
       if (mounted) {
         setState(() {
           _step = _WithdrawStep.form;
-          _error = 'Could not send the withdrawal. Make sure your account has enough ETH for gas.';
+          _error = context.l10n.walletScreenWithdrawError;
         });
       }
     }
@@ -701,13 +712,13 @@ class _WithdrawSheetState extends State<_WithdrawSheet> {
           children: [
             const Icon(Icons.check_circle, size: 56, color: AppColors.success),
             const SizedBox(height: 12),
-            const Text('Withdrawal sent!', style: TextStyle(fontSize: 18)),
+            Text(context.l10n.walletScreenWithdrawSuccessTitle, style: const TextStyle(fontSize: 18)),
             const SizedBox(height: 20),
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
                 onPressed: () => Navigator.of(context).pop(true),
-                child: const Text('Close'),
+                child: Text(context.l10n.walletScreenCloseButton),
               ),
             ),
           ],
@@ -726,12 +737,12 @@ class _WithdrawSheetState extends State<_WithdrawSheet> {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text('Withdraw', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(context.l10n.walletScreenWithdrawButton, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
           const SizedBox(height: 16),
           TextField(
             controller: _destinationController,
             enabled: _step == _WithdrawStep.form,
-            decoration: const InputDecoration(labelText: 'Destination address', hintText: '0x...'),
+            decoration: InputDecoration(labelText: context.l10n.walletScreenDestinationAddressLabel, hintText: '0x...'),
             style: const TextStyle(fontFamily: 'monospace'),
             onChanged: (_) => setState(() {}),
           ),
@@ -743,20 +754,20 @@ class _WithdrawSheetState extends State<_WithdrawSheet> {
                   controller: _amountController,
                   enabled: _step == _WithdrawStep.form,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Amount (ETH)', hintText: '0.0'),
+                  decoration: InputDecoration(labelText: context.l10n.walletScreenAmountLabel, hintText: '0.0'),
                   onChanged: (_) => setState(() {}),
                 ),
               ),
               const SizedBox(width: 8),
               OutlinedButton(
                 onPressed: _step == _WithdrawStep.form ? _setMax : null,
-                child: const Text('Max'),
+                child: Text(context.l10n.walletScreenMaxButton),
               ),
             ],
           ),
           const SizedBox(height: 4),
           Text(
-            'Available: ${_weiToDecimalString(widget.availableBalanceWei)} ETH',
+            context.l10n.walletScreenAvailableBalance(_weiToDecimalString(widget.availableBalanceWei)),
             style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
           ),
           if (_error != null) ...[
@@ -766,7 +777,7 @@ class _WithdrawSheetState extends State<_WithdrawSheet> {
           const SizedBox(height: 20),
           ElevatedButton(
             onPressed: _canSubmit ? _submit : null,
-            child: Text(_step == _WithdrawStep.submitting ? 'Submitting...' : 'Withdraw'),
+            child: Text(_step == _WithdrawStep.submitting ? context.l10n.walletScreenSubmittingButton : context.l10n.walletScreenWithdrawButton),
           ),
         ],
       ),

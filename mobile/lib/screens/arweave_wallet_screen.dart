@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../l10n/l10n_extensions.dart';
 import '../services/arweave_client.dart' show arweaveDefaultNode, getWalletBalance;
 import '../services/arweave_wallet_service.dart';
 import '../theme.dart';
@@ -97,7 +98,7 @@ class _ArweaveWalletScreenState extends State<ArweaveWalletScreen> {
         : null;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Wallet Arweave')),
+      appBar: AppBar(title: Text(context.l10n.arweaveWalletScreenTitle)),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -105,11 +106,9 @@ class _ArweaveWalletScreenState extends State<ArweaveWalletScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
-                    'O vault (blob principal e documentos anexados) e os apps terceiros '
-                    'autorizados publicam no Arweave — precisa de uma wallet local '
-                    'financiada com AR.',
-                    style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+                  Text(
+                    context.l10n.arweaveWalletScreenIntro,
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
                   ),
                   const SizedBox(height: 16),
                   if (_error != null)
@@ -120,7 +119,9 @@ class _ArweaveWalletScreenState extends State<ArweaveWalletScreen> {
                   if (!_exists)
                     ElevatedButton(
                       onPressed: _generating ? null : _handleGenerate,
-                      child: Text(_generating ? 'Gerando...' : 'Gerar wallet Arweave'),
+                      child: Text(_generating
+                          ? context.l10n.arweaveWalletScreenGeneratingButton
+                          : context.l10n.arweaveWalletScreenGenerateButton),
                     )
                   else
                     Column(
@@ -136,14 +137,16 @@ class _ArweaveWalletScreenState extends State<ArweaveWalletScreen> {
                             OutlinedButton.icon(
                               onPressed: _handleCopy,
                               icon: Icon(_copied ? Icons.check : Icons.copy, size: 16),
-                              label: Text(_copied ? '✓ Copiado!' : 'Copiar endereço'),
+                              label: Text(_copied
+                                  ? context.l10n.arweaveWalletScreenCopiedButton
+                                  : context.l10n.arweaveWalletScreenCopyButton),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Text(
                                 balanceAr != null
-                                    ? 'Saldo: $balanceAr AR'
-                                    : 'Saldo indisponível no momento',
+                                    ? context.l10n.arweaveWalletScreenBalanceLabel(balanceAr)
+                                    : context.l10n.arweaveWalletScreenBalanceUnavailable,
                                 style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
                               ),
                             ),
@@ -153,9 +156,8 @@ class _ArweaveWalletScreenState extends State<ArweaveWalletScreen> {
                           Padding(
                             padding: const EdgeInsets.only(top: 12),
                             child: Text(
-                              'Sem saldo ainda — compre AR numa exchange e envie pro '
-                              'endereço acima antes de publicar.',
-                              style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+                              context.l10n.arweaveWalletScreenNoBalanceHint,
+                              style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
                             ),
                           ),
                       ],
