@@ -47,3 +47,7 @@ app.*.map.json
 
 # Local secrets (API keys) — never commit, see secrets.example.dart
 /lib/config/secrets.dart
+
+# i18n — código gerado por `flutter gen-l10n` a partir de lib/l10n/arb/*.arb
+# (esses sim são versionados). Regenerado deterministicamente a cada build.
+/lib/l10n/generated/

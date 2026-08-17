@@ -54,6 +54,9 @@ dependencies:
   # (não hardcoded) E aplica o Kotlin Gradle Plugin incondicionalmente — sem
   # nenhum dos dois conflitos. Ver achado real na Sessão 126.
   file_picker: 10.3.6
+  flutter_localizations:
+    sdk: flutter
+  intl: ^0.20.2
 
 dev_dependencies:
   flutter_test:
@@ -85,6 +88,10 @@ flutter_launcher_icons:
 
 # The following section is specific to Flutter packages.
 flutter:
+
+  # Habilita o hook `flutter gen-l10n` (ver l10n.yaml) — gera AppLocalizations
+  # a partir de lib/l10n/arb/*.arb.
+  generate: true
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in
