@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n_extensions.dart';
 import '../services/cross_device_delivery_channel.dart';
 import '../services/ecies_service.dart';
 import '../services/ipfs_pin_client.dart';
@@ -119,37 +120,36 @@ class _AutofillCreditCardApprovalScreenState
   _Status? _validatePayload() {
     final v = widget.payload['v'];
     if (v != 1) {
-      _errorMsg = 'Invalid QR: unsupported schema version.';
+      _errorMsg = context.l10n.autofillCreditcardApprovalScreenErrorInvalidVersion;
       return _Status.error;
     }
 
     final sessionId = widget.payload['sessionId'] as String?;
     if (sessionId == null || sessionId.isEmpty) {
-      _errorMsg = 'Invalid QR: missing sessionId.';
+      _errorMsg = context.l10n.autofillCreditcardApprovalScreenErrorMissingSessionId;
       return _Status.error;
     }
 
     final ephemeralPubKey = widget.payload['ephemeralPubKey'] as String?;
     if (ephemeralPubKey == null || ephemeralPubKey.isEmpty) {
-      _errorMsg = 'Invalid QR: missing ephemeralPubKey.';
+      _errorMsg = context.l10n.autofillCreditcardApprovalScreenErrorMissingPubKey;
       return _Status.error;
     }
 
     final expiresAtMs = widget.payload['expiresAt'];
     if (expiresAtMs is! int) {
-      _errorMsg = 'Invalid QR: missing expiresAt.';
+      _errorMsg = context.l10n.autofillCreditcardApprovalScreenErrorMissingExpiresAt;
       return _Status.error;
     }
     final expiresAt = DateTime.fromMillisecondsSinceEpoch(expiresAtMs);
     if (expiresAt.isBefore(DateTime.now())) {
-      _errorMsg = 'This QR code has expired — go back to the site and try '
-          'again.';
+      _errorMsg = context.l10n.autofillCreditcardApprovalScreenErrorExpiredQr;
       return _Status.error;
     }
 
     final appName = (widget.payload['appName'] as String?)?.trim() ?? '';
     if (appName.isEmpty) {
-      _errorMsg = 'Invalid QR: missing appName.';
+      _errorMsg = context.l10n.autofillCreditcardApprovalScreenErrorMissingAppName;
       return _Status.error;
     }
 
@@ -223,8 +223,7 @@ class _AutofillCreditCardApprovalScreenState
       if (expiresAt.isBefore(DateTime.now())) {
         setState(() {
           _status = _Status.error;
-          _errorMsg = 'Session expired before responding — go back to the '
-              'site and try again.';
+          _errorMsg = context.l10n.autofillCreditcardApprovalScreenErrorSessionExpired;
         });
         return;
       }
@@ -248,7 +247,7 @@ class _AutofillCreditCardApprovalScreenState
       if (!mounted) return;
       setState(() {
         _status = _Status.error;
-        _errorMsg = 'Failed to respond to the site: $e';
+        _errorMsg = context.l10n.autofillCreditcardApprovalScreenErrorRespondFailed('$e');
       });
     }
   }
@@ -256,7 +255,7 @@ class _AutofillCreditCardApprovalScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Autofill request')),
+      appBar: AppBar(title: Text(context.l10n.autofillCreditcardApprovalScreenTitle)),
       body: switch (_status) {
         _Status.loadingCards =>
           const Center(child: CircularProgressIndicator()),
@@ -280,15 +279,15 @@ class _AutofillCreditCardApprovalScreenState
             const Icon(Icons.credit_card, size: 64, color: AppColors.accent),
             const SizedBox(height: 16),
             Text(
-              '$_appName wants to fill in a card',
+              context.l10n.autofillCreditcardApprovalScreenPickerHeading(_appName ?? ''),
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Choose which saved card to use:',
+            Text(
+              context.l10n.autofillCreditcardApprovalScreenPickerPrompt,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             const SizedBox(height: 16),
             ..._cards.map((entry) => Card(
@@ -304,7 +303,7 @@ class _AutofillCreditCardApprovalScreenState
             OutlinedButton.icon(
               onPressed: _reject,
               icon: const Icon(Icons.cancel_outlined),
-              label: const Text('Deny request'),
+              label: Text(context.l10n.autofillCreditcardApprovalScreenDenyButton),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.danger,
                 side: const BorderSide(color: AppColors.danger),
@@ -328,17 +327,20 @@ class _AutofillCreditCardApprovalScreenState
             const Icon(Icons.credit_card, size: 64, color: AppColors.accent),
             const SizedBox(height: 16),
             Text(
-              '$_appName wants to fill a form with this card',
+              context.l10n.autofillCreditcardApprovalScreenConfirmHeading(_appName ?? ''),
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            InfoRow(label: 'Label', value: card.label),
+            InfoRow(label: context.l10n.autofillCreditcardApprovalScreenFieldLabel, value: card.label),
             const SizedBox(height: 8),
-            InfoRow(label: 'Card holder', value: card.cardHolderName),
+            InfoRow(
+              label: context.l10n.autofillCreditcardApprovalScreenFieldCardHolder,
+              value: card.cardHolderName,
+            ),
             const SizedBox(height: 8),
             _MaskedInfoRow(
-              label: 'Card number',
+              label: context.l10n.autofillCreditcardApprovalScreenFieldCardNumber,
               value: card.cardNumber,
               visible: _cardNumberVisible,
               onToggle: () =>
@@ -346,27 +348,33 @@ class _AutofillCreditCardApprovalScreenState
             ),
             const SizedBox(height: 8),
             InfoRow(
-              label: 'Expiry',
+              label: context.l10n.autofillCreditcardApprovalScreenFieldExpiry,
               value: '${card.expiryMonth}/${card.expiryYear}',
             ),
             const SizedBox(height: 8),
             _MaskedInfoRow(
-              label: 'CVV',
+              label: context.l10n.autofillCreditcardApprovalScreenFieldCvv,
               value: card.cvv,
               visible: _cvvVisible,
               onToggle: () => setState(() => _cvvVisible = !_cvvVisible),
             ),
             const SizedBox(height: 8),
-            InfoRow(label: 'Network', value: card.cardNetwork.name),
+            InfoRow(
+              label: context.l10n.autofillCreditcardApprovalScreenFieldNetwork,
+              value: card.cardNetwork.name,
+            ),
             if (card.bank != null && card.bank!.isNotEmpty) ...[
               const SizedBox(height: 8),
-              InfoRow(label: 'Bank', value: card.bank!),
+              InfoRow(label: context.l10n.autofillCreditcardApprovalScreenFieldBank, value: card.bank!),
             ],
             const SizedBox(height: 32),
             ElevatedButton.icon(
               onPressed: _approve,
               icon: const Icon(Icons.check_circle_outline),
-              label: const Text('Approve', style: TextStyle(fontSize: 18)),
+              label: Text(
+                context.l10n.autofillCreditcardApprovalScreenApproveButton,
+                style: const TextStyle(fontSize: 18),
+              ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.success,
                 foregroundColor: AppColors.background,
@@ -377,7 +385,10 @@ class _AutofillCreditCardApprovalScreenState
             OutlinedButton.icon(
               onPressed: _reject,
               icon: const Icon(Icons.cancel_outlined),
-              label: const Text('Reject', style: TextStyle(fontSize: 18)),
+              label: Text(
+                context.l10n.autofillCreditcardApprovalScreenRejectButton,
+                style: const TextStyle(fontSize: 18),
+              ),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.danger,
                 side: const BorderSide(color: AppColors.danger),
@@ -388,7 +399,7 @@ class _AutofillCreditCardApprovalScreenState
               const SizedBox(height: 12),
               TextButton(
                 onPressed: _backToPicker,
-                child: const Text('Choose a different card'),
+                child: Text(context.l10n.autofillCreditcardApprovalScreenChooseDifferentButton),
               ),
             ],
           ],
@@ -407,25 +418,23 @@ class _AutofillCreditCardApprovalScreenState
             const SizedBox(height: 48),
             const Center(child: CircularProgressIndicator()),
             const SizedBox(height: 24),
-            const Text(
-              'Waiting for the site to connect...',
+            Text(
+              context.l10n.autofillCreditcardApprovalScreenWaitingTitle,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Make sure your phone and computer are on the same Wi-Fi '
-              'network.',
+            Text(
+              context.l10n.autofillCreditcardApprovalScreenWaitingSubtitle,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             if (_localIps.isNotEmpty) ...[
               const SizedBox(height: 24),
-              const Text(
-                'If the site can\'t find your phone automatically, enter '
-                'this IP address manually:',
+              Text(
+                context.l10n.autofillCreditcardApprovalScreenManualIpPrompt,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textMuted),
+                style: const TextStyle(color: AppColors.textMuted),
               ),
               const SizedBox(height: 8),
               ..._localIps.map(
@@ -458,35 +467,35 @@ class _AutofillCreditCardApprovalScreenState
             const Icon(Icons.check_circle_outline,
                 size: 72, color: AppColors.accent),
             const SizedBox(height: 16),
-            const Text(
-              'Sent',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Text(
+              context.l10n.autofillCreditcardApprovalScreenSentTitle,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'The site received your response.',
+            Text(
+              context.l10n.autofillCreditcardApprovalScreenSentSubtitle,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             if (_deadDropIpnsName != null) ...[
               const SizedBox(height: 8),
-              const Text(
-                'Dead-drop backup published (IPFS/IPNS).',
+              Text(
+                context.l10n.autofillCreditcardApprovalScreenDeadDropPublished,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
               ),
             ] else if (_deadDropError != null) ...[
               const SizedBox(height: 8),
-              const Text(
-                'Dead-drop backup unavailable this time.',
+              Text(
+                context.l10n.autofillCreditcardApprovalScreenDeadDropUnavailable,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
               ),
             ],
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Done'),
+              child: Text(context.l10n.autofillCreditcardApprovalScreenDoneButton),
             ),
           ],
         ),
@@ -503,22 +512,20 @@ class _AutofillCreditCardApprovalScreenState
           children: [
             const Icon(Icons.wifi_off, size: 72, color: AppColors.textMuted),
             const SizedBox(height: 16),
-            const Text(
-              'Nothing arrived',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Text(
+              context.l10n.autofillCreditcardApprovalScreenTimeoutTitle,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'The site never connected before this request expired. Make '
-              'sure both devices are on the same Wi-Fi network and try '
-              'again.',
+            Text(
+              context.l10n.autofillCreditcardApprovalScreenTimeoutSubtitle,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Back'),
+              child: Text(context.l10n.autofillCreditcardApprovalScreenBackButton),
             ),
           ],
         ),
@@ -536,14 +543,14 @@ class _AutofillCreditCardApprovalScreenState
             const Icon(Icons.error_outline, size: 72, color: AppColors.danger),
             const SizedBox(height: 16),
             Text(
-              _errorMsg ?? 'Something went wrong.',
+              _errorMsg ?? context.l10n.autofillCreditcardApprovalScreenGenericError,
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Back'),
+              child: Text(context.l10n.autofillCreditcardApprovalScreenBackButton),
             ),
           ],
         ),
@@ -580,7 +587,7 @@ class _MaskedInfoRow extends StatelessWidget {
       child: Row(
         children: [
           Text(
-            '$label: ',
+            context.l10n.autofillCreditcardApprovalScreenMaskedLabelSuffix(label),
             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
           ),
           Expanded(

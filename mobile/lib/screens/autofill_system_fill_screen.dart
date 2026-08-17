@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n_extensions.dart';
 import '../services/autofill_bridge_service.dart';
 import '../services/vault_repository.dart';
 import '../theme.dart';
@@ -77,7 +78,7 @@ class _AutofillSystemFillScreenState extends State<AutofillSystemFillScreen> {
       if (!mounted) return;
       setState(() {
         _status = _Status.error;
-        _errorMsg = 'Failed to load the Vault: $e';
+        _errorMsg = context.l10n.autofillSystemFillScreenLoadError('$e');
       });
     }
   }
@@ -90,7 +91,7 @@ class _AutofillSystemFillScreenState extends State<AutofillSystemFillScreen> {
       if (!mounted) return;
       setState(() {
         _status = _Status.error;
-        _errorMsg = 'Failed to respond: $e';
+        _errorMsg = context.l10n.autofillSystemFillScreenRespondError('$e');
       });
     }
   }
@@ -157,15 +158,15 @@ class _AutofillSystemFillScreenState extends State<AutofillSystemFillScreen> {
       };
 
   String get _emptyMessage => switch (_wantedType) {
-        EntryType.address => "You don't have any saved addresses yet.",
-        EntryType.creditCard => "You don't have any saved cards yet.",
-        _ => "You don't have any saved credentials yet.",
+        EntryType.address => context.l10n.autofillSystemFillScreenEmptyAddresses,
+        EntryType.creditCard => context.l10n.autofillSystemFillScreenEmptyCards,
+        _ => context.l10n.autofillSystemFillScreenEmptyCredentials,
       };
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Autofill request')),
+      appBar: AppBar(title: Text(context.l10n.autofillSystemFillScreenTitle)),
       body: switch (_status) {
         _Status.loading => const Center(child: CircularProgressIndicator()),
         _Status.picking => _buildPickerUI(),
@@ -185,7 +186,10 @@ class _AutofillSystemFillScreenState extends State<AutofillSystemFillScreen> {
             children: [
               Text(_emptyMessage, textAlign: TextAlign.center),
               const SizedBox(height: 24),
-              OutlinedButton(onPressed: _cancel, child: const Text('Close')),
+              OutlinedButton(
+                onPressed: _cancel,
+                child: Text(context.l10n.autofillSystemFillScreenCloseButton),
+              ),
             ],
           ),
         ),
@@ -198,7 +202,7 @@ class _AutofillSystemFillScreenState extends State<AutofillSystemFillScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Text(
-              'Choose which saved entry to use to fill this form:',
+              context.l10n.autofillSystemFillScreenPickerPrompt,
               textAlign: TextAlign.center,
               style: const TextStyle(color: AppColors.textMuted),
             ),
@@ -216,7 +220,7 @@ class _AutofillSystemFillScreenState extends State<AutofillSystemFillScreen> {
             OutlinedButton.icon(
               onPressed: _cancel,
               icon: const Icon(Icons.cancel_outlined),
-              label: const Text('Cancel'),
+              label: Text(context.l10n.autofillSystemFillScreenCancelButton),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.danger,
                 side: const BorderSide(color: AppColors.danger),
@@ -239,12 +243,15 @@ class _AutofillSystemFillScreenState extends State<AutofillSystemFillScreen> {
             const Icon(Icons.error_outline, size: 72, color: AppColors.danger),
             const SizedBox(height: 16),
             Text(
-              _errorMsg ?? 'Something went wrong.',
+              _errorMsg ?? context.l10n.autofillSystemFillScreenGenericError,
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 24),
-            ElevatedButton(onPressed: _cancel, child: const Text('Close')),
+            ElevatedButton(
+              onPressed: _cancel,
+              child: Text(context.l10n.autofillSystemFillScreenCloseButton),
+            ),
           ],
         ),
       ),

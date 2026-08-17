@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n_extensions.dart';
 import '../services/blockchain_service.dart';
 import '../services/vault_repository.dart';
 import '../theme.dart';
@@ -98,7 +99,7 @@ class _VaultDevicePermissionsScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Device permissions')),
+      appBar: AppBar(title: Text(context.l10n.vaultDevicePermissionsScreenTitle)),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : Padding(
@@ -106,11 +107,9 @@ class _VaultDevicePermissionsScreenState
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
-                    'Controls whether a paired device can add, edit and '
-                    'publish entries in this Vault. By default a new device '
-                    'is read-only.',
-                    style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+                  Text(
+                    context.l10n.vaultDevicePermissionsScreenExplanation,
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
                   ),
                   const SizedBox(height: 16),
                   if (_error != null)
@@ -120,9 +119,9 @@ class _VaultDevicePermissionsScreenState
                     ),
                   Expanded(
                     child: _rows.isEmpty
-                        ? const Center(
-                            child: Text('No active devices registered.',
-                                style: TextStyle(color: AppColors.textMuted)),
+                        ? Center(
+                            child: Text(context.l10n.vaultDevicePermissionsScreenEmptyState,
+                                style: const TextStyle(color: AppColors.textMuted)),
                           )
                         : ListView(
                             children: _rows
@@ -148,8 +147,8 @@ class _VaultDevicePermissionsScreenState
                                           ),
                                           child: Text(
                                             row.canWrite
-                                                ? '✓ Can write'
-                                                : 'Read only',
+                                                ? context.l10n.vaultDevicePermissionsScreenCanWrite
+                                                : context.l10n.vaultDevicePermissionsScreenReadOnly,
                                             style: TextStyle(
                                               color: row.canWrite
                                                   ? AppColors.success
