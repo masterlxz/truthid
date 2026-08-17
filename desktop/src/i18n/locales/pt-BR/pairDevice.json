@@ -1,0 +1,17 @@
+{
+  "addDeviceButton": "+ Adicionar dispositivo",
+  "title": "Adicionar dispositivo",
+  "instructions": "No seu celular, abra <0>Dispositivos → Mostrar QR para parear</0> e cole aqui os dados exibidos:",
+  "deviceAddressLabel": "Endereço do dispositivo",
+  "invalidAddress": "Endereço inválido.",
+  "encryptionKeyLabel": "Chave de criptografia (opcional)",
+  "deviceNameLabel": "Nome do dispositivo",
+  "rejectedOnLedger": "Transação rejeitada no Ledger.",
+  "errorPrefix": "Erro: {{message}}",
+  "confirmWallet1": "Confirmando na carteira (1/2)...",
+  "waitingNetwork1": "Aguardando a rede (1/2)...",
+  "confirmWallet2": "Confirmando na carteira (2/2)...",
+  "waitingNetwork2": "Aguardando a rede (2/2)...",
+  "registerDevice": "Registrar dispositivo",
+  "cancel": "Cancelar"
+}

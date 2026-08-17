@@ -1,0 +1,10 @@
+{
+  "title": "Solicitud de autocompletado",
+  "description": "La extensión de navegador TruthID quiere completar un formulario con una tarjeta guardada.",
+  "cvvSuffix": " · CVV {{cvv}}",
+  "expired": "Esta solicitud ha expirado.",
+  "useThisCard": "Usar esta tarjeta",
+  "hide": "Ocultar",
+  "show": "Mostrar",
+  "denyRequest": "Denegar solicitud"
+}

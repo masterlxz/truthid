@@ -1,0 +1,8 @@
+{
+  "title": "本地应用通道",
+  "active": "✓ 活跃 — 端口 {{port}}",
+  "inactive": "未激活",
+  "stop": "停止",
+  "stopping": "正在停止...",
+  "start": "启动"
+}

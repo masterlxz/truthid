@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useConnect } from "wagmi";
+import { useTranslation } from "react-i18next";
 import { ConnectLedger } from "./ConnectLedger";
 
 function IconWalletConnect() {
@@ -29,6 +30,7 @@ function IconLedger() {
 }
 
 export function ConnectWallet({ asModal, onClose }: { asModal?: boolean; onClose?: () => void }) {
+  const { t } = useTranslation();
   const { connect, connectors } = useConnect();
   const [showLedger, setShowLedger] = useState(false);
 
@@ -67,7 +69,7 @@ export function ConnectWallet({ asModal, onClose }: { asModal?: boolean; onClose
             </svg>
             TruthID
           </div>
-          <p className="wallet-screen-tagline">Sign in to your decentralized identity</p>
+          <p className="wallet-screen-tagline">{t("connectWallet.tagline")}</p>
         </div>
 
         <div className="wallet-options">
@@ -79,7 +81,7 @@ export function ConnectWallet({ asModal, onClose }: { asModal?: boolean; onClose
               <span className="wallet-option-icon">
                 <IconWalletConnect />
               </span>
-              <span className="wallet-option-name">WalletConnect</span>
+              <span className="wallet-option-name">{t("connectWallet.walletConnect")}</span>
               <span className="wallet-option-arrow">›</span>
             </button>
           )}
@@ -91,7 +93,7 @@ export function ConnectWallet({ asModal, onClose }: { asModal?: boolean; onClose
             <span className="wallet-option-icon">
               <IconLedger />
             </span>
-            <span className="wallet-option-name">Ledger</span>
+            <span className="wallet-option-name">{t("connectWallet.ledger")}</span>
             <span className="wallet-option-arrow">›</span>
           </button>
         </div>

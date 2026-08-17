@@ -1,0 +1,14 @@
+{
+  "keyringError": "Error accessing OS keyring: {{error}}",
+  "initializing": "Initializing desktop key...",
+  "title": "This desktop",
+  "registered": "Registered as device",
+  "notRegistered": "Not registered",
+  "rejectedOnLedger": "Transaction rejected on Ledger.",
+  "errorPrefix": "Error: {{message}}",
+  "confirmWallet1": "Confirm in wallet (1/2)...",
+  "waitingNetwork1": "Waiting for network (1/2)...",
+  "confirmWallet2": "Confirm in wallet (2/2)...",
+  "waitingNetwork2": "Waiting for network (2/2)...",
+  "registerButton": "Register this desktop"
+}

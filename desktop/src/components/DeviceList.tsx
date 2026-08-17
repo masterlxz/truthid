@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+import { formatDate } from "../i18n/formatDate";
 import type { DeviceInfo } from "../types";
 
 export function DeviceList({
@@ -13,30 +15,32 @@ export function DeviceList({
   isRevokeConfirming: boolean;
   onRevoke: (pubKey: string) => void;
 }) {
+  const { t, i18n } = useTranslation();
+
   if (devices.length === 0) {
-    return <p className="muted">No devices registered yet.</p>;
+    return <p className="muted">{t("deviceList.empty")}</p>;
   }
 
   return (
     <div>
-      <h3>Devices</h3>
+      <h3>{t("deviceList.title")}</h3>
       {devices.map((device) => {
         const isBeingRevoked = revokingPubKey === device.pubKey;
         // addedAt vem em segundos (Unix timestamp do bloco)
-        const addedDate = new Date(Number(device.addedAt) * 1000).toLocaleDateString();
+        const addedDate = formatDate(Number(device.addedAt), i18n.language);
 
         return (
           <div key={device.pubKey} className={`card${device.revoked ? " is-revoked" : ""}`}>
             <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "0.4rem" }}>
               <strong>{device.label}</strong>
               <span className={`status-badge ${device.revoked ? "status-badge--revoked" : "status-badge--active"}`}>
-                {device.revoked ? "Revoked" : "✓ Active"}
+                {device.revoked ? t("deviceList.status.revoked") : t("deviceList.status.active")}
               </span>
             </div>
             <code className="address">
               {device.pubKey.slice(0, 10)}…{device.pubKey.slice(-6)}
             </code>
-            <span className="muted"> · Added on {addedDate}</span>
+            <span className="muted"> · {t("deviceList.addedOn", { date: addedDate })}</span>
             {!device.revoked && (
               <div className="actions-row">
                 <button
@@ -44,10 +48,10 @@ export function DeviceList({
                   disabled={isRevokePending || isRevokeConfirming}
                 >
                   {isBeingRevoked && isRevokePending
-                    ? "Confirm in wallet..."
+                    ? t("deviceList.actions.confirmInWallet")
                     : isBeingRevoked && isRevokeConfirming
-                    ? "Waiting for network..."
-                    : "Revoke"}
+                    ? t("deviceList.actions.waitingForNetwork")
+                    : t("deviceList.actions.revoke")}
                 </button>
               </div>
             )}

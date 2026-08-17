@@ -1,0 +1,10 @@
+{
+  "title": "Solicitação de preenchimento automático",
+  "description": "A extensão TruthID do navegador quer preencher um formulário com um cartão salvo.",
+  "cvvSuffix": " · CVV {{cvv}}",
+  "expired": "Esta solicitação expirou.",
+  "useThisCard": "Usar este cartão",
+  "hide": "Ocultar",
+  "show": "Mostrar",
+  "denyRequest": "Negar solicitação"
+}

@@ -1,0 +1,7 @@
+{
+  "title": "自动填写请求",
+  "description": "TruthID 浏览器扩展想要用已保存的地址填写表单。",
+  "expired": "此请求已过期。",
+  "useThisAddress": "使用此地址",
+  "denyRequest": "拒绝请求"
+}

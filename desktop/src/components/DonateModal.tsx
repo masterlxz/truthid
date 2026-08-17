@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
+import { useTranslation } from "react-i18next";
 
 const DONATE_ADDRESS = "0xB54fe9909D76d98e87a9fD76bDB5C69fABe10265";
 const DONATE_URI = `ethereum:${DONATE_ADDRESS}`;
 
 export function DonateModal() {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
 
   async function handleCopy() {
@@ -16,7 +18,7 @@ export function DonateModal() {
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }}>
       <p className="muted" style={{ margin: 0, textAlign: "center" }}>
-        TruthID is open source and free. If it helps you, consider sending a tip.
+        {t("donateModal.description")}
       </p>
 
       <div className="donate-qr-wrapper">
@@ -32,12 +34,12 @@ export function DonateModal() {
 
       <div className="actions-row" style={{ justifyContent: "center" }}>
         <button onClick={handleCopy}>
-          {copied ? "✓ Copied!" : "Copy address"}
+          {copied ? t("donateModal.copied") : t("donateModal.copyAddress")}
         </button>
       </div>
 
       <p className="muted" style={{ margin: 0, fontSize: "0.8em", textAlign: "center" }}>
-        Any EVM chain · 0.001 ETH suggested
+        {t("donateModal.footnote")}
       </p>
     </div>
   );

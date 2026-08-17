@@ -1,0 +1,19 @@
+{
+  "cannotPublishNoIdentity": "未加载身份 — 无法发布。",
+  "title_one": "扩展新增了 {{count}} 项凭据",
+  "title_other": "扩展新增了 {{count}} 项凭据",
+  "description_one": "TruthID 浏览器扩展想要向您的密码库保存 {{count}} 项新凭据。",
+  "description_other": "TruthID 浏览器扩展想要向您的密码库保存 {{count}} 项新凭据。",
+  "fieldSite": "网站",
+  "updatingExistingEntry": "正在更新已有条目",
+  "newEntry": "新条目",
+  "fieldUsername": "用户名",
+  "fieldPassword": "密码",
+  "hide": "隐藏",
+  "show": "显示",
+  "newPasskeyFor": "🔑 + 为 {{rpId}} 新建通行密钥",
+  "requestExpired": "此请求已过期。",
+  "publishing": "正在发布...",
+  "approve": "批准",
+  "reject": "拒绝"
+}

@@ -1,0 +1,10 @@
+{
+  "title": "Sign message",
+  "defaultAppName": "An app",
+  "wantsToDeriveKey": "wants to derive a signing key for itself (purpose:",
+  "closingParen": ").",
+  "exactMessageLabel": "Exact message that will be signed:",
+  "requestExpired": "This request has expired.",
+  "approve": "Approve",
+  "reject": "Reject"
+}

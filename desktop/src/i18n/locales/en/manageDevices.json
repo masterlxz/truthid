@@ -1,0 +1,20 @@
+{
+  "reauthBanner": {
+    "body_one": "{{count}} device is registered but can't sign for this account — likely left over from a smart account redeploy. Reauthorizing doesn't require re-pairing anything, just a confirmation on the Ledger.",
+    "body_other": "{{count}} devices are registered but can't sign for this account — likely left over from a smart account redeploy. Reauthorizing doesn't require re-pairing anything, just a confirmation on the Ledger.",
+    "confirmingWallet": "Confirming in wallet...",
+    "waitingNetwork": "Waiting for network...",
+    "confirmButton_one": "Reauthorize {{count}} device",
+    "confirmButton_other": "Reauthorize {{count}} devices"
+  },
+  "rotationBanner": {
+    "body_one": "Device revoked — the vault key should be rotated now, so the revoked device loses access to content it had already decrypted. This requires the raw public key of the {{count}} remaining device (the same field shown during pairing — check its \"Show QR to pair\" screen).",
+    "body_other": "Device revoked — the vault key should be rotated now, so the revoked device loses access to content it had already decrypted. This requires the raw public key of each of the {{count}} remaining devices (the same field shown during pairing — check each one's \"Show QR to pair\" screen).",
+    "pubkeyPlaceholder": "0x03... or 0x04...",
+    "rotatingButton": "Rotating the vault to a new key...",
+    "confirmingWallet": "Confirming in wallet...",
+    "confirmButton": "Rotate & redistribute",
+    "postponeButton": "Postpone",
+    "rotationFailed": "Failed to rotate the vault key: {{error}}"
+  }
+}

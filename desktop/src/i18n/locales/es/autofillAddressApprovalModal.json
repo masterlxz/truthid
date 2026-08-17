@@ -1,0 +1,7 @@
+{
+  "title": "Solicitud de autocompletado",
+  "description": "La extensión de navegador TruthID quiere completar un formulario con una dirección guardada.",
+  "expired": "Esta solicitud ha expirado.",
+  "useThisAddress": "Usar esta dirección",
+  "denyRequest": "Denegar solicitud"
+}

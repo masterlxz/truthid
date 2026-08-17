@@ -1,0 +1,38 @@
+{
+  "topbar": {
+    "login": "⎋ Login",
+    "refresh": "Refresh",
+    "disconnectWallet": "Disconnect wallet",
+    "connectWallet": "Connect wallet",
+    "donate": "Donate to TruthID",
+    "logout": "Log out",
+    "logoutTitle": "Log out and forget this identity"
+  },
+  "updateBanner": {
+    "available": "TruthID {{version}} available",
+    "download": "Download"
+  },
+  "wrongNetwork": {
+    "message": "Wrong network. TruthID runs on Base Mainnet.",
+    "switching": "Switching...",
+    "switchButton": "Switch to Base Mainnet"
+  },
+  "loading": "Loading...",
+  "identityError": {
+    "message": "Failed to load identity: {{error}}",
+    "retry": "Try again"
+  },
+  "tabs": {
+    "dashboard": "Dashboard",
+    "devices": "Devices",
+    "sessions": "Active Sessions",
+    "vault": "Vault",
+    "recovery": "Recovery"
+  },
+  "loginModal": {
+    "title": "Desktop Login"
+  },
+  "donateModal": {
+    "title": "Donate to TruthID"
+  }
+}

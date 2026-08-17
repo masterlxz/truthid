@@ -1,8 +1,10 @@
 import { useState } from "react";
 import type { Address } from "viem";
 import { QRCodeSVG } from "qrcode.react";
+import { useTranslation } from "react-i18next";
 
 export function DepositModal({ smartAccountAddress }: { smartAccountAddress: Address }) {
+  const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   const depositUri = `ethereum:${smartAccountAddress}`;
 
@@ -15,7 +17,7 @@ export function DepositModal({ smartAccountAddress }: { smartAccountAddress: Add
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "1rem" }}>
       <p className="muted" style={{ margin: 0, textAlign: "center" }}>
-        Send ETH to your smart account address to fund future operations.
+        {t("depositModal.description")}
       </p>
 
       <div className="donate-qr-wrapper">
@@ -31,12 +33,12 @@ export function DepositModal({ smartAccountAddress }: { smartAccountAddress: Add
 
       <div className="actions-row" style={{ justifyContent: "center" }}>
         <button onClick={handleCopy}>
-          {copied ? "✓ Copied!" : "Copy address"}
+          {copied ? t("depositModal.copied") : t("depositModal.copyAddress")}
         </button>
       </div>
 
       <p className="muted" style={{ margin: 0, fontSize: "0.8em", textAlign: "center" }}>
-        Base Mainnet only
+        {t("depositModal.footnote")}
       </p>
     </div>
   );

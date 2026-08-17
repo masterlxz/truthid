@@ -1,0 +1,10 @@
+{
+  "title": "自动填写请求",
+  "description": "TruthID 浏览器扩展想要用已保存的卡片填写表单。",
+  "cvvSuffix": " · CVV {{cvv}}",
+  "expired": "此请求已过期。",
+  "useThisCard": "使用此卡片",
+  "hide": "隐藏",
+  "show": "显示",
+  "denyRequest": "拒绝请求"
+}

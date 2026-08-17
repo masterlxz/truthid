@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { Address } from "viem";
 import {
   useAccount,
@@ -24,6 +25,7 @@ import { DesktopDevice } from "./DesktopDevice";
 import { RedistributeVaultKey } from "./RedistributeVaultKey";
 
 export function ManageDevices() {
+  const { t } = useTranslation();
   const { username, identityId, smartAccountAddress } = useIdentity();
   const { isConnected } = useAccount();
   const { openConnectModal } = useWalletModal();
@@ -227,7 +229,7 @@ export function ManageDevices() {
         });
       })
       .catch((e) => {
-        setRotationError(`Falha ao rotacionar a chave do vault: ${String(e)}`);
+        setRotationError(t("manageDevices.rotationBanner.rotationFailed", { error: String(e) }));
         setRotationPhase("idle");
       });
   }
@@ -253,19 +255,14 @@ export function ManageDevices() {
       {devicesNeedingReauth.length > 0 && (
         <div className="card" style={{ marginBottom: "1rem", borderColor: "var(--warning, #c99a2e)" }}>
           <p style={{ marginTop: 0 }}>
-            <strong>{devicesNeedingReauth.length}</strong>{" "}
-            {devicesNeedingReauth.length === 1 ? "device está" : "devices estão"} registrado
-            {devicesNeedingReauth.length === 1 ? "" : "s"} mas não consegue
-            {devicesNeedingReauth.length === 1 ? "" : "m"} assinar por essa conta —
-            provavelmente sobrou de um redeploy da smart account. Reautorizar não exige
-            re-parear nada, só uma confirmação na Ledger.
+            {t("manageDevices.reauthBanner.body", { count: devicesNeedingReauth.length })}
           </p>
           <button onClick={handleReauthorize} disabled={isReauthorizePending || isReauthorizeConfirming}>
             {isReauthorizePending
-              ? "Confirmar na carteira..."
+              ? t("manageDevices.reauthBanner.confirmingWallet")
               : isReauthorizeConfirming
-              ? "Aguardando rede..."
-              : `Reautorizar ${devicesNeedingReauth.length} device${devicesNeedingReauth.length === 1 ? "" : "s"}`}
+              ? t("manageDevices.reauthBanner.waitingNetwork")
+              : t("manageDevices.reauthBanner.confirmButton", { count: devicesNeedingReauth.length })}
           </button>
           {isReauthorizeError && (
             <p className="error-text" style={{ marginBottom: 0 }}>
@@ -286,12 +283,7 @@ export function ManageDevices() {
       {pendingRemaining && pendingRemaining.length > 0 && (
         <div className="card" style={{ marginBottom: "1rem", borderColor: "var(--warning, #c99a2e)" }}>
           <p style={{ marginTop: 0 }}>
-            Device revogado — a chave do vault deveria ser rotacionada agora,
-            pra que o device revogado perca acesso ao conteúdo que já tinha
-            decifrado. Isso exige a chave pública crua de cada um dos{" "}
-            <strong>{pendingRemaining.length}</strong> devices restantes
-            (mesmo campo que aparece no pareamento — reveja a tela
-            &quot;Show QR to pair&quot; de cada um).
+            {t("manageDevices.rotationBanner.body", { count: pendingRemaining.length })}
           </p>
           {pendingRemaining.map((pubKey) => {
             const device = devices.find((d) => d.pubKey.toLowerCase() === pubKey.toLowerCase());
@@ -303,7 +295,7 @@ export function ManageDevices() {
                   onChange={(e) =>
                     setRawPubkeys((prev) => ({ ...prev, [pubKey]: e.target.value.trim() }))
                   }
-                  placeholder="0x03... or 0x04..."
+                  placeholder={t("manageDevices.rotationBanner.pubkeyPlaceholder")}
                   disabled={rotationPhase !== "idle"}
                   style={{ fontFamily: "monospace", fontSize: "0.8rem" }}
                 />
@@ -319,16 +311,16 @@ export function ManageDevices() {
               }
             >
               {rotationPhase === "rotating"
-                ? "Re-cifrando o vault com uma chave nova..."
+                ? t("manageDevices.rotationBanner.rotatingButton")
                 : rotationPhase === "confirming"
-                ? "Confirmar na carteira..."
-                : "Rotate & redistribute"}
+                ? t("manageDevices.rotationBanner.confirmingWallet")
+                : t("manageDevices.rotationBanner.confirmButton")}
             </button>
             <button
               onClick={() => { setPendingRemaining(null); setRawPubkeys({}); }}
               disabled={rotationPhase !== "idle"}
             >
-              Postpone
+              {t("manageDevices.rotationBanner.postponeButton")}
             </button>
           </div>
           {rotationError && <p className="error-text">{rotationError}</p>}

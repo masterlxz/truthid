@@ -1,0 +1,39 @@
+{
+  "title": "Painel da Smart Account",
+  "balance": {
+    "label": "Saldo",
+    "loading": "Carregando..."
+  },
+  "actions": {
+    "deposit": "Depositar",
+    "withdraw": "Sacar"
+  },
+  "costByType": {
+    "title": "Custo por tipo",
+    "sessions": "Sessões",
+    "devices": "Dispositivos",
+    "vault": "Vault"
+  },
+  "activity": {
+    "title": "Atividade",
+    "refresh": "Atualizar atividade",
+    "scanning": "Varrendo histórico de transações…",
+    "scanningProgress": "Varrendo histórico de transações (bloco {{scannedTo}} de {{latest}})",
+    "updating": "Atualizando…",
+    "failedToLoad": "Falha ao carregar atividade: {{error}}",
+    "retry": "Tentar de novo",
+    "empty": "Nenhuma atividade ainda.",
+    "labels": {
+      "session_created": "Sessão criada",
+      "session_revoked": "Sessão revogada",
+      "session_revoked_all": "Todas as sessões revogadas",
+      "device_registered": "Dispositivo registrado",
+      "device_revoked": "Dispositivo revogado",
+      "vault_updated": "Vault atualizado"
+    }
+  },
+  "modal": {
+    "deposit": "Depositar",
+    "withdraw": "Sacar"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "title": "Panel de la cuenta inteligente",
+  "balance": {
+    "label": "Saldo",
+    "loading": "Cargando..."
+  },
+  "actions": {
+    "deposit": "Depositar",
+    "withdraw": "Retirar"
+  },
+  "costByType": {
+    "title": "Costo por tipo",
+    "sessions": "Sesiones",
+    "devices": "Dispositivos",
+    "vault": "Vault"
+  },
+  "activity": {
+    "title": "Actividad",
+    "refresh": "Actualizar actividad",
+    "scanning": "Escaneando historial de transacciones…",
+    "scanningProgress": "Escaneando historial de transacciones (bloque {{scannedTo}} de {{latest}})",
+    "updating": "Actualizando…",
+    "failedToLoad": "Error al cargar la actividad: {{error}}",
+    "retry": "Reintentar",
+    "empty": "Aún no hay actividad.",
+    "labels": {
+      "session_created": "Sesión creada",
+      "session_revoked": "Sesión revocada",
+      "session_revoked_all": "Todas las sesiones revocadas",
+      "device_registered": "Dispositivo registrado",
+      "device_revoked": "Dispositivo revocado",
+      "vault_updated": "Vault actualizado"
+    }
+  },
+  "modal": {
+    "deposit": "Depositar",
+    "withdraw": "Retirar"
+  }
+}

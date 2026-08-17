@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { readFile, writeFile } from "@tauri-apps/plugin-fs";
 import { useAccount, useReadContract, useReadContracts, useSignMessage } from "wagmi";
 import { hexToSignature } from "viem";
+import { formatDate } from "../i18n/formatDate";
 import { useIdentity } from "../contexts/IdentityContext";
 import { useWalletModal } from "../contexts/WalletModalContext";
 import { DEVICE_REGISTRY_ADDRESS, DEVICE_REGISTRY_ABI } from "../config/contracts";
@@ -48,10 +50,8 @@ function maskPassword(p: string) {
   return p.length > 0 ? "•".repeat(Math.min(p.length, 12)) : "";
 }
 
-function formatTs(secs: number) {
-  return new Date(secs * 1000).toLocaleDateString("pt-BR", {
-    day: "2-digit", month: "2-digit", year: "numeric",
-  });
+function formatTs(secs: number, language: string) {
+  return formatDate(secs, language);
 }
 
 function truncate(s: string, n = 10) {
@@ -116,12 +116,15 @@ type FormState = {
   credit_card: CreditCardFormData;
 };
 
-const ENTRY_TYPE_OPTIONS: { value: EntryType; label: string; icon: string }[] = [
-  { value: "credential", label: "Password", icon: "🔑" },
-  { value: "document", label: "Document", icon: "📄" },
-  { value: "address", label: "Address", icon: "🏠" },
-  { value: "creditCard", label: "Card", icon: "💳" },
-];
+function useEntryTypeOptions(): { value: EntryType; label: string; icon: string }[] {
+  const { t } = useTranslation();
+  return [
+    { value: "credential", label: t("vaultManagement.entryType.credential"), icon: "🔑" },
+    { value: "document", label: t("vaultManagement.entryType.document"), icon: "📄" },
+    { value: "address", label: t("vaultManagement.entryType.address"), icon: "🏠" },
+    { value: "creditCard", label: t("vaultManagement.entryType.creditCard"), icon: "💳" },
+  ];
+}
 
 const ENTRY_TYPE_ICON: Record<EntryType, string> = {
   credential: "🔑",
@@ -309,11 +312,12 @@ function ProfilePicker({
   onChange: (v: string[]) => void;
   options: string[];
 }) {
+  const { t } = useTranslation();
   function toggle(p: string) {
     onChange(value.includes(p) ? value.filter((x) => x !== p) : [...value, p]);
   }
   if (options.length === 0) {
-    return <p className="muted" style={{ margin: 0, fontSize: "0.85em" }}>No profiles created yet — create one in "Manage profiles" below.</p>;
+    return <p className="muted" style={{ margin: 0, fontSize: "0.85em" }}>{t("vaultManagement.profilePicker.noProfiles")}</p>;
   }
   return (
     <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
@@ -408,6 +412,8 @@ function EntryForm({
   const [genError, setGenError] = useState<string | null>(null);
   const [qrScannerOpen, setQrScannerOpen] = useState(false);
   const [docError, setDocError] = useState<string | null>(null);
+  const { t } = useTranslation();
+  const entryTypeOptions = useEntryTypeOptions();
 
   function set(field: keyof FormState, val: string | string[]) {
     setForm((f) => ({ ...f, [field]: val }));
@@ -430,7 +436,12 @@ function EntryForm({
     if (!path || Array.isArray(path)) return;
     const bytes = await readFile(path);
     if (bytes.byteLength > MAX_DOCUMENT_BYTES) {
-      setDocError(`File too large (${formatBytes(bytes.byteLength)}) — limit is ${formatBytes(MAX_DOCUMENT_BYTES)}.`);
+      setDocError(
+        t("vaultManagement.entryForm.fileTooLarge", {
+          size: formatBytes(bytes.byteLength),
+          limit: formatBytes(MAX_DOCUMENT_BYTES),
+        }),
+      );
       return;
     }
     setDocError(null);
@@ -476,7 +487,7 @@ function EntryForm({
     const bytes = await readFile(path);
     const raw = await decodeQrFromImageBytes(bytes);
     if (!raw) {
-      setTotpError("No QR code found in that image");
+      setTotpError(t("vaultManagement.entryForm.noQrCodeFound"));
       return;
     }
     handleTotpChange(raw);
@@ -544,7 +555,7 @@ function EntryForm({
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem" }}>
       <div style={{ display: "flex", gap: "0.4rem", flexWrap: "wrap" }}>
-        {ENTRY_TYPE_OPTIONS.map((opt) => (
+        {entryTypeOptions.map((opt) => (
           <button
             key={opt.value}
             type="button"
@@ -566,19 +577,19 @@ function EntryForm({
         <>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
             <div className="field">
-              <label>Site *</label>
-              <input value={form.site} onChange={(e) => set("site", e.target.value)} placeholder="ex: github.com" />
+              <label>{t("vaultManagement.entryForm.fieldSite")}</label>
+              <input value={form.site} onChange={(e) => set("site", e.target.value)} placeholder={t("vaultManagement.entryForm.sitePlaceholder")} />
             </div>
             <div className="field">
-              <label>URL</label>
-              <input value={form.url} onChange={(e) => set("url", e.target.value)} placeholder="https://..." />
+              <label>{t("vaultManagement.entryForm.fieldUrl")}</label>
+              <input value={form.url} onChange={(e) => set("url", e.target.value)} placeholder={t("vaultManagement.entryForm.urlPlaceholder")} />
             </div>
             <div className="field">
-              <label>Username *</label>
-              <input value={form.username} onChange={(e) => set("username", e.target.value)} placeholder="@username or email" />
+              <label>{t("vaultManagement.entryForm.fieldUsername")}</label>
+              <input value={form.username} onChange={(e) => set("username", e.target.value)} placeholder={t("vaultManagement.entryForm.usernamePlaceholder")} />
             </div>
             <div className="field">
-              <label>Password *</label>
+              <label>{t("vaultManagement.entryForm.fieldPassword")}</label>
               <div style={{ display: "flex", gap: "0.4rem" }}>
                 <input
                   type={showPw ? "text" : "password"}
@@ -594,7 +605,7 @@ function EntryForm({
                   type="button"
                   onClick={() => (genOpen ? setGenOpen(false) : handleOpenGenerator())}
                   style={{ padding: "0.3em 0.6em", fontSize: "0.9em" }}
-                  title="Generate password"
+                  title={t("vaultManagement.entryForm.generatePasswordTitle")}
                 >
                   🎲
                 </button>
@@ -620,14 +631,14 @@ function EntryForm({
       {form.type === "document" && (
         <>
           <div className="field">
-            <label>Name *</label>
-            <input value={form.document.name} onChange={(e) => setDoc("name", e.target.value)} placeholder="e.g. ID, passport, contract..." />
+            <label>{t("vaultManagement.entryForm.fieldName")}</label>
+            <input value={form.document.name} onChange={(e) => setDoc("name", e.target.value)} placeholder={t("vaultManagement.entryForm.namePlaceholder")} />
           </div>
           <div className="field">
-            <label>File *</label>
+            <label>{t("vaultManagement.entryForm.fieldFile")}</label>
             <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
               <button type="button" onClick={handleUploadDocument} style={{ padding: "0.3em 0.8em", fontSize: "0.85em" }}>
-                📎 {form.document.file_name ? "Change file" : "Choose file"}
+                📎 {form.document.file_name ? t("vaultManagement.entryForm.changeFile") : t("vaultManagement.entryForm.chooseFile")}
               </button>
               {form.document.file_name && (
                 <span className="muted" style={{ fontSize: "0.85em" }}>
@@ -643,47 +654,47 @@ function EntryForm({
       {form.type === "address" && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
           <div className="field">
-            <label>Label *</label>
-            <input value={form.address.label} onChange={(e) => setAddr("label", e.target.value)} placeholder="e.g. Home, Work, Delivery" />
+            <label>{t("vaultManagement.entryForm.fieldLabel")}</label>
+            <input value={form.address.label} onChange={(e) => setAddr("label", e.target.value)} placeholder={t("vaultManagement.entryForm.labelPlaceholderAddress")} />
           </div>
           <div className="field">
-            <label>Full name *</label>
+            <label>{t("vaultManagement.entryForm.fieldFullName")}</label>
             <input value={form.address.full_name} onChange={(e) => setAddr("full_name", e.target.value)} />
           </div>
           <div className="field">
-            <label>Street *</label>
+            <label>{t("vaultManagement.entryForm.fieldStreet")}</label>
             <input value={form.address.street} onChange={(e) => setAddr("street", e.target.value)} />
           </div>
           <div className="field">
-            <label>Number *</label>
+            <label>{t("vaultManagement.entryForm.fieldNumber")}</label>
             <input value={form.address.number} onChange={(e) => setAddr("number", e.target.value)} />
           </div>
           <div className="field">
-            <label>Complement</label>
+            <label>{t("vaultManagement.entryForm.fieldComplement")}</label>
             <input value={form.address.complement} onChange={(e) => setAddr("complement", e.target.value)} />
           </div>
           <div className="field">
-            <label>Neighborhood *</label>
+            <label>{t("vaultManagement.entryForm.fieldNeighborhood")}</label>
             <input value={form.address.neighborhood} onChange={(e) => setAddr("neighborhood", e.target.value)} />
           </div>
           <div className="field">
-            <label>City *</label>
+            <label>{t("vaultManagement.entryForm.fieldCity")}</label>
             <input value={form.address.city} onChange={(e) => setAddr("city", e.target.value)} />
           </div>
           <div className="field">
-            <label>State *</label>
+            <label>{t("vaultManagement.entryForm.fieldState")}</label>
             <input value={form.address.state} onChange={(e) => setAddr("state", e.target.value)} />
           </div>
           <div className="field">
-            <label>ZIP code *</label>
+            <label>{t("vaultManagement.entryForm.fieldZipCode")}</label>
             <input value={form.address.zip_code} onChange={(e) => setAddr("zip_code", e.target.value)} />
           </div>
           <div className="field">
-            <label>Country *</label>
+            <label>{t("vaultManagement.entryForm.fieldCountry")}</label>
             <input value={form.address.country} onChange={(e) => setAddr("country", e.target.value)} />
           </div>
           <div className="field">
-            <label>Phone</label>
+            <label>{t("vaultManagement.entryForm.fieldPhone")}</label>
             <input value={form.address.phone} onChange={(e) => setAddr("phone", e.target.value)} />
           </div>
         </div>
@@ -692,15 +703,15 @@ function EntryForm({
       {form.type === "creditCard" && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.6rem" }}>
           <div className="field">
-            <label>Label *</label>
-            <input value={form.credit_card.label} onChange={(e) => setCard("label", e.target.value)} placeholder="e.g. Chase Sapphire, Amex Gold" />
+            <label>{t("vaultManagement.entryForm.fieldLabel")}</label>
+            <input value={form.credit_card.label} onChange={(e) => setCard("label", e.target.value)} placeholder={t("vaultManagement.entryForm.labelPlaceholderCard")} />
           </div>
           <div className="field">
-            <label>Cardholder *</label>
+            <label>{t("vaultManagement.entryForm.fieldCardholder")}</label>
             <input value={form.credit_card.card_holder_name} onChange={(e) => setCard("card_holder_name", e.target.value)} />
           </div>
           <div className="field">
-            <label>Number *</label>
+            <label>{t("vaultManagement.entryForm.fieldNumber")}</label>
             <div style={{ display: "flex", gap: "0.4rem" }}>
               <input
                 type={showCardNumber ? "text" : "password"}
@@ -715,21 +726,21 @@ function EntryForm({
             </div>
           </div>
           <div className="field">
-            <label>Network *</label>
+            <label>{t("vaultManagement.entryForm.fieldNetwork")}</label>
             <select value={form.credit_card.card_network} onChange={(e) => setCard("card_network", e.target.value)}>
               {CARD_NETWORK_OPTIONS.map((n) => <option key={n} value={n}>{n}</option>)}
             </select>
           </div>
           <div className="field">
-            <label>Expiry month *</label>
-            <input value={form.credit_card.expiry_month} onChange={(e) => setCard("expiry_month", e.target.value)} placeholder="MM" />
+            <label>{t("vaultManagement.entryForm.fieldExpiryMonth")}</label>
+            <input value={form.credit_card.expiry_month} onChange={(e) => setCard("expiry_month", e.target.value)} placeholder={t("vaultManagement.entryForm.expiryMonthPlaceholder")} />
           </div>
           <div className="field">
-            <label>Expiry year *</label>
-            <input value={form.credit_card.expiry_year} onChange={(e) => setCard("expiry_year", e.target.value)} placeholder="YYYY" />
+            <label>{t("vaultManagement.entryForm.fieldExpiryYear")}</label>
+            <input value={form.credit_card.expiry_year} onChange={(e) => setCard("expiry_year", e.target.value)} placeholder={t("vaultManagement.entryForm.expiryYearPlaceholder")} />
           </div>
           <div className="field">
-            <label>CVV *</label>
+            <label>{t("vaultManagement.entryForm.fieldCvv")}</label>
             <div style={{ display: "flex", gap: "0.4rem" }}>
               <input
                 type={showCvv ? "text" : "password"}
@@ -744,35 +755,35 @@ function EntryForm({
             </div>
           </div>
           <div className="field">
-            <label>Bank</label>
+            <label>{t("vaultManagement.entryForm.fieldBank")}</label>
             <input value={form.credit_card.bank} onChange={(e) => setCard("bank", e.target.value)} />
           </div>
         </div>
       )}
 
       <div className="field">
-        <label>Notes</label>
-        <input value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder="optional notes" />
+        <label>{t("vaultManagement.entryForm.fieldNotes")}</label>
+        <input value={form.notes} onChange={(e) => set("notes", e.target.value)} placeholder={t("vaultManagement.entryForm.notesPlaceholder")} />
       </div>
       <div className="field">
-        <label>Groups</label>
+        <label>{t("vaultManagement.entryForm.fieldGroups")}</label>
         <ProfilePicker value={form.profiles} onChange={(v) => set("profiles", v)} options={profileOptions} />
       </div>
       {form.type === "credential" && (
         <>
           <div className="field">
-            <label>2FA secret (optional)</label>
+            <label>{t("vaultManagement.entryForm.field2fa")}</label>
             <div style={{ display: "flex", gap: "0.4rem" }}>
               <input
                 style={{ flex: 1 }}
                 value={form.totp_secret}
                 onChange={(e) => handleTotpChange(e.target.value)}
-                placeholder="Base32 secret or otpauth:// URI..."
+                placeholder={t("vaultManagement.entryForm.totpPlaceholder")}
               />
               <button
                 type="button"
                 onClick={() => setQrScannerOpen(true)}
-                title="Scan QR via webcam"
+                title={t("vaultManagement.entryForm.scanQrTitle")}
                 style={{ padding: "0.2em 0.6em", fontSize: "0.9em" }}
               >
                 📷
@@ -780,7 +791,7 @@ function EntryForm({
               <button
                 type="button"
                 onClick={handleUploadQrImage}
-                title="Load QR from an image"
+                title={t("vaultManagement.entryForm.loadQrTitle")}
                 style={{ padding: "0.2em 0.6em", fontSize: "0.9em" }}
               >
                 🖼
@@ -792,19 +803,19 @@ function EntryForm({
             <TotpQrScanner onDetected={handleQrDetected} onClose={() => setQrScannerOpen(false)} />
           )}
           <div className="field">
-            <label>Passkey (optional)</label>
+            <label>{t("vaultManagement.entryForm.fieldPasskey")}</label>
             {form.passkey ? (
               <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
                 <span className="muted" style={{ fontSize: "0.85em" }}>
                   🔑 {form.passkey.rp_id}
                 </span>
                 <button type="button" onClick={handleGeneratePasskey} style={{ padding: "0.2em 0.6em", fontSize: "0.8em" }}>
-                  Regenerate
+                  {t("vaultManagement.entryForm.regeneratePasskey")}
                 </button>
               </div>
             ) : (
               <button type="button" onClick={handleGeneratePasskey} style={{ padding: "0.3em 0.8em", fontSize: "0.85em", alignSelf: "flex-start" }}>
-                Generate passkey
+                {t("vaultManagement.entryForm.generatePasskey")}
               </button>
             )}
           </div>
@@ -815,13 +826,13 @@ function EntryForm({
           onClick={handleSave}
           disabled={saving || !canSaveForm(form) || (form.type === "credential" && !!totpError)}
         >
-          {saving ? "Saving..." : "Save"}
+          {saving ? t("vaultManagement.entryForm.saving") : t("vaultManagement.entryForm.save")}
         </button>
         <button
           onClick={onCancel}
           style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)" }}
         >
-          Cancel
+          {t("vaultManagement.entryForm.cancel")}
         </button>
       </div>
     </div>
@@ -833,6 +844,7 @@ function EntryForm({
 // ---------------------------------------------------------------------------
 
 export function VaultManagement() {
+  const { t, i18n } = useTranslation();
   const { identityId } = useIdentity();
   const { isConnected } = useAccount();
   const { openConnectModal } = useWalletModal();
@@ -858,7 +870,7 @@ export function VaultManagement() {
     if (!vaultKeySignature) return;
     try {
       const { r, s, v } = hexToSignature(vaultKeySignature);
-      if (v == null) { setDeriveError("Invalid signature"); setDerivingKey(false); return; }
+      if (v == null) { setDeriveError(t("vaultManagement.unlockVault.invalidSignature")); setDerivingKey(false); return; }
       invoke("derive_vault_key_from_wallet", { r, s, v: Number(v) })
         .then(() => { setVaultKeyReady(true); setDerivingKey(false); })
         .catch((e: string) => { setDeriveError(String(e)); setDerivingKey(false); });
@@ -1085,7 +1097,7 @@ export function VaultManagement() {
   }
 
   async function handleRenameProfile(oldName: string) {
-    const newName = window.prompt(`Rename profile "${oldName}" to:`, oldName)?.trim();
+    const newName = window.prompt(t("vaultManagement.profiles.renamePrompt", { name: oldName }), oldName)?.trim();
     if (!newName || newName === oldName) return;
     setProfileError(null);
     try {
@@ -1097,7 +1109,7 @@ export function VaultManagement() {
   }
 
   async function handleDeleteProfile(name: string) {
-    if (!window.confirm(`Delete profile "${name}"? It will be removed from all passwords that use it.`)) return;
+    if (!window.confirm(t("vaultManagement.profiles.deleteConfirm", { name }))) return;
     setProfileError(null);
     try {
       await invoke<void>("vault_delete_profile", { name });
@@ -1133,9 +1145,9 @@ export function VaultManagement() {
             onClick={() => setView("entries")}
             style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)", padding: "0.3em 0.8em" }}
           >
-            ← Vault
+            {t("vaultManagement.header.backToVault")}
           </button>
-          <h2 style={{ margin: 0 }}>Arweave Wallet</h2>
+          <h2 style={{ margin: 0 }}>{t("vaultManagement.header.arweaveWalletTitle")}</h2>
         </div>
         <VaultSettings />
       </div>
@@ -1151,9 +1163,9 @@ export function VaultManagement() {
             onClick={() => setView("entries")}
             style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)", padding: "0.3em 0.8em" }}
           >
-            ← Vault
+            {t("vaultManagement.header.backToVault")}
           </button>
-          <h2 style={{ margin: 0 }}>Backup</h2>
+          <h2 style={{ margin: 0 }}>{t("vaultManagement.header.backupTitle")}</h2>
         </div>
         <VaultBackup />
       </div>
@@ -1162,23 +1174,23 @@ export function VaultManagement() {
 
   // ── Guard: vault key ─────────────────────────────────────────────────────
   if (vaultKeyReady === null) {
-    return <div className="card"><p className="muted">Checking vault key...</p></div>;
+    return <div className="card"><p className="muted">{t("vaultManagement.unlockVault.checking")}</p></div>;
   }
 
   if (!vaultKeyReady) {
     return (
       <div className="card">
-        <h2 style={{ marginTop: 0 }}>Unlock Vault</h2>
+        <h2 style={{ marginTop: 0 }}>{t("vaultManagement.unlockVault.title")}</h2>
         <p className="muted" style={{ marginBottom: "1rem", lineHeight: "1.5" }}>
-          Your vault key is derived from your wallet signature (RFC 6979).
-          Sign once with your Ledger or connected wallet to unlock the vault on this device.
-          The key is cached in your OS keyring — you will not need the wallet for daily use.
+          {t("vaultManagement.unlockVault.description")}
         </p>
         {(signKeyError || deriveError) && (
           <p className="error-text">
             {signKeyErr?.message?.includes("rejected_by_user")
-              ? "Signature rejected on Ledger."
-              : `Error: ${deriveError || signKeyErr?.message?.split("\\n")[0] || "operation failed"}`}
+              ? t("vaultManagement.unlockVault.signatureRejected")
+              : t("vaultManagement.unlockVault.errorPrefix", {
+                  message: deriveError || signKeyErr?.message?.split("\\n")[0] || t("vaultManagement.unlockVault.operationFailed"),
+                })}
           </p>
         )}
         <button
@@ -1186,10 +1198,10 @@ export function VaultManagement() {
           disabled={derivingKey || signKeyPending}
         >
           {derivingKey || signKeyPending
-            ? "Confirm signature on wallet..."
+            ? t("vaultManagement.unlockVault.confirmSignature")
             : !isConnected
-            ? "Connect wallet to unlock"
-            : "Unlock vault"}
+            ? t("vaultManagement.unlockVault.connectToUnlock")
+            : t("vaultManagement.unlockVault.unlock")}
         </button>
       </div>
     );
@@ -1200,19 +1212,19 @@ export function VaultManagement() {
     <div>
       {/* Cabeçalho */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem" }}>
-        <h2 style={{ margin: 0 }}>Vault</h2>
+        <h2 style={{ margin: 0 }}>{t("vaultManagement.header.title")}</h2>
         <div style={{ display: "flex", gap: "0.5rem" }}>
           <button
             onClick={() => setView("backup")}
             style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)", padding: "0.3em 0.8em", fontSize: "0.85em" }}
           >
-            ⏏ Backup
+            {t("vaultManagement.header.backupButton")}
           </button>
           <button
             onClick={() => setView("settings")}
             style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)", padding: "0.3em 0.8em", fontSize: "0.85em" }}
           >
-            ⚙ Providers
+            {t("vaultManagement.header.providersButton")}
           </button>
         </div>
       </div>
@@ -1222,16 +1234,18 @@ export function VaultManagement() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
           <div>
             {hasVault === undefined ? (
-              <span className="muted">Checking on-chain status...</span>
+              <span className="muted">{t("vaultManagement.status.checkingOnChain")}</span>
             ) : hasVault ? (
               <span className="muted">
-                Version <strong>{String((vaultRef as any)?.version ?? "?")}</strong> registered on-chain
+                {t("vaultManagement.status.versionPrefix")}
+                <strong>{String((vaultRef as any)?.version ?? "?")}</strong>
+                {t("vaultManagement.status.versionSuffix")}
                 {(vaultRef as any)?.updatedAt
-                  ? ` · updated on ${formatTs(Number((vaultRef as any).updatedAt))}`
+                  ? t("vaultManagement.status.updatedOn", { date: formatTs(Number((vaultRef as any).updatedAt), i18n.language) })
                   : ""}
               </span>
             ) : (
-              <span className="muted">Vault not yet registered on-chain</span>
+              <span className="muted">{t("vaultManagement.status.notRegistered")}</span>
             )}
           </div>
           <div style={{ display: "flex", gap: "0.5rem" }}>
@@ -1245,11 +1259,11 @@ export function VaultManagement() {
             <button
               onClick={handleEnviarViaDeviceKey}
               disabled={deviceKeyDisabled}
-              title="Publishes the vault signing with the local device key, without touching the Ledger — requires ~/.truthid/bundler_config.json configured"
+              title={t("vaultManagement.status.publishViaDeviceKeyTitle")}
             >
               {deviceKeyPublishState === "publishing"
-                ? "Publishing via device key..."
-                : "Publish via device key (no Ledger)"}
+                ? t("vaultManagement.status.publishingViaDeviceKey")
+                : t("vaultManagement.status.publishViaDeviceKeyButton")}
             </button>
           </div>
         </div>
@@ -1281,12 +1295,10 @@ export function VaultManagement() {
       {hasVault && typeof (vaultRef as any)?.cid === "string" && !(vaultRef as any).cid.startsWith("ar://") && (
         <div className="card" style={{ marginBottom: "1rem" }}>
           <p style={{ margin: 0 }}>
-            This vault is still published on the old storage (IPFS), which no longer
-            has dedicated pinning — a new device without a local cache may fail to
-            pair. Republish to migrate to Arweave.
+            {t("vaultManagement.migrationNudge.text")}
           </p>
           <button onClick={handleEnviar} disabled={buttonDisabled} style={{ marginTop: "0.5rem" }}>
-            {buttonLabel === "Enviar" ? "Migrate to Arweave" : buttonLabel}
+            {buttonLabel === "Enviar" ? t("vaultManagement.migrationNudge.migrateButton") : buttonLabel}
           </button>
         </div>
       )}
@@ -1296,7 +1308,7 @@ export function VaultManagement() {
         <input
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          placeholder="Search by site, username, or group..."
+          placeholder={t("vaultManagement.search.placeholder")}
           style={{ width: "100%", boxSizing: "border-box", marginBottom: "0.75rem" }}
         />
       )}
@@ -1305,9 +1317,9 @@ export function VaultManagement() {
 
       {/* Lista de entradas */}
       {loadingEntries ? (
-        <p className="muted">Loading...</p>
+        <p className="muted">{t("vaultManagement.list.loading")}</p>
       ) : filtered.length === 0 && !addOpen ? (
-        <p className="muted">{entries.length === 0 ? "No passwords saved yet." : "No entries found."}</p>
+        <p className="muted">{entries.length === 0 ? t("vaultManagement.list.noPasswords") : t("vaultManagement.list.noEntriesFound")}</p>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: "0.6rem", marginBottom: "0.75rem" }}>
           {filtered.map((entry) => {
@@ -1333,7 +1345,7 @@ export function VaultManagement() {
                       <button
                         type="button"
                         onClick={() => handleToggleFavorite(entry.id, !entry.favorite)}
-                        title={entry.favorite ? "Remove from favorites" : "Add to favorites"}
+                        title={entry.favorite ? t("vaultManagement.list.removeFavorite") : t("vaultManagement.list.addFavorite")}
                         style={{
                           padding: "0.25em",
                           minWidth: "1.8em",
@@ -1349,9 +1361,9 @@ export function VaultManagement() {
                       </button>
                       <span style={{ fontSize: "0.9em" }}>{ENTRY_TYPE_ICON[entry.type]}</span>
                       <strong>
-                        {entry.type === "document" ? (entry.document?.name ?? "Document")
-                          : entry.type === "address" ? (entry.address?.label ?? "Address")
-                          : entry.type === "creditCard" ? (entry.credit_card?.label ?? "Card")
+                        {entry.type === "document" ? (entry.document?.name ?? t("vaultManagement.list.documentFallback"))
+                          : entry.type === "address" ? (entry.address?.label ?? t("vaultManagement.list.addressFallback"))
+                          : entry.type === "creditCard" ? (entry.credit_card?.label ?? t("vaultManagement.list.cardFallback"))
                           : entry.site}
                       </strong>
                       {entry.profiles.map((p) => (
@@ -1389,7 +1401,7 @@ export function VaultManagement() {
                           onClick={() => handleDownloadDocument(entry.id, entry.document!)}
                           style={{ padding: "0.35em 0.7em", fontSize: "0.82em", minHeight: "1.8em" }}
                         >
-                          💾 Download
+                          💾 {t("vaultManagement.list.download")}
                         </button>
                       </div>
                     )}
@@ -1422,13 +1434,13 @@ export function VaultManagement() {
                           disabled={mutating}
                           style={{ padding: "0.3em 0.6em", fontSize: "0.82em", borderColor: "var(--color-danger)", color: "var(--color-danger)" }}
                         >
-                          Yes
+                          {t("vaultManagement.list.deleteConfirmYes")}
                         </button>
                         <button
                           onClick={() => setDeletingId(null)}
                           style={{ padding: "0.3em 0.6em", fontSize: "0.82em", borderColor: "var(--color-border)", color: "var(--color-text-muted)" }}
                         >
-                          No
+                          {t("vaultManagement.list.deleteConfirmNo")}
                         </button>
                       </>
                     ) : (
@@ -1450,11 +1462,11 @@ export function VaultManagement() {
       {/* Formulário de adição */}
       {!addOpen ? (
         <button onClick={() => setAddOpen(true)} style={{ marginBottom: "1.5rem" }}>
-          + New entry
+          {t("vaultManagement.newEntry.button")}
         </button>
       ) : (
         <div className="card" style={{ marginBottom: "1.5rem" }}>
-          <h3 style={{ marginTop: 0 }}>New entry</h3>
+          <h3 style={{ marginTop: 0 }}>{t("vaultManagement.newEntry.title")}</h3>
           <EntryForm
             initial={emptyForm()}
             onSave={handleAdd}
@@ -1473,17 +1485,17 @@ export function VaultManagement() {
           onClick={() => setProfilesOpen((v) => !v)}
           style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)", fontSize: "0.9em", padding: "0.4em 1em" }}
         >
-          {profilesOpen ? "▼" : "▶"} Manage profiles ({profiles.length})
+          {profilesOpen ? "▼" : "▶"} {t("vaultManagement.profiles.manageButton", { count: profiles.length })}
         </button>
 
         {profilesOpen && (
           <div className="card" style={{ marginTop: "0.75rem" }}>
             <p className="muted" style={{ marginTop: 0 }}>
-              Create profiles with any name you want, and tag each password with as many profiles as makes sense.
+              {t("vaultManagement.profiles.description")}
             </p>
             {profileError && <p className="error-text">{profileError}</p>}
             {profiles.length === 0 ? (
-              <p className="muted">No profiles created yet.</p>
+              <p className="muted">{t("vaultManagement.profiles.none")}</p>
             ) : (
               <div style={{ display: "flex", gap: "0.5rem", flexWrap: "wrap", marginBottom: "0.75rem" }}>
                 {profiles.map((p) => (
@@ -1495,14 +1507,14 @@ export function VaultManagement() {
                     <button
                       onClick={() => handleRenameProfile(p)}
                       style={{ border: "none", background: "none", padding: 0, font: "inherit", color: "inherit", cursor: "pointer" }}
-                      title="Rename"
+                      title={t("vaultManagement.profiles.renameTitle")}
                     >
                       {p}
                     </button>
                     <button
                       onClick={() => handleDeleteProfile(p)}
                       style={{ border: "none", background: "none", padding: 0, font: "inherit", color: "var(--color-danger)", cursor: "pointer" }}
-                      title="Delete"
+                      title={t("vaultManagement.profiles.deleteTitle")}
                     >
                       ✕
                     </button>
@@ -1515,11 +1527,11 @@ export function VaultManagement() {
                 value={newProfileName}
                 onChange={(e) => setNewProfileName(e.target.value)}
                 onKeyDown={(e) => { if (e.key === "Enter") handleAddProfile(); }}
-                placeholder="New profile name"
+                placeholder={t("vaultManagement.profiles.newProfilePlaceholder")}
                 style={{ flex: 1 }}
               />
               <button onClick={handleAddProfile} disabled={!newProfileName.trim()}>
-                Add
+                {t("vaultManagement.profiles.add")}
               </button>
             </div>
           </div>
@@ -1532,18 +1544,17 @@ export function VaultManagement() {
           onClick={() => setPermsOpen((v) => !v)}
           style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)", fontSize: "0.9em", padding: "0.4em 1em" }}
         >
-          {permsOpen ? "▼" : "▶"} Permissions by device ({activeDevices.length})
+          {permsOpen ? "▼" : "▶"} {t("vaultManagement.permissions.manageButton", { count: activeDevices.length })}
         </button>
 
         {permsOpen && (
           <div className="card" style={{ marginTop: "0.75rem" }}>
             <p className="muted" style={{ marginTop: 0 }}>
-              Controls whether a mobile device can <strong>write</strong> to the vault (read-only by default).
-              This desktop always has full permission.
+              {t("vaultManagement.permissions.descriptionPrefix")}<strong>{t("vaultManagement.permissions.descriptionBold")}</strong>{t("vaultManagement.permissions.descriptionSuffix")}
             </p>
             {permError && <p className="error-text">{permError}</p>}
             {activeDevices.length === 0 ? (
-              <p className="muted">No active devices registered.</p>
+              <p className="muted">{t("vaultManagement.permissions.noDevices")}</p>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                 {activeDevices.map((d) => {
@@ -1555,7 +1566,7 @@ export function VaultManagement() {
                       style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}
                     >
                       <div>
-                        <span style={{ fontWeight: 500 }}>{d.label || "Unnamed device"}</span>
+                        <span style={{ fontWeight: 500 }}>{d.label || t("vaultManagement.permissions.unnamedDevice")}</span>
                         <span className="address muted" style={{ fontSize: "0.8em", marginLeft: "0.5rem" }}>
                           {truncate(d.pubKey, 8)}
                         </span>
@@ -1569,7 +1580,7 @@ export function VaultManagement() {
                           color: canWrite ? "var(--color-accent)" : "var(--color-text-muted)",
                         }}
                       >
-                        {canWrite ? "✓ Can write" : "Read-only"}
+                        {canWrite ? t("vaultManagement.permissions.canWrite") : t("vaultManagement.permissions.readOnly")}
                       </button>
                     </div>
                   );

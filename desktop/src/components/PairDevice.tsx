@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Trans, useTranslation } from "react-i18next";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { keccak256, encodePacked, encodeFunctionData, isAddress, type Hex } from "viem";
 import { invoke } from "@tauri-apps/api/core";
@@ -27,6 +28,7 @@ import { buildAccountCalls } from "../utils/buildAccountCalls";
 export function PairDevice({ onDeviceRegistered }: {
   onDeviceRegistered: () => void;
 }) {
+  const { t } = useTranslation();
   const { isConnected } = useAccount();
   const { smartAccountAddress } = useIdentity();
   const { openConnectModal } = useWalletModal();
@@ -185,7 +187,7 @@ export function PairDevice({ onDeviceRegistered }: {
 
   if (!isOpen) {
     return (
-      <button onClick={() => setIsOpen(true)}>+ Add device</button>
+      <button onClick={() => setIsOpen(true)}>{t("pairDevice.addDeviceButton")}</button>
     );
   }
 
@@ -193,15 +195,17 @@ export function PairDevice({ onDeviceRegistered }: {
 
   return (
     <div className="card">
-      <h3 style={{ marginTop: 0 }}>Add device</h3>
+      <h3 style={{ marginTop: 0 }}>{t("pairDevice.title")}</h3>
 
 <p className="muted">
-          On your phone, open <strong>Devices → Show QR to pair</strong> and
-          paste the displayed data here:
+          <Trans i18nKey="pairDevice.instructions">
+            On your phone, open <strong>Devices → Show QR to pair</strong> and
+            paste the displayed data here:
+          </Trans>
         </p>
 
         <div className="field">
-          <label>Device address</label>
+          <label>{t("pairDevice.deviceAddressLabel")}</label>
           <input
             value={addressInput}
             onChange={(e) => setAddressInput(e.target.value.trim())}
@@ -209,11 +213,11 @@ export function PairDevice({ onDeviceRegistered }: {
             disabled={registerPhase !== "idle"}
             style={{ fontFamily: "monospace" }}
           />
-          {!addressIsValid && <p className="error-text">Invalid address.</p>}
+          {!addressIsValid && <p className="error-text">{t("pairDevice.invalidAddress")}</p>}
         </div>
 
         <div className="field">
-          <label>Encryption key (optional)</label>
+          <label>{t("pairDevice.encryptionKeyLabel")}</label>
           <input
             value={encryptionKey}
             onChange={(e) => setEncryptionKey(e.target.value.trim())}
@@ -224,7 +228,7 @@ export function PairDevice({ onDeviceRegistered }: {
         </div>
 
       <div className="field">
-        <label>Device name</label>
+        <label>{t("pairDevice.deviceNameLabel")}</label>
         <input
           value={labelInput}
           onChange={(e) => setLabelInput(e.target.value)}
@@ -236,8 +240,8 @@ export function PairDevice({ onDeviceRegistered }: {
       {isPairError && (
         <p className="error-text">
           {pairError?.message?.includes("rejected_by_user")
-            ? "Transaction rejected on Ledger."
-            : `Error: ${pairError?.message?.split("\n")[0]}`}
+            ? t("pairDevice.rejectedOnLedger")
+            : t("pairDevice.errorPrefix", { message: pairError?.message?.split("\n")[0] })}
         </p>
       )}
       <div className="actions-row">
@@ -246,16 +250,16 @@ export function PairDevice({ onDeviceRegistered }: {
           disabled={!isAddress(addressInput) || !labelInput || registerPhase !== "idle"}
         >
           {registerPhase === "committing" && isRegisterPendingAny
-            ? "Confirm in wallet (1/2)..."
+            ? t("pairDevice.confirmWallet1")
             : registerPhase === "committing" && isRegisterConfirmingAny
-            ? "Waiting for network (1/2)..."
+            ? t("pairDevice.waitingNetwork1")
             : registerPhase === "registering" && isRegisterPendingAny
-            ? "Confirm in wallet (2/2)..."
+            ? t("pairDevice.confirmWallet2")
             : registerPhase === "registering" && isRegisterConfirmingAny
-            ? "Waiting for network (2/2)..."
-            : "Register device"}
+            ? t("pairDevice.waitingNetwork2")
+            : t("pairDevice.registerDevice")}
         </button>
-        <button onClick={closePairing}>Cancel</button>
+        <button onClick={closePairing}>{t("pairDevice.cancel")}</button>
       </div>
     </div>
   );

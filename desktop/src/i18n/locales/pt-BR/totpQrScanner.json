@@ -1,0 +1,5 @@
+{
+  "title": "Escanear QR code do 2FA",
+  "cameraError": "Não foi possível acessar a câmera: {{error}}",
+  "instruction": "Aponte a câmera para o QR code na tela de configuração do 2FA"
+}

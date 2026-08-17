@@ -1,0 +1,14 @@
+{
+  "empty": "尚未注册任何设备。",
+  "title": "设备",
+  "status": {
+    "revoked": "已撤销",
+    "active": "✓ 活跃"
+  },
+  "addedOn": "添加于 {{date}}",
+  "actions": {
+    "confirmInWallet": "请在钱包中确认...",
+    "waitingForNetwork": "等待网络...",
+    "revoke": "撤销"
+  }
+}

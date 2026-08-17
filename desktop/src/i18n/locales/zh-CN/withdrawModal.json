@@ -1,0 +1,20 @@
+{
+  "withdrawalSent": "提现已发送！",
+  "sentSummary": "{{amount}} ETH 至",
+  "close": "关闭",
+  "title": "提现",
+  "destinationLabel": "目标地址",
+  "invalidAddress": "地址无效。",
+  "amountLabel": "金额（ETH）",
+  "max": "最大",
+  "available": "可用：{{amount}} ETH",
+  "invalidEthAmount": "请输入有效的 ETH 金额",
+  "amountExceedsBalance": "金额超出可用余额",
+  "rejectedOnLedger": "已在 Ledger 上拒绝。",
+  "errorPrefix": "错误：{{message}}",
+  "withdraw": "提现",
+  "confirmInWallet": "请在钱包中确认...",
+  "waitingForConfirmation": "等待确认...",
+  "confirming": "正在确认...",
+  "cancel": "取消"
+}

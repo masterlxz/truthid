@@ -1,0 +1,14 @@
+{
+  "serverUrlLabel": "URL del servidor",
+  "authenticating": "Autenticando...",
+  "authenticate": "Autenticar",
+  "authenticated": "✓ Autenticado",
+  "identityTokenLabel": "Identidad #{{id}} · Token",
+  "signing": "Firmando...",
+  "confirmInWallet": "Confirmando en la wallet...",
+  "waitingForNetwork": "Esperando la red...",
+  "sessionRegistered": "✓ Sesión registrada",
+  "registerSessionOnChain": "Registrar sesión on-chain",
+  "sessionLabel": "Sesión",
+  "registeredCheckActive": "registrada. Revisa Sesiones Activas para revocarla."
+}

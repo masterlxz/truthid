@@ -1,0 +1,19 @@
+{
+  "title": "Respaldo",
+  "descriptionBefore": "Exporta o restaura todo el vault (contraseñas, 2FA, passkeys, perfiles) a un archivo",
+  "descriptionAfter": " cifrado con su propia contraseña, separada de tu wallet — guarda esta contraseña en un lugar seguro, no se puede recuperar.",
+  "exportTitle": "Exportar",
+  "exportPasswordLabel": "Contraseña de exportación",
+  "confirmPasswordLabel": "Confirmar contraseña",
+  "backupSaved": "Respaldo guardado ✓",
+  "exporting": "Exportando...",
+  "exportButton": "Exportar respaldo",
+  "importTitle": "Importar",
+  "importDescriptionBefore": "Elige el archivo",
+  "importDescriptionAfter": " e ingresa la contraseña usada al momento de exportar.",
+  "backupPasswordLabel": "Contraseña del respaldo",
+  "backupImported": "Respaldo importado ✓",
+  "importing": "Importando...",
+  "importButton": "Elegir archivo e importar",
+  "confirmOverwrite": "Esto sobrescribirá TODO el vault local de este dispositivo con el contenido del archivo de respaldo. Esta acción no se puede deshacer. ¿Continuar?"
+}

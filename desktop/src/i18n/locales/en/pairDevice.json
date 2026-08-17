@@ -1,0 +1,17 @@
+{
+  "addDeviceButton": "+ Add device",
+  "title": "Add device",
+  "instructions": "On your phone, open <0>Devices → Show QR to pair</0> and paste the displayed data here:",
+  "deviceAddressLabel": "Device address",
+  "invalidAddress": "Invalid address.",
+  "encryptionKeyLabel": "Encryption key (optional)",
+  "deviceNameLabel": "Device name",
+  "rejectedOnLedger": "Transaction rejected on Ledger.",
+  "errorPrefix": "Error: {{message}}",
+  "confirmWallet1": "Confirm in wallet (1/2)...",
+  "waitingNetwork1": "Waiting for network (1/2)...",
+  "confirmWallet2": "Confirm in wallet (2/2)...",
+  "waitingNetwork2": "Waiting for network (2/2)...",
+  "registerDevice": "Register device",
+  "cancel": "Cancel"
+}

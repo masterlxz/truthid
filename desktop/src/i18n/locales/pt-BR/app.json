@@ -1,0 +1,38 @@
+{
+  "topbar": {
+    "login": "⎋ Login",
+    "refresh": "Atualizar",
+    "disconnectWallet": "Desconectar carteira",
+    "connectWallet": "Conectar carteira",
+    "donate": "Doar para o TruthID",
+    "logout": "Sair",
+    "logoutTitle": "Sair e esquecer esta identidade"
+  },
+  "updateBanner": {
+    "available": "TruthID {{version}} disponível",
+    "download": "Baixar"
+  },
+  "wrongNetwork": {
+    "message": "Rede errada. O TruthID roda na Base Mainnet.",
+    "switching": "Trocando...",
+    "switchButton": "Trocar para a Base Mainnet"
+  },
+  "loading": "Carregando...",
+  "identityError": {
+    "message": "Falha ao carregar identidade: {{error}}",
+    "retry": "Tentar de novo"
+  },
+  "tabs": {
+    "dashboard": "Painel",
+    "devices": "Dispositivos",
+    "sessions": "Sessões ativas",
+    "vault": "Vault",
+    "recovery": "Recuperação"
+  },
+  "loginModal": {
+    "title": "Login no Desktop"
+  },
+  "donateModal": {
+    "title": "Doar para o TruthID"
+  }
+}

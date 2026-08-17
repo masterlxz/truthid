@@ -1,0 +1,16 @@
+{
+  "back": "Atrás",
+  "title": "Conecta tu Ledger",
+  "steps": {
+    "connectUsb": "Conecta tu Ledger por USB",
+    "unlockPin": "Desbloquéalo con tu PIN en el dispositivo",
+    "openEthereumApp": "Abre la app de Ethereum en tu Ledger"
+  },
+  "accessDenied": "No se pudo acceder al Ledger. Cierra Ledger Live si está abierto, o verifica los permisos USB (Linux: regla udev).",
+  "selectAccount": "Selecciona una cuenta",
+  "accountName": "Cuenta {{index}}",
+  "loading": "cargando…",
+  "connecting": "Conectando...",
+  "connectAccount": "Conectar cuenta {{index}}",
+  "connectTimeout": "El Ledger no respondió a tiempo. Asegúrate de que esté desbloqueado con la app de Ethereum abierta, luego vuelve a intentarlo."
+}

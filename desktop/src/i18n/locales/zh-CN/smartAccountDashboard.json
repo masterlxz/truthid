@@ -1,0 +1,39 @@
+{
+  "title": "智能账户仪表盘",
+  "balance": {
+    "label": "余额",
+    "loading": "加载中..."
+  },
+  "actions": {
+    "deposit": "存入",
+    "withdraw": "提取"
+  },
+  "costByType": {
+    "title": "按类型划分的费用",
+    "sessions": "会话",
+    "devices": "设备",
+    "vault": "密码库"
+  },
+  "activity": {
+    "title": "活动记录",
+    "refresh": "刷新活动记录",
+    "scanning": "正在扫描交易历史…",
+    "scanningProgress": "正在扫描交易历史（区块 {{scannedTo}} / {{latest}}）",
+    "updating": "正在更新…",
+    "failedToLoad": "加载活动记录失败：{{error}}",
+    "retry": "重试",
+    "empty": "暂无活动记录。",
+    "labels": {
+      "session_created": "会话已创建",
+      "session_revoked": "会话已撤销",
+      "session_revoked_all": "所有会话已撤销",
+      "device_registered": "设备已注册",
+      "device_revoked": "设备已撤销",
+      "vault_updated": "密码库已更新"
+    }
+  },
+  "modal": {
+    "deposit": "存入",
+    "withdraw": "提取"
+  }
+}

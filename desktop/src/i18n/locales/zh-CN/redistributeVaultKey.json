@@ -1,0 +1,14 @@
+{
+  "toggleButton": "将密码库密钥重新分发给设备",
+  "title": "重新分发密码库密钥",
+  "description": "将此桌面端当前使用的密码库密钥发送给一个已配对的设备 — 如果该设备虽然拥有正确的内容却无法解密密码库（密钥不匹配，而非同步问题），可以使用此功能。您需要再次提供其加密密钥（与设备\"显示二维码以配对\"界面上显示的字段相同）。",
+  "deviceLabel": "设备",
+  "selectDevice": "选择一台设备...",
+  "encryptionKeyLabel": "加密密钥",
+  "keySent": "密码库密钥已发送 — 设备将在下次同步时获取。",
+  "encrypting": "正在加密...",
+  "confirmInWallet": "请在钱包中确认...",
+  "waitingForNetwork": "等待网络...",
+  "sendCurrentKey": "发送当前密钥",
+  "close": "关闭"
+}

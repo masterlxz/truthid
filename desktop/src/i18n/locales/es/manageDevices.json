@@ -1,0 +1,20 @@
+{
+  "reauthBanner": {
+    "body_one": "Hay {{count}} dispositivo registrado que no puede firmar para esta cuenta — probablemente un resto de un redeploy de la cuenta inteligente. Reautorizar no requiere volver a emparejar nada, solo una confirmación en el Ledger.",
+    "body_other": "Hay {{count}} dispositivos registrados que no pueden firmar para esta cuenta — probablemente un resto de un redeploy de la cuenta inteligente. Reautorizar no requiere volver a emparejar nada, solo una confirmación en el Ledger.",
+    "confirmingWallet": "Confirmando en la wallet...",
+    "waitingNetwork": "Esperando la red...",
+    "confirmButton_one": "Reautorizar {{count}} dispositivo",
+    "confirmButton_other": "Reautorizar {{count}} dispositivos"
+  },
+  "rotationBanner": {
+    "body_one": "Dispositivo revocado — la clave del vault debería rotarse ahora, para que el dispositivo revocado pierda acceso al contenido que ya había descifrado. Esto requiere la clave pública sin procesar del {{count}} dispositivo restante (el mismo campo que se muestra durante el emparejamiento — revisa su pantalla \"Mostrar QR para emparejar\").",
+    "body_other": "Dispositivo revocado — la clave del vault debería rotarse ahora, para que el dispositivo revocado pierda acceso al contenido que ya había descifrado. Esto requiere la clave pública sin procesar de cada uno de los {{count}} dispositivos restantes (el mismo campo que se muestra durante el emparejamiento — revisa la pantalla \"Mostrar QR para emparejar\" de cada uno).",
+    "pubkeyPlaceholder": "0x03... o 0x04...",
+    "rotatingButton": "Rotando el vault a una nueva clave...",
+    "confirmingWallet": "Confirmando en la wallet...",
+    "confirmButton": "Rotar y redistribuir",
+    "postponeButton": "Posponer",
+    "rotationFailed": "No se pudo rotar la clave del vault: {{error}}"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "title": "Smart Account Dashboard",
+  "balance": {
+    "label": "Balance",
+    "loading": "Loading..."
+  },
+  "actions": {
+    "deposit": "Deposit",
+    "withdraw": "Withdraw"
+  },
+  "costByType": {
+    "title": "Cost by type",
+    "sessions": "Sessions",
+    "devices": "Devices",
+    "vault": "Vault"
+  },
+  "activity": {
+    "title": "Activity",
+    "refresh": "Refresh activity",
+    "scanning": "Scanning transaction history…",
+    "scanningProgress": "Scanning transaction history (block {{scannedTo}} of {{latest}})",
+    "updating": "Updating…",
+    "failedToLoad": "Failed to load activity: {{error}}",
+    "retry": "Retry",
+    "empty": "No activity yet.",
+    "labels": {
+      "session_created": "Session created",
+      "session_revoked": "Session revoked",
+      "session_revoked_all": "All sessions revoked",
+      "device_registered": "Device registered",
+      "device_revoked": "Device revoked",
+      "vault_updated": "Vault updated"
+    }
+  },
+  "modal": {
+    "deposit": "Deposit",
+    "withdraw": "Withdraw"
+  }
+}

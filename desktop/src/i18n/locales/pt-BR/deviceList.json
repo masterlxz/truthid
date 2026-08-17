@@ -1,0 +1,14 @@
+{
+  "empty": "Nenhum dispositivo registrado ainda.",
+  "title": "Dispositivos",
+  "status": {
+    "revoked": "Revogado",
+    "active": "✓ Ativo"
+  },
+  "addedOn": "Adicionado em {{date}}",
+  "actions": {
+    "confirmInWallet": "Confirmando na carteira...",
+    "waitingForNetwork": "Aguardando a rede...",
+    "revoke": "Revogar"
+  }
+}

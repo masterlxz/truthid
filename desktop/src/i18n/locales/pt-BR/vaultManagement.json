@@ -1,0 +1,137 @@
+{
+  "profilePicker": {
+    "noProfiles": "Nenhum perfil criado ainda — crie um em \"Gerenciar perfis\" abaixo."
+  },
+  "entryType": {
+    "credential": "Senha",
+    "document": "Documento",
+    "address": "Endereço",
+    "creditCard": "Cartão"
+  },
+  "entryForm": {
+    "fieldSite": "Site *",
+    "sitePlaceholder": "ex: github.com",
+    "fieldUrl": "URL",
+    "urlPlaceholder": "https://...",
+    "fieldUsername": "Usuário *",
+    "usernamePlaceholder": "@usuário ou e-mail",
+    "fieldPassword": "Senha *",
+    "generatePasswordTitle": "Gerar senha",
+    "fieldName": "Nome *",
+    "namePlaceholder": "ex: RG, passaporte, contrato...",
+    "fieldFile": "Arquivo *",
+    "changeFile": "Trocar arquivo",
+    "chooseFile": "Escolher arquivo",
+    "fieldLabel": "Etiqueta *",
+    "labelPlaceholderAddress": "ex: Casa, Trabalho, Entrega",
+    "fieldFullName": "Nome completo *",
+    "fieldStreet": "Rua *",
+    "fieldNumber": "Número *",
+    "fieldComplement": "Complemento",
+    "fieldNeighborhood": "Bairro *",
+    "fieldCity": "Cidade *",
+    "fieldState": "Estado *",
+    "fieldZipCode": "CEP *",
+    "fieldCountry": "País *",
+    "fieldPhone": "Telefone",
+    "labelPlaceholderCard": "ex: Nubank Ultravioleta, Amex Gold",
+    "fieldCardholder": "Titular *",
+    "fieldNetwork": "Bandeira *",
+    "fieldExpiryMonth": "Mês de validade *",
+    "expiryMonthPlaceholder": "MM",
+    "fieldExpiryYear": "Ano de validade *",
+    "expiryYearPlaceholder": "AAAA",
+    "fieldCvv": "CVV *",
+    "fieldBank": "Banco",
+    "fieldNotes": "Notas",
+    "notesPlaceholder": "notas opcionais",
+    "fieldGroups": "Grupos",
+    "field2fa": "Segredo do 2FA (opcional)",
+    "totpPlaceholder": "Segredo Base32 ou URI otpauth://...",
+    "scanQrTitle": "Escanear QR pela webcam",
+    "loadQrTitle": "Carregar QR de uma imagem",
+    "fieldPasskey": "Passkey (opcional)",
+    "regeneratePasskey": "Regenerar",
+    "generatePasskey": "Gerar passkey",
+    "saving": "Salvando...",
+    "save": "Salvar",
+    "cancel": "Cancelar",
+    "noQrCodeFound": "Nenhum QR code encontrado nessa imagem",
+    "fileTooLarge": "Arquivo muito grande ({{size}}) — o limite é {{limit}}."
+  },
+  "unlockVault": {
+    "checking": "Verificando chave do vault...",
+    "title": "Desbloquear vault",
+    "description": "Sua chave do vault é derivada da assinatura da sua carteira (RFC 6979). Assine uma vez com seu Ledger ou carteira conectada para desbloquear o vault neste dispositivo. A chave fica em cache no keyring do SO — você não vai precisar da carteira no dia a dia.",
+    "invalidSignature": "Assinatura inválida",
+    "signatureRejected": "Assinatura rejeitada no Ledger.",
+    "errorPrefix": "Erro: {{message}}",
+    "operationFailed": "operação falhou",
+    "confirmSignature": "Confirme a assinatura na carteira...",
+    "connectToUnlock": "Conecte a carteira para desbloquear",
+    "unlock": "Desbloquear vault"
+  },
+  "header": {
+    "title": "Vault",
+    "backToVault": "← Vault",
+    "arweaveWalletTitle": "Carteira Arweave",
+    "backupTitle": "Backup",
+    "backupButton": "⏏ Backup",
+    "providersButton": "⚙ Provedores"
+  },
+  "status": {
+    "checkingOnChain": "Verificando status on-chain...",
+    "versionPrefix": "Versão ",
+    "versionSuffix": " registrada on-chain",
+    "updatedOn": " · atualizada em {{date}}",
+    "notRegistered": "Vault ainda não registrado on-chain",
+    "publishViaDeviceKeyTitle": "Publica o vault assinando com a chave local do dispositivo, sem usar o Ledger — exige ~/.truthid/bundler_config.json configurado",
+    "publishingViaDeviceKey": "Publicando via chave do dispositivo...",
+    "publishViaDeviceKeyButton": "Publicar via chave do dispositivo (sem Ledger)"
+  },
+  "migrationNudge": {
+    "text": "Este vault ainda está publicado no armazenamento antigo (IPFS), que não tem mais pinning dedicado — um dispositivo novo sem cache local pode falhar ao parear. Republique para migrar para o Arweave.",
+    "migrateButton": "Migrar para o Arweave"
+  },
+  "search": {
+    "placeholder": "Buscar por site, usuário ou grupo..."
+  },
+  "list": {
+    "loading": "Carregando...",
+    "noPasswords": "Nenhuma senha salva ainda.",
+    "noEntriesFound": "Nenhuma entrada encontrada.",
+    "removeFavorite": "Remover dos favoritos",
+    "addFavorite": "Adicionar aos favoritos",
+    "documentFallback": "Documento",
+    "addressFallback": "Endereço",
+    "cardFallback": "Cartão",
+    "download": "Baixar",
+    "deleteConfirmYes": "Sim",
+    "deleteConfirmNo": "Não"
+  },
+  "newEntry": {
+    "button": "+ Nova entrada",
+    "title": "Nova entrada"
+  },
+  "profiles": {
+    "manageButton": "Gerenciar perfis ({{count}})",
+    "description": "Crie perfis com o nome que você quiser, e marque cada senha com quantos perfis fizer sentido.",
+    "none": "Nenhum perfil criado ainda.",
+    "renameTitle": "Renomear",
+    "deleteTitle": "Excluir",
+    "newProfilePlaceholder": "Nome do novo perfil",
+    "add": "Adicionar",
+    "renamePrompt": "Renomear o perfil \"{{name}}\" para:",
+    "deleteConfirm": "Excluir o perfil \"{{name}}\"? Ele será removido de todas as senhas que o usam."
+  },
+  "permissions": {
+    "manageButton": "Permissões por dispositivo ({{count}})",
+    "descriptionPrefix": "Controla se um dispositivo mobile pode ",
+    "descriptionBold": "escrever",
+    "descriptionSuffix": " no vault (somente leitura por padrão). Este desktop sempre tem permissão total.",
+    "noDevices": "Nenhum dispositivo ativo registrado.",
+    "unnamedDevice": "Dispositivo sem nome",
+    "canWrite": "✓ Pode escrever",
+    "readOnly": "Somente leitura"
+  }
+}

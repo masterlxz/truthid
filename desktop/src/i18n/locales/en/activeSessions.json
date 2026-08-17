@@ -1,0 +1,16 @@
+{
+  "title": "Active sessions",
+  "empty": "No sessions yet. Sessions appear here when you log in to websites using TruthID.",
+  "status": {
+    "revoked": "Revoked",
+    "active": "✓ Active"
+  },
+  "device": "Device: {{label}}",
+  "createdAt": "Created at {{date}}",
+  "actions": {
+    "confirmInWallet": "Confirm in wallet...",
+    "waitingForNetwork": "Waiting for network...",
+    "revoke": "Revoke",
+    "revokeAll": "Revoke all ({{count}})"
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "identityAlreadyRegistered": "Identity already registered:",
+  "identityCreatedSuccess": "Identity created successfully!",
+  "fundedWith": "Smart account funded with {{amount}} ETH. Your Ledger will not be charged for future operations.",
+  "vaultKey": {
+    "intro": "Your vault encryption key is derived from your wallet signature. Sign once now (while your wallet is connected) to unlock the password manager on this device.",
+    "signatureRejected": "Signature rejected on Ledger.",
+    "confirmSignature": "Confirm signature on Ledger...",
+    "setupButton": "Setup vault key",
+    "ready": "Vault key ready — you can now use the password manager."
+  },
+  "steps": {
+    "signingConsent": "Signing consent",
+    "creatingIdentity": "Creating identity on-chain",
+    "deployingAccount": "Deploying smart account",
+    "fundingAccount": "Funding smart account"
+  },
+  "form": {
+    "title": "Create identity",
+    "usernamePlaceholder": "choose a username",
+    "usernameFormatHint": "Lowercase letters, numbers, dots and hyphens only (max. 64 characters)",
+    "usernameTaken": "Username already taken",
+    "fundingLabel": "Initial funding (ETH)",
+    "fundingInvalid": "Enter a valid ETH amount",
+    "explanation": "This setup uses a signature plus 3 transactions. Your Ledger pays gas one time only. After setup, your smart account pays its own gas for all future operations."
+  },
+  "errors": {
+    "rejectedOnLedger": "Rejected on Ledger.",
+    "prefixed": "Error: {{message}}",
+    "operationFailed": "operation failed",
+    "unexpectedConsentFormat": "Unexpected consent signature format."
+  },
+  "actions": {
+    "tryAgain": "Try again",
+    "registerIdentity": "Register identity",
+    "step1of4": "Step 1/4",
+    "confirmTx2InWallet": "Confirm tx 2/4 in wallet...",
+    "waitingForConfirmation": "Waiting for confirmation...",
+    "step2of4": "Step 2/4",
+    "confirmTx3InWallet": "Confirm tx 3/4 in wallet...",
+    "step3of4": "Step 3/4",
+    "confirmTx4InWallet": "Confirm tx 4/4 in wallet...",
+    "step4of4": "Step 4/4"
+  }
+}

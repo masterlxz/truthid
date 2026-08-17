@@ -1,0 +1,45 @@
+{
+  "identityAlreadyRegistered": "身份已注册：",
+  "identityCreatedSuccess": "身份创建成功！",
+  "fundedWith": "智能账户已注入 {{amount}} ETH。此后操作将不再消耗您 Ledger 的费用。",
+  "vaultKey": {
+    "intro": "您的密码库加密密钥由钱包签名派生。请现在签名一次（钱包已连接时），以在此设备上解锁密码管理器。",
+    "signatureRejected": "已在 Ledger 上拒绝签名。",
+    "confirmSignature": "请在 Ledger 上确认签名...",
+    "setupButton": "设置密码库密钥",
+    "ready": "密码库密钥已就绪 — 现在可以使用密码管理器了。"
+  },
+  "steps": {
+    "signingConsent": "正在签署同意",
+    "creatingIdentity": "正在链上创建身份",
+    "deployingAccount": "正在部署智能账户",
+    "fundingAccount": "正在为智能账户注资"
+  },
+  "form": {
+    "title": "创建身份",
+    "usernamePlaceholder": "选择一个用户名",
+    "usernameFormatHint": "仅限小写字母、数字、点和连字符（最多 64 个字符）",
+    "usernameTaken": "用户名已被占用",
+    "fundingLabel": "初始注资（ETH）",
+    "fundingInvalid": "请输入有效的 ETH 金额",
+    "explanation": "此设置需要一次签名和 3 笔交易。您的 Ledger 只需支付一次 gas 费。设置完成后，智能账户将为后续所有操作自行支付 gas 费。"
+  },
+  "errors": {
+    "rejectedOnLedger": "已在 Ledger 上拒绝。",
+    "prefixed": "错误：{{message}}",
+    "operationFailed": "操作失败",
+    "unexpectedConsentFormat": "意外的同意签名格式。"
+  },
+  "actions": {
+    "tryAgain": "重试",
+    "registerIdentity": "注册身份",
+    "step1of4": "步骤 1/4",
+    "confirmTx2InWallet": "请在钱包中确认交易 2/4...",
+    "waitingForConfirmation": "等待确认...",
+    "step2of4": "步骤 2/4",
+    "confirmTx3InWallet": "请在钱包中确认交易 3/4...",
+    "step3of4": "步骤 3/4",
+    "confirmTx4InWallet": "请在钱包中确认交易 4/4...",
+    "step4of4": "步骤 4/4"
+  }
+}

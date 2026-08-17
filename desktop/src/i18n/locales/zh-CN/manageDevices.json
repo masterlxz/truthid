@@ -1,0 +1,20 @@
+{
+  "reauthBanner": {
+    "body_one": "有 {{count}} 台设备已注册，但无法为此账户签名 — 可能是智能账户重新部署后遗留的。重新授权无需重新配对，只需在 Ledger 上确认即可。",
+    "body_other": "有 {{count}} 台设备已注册，但无法为此账户签名 — 可能是智能账户重新部署后遗留的。重新授权无需重新配对，只需在 Ledger 上确认即可。",
+    "confirmingWallet": "正在钱包中确认...",
+    "waitingNetwork": "等待网络...",
+    "confirmButton_one": "重新授权 {{count}} 台设备",
+    "confirmButton_other": "重新授权 {{count}} 台设备"
+  },
+  "rotationBanner": {
+    "body_one": "设备已撤销 — 现在应轮换密码库密钥，使被撤销的设备失去对已解密内容的访问权限。这需要剩余 {{count}} 台设备的原始公钥（配对时显示的同一字段 — 分别查看各设备的\"显示二维码以配对\"界面）。",
+    "body_other": "设备已撤销 — 现在应轮换密码库密钥，使被撤销的设备失去对已解密内容的访问权限。这需要剩余 {{count}} 台设备的原始公钥（配对时显示的同一字段 — 分别查看各设备的\"显示二维码以配对\"界面）。",
+    "pubkeyPlaceholder": "0x03... 或 0x04...",
+    "rotatingButton": "正在将密码库轮换为新密钥...",
+    "confirmingWallet": "正在钱包中确认...",
+    "confirmButton": "轮换并重新分发",
+    "postponeButton": "推迟",
+    "rotationFailed": "轮换密码库密钥失败：{{error}}"
+  }
+}

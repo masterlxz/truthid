@@ -1,0 +1,8 @@
+{
+  "title": "Canal do app local",
+  "active": "✓ Ativo — porta {{port}}",
+  "inactive": "Inativo",
+  "stop": "Parar",
+  "stopping": "Parando...",
+  "start": "Iniciar"
+}

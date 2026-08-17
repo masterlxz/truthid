@@ -1,0 +1,14 @@
+{
+  "keyringError": "Erro ao acessar o keyring do SO: {{error}}",
+  "initializing": "Inicializando chave do desktop...",
+  "title": "Este desktop",
+  "registered": "Registrado como dispositivo",
+  "notRegistered": "Não registrado",
+  "rejectedOnLedger": "Transação rejeitada no Ledger.",
+  "errorPrefix": "Erro: {{message}}",
+  "confirmWallet1": "Confirmando na carteira (1/2)...",
+  "waitingNetwork1": "Aguardando a rede (1/2)...",
+  "confirmWallet2": "Confirmando na carteira (2/2)...",
+  "waitingNetwork2": "Aguardando a rede (2/2)...",
+  "registerButton": "Registrar este desktop"
+}

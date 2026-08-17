@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import type { Address } from "viem";
 import { useIncomingVaultEditRequest } from "../hooks/useIncomingVaultEditRequest";
@@ -19,6 +20,7 @@ export function VaultEditApprovalModal({
 }: {
   smartAccountAddress?: Address | null;
 }) {
+  const { t } = useTranslation();
   const { request, clear } = useIncomingVaultEditRequest();
   // Sync em lote (P29): visibilidade de senha é por item, não mais um único
   // booleano — um Set dos índices que o usuário revelou.
@@ -46,7 +48,7 @@ export function VaultEditApprovalModal({
   async function handleApprove() {
     if (!request) return;
     if (!smartAccountAddress) {
-      setError("No identity loaded — cannot publish.");
+      setError(t("vaultEditApprovalModal.cannotPublishNoIdentity"));
       setStage("error");
       return;
     }
@@ -97,10 +99,7 @@ export function VaultEditApprovalModal({
   }
 
   const { entries } = request;
-  const title =
-    entries.length === 1
-      ? "New credential from extension"
-      : `${entries.length} new credentials from extension`;
+  const title = t("vaultEditApprovalModal.title", { count: entries.length });
 
   return (
     <div className="modal-overlay">
@@ -110,11 +109,7 @@ export function VaultEditApprovalModal({
         </div>
 
         <div className="card">
-          <p>
-            {entries.length === 1
-              ? "The TruthID browser extension wants to save a new credential to your Vault."
-              : `The TruthID browser extension wants to save ${entries.length} new credentials to your Vault.`}
-          </p>
+          <p>{t("vaultEditApprovalModal.description", { count: entries.length })}</p>
 
           {entries.map((entry, index) => (
             <div
@@ -123,21 +118,23 @@ export function VaultEditApprovalModal({
               style={{ marginTop: "0.75rem", background: "var(--bg-alt, transparent)" }}
             >
               <div className="field">
-                <label>Site</label>
+                <label>{t("vaultEditApprovalModal.fieldSite")}</label>
                 <input value={entry.site} readOnly />
               </div>
               <p className="muted" style={{ marginTop: "0.35rem", marginBottom: 0 }}>
-                {entry.targetEntryId ? "Updating existing entry" : "New entry"}
+                {entry.targetEntryId
+                  ? t("vaultEditApprovalModal.updatingExistingEntry")
+                  : t("vaultEditApprovalModal.newEntry")}
               </p>
               {entry.username && (
                 <div className="field" style={{ marginTop: "0.5rem" }}>
-                  <label>Username</label>
+                  <label>{t("vaultEditApprovalModal.fieldUsername")}</label>
                   <input value={entry.username} readOnly />
                 </div>
               )}
               {entry.password && (
                 <div className="field" style={{ marginTop: "0.5rem" }}>
-                  <label>Password</label>
+                  <label>{t("vaultEditApprovalModal.fieldPassword")}</label>
                   <div style={{ display: "flex", gap: "0.4rem" }}>
                     <input
                       style={{ flex: 1 }}
@@ -146,32 +143,36 @@ export function VaultEditApprovalModal({
                       readOnly
                     />
                     <button type="button" onClick={() => togglePasswordVisible(index)}>
-                      {visiblePasswords.has(index) ? "Hide" : "Show"}
+                      {visiblePasswords.has(index)
+                        ? t("vaultEditApprovalModal.hide")
+                        : t("vaultEditApprovalModal.show")}
                     </button>
                   </div>
                 </div>
               )}
               {entry.passkey && (
                 <p className="muted" style={{ marginTop: "0.5rem" }}>
-                  🔑 + new passkey for {entry.passkey.rp_id}
+                  {t("vaultEditApprovalModal.newPasskeyFor", { rpId: entry.passkey.rp_id })}
                 </p>
               )}
             </div>
           ))}
 
-          {expired && <p className="error-text">This request has expired.</p>}
+          {expired && <p className="error-text">{t("vaultEditApprovalModal.requestExpired")}</p>}
           {error && <p className="error-text">{error}</p>}
 
           <div className="actions-row" style={{ marginTop: "0.75rem" }}>
             <button onClick={handleApprove} disabled={expired || stage === "publishing"}>
-              {stage === "publishing" ? "Publishing..." : "Approve"}
+              {stage === "publishing"
+                ? t("vaultEditApprovalModal.publishing")
+                : t("vaultEditApprovalModal.approve")}
             </button>
             <button
               onClick={handleReject}
               className="topbar-btn-danger"
               disabled={stage === "publishing"}
             >
-              Reject
+              {t("vaultEditApprovalModal.reject")}
             </button>
           </div>
         </div>

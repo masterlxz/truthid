@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import {
   useAccount,
   useReadContract,
@@ -14,8 +15,10 @@ import {
 } from "../config/contracts";
 import { useIdentity } from "../contexts/IdentityContext";
 import { useWalletModal } from "../contexts/WalletModalContext";
+import { formatDateTime } from "../i18n/formatDate";
 
 export function ActiveSessions() {
+  const { t, i18n } = useTranslation();
   const { username, identityId } = useIdentity();
   const { isConnected } = useAccount();
   const { openConnectModal } = useWalletModal();
@@ -140,10 +143,10 @@ export function ActiveSessions() {
   return (
     <div>
       <h2>@{username}</h2>
-      <h3>Active sessions</h3>
+      <h3>{t("activeSessions.title")}</h3>
 
       {sessions.length === 0 && (
-        <p className="muted">No sessions yet. Sessions appear here when you log in to websites using TruthID.</p>
+        <p className="muted">{t("activeSessions.empty")}</p>
       )}
 
       {sessions.map((session) => {
@@ -151,9 +154,7 @@ export function ActiveSessions() {
         const isRevoked =
           session.revoked ||
           (revokeAllDone && !session.revoked);
-        const createdAt = new Date(
-          Number(session.createdAt) * 1000
-        ).toLocaleString();
+        const createdAt = formatDateTime(Number(session.createdAt), i18n.language);
         const deviceLabel =
           deviceLabels[session.devicePubKey] ??
           `${session.devicePubKey.slice(0, 8)}…`;
@@ -164,11 +165,11 @@ export function ActiveSessions() {
             <div style={{ display: "flex", alignItems: "center", gap: "0.6rem", marginBottom: "0.4rem" }}>
               <code className="address">{hashShort}</code>
               <span className={`status-badge ${isRevoked ? "status-badge--revoked" : "status-badge--active"}`}>
-                {isRevoked ? "Revoked" : "✓ Active"}
+                {isRevoked ? t("activeSessions.status.revoked") : t("activeSessions.status.active")}
               </span>
             </div>
-            <span className="muted">Device: {deviceLabel}</span>
-            <span className="muted"> · Created at {createdAt}</span>
+            <span className="muted">{t("activeSessions.device", { label: deviceLabel })}</span>
+            <span className="muted"> · {t("activeSessions.createdAt", { date: createdAt })}</span>
             {!isRevoked && (
               <div className="actions-row">
                 <button
@@ -178,10 +179,10 @@ export function ActiveSessions() {
                   }
                 >
                   {isBeingRevoked && isRevokeOnePending
-                    ? "Confirm in wallet..."
+                    ? t("activeSessions.actions.confirmInWallet")
                     : isBeingRevoked && isRevokeOneConfirming
-                    ? "Waiting for network..."
-                    : "Revoke"}
+                    ? t("activeSessions.actions.waitingForNetwork")
+                    : t("activeSessions.actions.revoke")}
                 </button>
               </div>
             )}
@@ -193,10 +194,10 @@ export function ActiveSessions() {
         <div className="actions-row">
           <button onClick={handleRevokeAll} disabled={isBusy}>
             {isRevokeAllPending
-              ? "Confirm in wallet..."
+              ? t("activeSessions.actions.confirmInWallet")
               : isRevokeAllConfirming
-              ? "Waiting for network..."
-              : `Revoke all (${activeSessions.length})`}
+              ? t("activeSessions.actions.waitingForNetwork")
+              : t("activeSessions.actions.revokeAll", { count: activeSessions.length })}
           </button>
         </div>
       )}

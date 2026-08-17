@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import type { Address } from "viem";
 import { decodeFunctionData, formatEther, parseAbi, toFunctionSelector } from "viem";
@@ -25,7 +26,11 @@ function decodeIncomingCall(req: IncomingSignRequest): DecodedCall {
     const expectedSelector = toFunctionSelector(req.functionSignature);
     const actualSelector = req.callData.slice(0, 10).toLowerCase();
     if (expectedSelector !== actualSelector) {
-      return { verified: false, reason: "declared function signature does not match callData" };
+      // Marcador resolvido pro texto localizado no componente (esta função
+      // roda fora de um componente React, sem acesso a `useTranslation()`) —
+      // diferente de `String(e)` no catch abaixo, que é mensagem de erro
+      // crua e não precisa (nem dá) de tradução.
+      return { verified: false, reason: "signature_mismatch" };
     }
     // `as string` widens away the template-literal type TS would otherwise
     // infer here — viem's parseAbi does compile-time grammar validation on
@@ -43,6 +48,7 @@ function decodeIncomingCall(req: IncomingSignRequest): DecodedCall {
 }
 
 export function SignRequestModal({ smartAccountAddress }: { smartAccountAddress: Address | null }) {
+  const { t } = useTranslation();
   const { request, clear } = useIncomingSignRequest();
   const { openConnectModal } = useWalletModal();
   const [stage, setStage] = useState<"idle" | "signing" | "error">("idle");
@@ -75,7 +81,7 @@ export function SignRequestModal({ smartAccountAddress }: { smartAccountAddress:
     // Checa expiração local antes de gastar gas — cobre o caso do
     // setInterval não ter disparado (janela minimizada, webview throttle).
     if (Date.now() > request.expiresAtMs) {
-      setError("This request has expired. No UserOp was sent.");
+      setError(t("signRequestModal.requestExpiredNoUserOp"));
       setStage("idle");
       return;
     }
@@ -86,7 +92,7 @@ export function SignRequestModal({ smartAccountAddress }: { smartAccountAddress:
       id: request.id,
     });
     if (!stillValid) {
-      setError("This request has expired. No UserOp was sent.");
+      setError(t("signRequestModal.requestExpiredNoUserOp"));
       setStage("idle");
       return;
     }
@@ -102,9 +108,7 @@ export function SignRequestModal({ smartAccountAddress }: { smartAccountAddress:
       });
 
       if (!transactionHash) {
-        throw new Error(
-          "UserOperation accepted but not confirmed yet — it may still confirm later."
-        );
+        throw new Error(t("signRequestModal.userOpNotConfirmed"));
       }
 
       await invoke("respond_to_sign_request", {
@@ -129,18 +133,24 @@ export function SignRequestModal({ smartAccountAddress }: { smartAccountAddress:
   }
 
   const busy = stage === "signing";
+  const reasonText =
+    !decoded.verified && decoded.reason === "signature_mismatch"
+      ? t("signRequestModal.signatureMismatchReason")
+      : !decoded.verified
+      ? decoded.reason
+      : "";
 
   return (
     <div className="modal-overlay">
       <div className="modal-box">
         <div className="modal-header">
-          <h2 className="modal-title">Sign request</h2>
+          <h2 className="modal-title">{t("signRequestModal.title")}</h2>
         </div>
 
         <div className="card">
           <p>
-            <strong>{request.appName || "An app"}</strong> wants to call a function on your
-            smart account.
+            <strong>{request.appName || t("signRequestModal.defaultAppName")}</strong>{" "}
+            {t("signRequestModal.wantsToCall")}
           </p>
 
           {decoded.verified ? (
@@ -150,16 +160,16 @@ export function SignRequestModal({ smartAccountAddress }: { smartAccountAddress:
           ) : (
             <>
               <span className="status-badge status-badge--revoked">
-                ⚠ Could not verify declared function ({decoded.reason})
+                {t("signRequestModal.couldNotVerify", { reason: reasonText })}
               </span>
               <p className="muted" style={{ marginTop: "0.5rem" }}>
-                App claims this function (unverified — does not match callData):
+                {t("signRequestModal.unverifiedClaim")}
               </p>
               <code className="address" style={{ display: "block" }}>
                 {request.functionSignature}
               </code>
               <p className="muted" style={{ marginTop: "0.5rem" }}>
-                Raw call data:
+                {t("signRequestModal.rawCallData")}
               </p>
               <code className="address" style={{ display: "block" }}>
                 {request.callData}
@@ -168,20 +178,20 @@ export function SignRequestModal({ smartAccountAddress }: { smartAccountAddress:
           )}
 
           <p className="muted" style={{ marginTop: "0.75rem" }}>
-            Contract: <code>{request.dest}</code>
+            {t("signRequestModal.contractLabel")} <code>{request.dest}</code>
             <br />
-            Value: {valueEth} ETH
+            {t("signRequestModal.valueLine", { value: valueEth })}
           </p>
 
-          {expired && <p className="error-text">This request has expired.</p>}
+          {expired && <p className="error-text">{t("signRequestModal.requestExpired")}</p>}
           {error && <p className="error-text">{error}</p>}
 
           <div className="actions-row" style={{ marginTop: "0.75rem" }}>
             <button onClick={handleApprove} disabled={busy || expired}>
-              {busy ? "Signing..." : "Approve"}
+              {busy ? t("signRequestModal.signing") : t("signRequestModal.approve")}
             </button>
             <button onClick={handleReject} disabled={busy} className="topbar-btn-danger">
-              Reject
+              {t("signRequestModal.reject")}
             </button>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -25,6 +26,7 @@ const USERNAME_REGEX = /^[a-z0-9.\-]{1,64}$/;
 const DEFAULT_FUNDING_ETH = "0.001";
 
 export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: Address }) {
+  const { t } = useTranslation();
   const [username, setUsername] = useState("");
   const [fundingEth, setFundingEth] = useState(DEFAULT_FUNDING_ETH);
   const [step, setStep] = useState<0 | 1 | 2 | 3 | 4>(0);
@@ -173,7 +175,7 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
     ) {
       tx1Submitted.current = true;
       const { r, s, v } = hexToSignature(consentSignature);
-      if (v === undefined) throw new Error("Unexpected consent signature format.");
+      if (v === undefined) throw new Error(t("createIdentity.errors.unexpectedConsentFormat"));
       createIdentity({
         address: IDENTITY_REGISTRY_ADDRESS,
         abi: IDENTITY_REGISTRY_ABI,
@@ -268,7 +270,7 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
   if (existingUsername) {
     return (
       <div className="card">
-        <p className="muted" style={{ marginBottom: "0.25rem" }}>Identity already registered:</p>
+        <p className="muted" style={{ marginBottom: "0.25rem" }}>{t("createIdentity.identityAlreadyRegistered")}</p>
         <strong>@{existingUsername as string}</strong>
       </div>
     );
@@ -277,37 +279,36 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
   if (tx3Success) {
     return (
       <div className="card">
-        <p className="muted" style={{ marginBottom: "0.25rem" }}>Identity created successfully!</p>
+        <p className="muted" style={{ marginBottom: "0.25rem" }}>{t("createIdentity.identityCreatedSuccess")}</p>
         <strong>@{username}</strong>
         <p className="muted" style={{ marginTop: "0.5rem" }}>
-          Smart account funded with {fundingEth} ETH. Your Ledger will not be charged for future operations.
+          {t("createIdentity.fundedWith", { amount: fundingEth })}
         </p>
 
         {!vaultKeyDerived && (
           <div style={{ marginTop: "1.5rem", paddingTop: "1rem", borderTop: "1px solid var(--color-border)" }}>
             <p className="muted" style={{ marginBottom: "0.75rem", lineHeight: "1.5" }}>
-              Your vault encryption key is derived from your wallet signature.
-              Sign once now (while your wallet is connected) to unlock the password manager on this device.
+              {t("createIdentity.vaultKey.intro")}
             </p>
             {signVaultError && (
               <p className="error-text">
                 {signVaultErr?.message?.includes("rejected_by_user")
-                  ? "Signature rejected on Ledger."
-                  : `Error: ${signVaultErr?.message?.split("\n")[0]}`}
+                  ? t("createIdentity.vaultKey.signatureRejected")
+                  : t("createIdentity.errors.prefixed", { message: signVaultErr?.message?.split("\n")[0] })}
               </p>
             )}
             <button
               onClick={() => signVaultKey({ message: VAULT_KEY_MESSAGE })}
               disabled={signVaultPending}
             >
-              {signVaultPending ? "Confirm signature on Ledger..." : "Setup vault key"}
+              {signVaultPending ? t("createIdentity.vaultKey.confirmSignature") : t("createIdentity.vaultKey.setupButton")}
             </button>
           </div>
         )}
 
         {vaultKeyDerived && (
           <p className="muted" style={{ marginTop: "0.75rem" }}>
-            Vault key ready — you can now use the password manager.
+            {t("createIdentity.vaultKey.ready")}
           </p>
         )}
       </div>
@@ -315,36 +316,36 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
   }
 
   const steps = [
-    { num: 1, label: "Signing consent", active: step >= 1, done: step > 1 || !!consentSignature },
-    { num: 2, label: "Creating identity on-chain", active: step >= 2, done: step > 2 || tx1Success },
-    { num: 3, label: "Deploying smart account", active: step >= 3, done: step > 3 || tx2Success },
-    { num: 4, label: "Funding smart account", active: step >= 4, done: tx3Success },
+    { num: 1, label: t("createIdentity.steps.signingConsent"), active: step >= 1, done: step > 1 || !!consentSignature },
+    { num: 2, label: t("createIdentity.steps.creatingIdentity"), active: step >= 2, done: step > 2 || tx1Success },
+    { num: 3, label: t("createIdentity.steps.deployingAccount"), active: step >= 3, done: step > 3 || tx2Success },
+    { num: 4, label: t("createIdentity.steps.fundingAccount"), active: step >= 4, done: tx3Success },
   ];
 
   return (
     <form onSubmit={handleSubmit} className="card">
-      <h2>Create identity</h2>
+      <h2>{t("createIdentity.form.title")}</h2>
 
       <div className="field">
         <input
           value={username}
           onChange={(e) => setUsername(e.target.value.toLowerCase())}
-          placeholder="choose a username"
+          placeholder={t("createIdentity.form.usernamePlaceholder")}
           disabled={isFormPending}
         />
       </div>
 
       {username.length > 0 && !isValidFormat && (
-        <p className="muted">Lowercase letters, numbers, dots and hyphens only (max. 64 characters)</p>
+        <p className="muted">{t("createIdentity.form.usernameFormatHint")}</p>
       )}
 
       {isValidFormat && isTaken && (
-        <p className="muted">Username already taken</p>
+        <p className="muted">{t("createIdentity.form.usernameTaken")}</p>
       )}
 
       <div className="field" style={{ marginTop: "0.75rem" }}>
         <label className="muted" style={{ display: "block", marginBottom: "0.25rem", fontSize: "0.85rem" }}>
-          Initial funding (ETH)
+          {t("createIdentity.form.fundingLabel")}
         </label>
         <input
           value={fundingEth}
@@ -356,12 +357,11 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
       </div>
 
       {!isFundingValid && fundingEth.length > 0 && (
-        <p className="muted">Enter a valid ETH amount</p>
+        <p className="muted">{t("createIdentity.form.fundingInvalid")}</p>
       )}
 
       <div className="muted" style={{ marginTop: "0.75rem", fontSize: "0.85rem", lineHeight: "1.5" }}>
-        This setup uses a signature plus 3 transactions. Your Ledger pays gas one time only.
-        After setup, your smart account pays its own gas for all future operations.
+        {t("createIdentity.form.explanation")}
       </div>
 
       {step > 0 && (
@@ -387,44 +387,58 @@ export function CreateIdentity({ smartAccountAddress }: { smartAccountAddress: A
       {hasError && (
         <p className="error-text" style={{ marginTop: "0.5rem" }}>
           {overallError?.message?.includes("rejected_by_user")
-            ? "Rejected on Ledger."
-            : `Error: ${overallError?.message?.split("\n")[0] ?? "operation failed"}`}
+            ? t("createIdentity.errors.rejectedOnLedger")
+            : t("createIdentity.errors.prefixed", {
+                message: overallError?.message?.split("\n")[0] ?? t("createIdentity.errors.operationFailed"),
+              })}
         </p>
       )}
 
       {(step === 3 && tx2Error) || (step === 4 && tx3Error) ? (
         <button type="button" onClick={handleRetry} style={{ marginTop: "0.5rem" }}>
-          Try again
+          {t("createIdentity.actions.tryAgain")}
         </button>
       ) : null}
 
       {step === 0 && (
         <button type="submit" disabled={!canSubmit}>
-          Register identity
+          {t("createIdentity.actions.registerIdentity")}
         </button>
       )}
 
       {step === 1 && (
         <button type="button" disabled>
-          {signPending ? "Confirm signature on Ledger..." : "Step 1/4"}
+          {signPending ? t("createIdentity.vaultKey.confirmSignature") : t("createIdentity.actions.step1of4")}
         </button>
       )}
 
       {step === 2 && (
         <button type="button" disabled>
-          {tx1Pending ? "Confirm tx 2/4 in wallet..." : tx1Confirming ? "Waiting for confirmation..." : "Step 2/4"}
+          {tx1Pending
+            ? t("createIdentity.actions.confirmTx2InWallet")
+            : tx1Confirming
+            ? t("createIdentity.actions.waitingForConfirmation")
+            : t("createIdentity.actions.step2of4")}
         </button>
       )}
 
       {step === 3 && (
         <button type="button" disabled>
-          {tx2Pending ? "Confirm tx 3/4 in wallet..." : tx2Confirming ? "Waiting for confirmation..." : "Step 3/4"}
+          {tx2Pending
+            ? t("createIdentity.actions.confirmTx3InWallet")
+            : tx2Confirming
+            ? t("createIdentity.actions.waitingForConfirmation")
+            : t("createIdentity.actions.step3of4")}
         </button>
       )}
 
       {step === 4 && (
         <button type="button" disabled>
-          {tx3Pending ? "Confirm tx 4/4 in wallet..." : tx3Confirming ? "Waiting for confirmation..." : "Step 4/4"}
+          {tx3Pending
+            ? t("createIdentity.actions.confirmTx4InWallet")
+            : tx3Confirming
+            ? t("createIdentity.actions.waitingForConfirmation")
+            : t("createIdentity.actions.step4of4")}
         </button>
       )}
     </form>

@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { generateTotpCode, secondsRemaining } from "../utils/totp";
 
 /** Mostra o código TOTP atual de uma entrada, com contagem regressiva e cópia
  * — mesmo padrão de "valor + botão copiar" de DepositModal.tsx/DonateModal.tsx. */
 export function TotpCode({ secret }: { secret: string }) {
+  const { t } = useTranslation();
   const [code, setCode] = useState("······");
   const [remaining, setRemaining] = useState(30);
   const [copied, setCopied] = useState(false);
@@ -55,7 +57,7 @@ export function TotpCode({ secret }: { secret: string }) {
       </code>
       <span className="muted" style={{ fontSize: "0.78em" }}>{remaining}s</span>
       <button onClick={handleCopy} style={{ padding: "0.15em 0.5em", fontSize: "0.78em" }}>
-        {copied ? "✓" : "Copiar"}
+        {copied ? "✓" : t("totpCode.copy")}
       </button>
     </div>
   );

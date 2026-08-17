@@ -1,0 +1,13 @@
+{
+  "arweaveWallet": {
+    "title": "Arweave 钱包",
+    "description": "密码库（主数据块及附加文档）以及通过 /pin 批准的第三方应用都会发布到 Arweave — 这需要一个已充值 AR 的本地钱包。",
+    "generating": "正在生成...",
+    "generate": "生成 Arweave 钱包",
+    "copied": "✓ 已复制！",
+    "copyAddress": "复制地址",
+    "balance": "余额：{{balance}} AR",
+    "balanceUnavailable": "暂时无法获取余额",
+    "noBalanceWarning": "尚无余额 — 请先在交易所购买 AR 并发送到上方地址，然后再点击\"发送\"。"
+  }
+}

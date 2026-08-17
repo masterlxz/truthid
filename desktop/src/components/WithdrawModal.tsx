@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { type Address, formatEther, parseEther, isAddress } from "viem";
@@ -14,6 +15,7 @@ export function WithdrawModal({
   availableBalance: bigint;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const { isConnected } = useAccount();
   const { openConnectModal } = useWalletModal();
   const queryClient = useQueryClient();
@@ -77,9 +79,9 @@ export function WithdrawModal({
     amount.length === 0
       ? null
       : parsedAmount === null || parsedAmount <= 0n
-      ? "Enter a valid ETH amount"
+      ? t("withdrawModal.invalidEthAmount")
       : parsedAmount > availableBalance
-      ? "Amount exceeds available balance"
+      ? t("withdrawModal.amountExceedsBalance")
       : null;
 
   const canSubmit = step === "form" && isAddress(destination) && amountIsValid;
@@ -101,12 +103,12 @@ export function WithdrawModal({
   if (step === "done") {
     return (
       <div className="card">
-        <p className="muted" style={{ marginBottom: "0.25rem" }}>Withdrawal sent!</p>
+        <p className="muted" style={{ marginBottom: "0.25rem" }}>{t("withdrawModal.withdrawalSent")}</p>
         <p>
-          {amount} ETH to <code className="address">{destination}</code>
+          {t("withdrawModal.sentSummary", { amount })} <code className="address">{destination}</code>
         </p>
         <div className="actions-row">
-          <button onClick={onClose}>Close</button>
+          <button onClick={onClose}>{t("withdrawModal.close")}</button>
         </div>
       </div>
     );
@@ -114,10 +116,10 @@ export function WithdrawModal({
 
   return (
     <form onSubmit={handleSubmit} className="card">
-      <h3 style={{ marginTop: 0 }}>Withdraw</h3>
+      <h3 style={{ marginTop: 0 }}>{t("withdrawModal.title")}</h3>
 
       <div className="field">
-        <label>Destination address</label>
+        <label>{t("withdrawModal.destinationLabel")}</label>
         <input
           value={destination}
           onChange={(e) => setDestination(e.target.value.trim())}
@@ -125,11 +127,11 @@ export function WithdrawModal({
           disabled={step !== "form"}
           style={{ fontFamily: "monospace" }}
         />
-        {!addressIsValid && <p className="error-text">Invalid address.</p>}
+        {!addressIsValid && <p className="error-text">{t("withdrawModal.invalidAddress")}</p>}
       </div>
 
       <div className="field">
-        <label>Amount (ETH)</label>
+        <label>{t("withdrawModal.amountLabel")}</label>
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
           <input
             value={amount}
@@ -139,11 +141,11 @@ export function WithdrawModal({
             style={{ width: "8rem" }}
           />
           <button type="button" onClick={handleMax} disabled={step !== "form"}>
-            Max
+            {t("withdrawModal.max")}
           </button>
         </div>
         <p className="muted" style={{ fontSize: "0.85rem" }}>
-          Available: {formatEther(availableBalance)} ETH
+          {t("withdrawModal.available", { amount: formatEther(availableBalance) })}
         </p>
         {amountError && <p className="error-text">{amountError}</p>}
       </div>
@@ -151,24 +153,28 @@ export function WithdrawModal({
       {isError && (
         <p className="error-text">
           {error?.message?.includes("rejected_by_user")
-            ? "Rejected on Ledger."
-            : `Error: ${error?.message?.split("\n")[0] ?? "operation failed"}`}
+            ? t("withdrawModal.rejectedOnLedger")
+            : t("withdrawModal.errorPrefix", { message: error?.message?.split("\n")[0] ?? "operation failed" })}
         </p>
       )}
 
       <div className="actions-row">
         {step === "form" && (
           <button type="submit" disabled={!canSubmit}>
-            Withdraw
+            {t("withdrawModal.withdraw")}
           </button>
         )}
         {step === "confirming" && (
           <button type="button" disabled>
-            {isPending ? "Confirm in wallet..." : isConfirming ? "Waiting for confirmation..." : "Confirming..."}
+            {isPending
+              ? t("withdrawModal.confirmInWallet")
+              : isConfirming
+              ? t("withdrawModal.waitingForConfirmation")
+              : t("withdrawModal.confirming")}
           </button>
         )}
         <button type="button" onClick={onClose} disabled={step === "confirming"}>
-          Cancel
+          {t("withdrawModal.cancel")}
         </button>
       </div>
     </form>

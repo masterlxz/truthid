@@ -1,0 +1,8 @@
+{
+  "title": "Pinning request",
+  "defaultAppName": "An app",
+  "description": "wants to publish content using your configured Arweave wallet. Content is always sent already encrypted — TruthID never sees or stores it in plain text.",
+  "expired": "This request has expired.",
+  "approve": "Approve",
+  "reject": "Reject"
+}

@@ -1,0 +1,19 @@
+{
+  "cannotPublishNoIdentity": "No identity loaded — cannot publish.",
+  "title_one": "New credential from extension",
+  "title_other": "{{count}} new credentials from extension",
+  "description_one": "The TruthID browser extension wants to save a new credential to your Vault.",
+  "description_other": "The TruthID browser extension wants to save {{count}} new credentials to your Vault.",
+  "fieldSite": "Site",
+  "updatingExistingEntry": "Updating existing entry",
+  "newEntry": "New entry",
+  "fieldUsername": "Username",
+  "fieldPassword": "Password",
+  "hide": "Hide",
+  "show": "Show",
+  "newPasskeyFor": "🔑 + new passkey for {{rpId}}",
+  "requestExpired": "This request has expired.",
+  "publishing": "Publishing...",
+  "approve": "Approve",
+  "reject": "Reject"
+}

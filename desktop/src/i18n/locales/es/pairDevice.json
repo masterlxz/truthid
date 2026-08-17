@@ -1,0 +1,17 @@
+{
+  "addDeviceButton": "+ Agregar dispositivo",
+  "title": "Agregar dispositivo",
+  "instructions": "En tu teléfono, abre <0>Dispositivos → Mostrar QR para emparejar</0> y pega aquí los datos mostrados:",
+  "deviceAddressLabel": "Dirección del dispositivo",
+  "invalidAddress": "Dirección no válida.",
+  "encryptionKeyLabel": "Clave de cifrado (opcional)",
+  "deviceNameLabel": "Nombre del dispositivo",
+  "rejectedOnLedger": "Transacción rechazada en el Ledger.",
+  "errorPrefix": "Error: {{message}}",
+  "confirmWallet1": "Confirmando en la wallet (1/2)...",
+  "waitingNetwork1": "Esperando la red (1/2)...",
+  "confirmWallet2": "Confirmando en la wallet (2/2)...",
+  "waitingNetwork2": "Esperando la red (2/2)...",
+  "registerDevice": "Registrar dispositivo",
+  "cancel": "Cancelar"
+}

@@ -1,0 +1,14 @@
+{
+  "toggleButton": "Redistribuir clave del vault a un dispositivo",
+  "title": "Redistribuir clave del vault",
+  "description": "Envía la clave del vault que este equipo de escritorio usa hoy a un dispositivo ya emparejado — úsalo si ese dispositivo no puede descifrar el vault aunque tenga el contenido correcto (desajuste de clave, no un problema de sincronización). Necesitarás su clave de cifrado de nuevo (el mismo campo que se muestra en la pantalla \"Mostrar QR para emparejar\" del dispositivo).",
+  "deviceLabel": "Dispositivo",
+  "selectDevice": "Selecciona un dispositivo...",
+  "encryptionKeyLabel": "Clave de cifrado",
+  "keySent": "Clave del vault enviada — el dispositivo la recibirá en la próxima sincronización.",
+  "encrypting": "Cifrando...",
+  "confirmInWallet": "Confirmando en la wallet...",
+  "waitingForNetwork": "Esperando la red...",
+  "sendCurrentKey": "Enviar clave actual",
+  "close": "Cerrar"
+}

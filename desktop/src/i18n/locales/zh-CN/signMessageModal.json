@@ -1,0 +1,10 @@
+{
+  "title": "签署消息",
+  "defaultAppName": "某应用",
+  "wantsToDeriveKey": "想要为自身派生一个签名密钥（用途：",
+  "closingParen": "）。",
+  "exactMessageLabel": "将要签署的完整消息：",
+  "requestExpired": "此请求已过期。",
+  "approve": "批准",
+  "reject": "拒绝"
+}

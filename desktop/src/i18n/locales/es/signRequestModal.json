@@ -1,0 +1,17 @@
+{
+  "title": "Solicitud de firma",
+  "defaultAppName": "Una app",
+  "wantsToCall": "quiere llamar a una función en tu cuenta inteligente.",
+  "signatureMismatchReason": "la firma de función declarada no coincide con callData",
+  "couldNotVerify": "⚠ No se pudo verificar la función declarada ({{reason}})",
+  "unverifiedClaim": "La app afirma que es esta función (no verificado — no coincide con callData):",
+  "rawCallData": "Datos de llamada sin procesar:",
+  "contractLabel": "Contrato:",
+  "valueLine": "Valor: {{value}} ETH",
+  "requestExpired": "Esta solicitud ha expirado.",
+  "requestExpiredNoUserOp": "Esta solicitud ha expirado. No se envió ninguna UserOp.",
+  "userOpNotConfirmed": "UserOperation aceptada pero aún no confirmada — podría confirmarse más tarde.",
+  "signing": "Firmando...",
+  "approve": "Aprobar",
+  "reject": "Rechazar"
+}

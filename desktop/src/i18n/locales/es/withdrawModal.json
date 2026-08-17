@@ -1,0 +1,20 @@
+{
+  "withdrawalSent": "¡Retiro enviado!",
+  "sentSummary": "{{amount}} ETH a",
+  "close": "Cerrar",
+  "title": "Retirar",
+  "destinationLabel": "Dirección de destino",
+  "invalidAddress": "Dirección no válida.",
+  "amountLabel": "Monto (ETH)",
+  "max": "Máx",
+  "available": "Disponible: {{amount}} ETH",
+  "invalidEthAmount": "Ingresa un monto de ETH válido",
+  "amountExceedsBalance": "El monto excede el saldo disponible",
+  "rejectedOnLedger": "Rechazado en el Ledger.",
+  "errorPrefix": "Error: {{message}}",
+  "withdraw": "Retirar",
+  "confirmInWallet": "Confirmando en la wallet...",
+  "waitingForConfirmation": "Esperando confirmación...",
+  "confirming": "Confirmando...",
+  "cancel": "Cancelar"
+}

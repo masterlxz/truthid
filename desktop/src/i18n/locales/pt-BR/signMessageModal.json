@@ -1,0 +1,10 @@
+{
+  "title": "Assinar mensagem",
+  "defaultAppName": "Um app",
+  "wantsToDeriveKey": "quer derivar uma chave de assinatura para si mesmo (propósito:",
+  "closingParen": ").",
+  "exactMessageLabel": "Mensagem exata que será assinada:",
+  "requestExpired": "Esta solicitação expirou.",
+  "approve": "Aprovar",
+  "reject": "Rejeitar"
+}

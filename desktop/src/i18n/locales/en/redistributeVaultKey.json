@@ -1,0 +1,14 @@
+{
+  "toggleButton": "Redistribute vault key to a device",
+  "title": "Redistribute vault key",
+  "description": "Sends the vault key this Desktop uses today to an already-paired device — use this if that device can't decrypt the vault even though it has the right content (key mismatch, not a sync issue). You'll need its encryption key again (same field shown on the device's \"Show QR to pair\" screen).",
+  "deviceLabel": "Device",
+  "selectDevice": "Select a device...",
+  "encryptionKeyLabel": "Encryption key",
+  "keySent": "Vault key sent — the device will pick it up next sync.",
+  "encrypting": "Encrypting...",
+  "confirmInWallet": "Confirm in wallet...",
+  "waitingForNetwork": "Waiting for network...",
+  "sendCurrentKey": "Send current key",
+  "close": "Close"
+}

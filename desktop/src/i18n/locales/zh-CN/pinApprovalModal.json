@@ -1,0 +1,8 @@
+{
+  "title": "固定请求",
+  "defaultAppName": "某应用",
+  "description": "想要使用您配置的 Arweave 钱包发布内容。内容始终以加密形式发送 — TruthID 从不会看到或以明文存储它。",
+  "expired": "此请求已过期。",
+  "approve": "批准",
+  "reject": "拒绝"
+}

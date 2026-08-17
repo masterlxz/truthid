@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 
 export function VaultSettings() {
@@ -19,6 +20,7 @@ export function VaultSettings() {
  * app.
  */
 function ArweaveWalletSection() {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [exists, setExists] = useState(false);
   const [address, setAddress] = useState<string | null>(null);
@@ -83,10 +85,9 @@ function ArweaveWalletSection() {
 
   return (
     <div className="card" style={{ marginBottom: "1.5rem" }}>
-      <h2 style={{ marginTop: 0 }}>Wallet Arweave</h2>
+      <h2 style={{ marginTop: 0 }}>{t("vaultSettings.arweaveWallet.title")}</h2>
       <p className="muted" style={{ marginBottom: "1.25rem" }}>
-        O vault (blob principal e documentos anexados) e os apps terceiros aprovados via /pin
-        publicam no Arweave — precisa de uma wallet local financiada com AR.
+        {t("vaultSettings.arweaveWallet.description")}
       </p>
 
       {error && <p className="error-text">{error}</p>}
@@ -94,7 +95,9 @@ function ArweaveWalletSection() {
       {!exists ? (
         <div className="actions-row">
           <button onClick={handleGenerate} disabled={generating}>
-            {generating ? "Gerando..." : "Gerar wallet Arweave"}
+            {generating
+              ? t("vaultSettings.arweaveWallet.generating")
+              : t("vaultSettings.arweaveWallet.generate")}
           </button>
         </div>
       ) : (
@@ -104,18 +107,19 @@ function ArweaveWalletSection() {
           </code>
           <div className="actions-row" style={{ marginTop: "0.5rem", alignItems: "center" }}>
             <button onClick={handleCopy} style={{ padding: "0.3em 0.75em", fontSize: "0.85em" }}>
-              {copied ? "✓ Copiado!" : "Copiar endereço"}
+              {copied
+                ? t("vaultSettings.arweaveWallet.copied")
+                : t("vaultSettings.arweaveWallet.copyAddress")}
             </button>
             <span className="muted" style={{ fontSize: "0.85em" }}>
               {balanceAr !== null
-                ? `Saldo: ${balanceAr} AR`
-                : "Saldo indisponível no momento"}
+                ? t("vaultSettings.arweaveWallet.balance", { balance: balanceAr })
+                : t("vaultSettings.arweaveWallet.balanceUnavailable")}
             </span>
           </div>
           {balanceAr !== null && Number(balanceAr) === 0 && (
             <p className="muted" style={{ fontSize: "0.85em", marginTop: "0.75rem", marginBottom: 0 }}>
-              Sem saldo ainda — compre AR numa exchange e envie pro endereço acima antes de
-              clicar "Enviar".
+              {t("vaultSettings.arweaveWallet.noBalanceWarning")}
             </p>
           )}
         </div>

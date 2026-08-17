@@ -1,0 +1,137 @@
+{
+  "profilePicker": {
+    "noProfiles": "No profiles created yet — create one in \"Manage profiles\" below."
+  },
+  "entryType": {
+    "credential": "Password",
+    "document": "Document",
+    "address": "Address",
+    "creditCard": "Card"
+  },
+  "entryForm": {
+    "fieldSite": "Site *",
+    "sitePlaceholder": "ex: github.com",
+    "fieldUrl": "URL",
+    "urlPlaceholder": "https://...",
+    "fieldUsername": "Username *",
+    "usernamePlaceholder": "@username or email",
+    "fieldPassword": "Password *",
+    "generatePasswordTitle": "Generate password",
+    "fieldName": "Name *",
+    "namePlaceholder": "e.g. ID, passport, contract...",
+    "fieldFile": "File *",
+    "changeFile": "Change file",
+    "chooseFile": "Choose file",
+    "fieldLabel": "Label *",
+    "labelPlaceholderAddress": "e.g. Home, Work, Delivery",
+    "fieldFullName": "Full name *",
+    "fieldStreet": "Street *",
+    "fieldNumber": "Number *",
+    "fieldComplement": "Complement",
+    "fieldNeighborhood": "Neighborhood *",
+    "fieldCity": "City *",
+    "fieldState": "State *",
+    "fieldZipCode": "ZIP code *",
+    "fieldCountry": "Country *",
+    "fieldPhone": "Phone",
+    "labelPlaceholderCard": "e.g. Chase Sapphire, Amex Gold",
+    "fieldCardholder": "Cardholder *",
+    "fieldNetwork": "Network *",
+    "fieldExpiryMonth": "Expiry month *",
+    "expiryMonthPlaceholder": "MM",
+    "fieldExpiryYear": "Expiry year *",
+    "expiryYearPlaceholder": "YYYY",
+    "fieldCvv": "CVV *",
+    "fieldBank": "Bank",
+    "fieldNotes": "Notes",
+    "notesPlaceholder": "optional notes",
+    "fieldGroups": "Groups",
+    "field2fa": "2FA secret (optional)",
+    "totpPlaceholder": "Base32 secret or otpauth:// URI...",
+    "scanQrTitle": "Scan QR via webcam",
+    "loadQrTitle": "Load QR from an image",
+    "fieldPasskey": "Passkey (optional)",
+    "regeneratePasskey": "Regenerate",
+    "generatePasskey": "Generate passkey",
+    "saving": "Saving...",
+    "save": "Save",
+    "cancel": "Cancel",
+    "noQrCodeFound": "No QR code found in that image",
+    "fileTooLarge": "File too large ({{size}}) — limit is {{limit}}."
+  },
+  "unlockVault": {
+    "checking": "Checking vault key...",
+    "title": "Unlock Vault",
+    "description": "Your vault key is derived from your wallet signature (RFC 6979). Sign once with your Ledger or connected wallet to unlock the vault on this device. The key is cached in your OS keyring — you will not need the wallet for daily use.",
+    "invalidSignature": "Invalid signature",
+    "signatureRejected": "Signature rejected on Ledger.",
+    "errorPrefix": "Error: {{message}}",
+    "operationFailed": "operation failed",
+    "confirmSignature": "Confirm signature on wallet...",
+    "connectToUnlock": "Connect wallet to unlock",
+    "unlock": "Unlock vault"
+  },
+  "header": {
+    "title": "Vault",
+    "backToVault": "← Vault",
+    "arweaveWalletTitle": "Arweave Wallet",
+    "backupTitle": "Backup",
+    "backupButton": "⏏ Backup",
+    "providersButton": "⚙ Providers"
+  },
+  "status": {
+    "checkingOnChain": "Checking on-chain status...",
+    "versionPrefix": "Version ",
+    "versionSuffix": " registered on-chain",
+    "updatedOn": " · updated on {{date}}",
+    "notRegistered": "Vault not yet registered on-chain",
+    "publishViaDeviceKeyTitle": "Publishes the vault signing with the local device key, without touching the Ledger — requires ~/.truthid/bundler_config.json configured",
+    "publishingViaDeviceKey": "Publishing via device key...",
+    "publishViaDeviceKeyButton": "Publish via device key (no Ledger)"
+  },
+  "migrationNudge": {
+    "text": "This vault is still published on the old storage (IPFS), which no longer has dedicated pinning — a new device without a local cache may fail to pair. Republish to migrate to Arweave.",
+    "migrateButton": "Migrate to Arweave"
+  },
+  "search": {
+    "placeholder": "Search by site, username, or group..."
+  },
+  "list": {
+    "loading": "Loading...",
+    "noPasswords": "No passwords saved yet.",
+    "noEntriesFound": "No entries found.",
+    "removeFavorite": "Remove from favorites",
+    "addFavorite": "Add to favorites",
+    "documentFallback": "Document",
+    "addressFallback": "Address",
+    "cardFallback": "Card",
+    "download": "Download",
+    "deleteConfirmYes": "Yes",
+    "deleteConfirmNo": "No"
+  },
+  "newEntry": {
+    "button": "+ New entry",
+    "title": "New entry"
+  },
+  "profiles": {
+    "manageButton": "Manage profiles ({{count}})",
+    "description": "Create profiles with any name you want, and tag each password with as many profiles as makes sense.",
+    "none": "No profiles created yet.",
+    "renameTitle": "Rename",
+    "deleteTitle": "Delete",
+    "newProfilePlaceholder": "New profile name",
+    "add": "Add",
+    "renamePrompt": "Rename profile \"{{name}}\" to:",
+    "deleteConfirm": "Delete profile \"{{name}}\"? It will be removed from all passwords that use it."
+  },
+  "permissions": {
+    "manageButton": "Permissions by device ({{count}})",
+    "descriptionPrefix": "Controls whether a mobile device can ",
+    "descriptionBold": "write",
+    "descriptionSuffix": " to the vault (read-only by default). This desktop always has full permission.",
+    "noDevices": "No active devices registered.",
+    "unnamedDevice": "Unnamed device",
+    "canWrite": "✓ Can write",
+    "readOnly": "Read-only"
+  }
+}

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { bytesToHex, type Address } from "viem";
@@ -24,6 +25,7 @@ import type { DeviceInfo } from "../types";
 // tela "Show QR to pair" no mobile) — o contrato só guarda o endereço
 // derivado dela, nunca a chave crua em si.
 export function RedistributeVaultKey({ devices }: { devices: DeviceInfo[] }) {
+  const { t } = useTranslation();
   const { isConnected } = useAccount();
   const { smartAccountAddress } = useIdentity();
   const { openConnectModal } = useWalletModal();
@@ -83,30 +85,24 @@ export function RedistributeVaultKey({ devices }: { devices: DeviceInfo[] }) {
   if (!isOpen) {
     return (
       <button onClick={() => setIsOpen(true)} className="secondary">
-        Redistribute vault key to a device
+        {t("redistributeVaultKey.toggleButton")}
       </button>
     );
   }
 
   return (
     <div className="card">
-      <h3 style={{ marginTop: 0 }}>Redistribute vault key</h3>
-      <p className="muted">
-        Sends the vault key this Desktop uses today to an already-paired
-        device — use this if that device can&apos;t decrypt the vault even
-        though it has the right content (key mismatch, not a sync issue).
-        You&apos;ll need its encryption key again (same field shown on the
-        device&apos;s &quot;Show QR to pair&quot; screen).
-      </p>
+      <h3 style={{ marginTop: 0 }}>{t("redistributeVaultKey.title")}</h3>
+      <p className="muted">{t("redistributeVaultKey.description")}</p>
 
       <div className="field">
-        <label>Device</label>
+        <label>{t("redistributeVaultKey.deviceLabel")}</label>
         <select
           value={targetPubKey}
           onChange={(e) => setTargetPubKey(e.target.value as Address)}
           disabled={isPending || isConfirming}
         >
-          <option value="">Select a device...</option>
+          <option value="">{t("redistributeVaultKey.selectDevice")}</option>
           {activeDevices.map((d) => (
             <option key={d.pubKey} value={d.pubKey}>
               {d.label} ({d.pubKey})
@@ -116,7 +112,7 @@ export function RedistributeVaultKey({ devices }: { devices: DeviceInfo[] }) {
       </div>
 
       <div className="field">
-        <label>Encryption key</label>
+        <label>{t("redistributeVaultKey.encryptionKeyLabel")}</label>
         <input
           value={rawPubkeyHex}
           onChange={(e) => setRawPubkeyHex(e.target.value.trim())}
@@ -127,7 +123,7 @@ export function RedistributeVaultKey({ devices }: { devices: DeviceInfo[] }) {
       </div>
 
       {error && <p className="error-text">{error}</p>}
-      {isSuccess && <p>Vault key sent — the device will pick it up next sync.</p>}
+      {isSuccess && <p>{t("redistributeVaultKey.keySent")}</p>}
 
       <div className="actions-row">
         <button
@@ -135,14 +131,14 @@ export function RedistributeVaultKey({ devices }: { devices: DeviceInfo[] }) {
           disabled={!targetPubKey || !rawPubkeyHex || isEncrypting || isPending || isConfirming}
         >
           {isEncrypting
-            ? "Encrypting..."
+            ? t("redistributeVaultKey.encrypting")
             : isPending
-            ? "Confirm in wallet..."
+            ? t("redistributeVaultKey.confirmInWallet")
             : isConfirming
-            ? "Waiting for network..."
-            : "Send current key"}
+            ? t("redistributeVaultKey.waitingForNetwork")
+            : t("redistributeVaultKey.sendCurrentKey")}
         </button>
-        <button onClick={close}>Close</button>
+        <button onClick={close}>{t("redistributeVaultKey.close")}</button>
       </div>
     </div>
   );

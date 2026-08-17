@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useTranslation } from "react-i18next";
 import { useIncomingAutofillCreditCardRequest } from "../hooks/useIncomingAutofillCreditCardRequest";
 import { useRequestExpiry } from "../hooks/useRequestExpiry";
 import { respondToRequest } from "../services/respondToRequest";
@@ -12,6 +13,7 @@ import { respondToRequest } from "../services/respondToRequest";
  * sensível que endereço, mesmo em loopback).
  */
 export function AutofillCreditCardApprovalModal() {
+  const { t } = useTranslation();
   const { request, clear } = useIncomingAutofillCreditCardRequest();
   const expired = useRequestExpiry(request?.expiresAtMs ?? null);
   const [visible, setVisible] = useState<Set<string>>(new Set());
@@ -43,11 +45,11 @@ export function AutofillCreditCardApprovalModal() {
     <div className="modal-overlay">
       <div className="modal-box">
         <div className="modal-header">
-          <h2 className="modal-title">Autofill request</h2>
+          <h2 className="modal-title">{t("autofillCreditCardApprovalModal.title")}</h2>
         </div>
 
         <div className="card">
-          <p>The TruthID browser extension wants to fill a form with a saved card.</p>
+          <p>{t("autofillCreditCardApprovalModal.description")}</p>
 
           {request.candidates.map((candidate) => {
             const shown = visible.has(candidate.entryId);
@@ -62,25 +64,25 @@ export function AutofillCreditCardApprovalModal() {
                 <p className="muted" style={{ marginTop: "0.25rem" }}>
                   {candidate.data.card_network} {shown ? candidate.data.card_number : `•••• ${last4}`} ·{" "}
                   {candidate.data.expiry_month}/{candidate.data.expiry_year}
-                  {shown && ` · CVV ${candidate.data.cvv}`}
+                  {shown && t("autofillCreditCardApprovalModal.cvvSuffix", { cvv: candidate.data.cvv })}
                 </p>
                 <div className="actions-row" style={{ marginTop: "0.5rem" }}>
                   <button onClick={() => handleApprove(candidate.entryId)} disabled={expired}>
-                    Use this card
+                    {t("autofillCreditCardApprovalModal.useThisCard")}
                   </button>
                   <button type="button" onClick={() => toggleVisible(candidate.entryId)}>
-                    {shown ? "Hide" : "Show"}
+                    {shown ? t("autofillCreditCardApprovalModal.hide") : t("autofillCreditCardApprovalModal.show")}
                   </button>
                 </div>
               </div>
             );
           })}
 
-          {expired && <p className="error-text">This request has expired.</p>}
+          {expired && <p className="error-text">{t("autofillCreditCardApprovalModal.expired")}</p>}
 
           <div className="actions-row" style={{ marginTop: "0.75rem" }}>
             <button onClick={handleReject} className="topbar-btn-danger">
-              Deny request
+              {t("autofillCreditCardApprovalModal.denyRequest")}
             </button>
           </div>
         </div>

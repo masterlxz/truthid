@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import type { TFunction } from "i18next";
 import {
   useAccount,
   useReadContract,
@@ -23,20 +25,21 @@ function formatAddress(addr: string) {
 // P44: timelockSecs tem 7 dias como default só pra cobrir a janela breve
 // antes do TIMELOCK() do contrato carregar — assim que a leitura resolve,
 // os call sites passam o valor real, única fonte de verdade.
-function timeRemaining(proposedAt: bigint, timelockSecs: bigint = 7n * 86400n): string {
+function timeRemaining(t: TFunction, proposedAt: bigint, timelockSecs: bigint = 7n * 86400n): string {
   const now = BigInt(Math.floor(Date.now() / 1000));
   const deadline = proposedAt + timelockSecs;
-  if (now >= deadline) return "Ready to execute";
+  if (now >= deadline) return t("guardianManagement.timeRemainingReady");
   const diff = Number(deadline - now);
   const d = Math.floor(diff / 86400);
   const h = Math.floor((diff % 86400) / 3600);
   const m = Math.floor((diff % 3600) / 60);
-  return `${d}d ${h}h ${m}m remaining`;
+  return t("guardianManagement.timeRemaining", { d, h, m });
 }
 
 type ProposalStatus = "none" | "active" | "executed" | "cancelled";
 
 export function GuardianManagement() {
+  const { t } = useTranslation();
   const { username, smartAccountAddress } = useIdentity();
   const { address: connectedAddress, isConnected } = useAccount();
   const { openConnectModal } = useWalletModal();
@@ -121,7 +124,7 @@ export function GuardianManagement() {
   function handleConfigure() {
     if (!isConnected) { openConnectModal(); return; }
     if (!smartAccountAddress) {
-      setConfigError("Smart account not ready yet — try again in a moment.");
+      setConfigError(t("guardianManagement.smartAccountNotReady"));
       return;
     }
     setConfigError(null);
@@ -131,15 +134,15 @@ export function GuardianManagement() {
       .filter((a) => a.length > 0);
 
     if (validAddresses.length === 0) {
-      setConfigError("Add at least one guardian address");
+      setConfigError(t("guardianManagement.addAtLeastOneGuardian"));
       return;
     }
     if (validAddresses.some((a) => !isAddress(a))) {
-      setConfigError("One or more addresses are invalid");
+      setConfigError(t("guardianManagement.invalidAddresses"));
       return;
     }
     if (thresholdInput < 1 || thresholdInput > validAddresses.length) {
-      setConfigError("Threshold must be between 1 and the number of guardians");
+      setConfigError(t("guardianManagement.thresholdRange"));
       return;
     }
 
@@ -202,7 +205,7 @@ export function GuardianManagement() {
     if (!isConnected) { openConnectModal(); return; }
     setProposeError(null);
     if (!isAddress(newController.trim())) {
-      setProposeError("Invalid controller address");
+      setProposeError(t("guardianManagement.invalidControllerAddress"));
       return;
     }
     sendPropose({
@@ -298,7 +301,7 @@ export function GuardianManagement() {
   function handleCancel() {
     if (!isConnected) { openConnectModal(); return; }
     if (!smartAccountAddress) {
-      setCancelError("Smart account not ready yet — try again in a moment.");
+      setCancelError(t("guardianManagement.smartAccountNotReady"));
       return;
     }
     setCancelError(null);
@@ -391,7 +394,7 @@ export function GuardianManagement() {
     if (!guardianTarget) return;
     setTargetProposeError(null);
     if (!isAddress(targetNewController.trim())) {
-      setTargetProposeError("Invalid controller address");
+      setTargetProposeError(t("guardianManagement.invalidControllerAddress"));
       return;
     }
     sendTargetPropose({
@@ -487,10 +490,16 @@ export function GuardianManagement() {
 
   return (
     <div>
-      <h2>Social Recovery — @{username}</h2>
+      <h2>{t("guardianManagement.title", { username })}</h2>
       <p className="muted" style={{ marginBottom: "1rem" }}>
-        Guardians can help recover your identity if you lose access to your wallet.
-        {timelock && ` Recovery requires ${Number(threshold)} of ${guardians.length} approvals plus a ${Number(timelock / 86400n)}-day timelock.`}
+        {t("guardianManagement.intro")}
+        {timelock
+          ? t("guardianManagement.introTimelock", {
+              threshold: Number(threshold),
+              total: guardians.length,
+              days: Number(timelock / 86400n),
+            })
+          : null}
       </p>
 
       {/* P40: enquanto getGuardianConfig ainda carrega, guardianConfig é
@@ -499,14 +508,14 @@ export function GuardianManagement() {
           configurados, e clicar "Configure Guardians" nesse estado
           sobrescreveria a lista real em silêncio. */}
       {isGuardianConfigLoading && (
-        <p className="muted">Loading guardian configuration…</p>
+        <p className="muted">{t("guardianManagement.loadingConfig")}</p>
       )}
 
       {!isGuardianConfigLoading && !isConfigured && !showConfigForm && (
         <div className="card" style={{ borderColor: "#f0ad4e" }}>
-          <p><strong>⚠ No guardians configured.</strong> Without guardians, losing your wallet means permanent loss of identity.</p>
+          <p><strong>⚠ {t("guardianManagement.noGuardiansWarning")}</strong> {t("guardianManagement.noGuardiansBody")}</p>
           <div className="actions-row">
-            <button onClick={() => setShowConfigForm(true)}>Configure Guardians</button>
+            <button onClick={() => setShowConfigForm(true)}>{t("guardianManagement.configureButton")}</button>
           </div>
         </div>
       )}
@@ -515,14 +524,14 @@ export function GuardianManagement() {
       {showConfigForm && (
         <div className="card">
           <h3 style={{ marginTop: 0 }}>
-            {isConfigured ? "Reconfigure Guardians" : "Configure Guardians"}
+            {isConfigured ? t("guardianManagement.reconfigureTitle") : t("guardianManagement.configureTitle")}
           </h3>
 
           {guardianInputs.map((addr, idx) => (
             <div key={idx} className="guardian-row" style={{ display: "flex", gap: "0.5rem", marginBottom: "0.5rem", alignItems: "center" }}>
               <input
                 type="text"
-                placeholder="0x..."
+                placeholder={t("guardianManagement.addressPlaceholder")}
                 value={addr}
                 onChange={(e) => updateGuardianField(idx, e.target.value)}
                 style={{ flex: 1, fontFamily: "monospace" }}
@@ -531,19 +540,19 @@ export function GuardianManagement() {
                 onClick={() => removeGuardianField(idx)}
                 disabled={guardianInputs.length <= 1}
                 className="small-btn"
-                title="Remove"
+                title={t("guardianManagement.removeGuardianTitle")}
               >
                 ✕
               </button>
               {idx === guardianInputs.length - 1 && (
-                <button onClick={addGuardianField} className="small-btn" title="Add guardian">+</button>
+                <button onClick={addGuardianField} className="small-btn" title={t("guardianManagement.addGuardianTitle")}>+</button>
               )}
             </div>
           ))}
 
           <div style={{ marginBottom: "0.75rem" }}>
             <label>
-              Threshold (approvals needed):{" "}
+              {t("guardianManagement.thresholdLabel")}{" "}
               <input
                 type="number"
                 min={1}
@@ -552,7 +561,7 @@ export function GuardianManagement() {
                 onChange={(e) => setThresholdInput(Number(e.target.value))}
                 style={{ width: "60px" }}
               />
-              {" of "}{guardianInputs.filter((a) => a.trim()).length}
+              {t("guardianManagement.thresholdOf")}{guardianInputs.filter((a) => a.trim()).length}
             </label>
           </div>
 
@@ -560,17 +569,21 @@ export function GuardianManagement() {
           {isConfigError && (
             <p className="error-text">
               {configWriteError?.message?.includes("rejected_by_user")
-                ? "Rejected on Ledger"
-                : `Error: ${configWriteError?.message?.split("\n")[0]}`}
+                ? t("guardianManagement.rejectedOnLedger")
+                : t("guardianManagement.errorPrefix", { message: configWriteError?.message?.split("\n")[0] })}
             </p>
           )}
 
           <div className="actions-row">
             <button onClick={handleConfigure} disabled={isConfigBusy}>
-              {isConfigBusy ? "Confirm in wallet..." : isConfigured ? "Update Guardians" : "Set Guardians"}
+              {isConfigBusy
+                ? t("guardianManagement.confirmInWallet")
+                : isConfigured
+                ? t("guardianManagement.updateGuardiansButton")
+                : t("guardianManagement.setGuardiansButton")}
             </button>
             <button onClick={() => { setShowConfigForm(false); resetConfig(); setConfigError(null); }}>
-              Cancel
+              {t("guardianManagement.cancelButton")}
             </button>
           </div>
         </div>
@@ -579,18 +592,18 @@ export function GuardianManagement() {
       {/* ── Current guardian list ── */}
       {isConfigured && !showConfigForm && (
         <div className="card">
-          <h3 style={{ marginTop: 0 }}>Guardians ({Number(threshold)} of {guardians.length})</h3>
+          <h3 style={{ marginTop: 0 }}>{t("guardianManagement.guardiansListTitle", { threshold: Number(threshold), total: guardians.length })}</h3>
           <ul style={{ listStyle: "none", padding: 0 }}>
             {guardians.map((g) => (
               <li key={g} style={{ fontFamily: "monospace", marginBottom: "0.25rem" }}>
                 {formatAddress(g)}
-                {g.toLowerCase() === connectedAddress?.toLowerCase() && <span className="status-badge status-badge--active" style={{ marginLeft: "0.5rem" }}>You</span>}
+                {g.toLowerCase() === connectedAddress?.toLowerCase() && <span className="status-badge status-badge--active" style={{ marginLeft: "0.5rem" }}>{t("guardianManagement.youBadge")}</span>}
               </li>
             ))}
           </ul>
           <div className="actions-row" style={{ marginTop: "0.75rem" }}>
             <button onClick={() => { setGuardianInputs(guardians.map((g) => g)); setThresholdInput(Number(threshold)); setShowConfigForm(true); }}>
-              Change Guardians
+              {t("guardianManagement.changeGuardiansButton")}
             </button>
           </div>
         </div>
@@ -598,14 +611,14 @@ export function GuardianManagement() {
 
       {/* ── Act as guardian for another identity (P39) ── */}
       <div className="card">
-        <h3 style={{ marginTop: 0 }}>Act as Guardian</h3>
+        <h3 style={{ marginTop: 0 }}>{t("guardianManagement.actAsGuardianTitle")}</h3>
         <p className="muted">
-          If someone added you as a guardian, look up their username to help with their recovery.
+          {t("guardianManagement.actAsGuardianIntro")}
         </p>
         <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.75rem" }}>
           <input
             type="text"
-            placeholder="Their username"
+            placeholder={t("guardianManagement.usernamePlaceholder")}
             value={guardianTargetInput}
             onChange={(e) => setGuardianTargetInput(e.target.value)}
             style={{ flex: 1 }}
@@ -614,24 +627,24 @@ export function GuardianManagement() {
             onClick={() => setGuardianTarget(guardianTargetInput.trim())}
             disabled={!guardianTargetInput.trim()}
           >
-            Look up
+            {t("guardianManagement.lookUpButton")}
           </button>
         </div>
 
         {guardianTarget && (
           <>
             {!targetIsGuardian && (
-              <p className="muted">You are not a guardian for @{guardianTarget}.</p>
+              <p className="muted">{t("guardianManagement.notGuardianFor", { username: guardianTarget })}</p>
             )}
 
             {targetIsGuardian && targetProposalStatus === "none" && (
               <>
                 <p className="muted">
-                  No active recovery. If @{guardianTarget} lost access, propose a new controller wallet.
+                  {t("guardianManagement.noActiveRecoveryFor", { username: guardianTarget })}
                 </p>
                 <input
                   type="text"
-                  placeholder="New controller address (0x...)"
+                  placeholder={t("guardianManagement.newControllerPlaceholder")}
                   value={targetNewController}
                   onChange={(e) => setTargetNewController(e.target.value)}
                   style={{ width: "100%", fontFamily: "monospace", marginBottom: "0.5rem" }}
@@ -640,13 +653,17 @@ export function GuardianManagement() {
                 {isTargetProposeError && (
                   <p className="error-text">
                     {targetProposeWriteError?.message?.includes("rejected_by_user")
-                      ? "Rejected on wallet"
-                      : `Error: ${targetProposeWriteError?.message?.split("\n")[0]}`}
+                      ? t("guardianManagement.rejectedOnWallet")
+                      : t("guardianManagement.errorPrefix", { message: targetProposeWriteError?.message?.split("\n")[0] })}
                   </p>
                 )}
                 <div className="actions-row">
                   <button onClick={handleTargetPropose} disabled={isTargetProposePending || isTargetProposeConfirming}>
-                    {isTargetProposePending ? "Confirm in wallet..." : isTargetProposeConfirming ? "Waiting for network..." : "Propose Recovery"}
+                    {isTargetProposePending
+                      ? t("guardianManagement.confirmInWallet")
+                      : isTargetProposeConfirming
+                      ? t("guardianManagement.waitingForNetwork")
+                      : t("guardianManagement.proposeRecoveryButton")}
                   </button>
                 </div>
               </>
@@ -655,33 +672,37 @@ export function GuardianManagement() {
             {targetProposalStatus === "active" && targetProposal && (
               <div>
                 <p>
-                  <strong>Proposed by:</strong> {formatAddress(targetProposal.proposedBy)}<br />
-                  <strong>New controller:</strong> {formatAddress(targetProposal.newController)}<br />
-                  <strong>Approvals:</strong> {Number(targetProposal.approvalCount)} of {Number(targetThreshold)}<br />
-                  <strong>Timelock:</strong> {timeRemaining(targetProposal.proposedAt, timelock)}
+                  <strong>{t("guardianManagement.proposedByLabel")}</strong> {formatAddress(targetProposal.proposedBy)}<br />
+                  <strong>{t("guardianManagement.newControllerLabel")}</strong> {formatAddress(targetProposal.newController)}<br />
+                  <strong>{t("guardianManagement.approvalsLabel")}</strong> {Number(targetProposal.approvalCount)} of {Number(targetThreshold)}<br />
+                  <strong>{t("guardianManagement.timelockLabel")}</strong> {timeRemaining(t, targetProposal.proposedAt, timelock)}
                 </p>
 
                 {targetIsGuardian && isTargetHasApprovedLoading && (
-                  <p className="muted">Checking approval status…</p>
+                  <p className="muted">{t("guardianManagement.checkingApprovalStatus")}</p>
                 )}
 
                 {targetIsGuardian && !isTargetHasApprovedLoading && !targetHasApproved && (
                   <div className="actions-row">
                     <button onClick={handleTargetApprove} disabled={isTargetApprovePending || isTargetApproveConfirming}>
-                      {isTargetApprovePending ? "Confirm in wallet..." : isTargetApproveConfirming ? "Waiting for network..." : "Approve Recovery"}
+                      {isTargetApprovePending
+                        ? t("guardianManagement.confirmInWallet")
+                        : isTargetApproveConfirming
+                        ? t("guardianManagement.waitingForNetwork")
+                        : t("guardianManagement.approveRecoveryButton")}
                     </button>
                   </div>
                 )}
 
                 {targetIsGuardian && !isTargetHasApprovedLoading && targetHasApproved && (
-                  <p><span className="status-badge status-badge--active">✓ You approved</span></p>
+                  <p><span className="status-badge status-badge--active">{t("guardianManagement.youApprovedBadge")}</span></p>
                 )}
 
                 {isTargetApproveError && (
                   <p className="error-text">
                     {targetApproveWriteError?.message?.includes("rejected_by_user")
-                      ? "Rejected on wallet"
-                      : `Error: ${targetApproveWriteError?.message?.split("\n")[0]}`}
+                      ? t("guardianManagement.rejectedOnWallet")
+                      : t("guardianManagement.errorPrefix", { message: targetApproveWriteError?.message?.split("\n")[0] })}
                   </p>
                 )}
 
@@ -692,7 +713,11 @@ export function GuardianManagement() {
                       disabled={isTargetExecutePending || isTargetExecuteConfirming}
                       style={{ background: "#d9534f", color: "#fff" }}
                     >
-                      {isTargetExecutePending ? "Confirm in wallet..." : isTargetExecuteConfirming ? "Waiting for network..." : "▶ Execute Recovery Now"}
+                      {isTargetExecutePending
+                        ? t("guardianManagement.confirmInWallet")
+                        : isTargetExecuteConfirming
+                        ? t("guardianManagement.waitingForNetwork")
+                        : t("guardianManagement.executeRecoveryNowButton")}
                     </button>
                   </div>
                 )}
@@ -700,8 +725,8 @@ export function GuardianManagement() {
                 {isTargetExecuteError && (
                   <p className="error-text">
                     {targetExecuteWriteError?.message?.includes("rejected_by_user")
-                      ? "Rejected on wallet"
-                      : `Error: ${targetExecuteWriteError?.message?.split("\n")[0]}`}
+                      ? t("guardianManagement.rejectedOnWallet")
+                      : t("guardianManagement.errorPrefix", { message: targetExecuteWriteError?.message?.split("\n")[0] })}
                   </p>
                 )}
               </div>
@@ -709,13 +734,13 @@ export function GuardianManagement() {
 
             {targetProposalStatus === "executed" && targetProposal && (
               <p>
-                <span className="status-badge status-badge--active">✓ Recovery executed</span>{" "}
-                New controller: {formatAddress(targetProposal.newController)}.
+                <span className="status-badge status-badge--active">{t("guardianManagement.recoveryExecutedBadge")}</span>{" "}
+                {t("guardianManagement.newControllerNote", { address: formatAddress(targetProposal.newController) })}
               </p>
             )}
 
             {targetProposalStatus === "cancelled" && (
-              <p><span className="status-badge status-badge--revoked">✕ Recovery cancelled</span></p>
+              <p><span className="status-badge status-badge--revoked">{t("guardianManagement.recoveryCancelledBadge")}</span></p>
             )}
           </>
         )}
@@ -724,42 +749,50 @@ export function GuardianManagement() {
       {/* ── Active Proposal ── */}
       {proposalStatus === "active" && proposal && (
         <div className="card" style={{ borderColor: "#d9534f" }}>
-          <h3 style={{ marginTop: 0, color: "#d9534f" }}>⚠ Recovery Proposed</h3>
+          <h3 style={{ marginTop: 0, color: "#d9534f" }}>{t("guardianManagement.recoveryProposedTitle")}</h3>
           <p>
-            <strong>Proposed by:</strong> {formatAddress(proposal.proposedBy)}<br />
-            <strong>New controller:</strong> {formatAddress(proposal.newController)}<br />
-            <strong>Approvals:</strong> {Number(proposal.approvalCount)} of {Number(threshold)}<br />
-            <strong>Timelock:</strong> {timeRemaining(proposal.proposedAt, timelock)}
+            <strong>{t("guardianManagement.proposedByLabel")}</strong> {formatAddress(proposal.proposedBy)}<br />
+            <strong>{t("guardianManagement.newControllerLabel")}</strong> {formatAddress(proposal.newController)}<br />
+            <strong>{t("guardianManagement.approvalsLabel")}</strong> {Number(proposal.approvalCount)} of {Number(threshold)}<br />
+            <strong>{t("guardianManagement.timelockLabel")}</strong> {timeRemaining(t, proposal.proposedAt, timelock)}
           </p>
 
           {isGuardian && isHasApprovedLoading && (
-            <p className="muted">Checking approval status…</p>
+            <p className="muted">{t("guardianManagement.checkingApprovalStatus")}</p>
           )}
 
           {isGuardian && !isHasApprovedLoading && !hasApproved && (
             <div className="actions-row">
               <button onClick={handleApprove} disabled={isApprovePending || isApproveConfirming}>
-                {isApprovePending ? "Confirm in wallet..." : isApproveConfirming ? "Waiting for network..." : "Approve Recovery"}
+                {isApprovePending
+                  ? t("guardianManagement.confirmInWallet")
+                  : isApproveConfirming
+                  ? t("guardianManagement.waitingForNetwork")
+                  : t("guardianManagement.approveRecoveryButton")}
               </button>
             </div>
           )}
 
           {isGuardian && !isHasApprovedLoading && hasApproved && (
-            <p><span className="status-badge status-badge--active">✓ You approved</span></p>
+            <p><span className="status-badge status-badge--active">{t("guardianManagement.youApprovedBadge")}</span></p>
           )}
 
           {isApproveError && (
             <p className="error-text">
               {approveWriteError?.message?.includes("rejected_by_user")
-                ? "Rejected on wallet"
-                : `Error: ${approveWriteError?.message?.split("\n")[0]}`}
+                ? t("guardianManagement.rejectedOnWallet")
+                : t("guardianManagement.errorPrefix", { message: approveWriteError?.message?.split("\n")[0] })}
             </p>
           )}
 
           {canExecute && (
             <div className="actions-row">
               <button onClick={handleExecute} disabled={isExecutePending || isExecuteConfirming} style={{ background: "#d9534f", color: "#fff" }}>
-                {isExecutePending ? "Confirm in wallet..." : isExecuteConfirming ? "Waiting for network..." : "▶ Execute Recovery Now"}
+                {isExecutePending
+                  ? t("guardianManagement.confirmInWallet")
+                  : isExecuteConfirming
+                  ? t("guardianManagement.waitingForNetwork")
+                  : t("guardianManagement.executeRecoveryNowButton")}
               </button>
             </div>
           )}
@@ -767,8 +800,8 @@ export function GuardianManagement() {
           {isExecuteError && (
             <p className="error-text">
               {executeWriteError?.message?.includes("rejected_by_user")
-                ? "Rejected on wallet"
-                : `Error: ${executeWriteError?.message?.split("\n")[0]}`}
+                ? t("guardianManagement.rejectedOnWallet")
+                : t("guardianManagement.errorPrefix", { message: executeWriteError?.message?.split("\n")[0] })}
             </p>
           )}
 
@@ -779,7 +812,9 @@ export function GuardianManagement() {
               className="small-btn"
               style={{ color: "#888" }}
             >
-              {isCancelPending || isCancelConfirming ? "Processing..." : "Cancel Proposal (controller only)"}
+              {isCancelPending || isCancelConfirming
+                ? t("guardianManagement.processingButton")
+                : t("guardianManagement.cancelProposalButton")}
             </button>
           </div>
 
@@ -787,8 +822,8 @@ export function GuardianManagement() {
           {isCancelError && (
             <p className="error-text">
               {cancelWriteError?.message?.includes("rejected_by_user")
-                ? "Rejected on Ledger"
-                : `Error: ${cancelWriteError?.message?.split("\n")[0]}`}
+                ? t("guardianManagement.rejectedOnLedger")
+                : t("guardianManagement.errorPrefix", { message: cancelWriteError?.message?.split("\n")[0] })}
             </p>
           )}
         </div>
@@ -797,11 +832,11 @@ export function GuardianManagement() {
       {/* ── No active proposal, guardian can propose ── */}
       {isConfigured && isGuardian && proposalStatus === "none" && (
         <div className="card">
-          <h3 style={{ marginTop: 0 }}>Propose Recovery</h3>
-          <p className="muted">If the identity owner lost access, propose a new controller wallet.</p>
+          <h3 style={{ marginTop: 0 }}>{t("guardianManagement.proposeRecoveryButton")}</h3>
+          <p className="muted">{t("guardianManagement.proposeRecoveryIntro")}</p>
           <input
             type="text"
-            placeholder="New controller address (0x...)"
+            placeholder={t("guardianManagement.newControllerPlaceholder")}
             value={newController}
             onChange={(e) => setNewController(e.target.value)}
             style={{ width: "100%", fontFamily: "monospace", marginBottom: "0.5rem" }}
@@ -810,13 +845,17 @@ export function GuardianManagement() {
           {isProposeError && (
             <p className="error-text">
               {proposeWriteError?.message?.includes("rejected_by_user")
-                ? "Rejected on wallet"
-                : `Error: ${proposeWriteError?.message?.split("\n")[0]}`}
+                ? t("guardianManagement.rejectedOnWallet")
+                : t("guardianManagement.errorPrefix", { message: proposeWriteError?.message?.split("\n")[0] })}
             </p>
           )}
           <div className="actions-row">
             <button onClick={handlePropose} disabled={isProposePending || isProposeConfirming}>
-              {isProposePending ? "Confirm in wallet..." : isProposeConfirming ? "Waiting for network..." : "Propose Recovery"}
+              {isProposePending
+                ? t("guardianManagement.confirmInWallet")
+                : isProposeConfirming
+                ? t("guardianManagement.waitingForNetwork")
+                : t("guardianManagement.proposeRecoveryButton")}
             </button>
           </div>
         </div>
@@ -825,15 +864,15 @@ export function GuardianManagement() {
       {/* ── Executed / Cancelled proposal ── */}
       {proposalStatus === "executed" && (
         <div className="card" style={{ borderColor: "#5cb85c" }}>
-          <p><span className="status-badge status-badge--active">✓ Recovery executed</span></p>
-          <p className="muted">New controller: {formatAddress(proposal!.newController)}. You may need to reconnect with the new wallet.</p>
+          <p><span className="status-badge status-badge--active">{t("guardianManagement.recoveryExecutedBadge")}</span></p>
+          <p className="muted">{t("guardianManagement.reconnectNote", { address: formatAddress(proposal!.newController) })}</p>
         </div>
       )}
 
       {proposalStatus === "cancelled" && (
         <div className="card" style={{ borderColor: "#888" }}>
-          <p><span className="status-badge status-badge--revoked">✕ Recovery cancelled</span></p>
-          <p className="muted">The controller cancelled the recovery proposal. No action needed.</p>
+          <p><span className="status-badge status-badge--revoked">{t("guardianManagement.recoveryCancelledBadge")}</span></p>
+          <p className="muted">{t("guardianManagement.cancelledNote")}</p>
         </div>
       )}
     </div>

@@ -1,0 +1,14 @@
+{
+  "serverUrlLabel": "服务器地址",
+  "authenticating": "正在验证...",
+  "authenticate": "验证身份",
+  "authenticated": "✓ 已验证",
+  "identityTokenLabel": "身份 #{{id}} · 令牌",
+  "signing": "正在签名...",
+  "confirmInWallet": "请在钱包中确认...",
+  "waitingForNetwork": "等待网络...",
+  "sessionRegistered": "✓ 会话已注册",
+  "registerSessionOnChain": "在链上注册会话",
+  "sessionLabel": "会话",
+  "registeredCheckActive": "已注册。可在活跃会话中查看并撤销。"
+}

@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
+import { useTranslation } from "react-i18next";
 import { useAccount, useReadContract, useSwitchChain, useDisconnect } from "wagmi";
 import { useQueryClient } from "@tanstack/react-query";
 import { base } from "wagmi/chains";
@@ -53,6 +54,7 @@ function LogoIcon() {
 }
 
 function App() {
+  const { t } = useTranslation();
   const { isConnected, address, chainId } = useAccount();
   const { disconnect } = useDisconnect();
   const [activeTab, setActiveTab] = useState<Tab>("dashboard");
@@ -170,7 +172,7 @@ function App() {
           <div className="topbar-right">
             {displayUsername && (
               <button className="topbar-btn" onClick={() => setLoginOpen(true)}>
-                ⎋ Login
+                {t("app.topbar.login")}
               </button>
             )}
             {displayUsername && (
@@ -180,7 +182,7 @@ function App() {
               <button
                 className="topbar-btn"
                 onClick={() => queryClient.invalidateQueries()}
-                title="Refresh"
+                title={t("app.topbar.refresh")}
               >
                 ↻
               </button>
@@ -189,40 +191,40 @@ function App() {
               <button
                 className="topbar-btn topbar-btn-danger"
                 onClick={() => disconnect()}
-                title="Disconnect wallet"
+                title={t("app.topbar.disconnectWallet")}
               >
-                Disconnect wallet
+                {t("app.topbar.disconnectWallet")}
               </button>
             ) : (
               <button
                 className="topbar-btn"
                 onClick={() => setConnectModalOpen(true)}
               >
-                Connect wallet
+                {t("app.topbar.connectWallet")}
               </button>
             )}
             <button
               className="topbar-btn"
               onClick={() => setDonateOpen(true)}
-              title="Donate to TruthID"
+              title={t("app.topbar.donate")}
             >
               ♥
             </button>
             <button
               className="topbar-btn topbar-btn-danger"
               onClick={handleLogout}
-              title="Log out and forget this identity"
+              title={t("app.topbar.logoutTitle")}
             >
-              Log out
+              {t("app.topbar.logout")}
             </button>
           </div>
         </header>
 
         {updateVersion && !updateDismissed && (
           <div className="update-banner">
-            <span>⬆ TruthID {updateVersion} available</span>
+            <span>⬆ {t("app.updateBanner.available", { version: updateVersion })}</span>
             <a href={updateUrl} target="_blank" rel="noreferrer" className="update-banner-link">
-              Download
+              {t("app.updateBanner.download")}
             </a>
             <button className="update-banner-dismiss" onClick={() => setUpdateDismissed(true)}>
               ✕
@@ -233,23 +235,23 @@ function App() {
         <main className="main-content">
           {isWrongNetwork && (
             <div className="card">
-              <p>Wrong network. TruthID runs on Base Mainnet.</p>
+              <p>{t("app.wrongNetwork.message")}</p>
               <button onClick={() => switchChain({ chainId: base.id })} disabled={isSwitching}>
-                {isSwitching ? "Switching..." : "Switch to Base Mainnet"}
+                {isSwitching ? t("app.wrongNetwork.switching") : t("app.wrongNetwork.switchButton")}
               </button>
             </div>
           )}
 
           {!isWrongNetwork && isLoadingIdentity && (
-            <p className="muted">Loading...</p>
+            <p className="muted">{t("app.loading")}</p>
           )}
 
           {!isWrongNetwork && !isLoadingIdentity && isIdentityError && !storedUsername && (
             <div className="card">
               <p className="error-text">
-                Failed to load identity: {identityError?.message?.split("\n")[0]}
+                {t("app.identityError.message", { error: identityError?.message?.split("\n")[0] })}
               </p>
-              <button onClick={() => refetchIdentity()}>Try again</button>
+              <button onClick={() => refetchIdentity()}>{t("app.identityError.retry")}</button>
             </div>
           )}
 

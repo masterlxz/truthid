@@ -1,0 +1,17 @@
+{
+  "title": "Sign request",
+  "defaultAppName": "An app",
+  "wantsToCall": "wants to call a function on your smart account.",
+  "signatureMismatchReason": "declared function signature does not match callData",
+  "couldNotVerify": "⚠ Could not verify declared function ({{reason}})",
+  "unverifiedClaim": "App claims this function (unverified — does not match callData):",
+  "rawCallData": "Raw call data:",
+  "contractLabel": "Contract:",
+  "valueLine": "Value: {{value}} ETH",
+  "requestExpired": "This request has expired.",
+  "requestExpiredNoUserOp": "This request has expired. No UserOp was sent.",
+  "userOpNotConfirmed": "UserOperation accepted but not confirmed yet — it may still confirm later.",
+  "signing": "Signing...",
+  "approve": "Approve",
+  "reject": "Reject"
+}

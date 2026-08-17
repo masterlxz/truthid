@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useConnect } from "wagmi";
 import { ledger, setLedgerAccountIndex } from "../connectors/ledger";
@@ -38,15 +39,12 @@ function statusToStep(status: string): number {
   return 0; // not_connected or anything else
 }
 
-const STEP_LABELS = [
-  "Connect your Ledger via USB",
-  "Unlock with your PIN on the device",
-  "Open the Ethereum app on your Ledger",
-];
+const STEP_KEYS = ["connectUsb", "unlockPin", "openEthereumApp"] as const;
 
 const ACCOUNT_COUNT = 5;
 
 export function ConnectLedger({ onBack }: { onBack: () => void }) {
+  const { t } = useTranslation();
   const { connectAsync } = useConnect();
   const [phase, setPhase] = useState<LedgerPhase>("detecting");
   const [status, setStatus] = useState("not_connected");
@@ -145,7 +143,7 @@ export function ConnectLedger({ onBack }: { onBack: () => void }) {
       await withTimeout(
         connectAsync({ connector: ledger }),
         HID_TIMEOUT_MS,
-        "Ledger did not respond in time. Make sure it's unlocked with the Ethereum app open, then try again.",
+        t("connectLedger.connectTimeout"),
       );
     } catch (e) {
       setConnectError(String(e));
@@ -161,15 +159,15 @@ export function ConnectLedger({ onBack }: { onBack: () => void }) {
   return (
     <div className="ledger-connect">
       <button className="back-btn" onClick={handleBack}>
-        ← Back
+        ← {t("connectLedger.back")}
       </button>
 
       {phase === "detecting" && (
         <>
-          <h2 className="ledger-connect-title">Connect your Ledger</h2>
+          <h2 className="ledger-connect-title">{t("connectLedger.title")}</h2>
 
           <div className="stepper">
-            {STEP_LABELS.map((label, i) => {
+            {STEP_KEYS.map((key, i) => {
               const state =
                 i < activeStep ? "done" : i === activeStep ? "active" : "pending";
               return (
@@ -177,7 +175,7 @@ export function ConnectLedger({ onBack }: { onBack: () => void }) {
                   <div className="step-indicator">
                     {state === "done" ? "✓" : i + 1}
                   </div>
-                  <span className="step-text">{label}</span>
+                  <span className="step-text">{t(`connectLedger.steps.${key}`)}</span>
                 </div>
               );
             })}
@@ -185,7 +183,7 @@ export function ConnectLedger({ onBack }: { onBack: () => void }) {
 
           {isAccessDenied && (
             <div className="ledger-error-box">
-              Could not access the Ledger. Close Ledger Live if it is open, or check USB permissions (Linux: udev rule).
+              {t("connectLedger.accessDenied")}
             </div>
           )}
         </>
@@ -193,7 +191,7 @@ export function ConnectLedger({ onBack }: { onBack: () => void }) {
 
       {phase === "account-select" && (
         <>
-          <h2 className="ledger-connect-title">Select account</h2>
+          <h2 className="ledger-connect-title">{t("connectLedger.selectAccount")}</h2>
 
           <div className="account-list">
             {Array.from({ length: ACCOUNT_COUNT }, (_, i) => (
@@ -205,13 +203,13 @@ export function ConnectLedger({ onBack }: { onBack: () => void }) {
               >
                 <div className="account-radio" />
                 <div className="account-option-info">
-                  <span className="account-option-name">Account {i}</span>
+                  <span className="account-option-name">{t("connectLedger.accountName", { index: i })}</span>
                   {addresses[i] !== null ? (
                     <code className="account-option-address">
                       {addresses[i]!.slice(0, 6)}…{addresses[i]!.slice(-4)}
                     </code>
                   ) : (
-                    <span className="account-option-loading">loading…</span>
+                    <span className="account-option-loading">{t("connectLedger.loading")}</span>
                   )}
                 </div>
               </button>
@@ -225,7 +223,7 @@ export function ConnectLedger({ onBack }: { onBack: () => void }) {
           )}
 
           <button onClick={handleConnect} disabled={isConnecting || addressesLoading}>
-            {isConnecting ? "Connecting..." : `Connect Account ${selectedIndex}`}
+            {isConnecting ? t("connectLedger.connecting") : t("connectLedger.connectAccount", { index: selectedIndex })}
           </button>
         </>
       )}

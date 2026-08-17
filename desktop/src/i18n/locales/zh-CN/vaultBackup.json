@@ -1,0 +1,19 @@
+{
+  "title": "备份",
+  "descriptionBefore": "可将整个密码库（密码、2FA、通行密钥、配置文件）导出到或从",
+  "descriptionAfter": "文件恢复。使用独立密码加密，与您的钱包无关 — 请妥善保管此密码，一旦丢失将无法找回。",
+  "exportTitle": "导出",
+  "exportPasswordLabel": "导出密码",
+  "confirmPasswordLabel": "确认密码",
+  "backupSaved": "备份已保存 ✓",
+  "exporting": "正在导出...",
+  "exportButton": "导出备份",
+  "importTitle": "导入",
+  "importDescriptionBefore": "请选择",
+  "importDescriptionAfter": "文件，并输入导出时设置的密码。",
+  "backupPasswordLabel": "备份密码",
+  "backupImported": "备份已导入 ✓",
+  "importing": "正在导入...",
+  "importButton": "选择文件并导入",
+  "confirmOverwrite": "这将用备份文件的内容覆盖此设备上的整个本地密码库。此操作无法撤销。是否继续？"
+}

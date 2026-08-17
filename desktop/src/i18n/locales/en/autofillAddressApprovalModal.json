@@ -1,0 +1,7 @@
+{
+  "title": "Autofill request",
+  "description": "The TruthID browser extension wants to fill a form with a saved address.",
+  "expired": "This request has expired.",
+  "useThisAddress": "Use this address",
+  "denyRequest": "Deny request"
+}

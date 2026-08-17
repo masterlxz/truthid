@@ -1,0 +1,45 @@
+{
+  "identityAlreadyRegistered": "Identidad ya registrada:",
+  "identityCreatedSuccess": "¡Identidad creada con éxito!",
+  "fundedWith": "Cuenta inteligente financiada con {{amount}} ETH. Tu Ledger no pagará gas por operaciones futuras.",
+  "vaultKey": {
+    "intro": "La clave de cifrado de tu vault se deriva de la firma de tu wallet. Firma una vez ahora (mientras tu wallet está conectada) para desbloquear el gestor de contraseñas en este dispositivo.",
+    "signatureRejected": "Firma rechazada en el Ledger.",
+    "confirmSignature": "Confirmando firma en el Ledger...",
+    "setupButton": "Configurar clave del vault",
+    "ready": "Clave del vault lista — ya puedes usar el gestor de contraseñas."
+  },
+  "steps": {
+    "signingConsent": "Firmando el consentimiento",
+    "creatingIdentity": "Creando identidad on-chain",
+    "deployingAccount": "Desplegando cuenta inteligente",
+    "fundingAccount": "Financiando cuenta inteligente"
+  },
+  "form": {
+    "title": "Crear identidad",
+    "usernamePlaceholder": "elige un nombre de usuario",
+    "usernameFormatHint": "Solo letras minúsculas, números, puntos y guiones (máx. 64 caracteres)",
+    "usernameTaken": "Ese nombre de usuario ya está en uso",
+    "fundingLabel": "Financiamiento inicial (ETH)",
+    "fundingInvalid": "Ingresa un monto de ETH válido",
+    "explanation": "Esta configuración usa una firma más 3 transacciones. Tu Ledger paga el gas una sola vez. Después de la configuración, tu cuenta inteligente paga su propio gas para todas las operaciones futuras."
+  },
+  "errors": {
+    "rejectedOnLedger": "Rechazado en el Ledger.",
+    "prefixed": "Error: {{message}}",
+    "operationFailed": "la operación falló",
+    "unexpectedConsentFormat": "Formato de firma de consentimiento inesperado."
+  },
+  "actions": {
+    "tryAgain": "Intentar de nuevo",
+    "registerIdentity": "Registrar identidad",
+    "step1of4": "Paso 1/4",
+    "confirmTx2InWallet": "Confirmando tx 2/4 en la wallet...",
+    "waitingForConfirmation": "Esperando confirmación...",
+    "step2of4": "Paso 2/4",
+    "confirmTx3InWallet": "Confirmando tx 3/4 en la wallet...",
+    "step3of4": "Paso 3/4",
+    "confirmTx4InWallet": "Confirmando tx 4/4 en la wallet...",
+    "step4of4": "Paso 4/4"
+  }
+}

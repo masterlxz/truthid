@@ -1,0 +1,19 @@
+{
+  "title": "Backup",
+  "descriptionBefore": "Exporta ou restaura o vault inteiro (senhas, 2FA, passkeys, perfis) para um arquivo",
+  "descriptionAfter": "cifrado com senha própria, separada da sua carteira — guarde essa senha em local seguro, ela não pode ser recuperada.",
+  "exportTitle": "Exportar",
+  "exportPasswordLabel": "Senha de exportação",
+  "confirmPasswordLabel": "Confirmar senha",
+  "backupSaved": "Backup salvo ✓",
+  "exporting": "Exportando...",
+  "exportButton": "Exportar backup",
+  "importTitle": "Importar",
+  "importDescriptionBefore": "Escolha o arquivo",
+  "importDescriptionAfter": "e informe a senha usada na exportação.",
+  "backupPasswordLabel": "Senha do backup",
+  "backupImported": "Backup importado ✓",
+  "importing": "Importando...",
+  "importButton": "Escolher arquivo e importar",
+  "confirmOverwrite": "Isso vai sobrescrever TODO o vault local deste dispositivo com o conteúdo do arquivo de backup. Não pode ser desfeito. Continuar?"
+}

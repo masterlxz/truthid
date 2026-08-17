@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { useTranslation } from "react-i18next";
 import { useIncomingPinRequest } from "../hooks/useIncomingPinRequest";
 import { useRequestExpiry } from "../hooks/useRequestExpiry";
 import { respondToRequest } from "../services/respondToRequest";
@@ -12,6 +13,7 @@ import { respondToRequest } from "../services/respondToRequest";
  * VaultSettings) — a chave privada da wallet nunca sai do Rust.
  */
 export function PinApprovalModal() {
+  const { t } = useTranslation();
   const { request, clear } = useIncomingPinRequest();
   const [error, setError] = useState<string | null>(null);
   const expired = useRequestExpiry(request?.expiresAtMs ?? null);
@@ -41,25 +43,24 @@ export function PinApprovalModal() {
     <div className="modal-overlay">
       <div className="modal-box">
         <div className="modal-header">
-          <h2 className="modal-title">Pinning request</h2>
+          <h2 className="modal-title">{t("pinApprovalModal.title")}</h2>
         </div>
 
         <div className="card">
           <p>
-            <strong>{request.appName || "An app"}</strong> wants to publish content using your
-            configured Arweave wallet. Content is always sent already encrypted — TruthID never
-            sees or stores it in plain text.
+            <strong>{request.appName || t("pinApprovalModal.defaultAppName")}</strong>{" "}
+            {t("pinApprovalModal.description")}
           </p>
 
-          {expired && <p className="error-text">This request has expired.</p>}
+          {expired && <p className="error-text">{t("pinApprovalModal.expired")}</p>}
           {error && <p className="error-text">{error}</p>}
 
           <div className="actions-row" style={{ marginTop: "0.75rem" }}>
             <button onClick={handleApprove} disabled={expired}>
-              Approve
+              {t("pinApprovalModal.approve")}
             </button>
             <button onClick={handleReject} className="topbar-btn-danger">
-              Reject
+              {t("pinApprovalModal.reject")}
             </button>
           </div>
         </div>

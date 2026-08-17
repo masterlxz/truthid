@@ -1,0 +1,16 @@
+{
+  "back": "返回",
+  "title": "连接您的 Ledger",
+  "steps": {
+    "connectUsb": "通过 USB 连接您的 Ledger",
+    "unlockPin": "在设备上输入 PIN 解锁",
+    "openEthereumApp": "在 Ledger 上打开 Ethereum 应用"
+  },
+  "accessDenied": "无法访问 Ledger。请关闭 Ledger Live（如果已打开），或检查 USB 权限（Linux：udev 规则）。",
+  "selectAccount": "选择账户",
+  "accountName": "账户 {{index}}",
+  "loading": "加载中…",
+  "connecting": "正在连接...",
+  "connectAccount": "连接账户 {{index}}",
+  "connectTimeout": "Ledger 未能及时响应。请确认已解锁并打开 Ethereum 应用，然后重试。"
+}

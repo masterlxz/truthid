@@ -1,0 +1,5 @@
+{
+  "title": "扫描 2FA 二维码",
+  "cameraError": "无法访问摄像头：{{error}}",
+  "instruction": "将摄像头对准 2FA 设置界面上的二维码"
+}

@@ -1,0 +1,8 @@
+{
+  "title": "Solicitud de pinning",
+  "defaultAppName": "Una app",
+  "description": "quiere publicar contenido usando tu wallet de Arweave configurada. El contenido siempre se envía ya cifrado — TruthID nunca lo ve ni lo almacena en texto plano.",
+  "expired": "Esta solicitud ha expirado.",
+  "approve": "Aprobar",
+  "reject": "Rechazar"
+}

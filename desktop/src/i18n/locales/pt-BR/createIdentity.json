@@ -1,0 +1,45 @@
+{
+  "identityAlreadyRegistered": "Identidade já registrada:",
+  "identityCreatedSuccess": "Identidade criada com sucesso!",
+  "fundedWith": "Smart account financiada com {{amount}} ETH. Seu Ledger não será cobrado por operações futuras.",
+  "vaultKey": {
+    "intro": "Sua chave de criptografia do vault é derivada da assinatura da sua carteira. Assine uma vez agora (com a carteira conectada) para desbloquear o gerenciador de senhas neste dispositivo.",
+    "signatureRejected": "Assinatura rejeitada no Ledger.",
+    "confirmSignature": "Confirme a assinatura no Ledger...",
+    "setupButton": "Configurar chave do vault",
+    "ready": "Chave do vault pronta — você já pode usar o gerenciador de senhas."
+  },
+  "steps": {
+    "signingConsent": "Assinando consentimento",
+    "creatingIdentity": "Criando identidade on-chain",
+    "deployingAccount": "Implantando smart account",
+    "fundingAccount": "Financiando smart account"
+  },
+  "form": {
+    "title": "Criar identidade",
+    "usernamePlaceholder": "escolha um nome de usuário",
+    "usernameFormatHint": "Apenas letras minúsculas, números, pontos e hífens (máx. 64 caracteres)",
+    "usernameTaken": "Nome de usuário já em uso",
+    "fundingLabel": "Financiamento inicial (ETH)",
+    "fundingInvalid": "Informe um valor de ETH válido",
+    "explanation": "Esta configuração usa uma assinatura mais 3 transações. Seu Ledger paga o gas apenas uma vez. Depois da configuração, sua smart account paga seu próprio gas em todas as operações futuras."
+  },
+  "errors": {
+    "rejectedOnLedger": "Rejeitado no Ledger.",
+    "prefixed": "Erro: {{message}}",
+    "operationFailed": "operação falhou",
+    "unexpectedConsentFormat": "Formato inesperado da assinatura de consentimento."
+  },
+  "actions": {
+    "tryAgain": "Tentar de novo",
+    "registerIdentity": "Registrar identidade",
+    "step1of4": "Etapa 1/4",
+    "confirmTx2InWallet": "Confirme a tx 2/4 na carteira...",
+    "waitingForConfirmation": "Aguardando confirmação...",
+    "step2of4": "Etapa 2/4",
+    "confirmTx3InWallet": "Confirme a tx 3/4 na carteira...",
+    "step3of4": "Etapa 3/4",
+    "confirmTx4InWallet": "Confirme a tx 4/4 na carteira...",
+    "step4of4": "Etapa 4/4"
+  }
+}

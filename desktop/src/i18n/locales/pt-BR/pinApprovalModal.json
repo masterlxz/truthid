@@ -1,0 +1,8 @@
+{
+  "title": "Solicitação de publicação",
+  "defaultAppName": "Um app",
+  "description": "quer publicar conteúdo usando sua carteira Arweave configurada. O conteúdo é sempre enviado já cifrado — o TruthID nunca vê nem armazena em texto puro.",
+  "expired": "Esta solicitação expirou.",
+  "approve": "Aprovar",
+  "reject": "Rejeitar"
+}

@@ -1,0 +1,5 @@
+{
+  "title": "Scan 2FA QR code",
+  "cameraError": "Couldn't access the camera: {{error}}",
+  "instruction": "Point the camera at the QR code on the 2FA setup screen"
+}

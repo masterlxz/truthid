@@ -1,0 +1,19 @@
+{
+  "cannotPublishNoIdentity": "Nenhuma identidade carregada — não é possível publicar.",
+  "title_one": "Nova credencial da extensão",
+  "title_other": "{{count}} novas credenciais da extensão",
+  "description_one": "A extensão TruthID do navegador quer salvar uma nova credencial no seu Vault.",
+  "description_other": "A extensão TruthID do navegador quer salvar {{count}} novas credenciais no seu Vault.",
+  "fieldSite": "Site",
+  "updatingExistingEntry": "Atualizando entrada existente",
+  "newEntry": "Nova entrada",
+  "fieldUsername": "Usuário",
+  "fieldPassword": "Senha",
+  "hide": "Ocultar",
+  "show": "Mostrar",
+  "newPasskeyFor": "🔑 + nova passkey para {{rpId}}",
+  "requestExpired": "Esta solicitação expirou.",
+  "publishing": "Publicando...",
+  "approve": "Aprovar",
+  "reject": "Rejeitar"
+}

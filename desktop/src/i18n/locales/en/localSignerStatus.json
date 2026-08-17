@@ -1,0 +1,8 @@
+{
+  "title": "Local app channel",
+  "active": "✓ Active — port {{port}}",
+  "inactive": "Inactive",
+  "stop": "Stop",
+  "stopping": "Stopping...",
+  "start": "Start"
+}

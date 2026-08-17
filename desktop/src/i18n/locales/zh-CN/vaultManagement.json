@@ -1,0 +1,137 @@
+{
+  "profilePicker": {
+    "noProfiles": "尚未创建任何配置文件 — 可在下方\"管理配置文件\"中创建。"
+  },
+  "entryType": {
+    "credential": "密码",
+    "document": "文档",
+    "address": "地址",
+    "creditCard": "银行卡"
+  },
+  "entryForm": {
+    "fieldSite": "网站 *",
+    "sitePlaceholder": "例如：github.com",
+    "fieldUrl": "网址",
+    "urlPlaceholder": "https://...",
+    "fieldUsername": "用户名 *",
+    "usernamePlaceholder": "@用户名 或 邮箱",
+    "fieldPassword": "密码 *",
+    "generatePasswordTitle": "生成密码",
+    "fieldName": "名称 *",
+    "namePlaceholder": "例如：身份证、护照、合同...",
+    "fieldFile": "文件 *",
+    "changeFile": "更换文件",
+    "chooseFile": "选择文件",
+    "fieldLabel": "标签 *",
+    "labelPlaceholderAddress": "例如：家、公司、收货地址",
+    "fieldFullName": "全名 *",
+    "fieldStreet": "街道 *",
+    "fieldNumber": "门牌号 *",
+    "fieldComplement": "补充地址",
+    "fieldNeighborhood": "社区 *",
+    "fieldCity": "城市 *",
+    "fieldState": "省/州 *",
+    "fieldZipCode": "邮政编码 *",
+    "fieldCountry": "国家 *",
+    "fieldPhone": "电话",
+    "labelPlaceholderCard": "例如：招商银行白金卡、Amex Gold",
+    "fieldCardholder": "持卡人 *",
+    "fieldNetwork": "卡组织 *",
+    "fieldExpiryMonth": "有效期 - 月 *",
+    "expiryMonthPlaceholder": "MM",
+    "fieldExpiryYear": "有效期 - 年 *",
+    "expiryYearPlaceholder": "YYYY",
+    "fieldCvv": "CVV *",
+    "fieldBank": "银行",
+    "fieldNotes": "备注",
+    "notesPlaceholder": "可选备注",
+    "fieldGroups": "分组",
+    "field2fa": "2FA 密钥（可选）",
+    "totpPlaceholder": "Base32 密钥 或 otpauth:// URI...",
+    "scanQrTitle": "通过摄像头扫描二维码",
+    "loadQrTitle": "从图片加载二维码",
+    "fieldPasskey": "通行密钥（可选）",
+    "regeneratePasskey": "重新生成",
+    "generatePasskey": "生成通行密钥",
+    "saving": "正在保存...",
+    "save": "保存",
+    "cancel": "取消",
+    "noQrCodeFound": "该图片中未找到二维码",
+    "fileTooLarge": "文件过大（{{size}}）— 限制为 {{limit}}。"
+  },
+  "unlockVault": {
+    "checking": "正在检查密码库密钥...",
+    "title": "解锁密码库",
+    "description": "您的密码库密钥由钱包签名（RFC 6979）派生。请用 Ledger 或已连接的钱包签名一次，以在此设备上解锁密码库。密钥会缓存在操作系统的密钥环中 — 日常使用无需再次连接钱包。",
+    "invalidSignature": "签名无效",
+    "signatureRejected": "已在 Ledger 上拒绝签名。",
+    "errorPrefix": "错误：{{message}}",
+    "operationFailed": "操作失败",
+    "confirmSignature": "请在钱包中确认签名...",
+    "connectToUnlock": "连接钱包以解锁",
+    "unlock": "解锁密码库"
+  },
+  "header": {
+    "title": "密码库",
+    "backToVault": "← 密码库",
+    "arweaveWalletTitle": "Arweave 钱包",
+    "backupTitle": "备份",
+    "backupButton": "⏏ 备份",
+    "providersButton": "⚙ 提供方"
+  },
+  "status": {
+    "checkingOnChain": "正在检查链上状态...",
+    "versionPrefix": "版本 ",
+    "versionSuffix": " 已在链上注册",
+    "updatedOn": " · 更新于 {{date}}",
+    "notRegistered": "密码库尚未在链上注册",
+    "publishViaDeviceKeyTitle": "使用本地设备密钥签名发布密码库，无需使用 Ledger — 需要已配置 ~/.truthid/bundler_config.json",
+    "publishingViaDeviceKey": "正在通过设备密钥发布...",
+    "publishViaDeviceKeyButton": "通过设备密钥发布（无需 Ledger）"
+  },
+  "migrationNudge": {
+    "text": "此密码库仍发布在旧存储（IPFS）上，该存储已不再提供专用固定服务 — 没有本地缓存的新设备可能无法完成配对。请重新发布以迁移到 Arweave。",
+    "migrateButton": "迁移到 Arweave"
+  },
+  "search": {
+    "placeholder": "按网站、用户名或分组搜索..."
+  },
+  "list": {
+    "loading": "加载中...",
+    "noPasswords": "尚未保存任何密码。",
+    "noEntriesFound": "未找到任何条目。",
+    "removeFavorite": "从收藏中移除",
+    "addFavorite": "添加到收藏",
+    "documentFallback": "文档",
+    "addressFallback": "地址",
+    "cardFallback": "银行卡",
+    "download": "下载",
+    "deleteConfirmYes": "是",
+    "deleteConfirmNo": "否"
+  },
+  "newEntry": {
+    "button": "+ 新条目",
+    "title": "新条目"
+  },
+  "profiles": {
+    "manageButton": "管理配置文件（{{count}}）",
+    "description": "创建任意名称的配置文件，并为每个密码打上任意数量合适的配置文件标签。",
+    "none": "尚未创建任何配置文件。",
+    "renameTitle": "重命名",
+    "deleteTitle": "删除",
+    "newProfilePlaceholder": "新配置文件名称",
+    "add": "添加",
+    "renamePrompt": "将配置文件\"{{name}}\"重命名为：",
+    "deleteConfirm": "删除配置文件\"{{name}}\"？它将从所有使用该配置文件的密码中移除。"
+  },
+  "permissions": {
+    "manageButton": "按设备管理权限（{{count}}）",
+    "descriptionPrefix": "控制手机设备是否可以",
+    "descriptionBold": "写入",
+    "descriptionSuffix": "密码库（默认只读）。此桌面端始终拥有完整权限。",
+    "noDevices": "尚未注册任何活跃设备。",
+    "unnamedDevice": "未命名设备",
+    "canWrite": "✓ 可写入",
+    "readOnly": "只读"
+  }
+}

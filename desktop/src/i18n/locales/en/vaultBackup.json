@@ -1,0 +1,19 @@
+{
+  "title": "Backup",
+  "descriptionBefore": "Exports or restores the entire vault (passwords, 2FA, passkeys, profiles) to a",
+  "descriptionAfter": "file. Encrypted with its own password, separate from your wallet — keep this password somewhere safe, it cannot be recovered.",
+  "exportTitle": "Export",
+  "exportPasswordLabel": "Export password",
+  "confirmPasswordLabel": "Confirm password",
+  "backupSaved": "Backup saved ✓",
+  "exporting": "Exporting...",
+  "exportButton": "Export backup",
+  "importTitle": "Import",
+  "importDescriptionBefore": "Choose the",
+  "importDescriptionAfter": "file and enter the password used at export time.",
+  "backupPasswordLabel": "Backup password",
+  "backupImported": "Backup imported ✓",
+  "importing": "Importing...",
+  "importButton": "Choose file and import",
+  "confirmOverwrite": "This will overwrite the ENTIRE local vault on this device with the contents of the backup file. This cannot be undone. Continue?"
+}

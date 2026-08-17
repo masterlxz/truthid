@@ -1,0 +1,17 @@
+{
+  "addDeviceButton": "+ 添加设备",
+  "title": "添加设备",
+  "instructions": "在您的手机上，打开<0>设备 → 显示二维码以配对</0>，然后将显示的数据粘贴到此处：",
+  "deviceAddressLabel": "设备地址",
+  "invalidAddress": "地址无效。",
+  "encryptionKeyLabel": "加密密钥（可选）",
+  "deviceNameLabel": "设备名称",
+  "rejectedOnLedger": "交易已在 Ledger 上拒绝。",
+  "errorPrefix": "错误：{{message}}",
+  "confirmWallet1": "请在钱包中确认（1/2）...",
+  "waitingNetwork1": "等待网络（1/2）...",
+  "confirmWallet2": "请在钱包中确认（2/2）...",
+  "waitingNetwork2": "等待网络（2/2）...",
+  "registerDevice": "注册设备",
+  "cancel": "取消"
+}

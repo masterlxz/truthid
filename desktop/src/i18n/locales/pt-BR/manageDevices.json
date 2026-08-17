@@ -1,0 +1,20 @@
+{
+  "reauthBanner": {
+    "body_one": "{{count}} dispositivo está registrado mas não consegue assinar por esta conta — provavelmente restou de um redeploy da smart account. Reautorizar não exige repareamento, só uma confirmação no Ledger.",
+    "body_other": "{{count}} dispositivos estão registrados mas não conseguem assinar por esta conta — provavelmente restaram de um redeploy da smart account. Reautorizar não exige repareamento, só uma confirmação no Ledger.",
+    "confirmingWallet": "Confirmando na carteira...",
+    "waitingNetwork": "Aguardando a rede...",
+    "confirmButton_one": "Reautorizar {{count}} dispositivo",
+    "confirmButton_other": "Reautorizar {{count}} dispositivos"
+  },
+  "rotationBanner": {
+    "body_one": "Dispositivo revogado — a chave do vault deve ser rotacionada agora, para que o dispositivo revogado perca acesso ao conteúdo que já tinha decifrado. Isso exige a chave pública bruta do {{count}} dispositivo restante (o mesmo campo mostrado durante o pareamento — confira a tela \"Mostrar QR para parear\" dele).",
+    "body_other": "Dispositivo revogado — a chave do vault deve ser rotacionada agora, para que o dispositivo revogado perca acesso ao conteúdo que já tinha decifrado. Isso exige a chave pública bruta de cada um dos {{count}} dispositivos restantes (o mesmo campo mostrado durante o pareamento — confira a tela \"Mostrar QR para parear\" de cada um).",
+    "pubkeyPlaceholder": "0x03... ou 0x04...",
+    "rotatingButton": "Rotacionando o vault para uma nova chave...",
+    "confirmingWallet": "Confirmando na carteira...",
+    "confirmButton": "Rotacionar e redistribuir",
+    "postponeButton": "Adiar",
+    "rotationFailed": "Falha ao rotacionar a chave do vault: {{error}}"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "title": "Autofill request",
+  "description": "The TruthID browser extension wants to fill a form with a saved card.",
+  "cvvSuffix": " · CVV {{cvv}}",
+  "expired": "This request has expired.",
+  "useThisCard": "Use this card",
+  "hide": "Hide",
+  "show": "Show",
+  "denyRequest": "Deny request"
+}

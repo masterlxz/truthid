@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { decodeQrFromImageData } from "../utils/qrDecode";
 
 // Modal de scan ao vivo via webcam — primeiro uso de getUserMedia no
@@ -13,6 +14,7 @@ export function TotpQrScanner({
   onDetected: (raw: string) => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const videoRef = useRef<HTMLVideoElement>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -75,14 +77,14 @@ export function TotpQrScanner({
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal-box" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <h2 className="modal-title">Escanear QR do 2FA</h2>
+          <h2 className="modal-title">{t("totpQrScanner.title")}</h2>
           <button className="modal-close" onClick={onClose}>
             ✕
           </button>
         </div>
         {error ? (
           <p className="error-text" style={{ margin: 0 }}>
-            Não foi possível acessar a câmera: {error}
+            {t("totpQrScanner.cameraError", { error })}
           </p>
         ) : (
           <video
@@ -93,7 +95,7 @@ export function TotpQrScanner({
           />
         )}
         <p className="muted" style={{ margin: "0.75rem 0 0", fontSize: "0.82em", textAlign: "center" }}>
-          Aponte a câmera pro QR code da tela de configuração do 2FA
+          {t("totpQrScanner.instruction")}
         </p>
       </div>
     </div>

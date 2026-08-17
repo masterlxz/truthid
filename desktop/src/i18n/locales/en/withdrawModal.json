@@ -1,0 +1,20 @@
+{
+  "withdrawalSent": "Withdrawal sent!",
+  "sentSummary": "{{amount}} ETH to",
+  "close": "Close",
+  "title": "Withdraw",
+  "destinationLabel": "Destination address",
+  "invalidAddress": "Invalid address.",
+  "amountLabel": "Amount (ETH)",
+  "max": "Max",
+  "available": "Available: {{amount}} ETH",
+  "invalidEthAmount": "Enter a valid ETH amount",
+  "amountExceedsBalance": "Amount exceeds available balance",
+  "rejectedOnLedger": "Rejected on Ledger.",
+  "errorPrefix": "Error: {{message}}",
+  "withdraw": "Withdraw",
+  "confirmInWallet": "Confirm in wallet...",
+  "waitingForConfirmation": "Waiting for confirmation...",
+  "confirming": "Confirming...",
+  "cancel": "Cancel"
+}

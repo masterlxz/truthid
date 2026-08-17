@@ -1,0 +1,7 @@
+{
+  "title": "Solicitação de preenchimento automático",
+  "description": "A extensão TruthID do navegador quer preencher um formulário com um endereço salvo.",
+  "expired": "Esta solicitação expirou.",
+  "useThisAddress": "Usar este endereço",
+  "denyRequest": "Negar solicitação"
+}

@@ -1,0 +1,13 @@
+{
+  "arweaveWallet": {
+    "title": "Arweave Wallet",
+    "description": "The vault (main blob and attached documents) and third-party apps approved via /pin publish to Arweave — this requires a local wallet funded with AR.",
+    "generating": "Generating...",
+    "generate": "Generate Arweave wallet",
+    "copied": "✓ Copied!",
+    "copyAddress": "Copy address",
+    "balance": "Balance: {{balance}} AR",
+    "balanceUnavailable": "Balance unavailable right now",
+    "noBalanceWarning": "No balance yet — buy AR on an exchange and send it to the address above before clicking \"Send\"."
+  }
+}

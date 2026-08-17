@@ -1,11 +1,11 @@
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { Passkey } from "../types";
 import { signAssertion } from "../utils/webauthn";
+import { formatDate } from "../i18n/formatDate";
 
-function formatCreatedAt(secs: number) {
-  return new Date(secs * 1000).toLocaleDateString("pt-BR", {
-    day: "2-digit", month: "2-digit", year: "numeric",
-  });
+function formatCreatedAt(secs: number, language: string) {
+  return formatDate(secs, language, { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 /** Mostra a credencial passkey de uma entrada (RP ID + data de criação) com um
@@ -14,6 +14,7 @@ function formatCreatedAt(secs: number) {
  * mesmo sem a interceptação de `navigator.credentials` (fora de escopo desta
  * fase). Mesmo padrão de "valor + ação" de TotpCode.tsx. */
 export function PasskeyBadge({ passkey }: { passkey: Passkey }) {
+  const { t, i18n } = useTranslation();
   const [result, setResult] = useState<"idle" | "ok" | "error">("idle");
   const [error, setError] = useState<string | null>(null);
 
@@ -42,10 +43,10 @@ export function PasskeyBadge({ passkey }: { passkey: Passkey }) {
         🔑 Passkey
       </span>
       <span className="muted" style={{ fontSize: "0.8em" }}>
-        {passkey.rp_id} · {formatCreatedAt(passkey.created_at)}
+        {passkey.rp_id} · {formatCreatedAt(passkey.created_at, i18n.language)}
       </span>
       <button onClick={handleTest} style={{ padding: "0.15em 0.5em", fontSize: "0.78em" }}>
-        {result === "ok" ? "✓" : result === "error" ? "✕" : "Testar assinatura"}
+        {result === "ok" ? "✓" : result === "error" ? "✕" : t("passkeyBadge.testSignature")}
       </button>
       {error && <span className="error-text" style={{ fontSize: "0.78em" }}>{error}</span>}
     </div>

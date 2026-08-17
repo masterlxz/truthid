@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { useTranslation } from "react-i18next";
 import { useIncomingAutofillAddressRequest } from "../hooks/useIncomingAutofillAddressRequest";
 import { useRequestExpiry } from "../hooks/useRequestExpiry";
 import { respondToRequest } from "../services/respondToRequest";
@@ -13,6 +14,7 @@ import { respondToRequest } from "../services/respondToRequest";
  * mesmo nível de confiança do próprio usuário na própria máquina).
  */
 export function AutofillAddressApprovalModal() {
+  const { t } = useTranslation();
   const { request, clear } = useIncomingAutofillAddressRequest();
   const expired = useRequestExpiry(request?.expiresAtMs ?? null);
 
@@ -34,11 +36,11 @@ export function AutofillAddressApprovalModal() {
     <div className="modal-overlay">
       <div className="modal-box">
         <div className="modal-header">
-          <h2 className="modal-title">Autofill request</h2>
+          <h2 className="modal-title">{t("autofillAddressApprovalModal.title")}</h2>
         </div>
 
         <div className="card">
-          <p>The TruthID browser extension wants to fill a form with a saved address.</p>
+          <p>{t("autofillAddressApprovalModal.description")}</p>
 
           {request.candidates.map((candidate) => (
             <div
@@ -53,17 +55,17 @@ export function AutofillAddressApprovalModal() {
               </p>
               <div className="actions-row" style={{ marginTop: "0.5rem" }}>
                 <button onClick={() => handleApprove(candidate.entryId)} disabled={expired}>
-                  Use this address
+                  {t("autofillAddressApprovalModal.useThisAddress")}
                 </button>
               </div>
             </div>
           ))}
 
-          {expired && <p className="error-text">This request has expired.</p>}
+          {expired && <p className="error-text">{t("autofillAddressApprovalModal.expired")}</p>}
 
           <div className="actions-row" style={{ marginTop: "0.75rem" }}>
             <button onClick={handleReject} className="topbar-btn-danger">
-              Deny request
+              {t("autofillAddressApprovalModal.denyRequest")}
             </button>
           </div>
         </div>

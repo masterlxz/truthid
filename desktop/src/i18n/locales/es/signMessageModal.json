@@ -1,0 +1,10 @@
+{
+  "title": "Firmar mensaje",
+  "defaultAppName": "Una app",
+  "wantsToDeriveKey": "quiere derivar una clave de firma para sí misma (propósito:",
+  "closingParen": ").",
+  "exactMessageLabel": "Mensaje exacto que se firmará:",
+  "requestExpired": "Esta solicitud ha expirado.",
+  "approve": "Aprobar",
+  "reject": "Rechazar"
+}

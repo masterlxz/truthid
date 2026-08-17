@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { invoke } from "@tauri-apps/api/core";
 import {
@@ -25,6 +26,7 @@ import { LocalSignerStatus } from "./LocalSignerStatus";
 // smart account, não o Ledger).
 
 export function DesktopDevice({ onRegistered }: { onRegistered: () => void }) {
+  const { t } = useTranslation();
   const [address, setAddress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { isConnected } = useAccount();
@@ -148,46 +150,46 @@ export function DesktopDevice({ onRegistered }: { onRegistered: () => void }) {
   if (error) {
     return (
       <p className="error-text">
-        Error accessing OS keyring: {error}
+        {t("desktopDevice.keyringError", { error })}
       </p>
     );
   }
 
   if (!address) {
-    return <p className="muted">Initializing desktop key...</p>;
+    return <p className="muted">{t("desktopDevice.initializing")}</p>;
   }
 
   return (
     <>
     <div className="card">
-      <h3 style={{ marginTop: 0 }}>This desktop</h3>
+      <h3 style={{ marginTop: 0 }}>{t("desktopDevice.title")}</h3>
       <code className="address">
         {address.slice(0, 10)}…{address.slice(-6)}
       </code>
       <div style={{ marginTop: "0.75rem" }}>
         {isActive ? (
-          <span className="status-badge status-badge--active">✓ Registered as device</span>
+          <span className="status-badge status-badge--active">✓ {t("desktopDevice.registered")}</span>
         ) : (
           <>
-            <span className="status-badge status-badge--revoked">Not registered</span>
+            <span className="status-badge status-badge--revoked">{t("desktopDevice.notRegistered")}</span>
             {isWriteError && (
               <p className="error-text">
                 {writeError?.message?.includes("rejected_by_user")
-                  ? "Transaction rejected on Ledger."
-                  : `Error: ${writeError?.message?.split("\n")[0]}`}
+                  ? t("desktopDevice.rejectedOnLedger")
+                  : t("desktopDevice.errorPrefix", { message: writeError?.message?.split("\n")[0] })}
               </p>
             )}
             <div className="actions-row">
               <button onClick={handleRegister} disabled={isBusy}>
                 {phase === "committing" && isPending
-                  ? "Confirm in wallet (1/2)..."
+                  ? t("desktopDevice.confirmWallet1")
                   : phase === "committing" && isConfirming
-                  ? "Waiting for network (1/2)..."
+                  ? t("desktopDevice.waitingNetwork1")
                   : phase === "registering" && isPending
-                  ? "Confirm in wallet (2/2)..."
+                  ? t("desktopDevice.confirmWallet2")
                   : phase === "registering" && isConfirming
-                  ? "Waiting for network (2/2)..."
-                  : "Register this desktop"}
+                  ? t("desktopDevice.waitingNetwork2")
+                  : t("desktopDevice.registerButton")}
               </button>
             </div>
           </>

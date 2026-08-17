@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { keccak256, toHex } from "viem";
@@ -14,6 +15,7 @@ type LoginStatus = "idle" | "loading" | "success" | "error";
 type SessionStatus = "idle" | "signing" | "pending" | "confirmed" | "error";
 
 export function QuickLogin() {
+  const { t } = useTranslation();
   const [serverUrl, setServerUrl] = useState("http://localhost:3000");
   const [loginStatus, setLoginStatus] = useState<LoginStatus>("idle");
   const [loginResult, setLoginResult] = useState<{
@@ -138,7 +140,7 @@ export function QuickLogin() {
   return (
     <div>
       <div className="field">
-        <label>Server URL</label>
+        <label>{t("quickLogin.serverUrlLabel")}</label>
         <input
           value={serverUrl}
           onChange={(e) => setServerUrl(e.target.value)}
@@ -149,17 +151,17 @@ export function QuickLogin() {
 
       <div className="actions-row" style={{ marginTop: 0, marginBottom: "1rem" }}>
         <button onClick={handleLogin} disabled={isLoginBusy}>
-          {isLoginBusy ? "Authenticating..." : "Authenticate"}
+          {isLoginBusy ? t("quickLogin.authenticating") : t("quickLogin.authenticate")}
         </button>
       </div>
 
       {loginStatus === "success" && loginResult && (
         <div className="card" style={{ marginBottom: "1rem" }}>
           <span className="status-badge status-badge--active" style={{ marginBottom: "0.5rem", display: "inline-flex" }}>
-            ✓ Authenticated
+            {t("quickLogin.authenticated")}
           </span>
           <p className="muted" style={{ margin: "0.4rem 0 0" }}>
-            Identity #{loginResult.identityId} · Token{" "}
+            {t("quickLogin.identityTokenLabel", { id: loginResult.identityId })}{" "}
             <code className="address">{loginResult.token.slice(0, 8)}…</code>
           </p>
 
@@ -169,24 +171,24 @@ export function QuickLogin() {
               disabled={isSessionBusy || sessionStatus === "confirmed"}
             >
               {sessionStatus === "signing"
-                ? "Signing..."
+                ? t("quickLogin.signing")
                 : sessionStatus === "pending" || isWritePending
-                ? "Confirm in wallet..."
+                ? t("quickLogin.confirmInWallet")
                 : isCreateConfirming
-                ? "Waiting for network..."
+                ? t("quickLogin.waitingForNetwork")
                 : sessionStatus === "confirmed"
-                ? "✓ Session registered"
-                : "Register session on-chain"}
+                ? t("quickLogin.sessionRegistered")
+                : t("quickLogin.registerSessionOnChain")}
             </button>
           </div>
 
           {sessionStatus === "confirmed" && sessionHash && (
             <p className="muted" style={{ marginTop: "0.5rem", marginBottom: 0 }}>
-              Session{" "}
+              {t("quickLogin.sessionLabel")}{" "}
               <code className="address">
                 {sessionHash.slice(0, 10)}…{sessionHash.slice(-6)}
               </code>{" "}
-              registered. Check Active Sessions to revoke.
+              {t("quickLogin.registeredCheckActive")}
             </p>
           )}
 

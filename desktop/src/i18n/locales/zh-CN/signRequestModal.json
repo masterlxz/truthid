@@ -1,0 +1,17 @@
+{
+  "title": "签名请求",
+  "defaultAppName": "某应用",
+  "wantsToCall": "想要在您的智能账户上调用一个函数。",
+  "signatureMismatchReason": "声明的函数签名与 callData 不匹配",
+  "couldNotVerify": "⚠ 无法验证声明的函数（{{reason}}）",
+  "unverifiedClaim": "应用声称调用此函数（未经验证 — 与 callData 不匹配）：",
+  "rawCallData": "原始调用数据：",
+  "contractLabel": "合约：",
+  "valueLine": "金额：{{value}} ETH",
+  "requestExpired": "此请求已过期。",
+  "requestExpiredNoUserOp": "此请求已过期。未发送 UserOp。",
+  "userOpNotConfirmed": "UserOperation 已被接受但尚未确认 — 稍后可能仍会确认。",
+  "signing": "正在签名...",
+  "approve": "批准",
+  "reject": "拒绝"
+}

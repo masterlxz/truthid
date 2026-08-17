@@ -1,0 +1,17 @@
+{
+  "title": "Solicitação de assinatura",
+  "defaultAppName": "Um app",
+  "wantsToCall": "quer chamar uma função na sua smart account.",
+  "signatureMismatchReason": "a assinatura de função declarada não bate com o callData",
+  "couldNotVerify": "⚠ Não foi possível verificar a função declarada ({{reason}})",
+  "unverifiedClaim": "O app declara esta função (não verificada — não bate com o callData):",
+  "rawCallData": "Dados brutos da chamada:",
+  "contractLabel": "Contrato:",
+  "valueLine": "Valor: {{value}} ETH",
+  "requestExpired": "Esta solicitação expirou.",
+  "requestExpiredNoUserOp": "Esta solicitação expirou. Nenhuma UserOp foi enviada.",
+  "userOpNotConfirmed": "UserOperation aceita mas ainda não confirmada — pode confirmar mais tarde.",
+  "signing": "Assinando...",
+  "approve": "Aprovar",
+  "reject": "Rejeitar"
+}

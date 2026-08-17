@@ -1,0 +1,16 @@
+{
+  "back": "Back",
+  "title": "Connect your Ledger",
+  "steps": {
+    "connectUsb": "Connect your Ledger via USB",
+    "unlockPin": "Unlock with your PIN on the device",
+    "openEthereumApp": "Open the Ethereum app on your Ledger"
+  },
+  "accessDenied": "Could not access the Ledger. Close Ledger Live if it is open, or check USB permissions (Linux: udev rule).",
+  "selectAccount": "Select account",
+  "accountName": "Account {{index}}",
+  "loading": "loading…",
+  "connecting": "Connecting...",
+  "connectAccount": "Connect Account {{index}}",
+  "connectTimeout": "Ledger did not respond in time. Make sure it's unlocked with the Ethereum app open, then try again."
+}

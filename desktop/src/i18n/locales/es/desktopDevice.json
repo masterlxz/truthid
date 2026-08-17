@@ -1,0 +1,14 @@
+{
+  "keyringError": "Error al acceder al llavero del sistema operativo: {{error}}",
+  "initializing": "Inicializando clave de escritorio...",
+  "title": "Este escritorio",
+  "registered": "Registrado como dispositivo",
+  "notRegistered": "No registrado",
+  "rejectedOnLedger": "Transacción rechazada en el Ledger.",
+  "errorPrefix": "Error: {{message}}",
+  "confirmWallet1": "Confirmando en la wallet (1/2)...",
+  "waitingNetwork1": "Esperando la red (1/2)...",
+  "confirmWallet2": "Confirmando en la wallet (2/2)...",
+  "waitingNetwork2": "Esperando la red (2/2)...",
+  "registerButton": "Registrar este escritorio"
+}
