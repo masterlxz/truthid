@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n_extensions.dart';
 import '../services/cross_device_delivery_channel.dart';
 import '../services/deep_link_delivery_channel.dart';
 import '../services/device_key_service.dart';
@@ -133,13 +134,13 @@ class _SignMessageApprovalScreenState
   _Status? _validatePayload() {
     final v = widget.payload['v'];
     if (v != 1) {
-      _errorMsg = 'Invalid QR: unsupported schema version.';
+      _errorMsg = context.l10n.signMessageApprovalScreenErrorUnsupportedVersion;
       return _Status.error;
     }
 
     final sessionId = widget.payload['sessionId'] as String?;
     if (sessionId == null || sessionId.isEmpty) {
-      _errorMsg = 'Invalid QR: missing sessionId.';
+      _errorMsg = context.l10n.signMessageApprovalScreenErrorMissingSessionId;
       return _Status.error;
     }
 
@@ -147,14 +148,15 @@ class _SignMessageApprovalScreenState
       final callback = widget.payload['callback'] as String?;
       final callbackUri = callback != null ? Uri.tryParse(callback) : null;
       if (callbackUri == null || callbackUri.scheme.isEmpty) {
-        _errorMsg = 'Invalid request: missing or malformed callback.';
+        _errorMsg = context.l10n.signMessageApprovalScreenErrorInvalidCallback;
         return _Status.error;
       }
       _callbackUri = callbackUri;
     } else {
       final ephemeralPubKey = widget.payload['ephemeralPubKey'] as String?;
       if (ephemeralPubKey == null || ephemeralPubKey.isEmpty) {
-        _errorMsg = 'Invalid QR: missing ephemeralPubKey.';
+        _errorMsg =
+            context.l10n.signMessageApprovalScreenErrorMissingEphemeralPubKey;
         return _Status.error;
       }
       _requesterPubKeyHex = ephemeralPubKey;
@@ -162,25 +164,24 @@ class _SignMessageApprovalScreenState
 
     final expiresAtMs = widget.payload['expiresAt'];
     if (expiresAtMs is! int) {
-      _errorMsg = 'Invalid QR: missing expiresAt.';
+      _errorMsg = context.l10n.signMessageApprovalScreenErrorMissingExpiresAt;
       return _Status.error;
     }
     final expiresAt = DateTime.fromMillisecondsSinceEpoch(expiresAtMs);
     if (expiresAt.isBefore(DateTime.now())) {
-      _errorMsg = 'This QR code has expired — go back to the app and scan a '
-          'fresh one.';
+      _errorMsg = context.l10n.signMessageApprovalScreenErrorExpired;
       return _Status.error;
     }
 
     final appName = (widget.payload['appName'] as String?)?.trim() ?? '';
     if (appName.isEmpty) {
-      _errorMsg = 'Invalid QR: missing appName.';
+      _errorMsg = context.l10n.signMessageApprovalScreenErrorMissingAppName;
       return _Status.error;
     }
 
     final purpose = widget.payload['purpose'] as String? ?? '';
     if (!_isValidPurpose(purpose)) {
-      _errorMsg = 'Invalid QR: purpose must be 1-64 chars of [A-Za-z0-9_.-].';
+      _errorMsg = context.l10n.signMessageApprovalScreenErrorInvalidPurpose;
       return _Status.error;
     }
 
@@ -227,7 +228,8 @@ class _SignMessageApprovalScreenState
       if (expiresAt.isBefore(DateTime.now())) {
         setState(() {
           _status = _Status.error;
-          _errorMsg = 'Session expired before responding — scan the QR again.';
+          _errorMsg = context
+              .l10n.signMessageApprovalScreenErrorSessionExpiredResponding;
         });
         return;
       }
@@ -251,7 +253,8 @@ class _SignMessageApprovalScreenState
       if (!mounted) return;
       setState(() {
         _status = _Status.error;
-        _errorMsg = 'Failed to respond to the app: $e';
+        _errorMsg =
+            context.l10n.signMessageApprovalScreenErrorRespondFailed('$e');
       });
     }
   }
@@ -259,7 +262,7 @@ class _SignMessageApprovalScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Sign message request')),
+      appBar: AppBar(title: Text(context.l10n.signMessageApprovalScreenTitle)),
       body: switch (_status) {
         _Status.pending => _buildPendingUI(),
         _Status.sending => _buildSendingUI(),
@@ -281,16 +284,20 @@ class _SignMessageApprovalScreenState
             const Icon(Icons.key_outlined, size: 64, color: AppColors.accent),
             const SizedBox(height: 16),
             Text(
-              '$_appName wants to derive a signing key for itself',
+              context.l10n
+                  .signMessageApprovalScreenPendingHeading(_appName ?? ''),
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            InfoRow(label: 'Purpose', value: _purpose ?? ''),
+            InfoRow(
+              label: context.l10n.signMessageApprovalScreenPurposeLabel,
+              value: _purpose ?? '',
+            ),
             const SizedBox(height: 16),
-            const Text(
-              'Exact message that will be signed:',
-              style: TextStyle(color: AppColors.textMuted),
+            Text(
+              context.l10n.signMessageApprovalScreenMessagePreviewLabel,
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             const SizedBox(height: 4),
             Text(
@@ -301,7 +308,8 @@ class _SignMessageApprovalScreenState
             ElevatedButton.icon(
               onPressed: _approve,
               icon: const Icon(Icons.check_circle_outline),
-              label: const Text('Approve', style: TextStyle(fontSize: 18)),
+              label: Text(context.l10n.signMessageApprovalScreenApproveButton,
+                  style: const TextStyle(fontSize: 18)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.success,
                 foregroundColor: AppColors.background,
@@ -312,7 +320,8 @@ class _SignMessageApprovalScreenState
             OutlinedButton.icon(
               onPressed: _reject,
               icon: const Icon(Icons.cancel_outlined),
-              label: const Text('Reject', style: TextStyle(fontSize: 18)),
+              label: Text(context.l10n.signMessageApprovalScreenRejectButton,
+                  style: const TextStyle(fontSize: 18)),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.danger,
                 side: const BorderSide(color: AppColors.danger),
@@ -335,25 +344,23 @@ class _SignMessageApprovalScreenState
             const SizedBox(height: 48),
             const Center(child: CircularProgressIndicator()),
             const SizedBox(height: 24),
-            const Text(
-              'Waiting for the app to connect...',
+            Text(
+              context.l10n.signMessageApprovalScreenWaitingHeading,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Make sure your phone and computer are on the same Wi-Fi '
-              'network.',
+            Text(
+              context.l10n.signMessageApprovalScreenWifiHint,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             if (_localIps.isNotEmpty) ...[
               const SizedBox(height: 24),
-              const Text(
-                'If the app can\'t find your phone automatically, enter this '
-                'IP address manually:',
+              Text(
+                context.l10n.signMessageApprovalScreenManualIpHint,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textMuted),
+                style: const TextStyle(color: AppColors.textMuted),
               ),
               const SizedBox(height: 8),
               ..._localIps.map(
@@ -386,35 +393,35 @@ class _SignMessageApprovalScreenState
             const Icon(Icons.check_circle_outline,
                 size: 72, color: AppColors.accent),
             const SizedBox(height: 16),
-            const Text(
-              'Sent',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Text(
+              context.l10n.signMessageApprovalScreenSentHeading,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'The app received your response.',
+            Text(
+              context.l10n.signMessageApprovalScreenSentBody,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             if (_deadDropIpnsName != null) ...[
               const SizedBox(height: 8),
-              const Text(
-                'Dead-drop backup published (IPFS/IPNS).',
+              Text(
+                context.l10n.signMessageApprovalScreenDeadDropPublished,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
               ),
             ] else if (_deadDropError != null) ...[
               const SizedBox(height: 8),
-              const Text(
-                'Dead-drop backup unavailable this time.',
+              Text(
+                context.l10n.signMessageApprovalScreenDeadDropUnavailable,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
               ),
             ],
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Done'),
+              child: Text(context.l10n.signMessageApprovalScreenDoneButton),
             ),
           ],
         ),
@@ -431,22 +438,20 @@ class _SignMessageApprovalScreenState
           children: [
             const Icon(Icons.wifi_off, size: 72, color: AppColors.textMuted),
             const SizedBox(height: 16),
-            const Text(
-              'Nothing arrived',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Text(
+              context.l10n.signMessageApprovalScreenTimeoutHeading,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'The app never connected before this request expired. Make '
-              'sure both devices are on the same Wi-Fi network and try '
-              'again.',
+            Text(
+              context.l10n.signMessageApprovalScreenTimeoutBody,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Back'),
+              child: Text(context.l10n.signMessageApprovalScreenBackButton),
             ),
           ],
         ),
@@ -464,14 +469,14 @@ class _SignMessageApprovalScreenState
             const Icon(Icons.error_outline, size: 72, color: AppColors.danger),
             const SizedBox(height: 16),
             Text(
-              _errorMsg ?? 'Something went wrong.',
+              _errorMsg ?? context.l10n.signMessageApprovalScreenGenericError,
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Back'),
+              child: Text(context.l10n.signMessageApprovalScreenBackButton),
             ),
           ],
         ),

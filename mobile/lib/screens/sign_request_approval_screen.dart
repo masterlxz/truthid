@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:web3dart/crypto.dart';
 import 'package:web3dart/web3dart.dart' show EthereumAddress;
 
+import '../l10n/l10n_extensions.dart';
 import '../services/blockchain_service.dart';
 import '../services/bundler_config_service.dart';
 import '../services/cross_device_delivery_channel.dart';
@@ -191,13 +192,13 @@ class _SignRequestApprovalScreenState
   _Status? _validatePayload() {
     final v = widget.payload['v'];
     if (v != 1) {
-      _errorMsg = 'Invalid QR: unsupported schema version.';
+      _errorMsg = context.l10n.signRequestApprovalScreenErrorUnsupportedVersion;
       return _Status.error;
     }
 
     final sessionId = widget.payload['sessionId'] as String?;
     if (sessionId == null || sessionId.isEmpty) {
-      _errorMsg = 'Invalid QR: missing sessionId.';
+      _errorMsg = context.l10n.signRequestApprovalScreenErrorMissingSessionId;
       return _Status.error;
     }
 
@@ -205,14 +206,15 @@ class _SignRequestApprovalScreenState
       final callback = widget.payload['callback'] as String?;
       final callbackUri = callback != null ? Uri.tryParse(callback) : null;
       if (callbackUri == null || callbackUri.scheme.isEmpty) {
-        _errorMsg = 'Invalid request: missing or malformed callback.';
+        _errorMsg = context.l10n.signRequestApprovalScreenErrorInvalidCallback;
         return _Status.error;
       }
       _callbackUri = callbackUri;
     } else {
       final ephemeralPubKey = widget.payload['ephemeralPubKey'] as String?;
       if (ephemeralPubKey == null || ephemeralPubKey.isEmpty) {
-        _errorMsg = 'Invalid QR: missing ephemeralPubKey.';
+        _errorMsg =
+            context.l10n.signRequestApprovalScreenErrorMissingEphemeralPubKey;
         return _Status.error;
       }
       _requesterPubKeyHex = ephemeralPubKey;
@@ -220,37 +222,37 @@ class _SignRequestApprovalScreenState
 
     final expiresAtMs = widget.payload['expiresAt'];
     if (expiresAtMs is! int) {
-      _errorMsg = 'Invalid QR: missing expiresAt.';
+      _errorMsg = context.l10n.signRequestApprovalScreenErrorMissingExpiresAt;
       return _Status.error;
     }
     final expiresAt = DateTime.fromMillisecondsSinceEpoch(expiresAtMs);
     if (expiresAt.isBefore(DateTime.now())) {
-      _errorMsg = 'This QR code has expired — go back to the app and scan a '
-          'fresh one.';
+      _errorMsg = context.l10n.signRequestApprovalScreenErrorExpired;
       return _Status.error;
     }
 
     final appName = (widget.payload['appName'] as String?)?.trim() ?? '';
     if (appName.isEmpty) {
-      _errorMsg = 'Invalid QR: missing appName.';
+      _errorMsg = context.l10n.signRequestApprovalScreenErrorMissingAppName;
       return _Status.error;
     }
 
     final dest = widget.payload['dest'] as String?;
     if (dest == null || dest.isEmpty) {
-      _errorMsg = 'Invalid QR: missing dest.';
+      _errorMsg = context.l10n.signRequestApprovalScreenErrorMissingDest;
       return _Status.error;
     }
 
     final callData = widget.payload['callData'] as String?;
     if (callData == null || callData.isEmpty) {
-      _errorMsg = 'Invalid QR: missing callData.';
+      _errorMsg = context.l10n.signRequestApprovalScreenErrorMissingCallData;
       return _Status.error;
     }
 
     final functionSignature = widget.payload['functionSignature'] as String?;
     if (functionSignature == null || functionSignature.isEmpty) {
-      _errorMsg = 'Invalid QR: missing functionSignature.';
+      _errorMsg =
+          context.l10n.signRequestApprovalScreenErrorMissingFunctionSignature;
       return _Status.error;
     }
 
@@ -275,7 +277,7 @@ class _SignRequestApprovalScreenState
       if (!mounted) return;
       setState(() {
         _status = _Status.error;
-        _errorMsg = "This phone isn't paired with a TruthID identity yet.";
+        _errorMsg = context.l10n.signRequestApprovalScreenErrorNotPaired;
       });
       return;
     }
@@ -295,7 +297,7 @@ class _SignRequestApprovalScreenState
       setState(() {
         _status = _Status.error;
         _errorMsg =
-            'Still resolving your identity on-chain — try again in a moment.';
+            context.l10n.signRequestApprovalScreenErrorResolvingIdentity;
       });
       return;
     }
@@ -306,7 +308,8 @@ class _SignRequestApprovalScreenState
         if (!mounted) return;
         setState(() {
           _status = _Status.error;
-          _errorMsg = 'Could not resolve your smart account — try again.';
+          _errorMsg = context
+              .l10n.signRequestApprovalScreenErrorSmartAccountUnresolved;
         });
         return;
       }
@@ -319,7 +322,8 @@ class _SignRequestApprovalScreenState
       if (!mounted) return;
       setState(() {
         _status = _Status.error;
-        _errorMsg = 'Failed to resolve your smart account: $e';
+        _errorMsg =
+            context.l10n.signRequestApprovalScreenErrorSmartAccountFailed('$e');
       });
     }
   }
@@ -393,7 +397,8 @@ class _SignRequestApprovalScreenState
       if (expiresAt.isBefore(DateTime.now())) {
         setState(() {
           _status = _Status.error;
-          _errorMsg = 'Session expired before responding — scan the QR again.';
+          _errorMsg = context
+              .l10n.signRequestApprovalScreenErrorSessionExpiredResponding;
         });
         return;
       }
@@ -417,27 +422,30 @@ class _SignRequestApprovalScreenState
       if (!mounted) return;
       setState(() {
         _status = _Status.error;
-        _errorMsg = 'Failed to respond to the app: $e';
+        _errorMsg =
+            context.l10n.signRequestApprovalScreenErrorRespondFailed('$e');
       });
     }
   }
 
-  String _resultSummary() {
+  String _resultSummary(BuildContext context) {
     switch (_executionOutcome) {
       case 'executed':
-        return 'Transaction executed (UserOp ${_userOpHash ?? ''}).';
+        return context.l10n
+            .signRequestApprovalScreenResultExecuted(_userOpHash ?? '');
       case 'failed':
-        return 'Transaction failed: ${_executionError ?? ''}';
+        return context.l10n
+            .signRequestApprovalScreenResultFailed(_executionError ?? '');
       case 'rejected':
       default:
-        return 'You rejected this request.';
+        return context.l10n.signRequestApprovalScreenResultRejected;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Sign & execute request')),
+      appBar: AppBar(title: Text(context.l10n.signRequestApprovalScreenTitle)),
       body: switch (_status) {
         _Status.loading => _buildLoadingUI(),
         _Status.pending => _buildPendingUI(),
@@ -465,29 +473,37 @@ class _SignRequestApprovalScreenState
             const Icon(Icons.bolt_outlined, size: 64, color: AppColors.accent),
             const SizedBox(height: 16),
             Text(
-              '$_appName wants to execute a transaction',
+              context.l10n
+                  .signRequestApprovalScreenPendingHeading(_appName ?? ''),
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Your smart account will pay the gas.',
+            Text(
+              context.l10n.signRequestApprovalScreenGasNotice,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             const SizedBox(height: 16),
-            InfoRow(label: 'Destination', value: _dest ?? ''),
-            InfoRow(label: 'Value (wei)', value: _value ?? ''),
+            InfoRow(
+              label: context.l10n.signRequestApprovalScreenDestinationLabel,
+              value: _dest ?? '',
+            ),
+            InfoRow(
+              label: context.l10n.signRequestApprovalScreenValueLabel,
+              value: _value ?? '',
+            ),
             InfoRow(
               label: _selectorVerified
-                  ? 'Function (verified)'
-                  : 'Function (unverified)',
+                  ? context.l10n.signRequestApprovalScreenFunctionVerifiedLabel
+                  : context
+                      .l10n.signRequestApprovalScreenFunctionUnverifiedLabel,
               value: _functionSignature ?? '',
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Raw call data:',
-              style: TextStyle(color: AppColors.textMuted),
+            Text(
+              context.l10n.signRequestApprovalScreenRawCallDataLabel,
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             const SizedBox(height: 4),
             Text(
@@ -498,7 +514,8 @@ class _SignRequestApprovalScreenState
             ElevatedButton.icon(
               onPressed: _approve,
               icon: const Icon(Icons.check_circle_outline),
-              label: const Text('Approve', style: TextStyle(fontSize: 18)),
+              label: Text(context.l10n.signRequestApprovalScreenApproveButton,
+                  style: const TextStyle(fontSize: 18)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.success,
                 foregroundColor: AppColors.background,
@@ -509,7 +526,8 @@ class _SignRequestApprovalScreenState
             OutlinedButton.icon(
               onPressed: _reject,
               icon: const Icon(Icons.cancel_outlined),
-              label: const Text('Reject', style: TextStyle(fontSize: 18)),
+              label: Text(context.l10n.signRequestApprovalScreenRejectButton,
+                  style: const TextStyle(fontSize: 18)),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.danger,
                 side: const BorderSide(color: AppColors.danger),
@@ -523,25 +541,24 @@ class _SignRequestApprovalScreenState
   }
 
   Widget _buildExecutingUI() {
-    return const Center(
+    return Center(
       child: Padding(
-        padding: EdgeInsets.all(24),
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 24),
+            const CircularProgressIndicator(),
+            const SizedBox(height: 24),
             Text(
-              'Executing transaction...',
+              context.l10n.signRequestApprovalScreenExecutingHeading,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
-            SizedBox(height: 8),
+            const SizedBox(height: 8),
             Text(
-              'Sending to the bundler and waiting for confirmation. This can '
-              'take up to a minute.',
+              context.l10n.signRequestApprovalScreenExecutingBody,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
           ],
         ),
@@ -559,25 +576,23 @@ class _SignRequestApprovalScreenState
             const SizedBox(height: 48),
             const Center(child: CircularProgressIndicator()),
             const SizedBox(height: 24),
-            const Text(
-              'Waiting for the app to connect...',
+            Text(
+              context.l10n.signRequestApprovalScreenWaitingHeading,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Make sure your phone and computer are on the same Wi-Fi '
-              'network.',
+            Text(
+              context.l10n.signRequestApprovalScreenWifiHint,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             if (_localIps.isNotEmpty) ...[
               const SizedBox(height: 24),
-              const Text(
-                'If the app can\'t find your phone automatically, enter this '
-                'IP address manually:',
+              Text(
+                context.l10n.signRequestApprovalScreenManualIpHint,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textMuted),
+                style: const TextStyle(color: AppColors.textMuted),
               ),
               const SizedBox(height: 8),
               ..._localIps.map(
@@ -610,41 +625,41 @@ class _SignRequestApprovalScreenState
             const Icon(Icons.check_circle_outline,
                 size: 72, color: AppColors.accent),
             const SizedBox(height: 16),
-            const Text(
-              'Sent',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'The app received your response.',
-              textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+            Text(
+              context.l10n.signRequestApprovalScreenSentHeading,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
-              _resultSummary(),
+              context.l10n.signRequestApprovalScreenSentBody,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _resultSummary(context),
               textAlign: TextAlign.center,
               style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
             ),
             if (_deadDropIpnsName != null) ...[
               const SizedBox(height: 8),
-              const Text(
-                'Dead-drop backup published (IPFS/IPNS).',
+              Text(
+                context.l10n.signRequestApprovalScreenDeadDropPublished,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
               ),
             ] else if (_deadDropError != null) ...[
               const SizedBox(height: 8),
-              const Text(
-                'Dead-drop backup unavailable this time.',
+              Text(
+                context.l10n.signRequestApprovalScreenDeadDropUnavailable,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
               ),
             ],
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Done'),
+              child: Text(context.l10n.signRequestApprovalScreenDoneButton),
             ),
           ],
         ),
@@ -661,22 +676,20 @@ class _SignRequestApprovalScreenState
           children: [
             const Icon(Icons.wifi_off, size: 72, color: AppColors.textMuted),
             const SizedBox(height: 16),
-            const Text(
-              'Nothing arrived',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Text(
+              context.l10n.signRequestApprovalScreenTimeoutHeading,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'The app never connected before this request expired. Make '
-              'sure both devices are on the same Wi-Fi network and try '
-              'again.',
+            Text(
+              context.l10n.signRequestApprovalScreenTimeoutBody,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Back'),
+              child: Text(context.l10n.signRequestApprovalScreenBackButton),
             ),
           ],
         ),
@@ -694,14 +707,14 @@ class _SignRequestApprovalScreenState
             const Icon(Icons.error_outline, size: 72, color: AppColors.danger),
             const SizedBox(height: 16),
             Text(
-              _errorMsg ?? 'Something went wrong.',
+              _errorMsg ?? context.l10n.signRequestApprovalScreenGenericError,
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Back'),
+              child: Text(context.l10n.signRequestApprovalScreenBackButton),
             ),
           ],
         ),

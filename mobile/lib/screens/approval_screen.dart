@@ -7,6 +7,7 @@ import 'package:web3dart/web3dart.dart' show EthereumAddress;
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n_extensions.dart';
 import '../services/blockchain_service.dart';
 import '../services/bundler_config_service.dart';
 import '../services/device_key_service.dart';
@@ -101,26 +102,25 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
     // pra um endpoint que intercepta a resposta assinada em texto claro.
     if (challenge == null) {
       _status = _Status.error;
-      _statusMsg = 'Invalid QR: missing challenge.';
+      _statusMsg = context.l10n.approvalScreenErrorMissingChallenge;
       return;
     }
     if (callbackUrl != null && !callbackUrl.startsWith('https://')) {
       _status = _Status.error;
-      _statusMsg = 'Invalid QR: callbackUrl must use https://.';
+      _statusMsg = context.l10n.approvalScreenErrorInvalidCallbackUrl;
       return;
     }
 
     final issuedAtMs = challenge['issuedAt'];
     if (issuedAtMs is! int) {
       _status = _Status.error;
-      _statusMsg = 'Invalid QR: missing issuedAt.';
+      _statusMsg = context.l10n.approvalScreenErrorMissingIssuedAt;
       return;
     }
     final issuedAt = DateTime.fromMillisecondsSinceEpoch(issuedAtMs);
     if (DateTime.now().difference(issuedAt) > _challengeTtl) {
       _status = _Status.error;
-      _statusMsg =
-          'This QR code has expired — ask the site for a new login QR code.';
+      _statusMsg = context.l10n.approvalScreenErrorExpiredInitial;
       return;
     }
 
@@ -164,9 +164,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
     // Re-checa a expiração aqui também — pode ter passado tempo entre o scan
     // do QR (initState) e o usuário efetivamente tocar em "Approve".
     if (DateTime.now().difference(_issuedAt!) > _challengeTtl) {
-      _setError(
-        'This QR code has expired — go back to the app and scan a fresh one.',
-      );
+      _setError(context.l10n.approvalScreenErrorExpiredOnApprove);
       return;
     }
     _responded = true;
@@ -198,7 +196,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
     // O device precisa estar pareado com uma identidade — sem isso não há
     // smart account nem identityId pra registrar a sessão.
     if (_identityId == null || _username == null) {
-      _setError('This device is not paired with any identity yet.');
+      _setError(context.l10n.approvalScreenErrorNotPaired);
       return;
     }
 
@@ -213,15 +211,11 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
     try {
       identity = await _blockchainService.getIdentityByUsername(_username!);
     } catch (_) {
-      _setError(
-        'Could not find this identity on-chain. Check your connection.',
-      );
+      _setError(context.l10n.approvalScreenErrorIdentityLookupFailed);
       return;
     }
     if (identity == null) {
-      _setError(
-        'Could not find this identity on-chain. Check your connection.',
-      );
+      _setError(context.l10n.approvalScreenErrorIdentityLookupFailed);
       return;
     }
 
@@ -256,9 +250,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
         sessionSignatureHex: sessionSignature,
       );
     } catch (_) {
-      _setError(
-        'Could not create the session on-chain. Make sure your account has enough ETH for gas.',
-      );
+      _setError(context.l10n.approvalScreenErrorSessionCreationFailed);
       return;
     }
 
@@ -276,9 +268,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
             sessionSignature, // personal_sign(keccak256(nonce)) — já registrado on-chain
       });
     } catch (_) {
-      _setError(
-        'Could not send response to the website. Check your connection.',
-      );
+      _setError(context.l10n.approvalScreenErrorPostResponseFailed);
       return;
     }
 
@@ -321,7 +311,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Login Request')),
+      appBar: AppBar(title: Text(context.l10n.approvalScreenTitle)),
       body: switch (_status) {
         _Status.challenge => _buildChallengeUI(),
         _Status.submitting => _buildSubmittingUI(),
@@ -335,7 +325,8 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
     final uri = Uri.tryParse(_callbackUrl ?? '');
     final displaySite = uri != null
         ? '${uri.scheme}://${uri.host}'
-        : (_challenge!['origin'] as String? ?? 'unknown site');
+        : (_challenge!['origin'] as String? ??
+            context.l10n.approvalScreenUnknownSite);
     final issuedAt = _challenge!['issuedAt'] as int?;
     final time = issuedAt != null
         ? TimeOfDay.fromDateTime(
@@ -356,30 +347,34 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
               color: AppColors.accent,
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Login request received',
+            Text(
+              context.l10n.approvalScreenHeading,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'A website is requesting to sign in with your TruthID identity.',
+            Text(
+              context.l10n.approvalScreenSubheading,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             const SizedBox(height: 32),
-            InfoRow(label: 'Site', value: displaySite),
+            InfoRow(label: context.l10n.approvalScreenSiteLabel, value: displaySite),
             const SizedBox(height: 8),
-            InfoRow(label: 'Time', value: time),
+            InfoRow(label: context.l10n.approvalScreenTimeLabel, value: time),
             if (_identityId != null) ...[
               const SizedBox(height: 8),
-              InfoRow(label: 'Signing as', value: 'Identity #$_identityId'),
+              InfoRow(
+                label: context.l10n.approvalScreenSigningAsLabel,
+                value: context.l10n.approvalScreenIdentityValue(_identityId!),
+              ),
             ],
             const SizedBox(height: 32),
             ElevatedButton.icon(
               onPressed: _approve,
               icon: const Icon(Icons.check_circle_outline),
-              label: const Text('Approve', style: TextStyle(fontSize: 18)),
+              label: Text(context.l10n.approvalScreenApproveButton,
+                  style: const TextStyle(fontSize: 18)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.success,
                 foregroundColor: AppColors.background,
@@ -390,7 +385,8 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
             OutlinedButton.icon(
               onPressed: _reject,
               icon: const Icon(Icons.cancel_outlined),
-              label: const Text('Reject', style: TextStyle(fontSize: 18)),
+              label: Text(context.l10n.approvalScreenRejectButton,
+                  style: const TextStyle(fontSize: 18)),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.danger,
                 side: const BorderSide(color: AppColors.danger),
@@ -405,26 +401,27 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
   }
 
   Widget _buildSubmittingUI() {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 16),
-          Text('Creating your session on-chain...'),
+          const CircularProgressIndicator(),
+          const SizedBox(height: 16),
+          Text(context.l10n.approvalScreenSubmittingMessage),
         ],
       ),
     );
   }
 
   Widget _buildDoneUI() {
-    return const Center(
+    return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(Icons.check_circle, size: 72, color: AppColors.success),
-          SizedBox(height: 16),
-          Text('Response sent!', style: TextStyle(fontSize: 20)),
+          const Icon(Icons.check_circle, size: 72, color: AppColors.success),
+          const SizedBox(height: 16),
+          Text(context.l10n.approvalScreenDoneMessage,
+              style: const TextStyle(fontSize: 20)),
         ],
       ),
     );
@@ -447,7 +444,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Back'),
+              child: Text(context.l10n.approvalScreenBackButton),
             ),
           ],
         ),

@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n_extensions.dart';
 import '../services/arweave_client.dart' show ArweaveVaultPublisher;
 import '../services/cross_device_delivery_channel.dart';
 import '../services/ecies_service.dart';
@@ -138,37 +139,36 @@ class _PinApprovalScreenState extends State<PinApprovalScreen> {
   _Status? _validatePayload() {
     final v = widget.payload['v'];
     if (v != 1) {
-      _errorMsg = 'Invalid QR: unsupported schema version.';
+      _errorMsg = context.l10n.pinApprovalScreenErrorUnsupportedVersion;
       return _Status.error;
     }
 
     final sessionId = widget.payload['sessionId'] as String?;
     if (sessionId == null || sessionId.isEmpty) {
-      _errorMsg = 'Invalid QR: missing sessionId.';
+      _errorMsg = context.l10n.pinApprovalScreenErrorMissingSessionId;
       return _Status.error;
     }
 
     final ephemeralPubKey = widget.payload['ephemeralPubKey'] as String?;
     if (ephemeralPubKey == null || ephemeralPubKey.isEmpty) {
-      _errorMsg = 'Invalid QR: missing ephemeralPubKey.';
+      _errorMsg = context.l10n.pinApprovalScreenErrorMissingEphemeralPubKey;
       return _Status.error;
     }
 
     final expiresAtMs = widget.payload['expiresAt'];
     if (expiresAtMs is! int) {
-      _errorMsg = 'Invalid QR: missing expiresAt.';
+      _errorMsg = context.l10n.pinApprovalScreenErrorMissingExpiresAt;
       return _Status.error;
     }
     final expiresAt = DateTime.fromMillisecondsSinceEpoch(expiresAtMs);
     if (expiresAt.isBefore(DateTime.now())) {
-      _errorMsg = 'This QR code has expired — go back to the app and scan a '
-          'fresh one.';
+      _errorMsg = context.l10n.pinApprovalScreenErrorExpired;
       return _Status.error;
     }
 
     final appName = (widget.payload['appName'] as String?)?.trim() ?? '';
     if (appName.isEmpty) {
-      _errorMsg = 'Invalid QR: missing appName.';
+      _errorMsg = context.l10n.pinApprovalScreenErrorMissingAppName;
       return _Status.error;
     }
 
@@ -209,7 +209,8 @@ class _PinApprovalScreenState extends State<PinApprovalScreen> {
       if (!mounted) return;
       setState(() {
         _status = _Status.error;
-        _errorMsg = 'Failed to decrypt the received content: $e';
+        _errorMsg =
+            context.l10n.pinApprovalScreenErrorDecryptFailed('$e');
       });
     }
   }
@@ -252,7 +253,8 @@ class _PinApprovalScreenState extends State<PinApprovalScreen> {
       if (expiresAt.isBefore(DateTime.now())) {
         setState(() {
           _status = _Status.error;
-          _errorMsg = 'Session expired before responding — scan the QR again.';
+          _errorMsg =
+              context.l10n.pinApprovalScreenErrorSessionExpiredResponding;
         });
         return;
       }
@@ -276,7 +278,7 @@ class _PinApprovalScreenState extends State<PinApprovalScreen> {
       if (!mounted) return;
       setState(() {
         _status = _Status.error;
-        _errorMsg = 'Failed to respond to the app: $e';
+        _errorMsg = context.l10n.pinApprovalScreenErrorRespondFailed('$e');
       });
     }
   }
@@ -284,7 +286,7 @@ class _PinApprovalScreenState extends State<PinApprovalScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Pin content request')),
+      appBar: AppBar(title: Text(context.l10n.pinApprovalScreenTitle)),
       body: switch (_status) {
         _Status.receivingContent => _buildReceivingUI(),
         _Status.awaitingApproval => _buildApprovalUI(),
@@ -307,24 +309,24 @@ class _PinApprovalScreenState extends State<PinApprovalScreen> {
             const Center(child: CircularProgressIndicator()),
             const SizedBox(height: 24),
             Text(
-              '${_appName ?? 'An app'} wants to send content to pin...',
+              context.l10n.pinApprovalScreenReceivingHeading(
+                _appName ?? context.l10n.pinApprovalScreenGenericAppName,
+              ),
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Make sure your phone and computer are on the same Wi-Fi '
-              'network.',
+            Text(
+              context.l10n.pinApprovalScreenWifiHint,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             if (_localIps.isNotEmpty) ...[
               const SizedBox(height: 24),
-              const Text(
-                'If the app can\'t find your phone automatically, enter this '
-                'IP address manually:',
+              Text(
+                context.l10n.pinApprovalScreenManualIpHint,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textMuted),
+                style: const TextStyle(color: AppColors.textMuted),
               ),
               const SizedBox(height: 8),
               ..._localIps.map(
@@ -359,13 +361,15 @@ class _PinApprovalScreenState extends State<PinApprovalScreen> {
                 size: 64, color: AppColors.accent),
             const SizedBox(height: 16),
             Text(
-              '$_appName wants to publish content to Arweave',
+              context.l10n.pinApprovalScreenApprovalHeading(_appName ?? ''),
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
-              'Size: ${_formatBytes(_content?.length ?? 0)}',
+              context.l10n.pinApprovalScreenSizeLabel(
+                _formatBytes(_content?.length ?? 0),
+              ),
               textAlign: TextAlign.center,
               style: const TextStyle(color: AppColors.textMuted),
             ),
@@ -373,7 +377,8 @@ class _PinApprovalScreenState extends State<PinApprovalScreen> {
             ElevatedButton.icon(
               onPressed: _approve,
               icon: const Icon(Icons.check_circle_outline),
-              label: const Text('Approve', style: TextStyle(fontSize: 18)),
+              label: Text(context.l10n.pinApprovalScreenApproveButton,
+                  style: const TextStyle(fontSize: 18)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.success,
                 foregroundColor: AppColors.background,
@@ -384,7 +389,8 @@ class _PinApprovalScreenState extends State<PinApprovalScreen> {
             OutlinedButton.icon(
               onPressed: _reject,
               icon: const Icon(Icons.cancel_outlined),
-              label: const Text('Reject', style: TextStyle(fontSize: 18)),
+              label: Text(context.l10n.pinApprovalScreenRejectButton,
+                  style: const TextStyle(fontSize: 18)),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.danger,
                 side: const BorderSide(color: AppColors.danger),
@@ -411,35 +417,35 @@ class _PinApprovalScreenState extends State<PinApprovalScreen> {
             const Icon(Icons.check_circle_outline,
                 size: 72, color: AppColors.accent),
             const SizedBox(height: 16),
-            const Text(
-              'Sent',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Text(
+              context.l10n.pinApprovalScreenSentHeading,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'The app received your response.',
+            Text(
+              context.l10n.pinApprovalScreenSentBody,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             if (_deadDropIpnsName != null) ...[
               const SizedBox(height: 8),
-              const Text(
-                'Dead-drop backup published (IPFS/IPNS).',
+              Text(
+                context.l10n.pinApprovalScreenDeadDropPublished,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
               ),
             ] else if (_deadDropError != null) ...[
               const SizedBox(height: 8),
-              const Text(
-                'Dead-drop backup unavailable this time.',
+              Text(
+                context.l10n.pinApprovalScreenDeadDropUnavailable,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
               ),
             ],
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Done'),
+              child: Text(context.l10n.pinApprovalScreenDoneButton),
             ),
           ],
         ),
@@ -456,22 +462,20 @@ class _PinApprovalScreenState extends State<PinApprovalScreen> {
           children: [
             const Icon(Icons.wifi_off, size: 72, color: AppColors.textMuted),
             const SizedBox(height: 16),
-            const Text(
-              'Nothing arrived',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Text(
+              context.l10n.pinApprovalScreenTimeoutHeading,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'The app never connected before this request expired. Make '
-              'sure both devices are on the same Wi-Fi network and try '
-              'again.',
+            Text(
+              context.l10n.pinApprovalScreenTimeoutBody,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Back'),
+              child: Text(context.l10n.pinApprovalScreenBackButton),
             ),
           ],
         ),
@@ -489,14 +493,14 @@ class _PinApprovalScreenState extends State<PinApprovalScreen> {
             const Icon(Icons.error_outline, size: 72, color: AppColors.danger),
             const SizedBox(height: 16),
             Text(
-              _errorMsg ?? 'Something went wrong.',
+              _errorMsg ?? context.l10n.pinApprovalScreenGenericError,
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Back'),
+              child: Text(context.l10n.pinApprovalScreenBackButton),
             ),
           ],
         ),
