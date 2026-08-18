@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import '../l10n/l10n_extensions.dart';
 import '../theme.dart';
 
 // Tela de câmera genérica — decodifica o QR cru e delega a validação/parsing
@@ -8,17 +9,22 @@ import '../theme.dart';
 // devolve esse valor pro caller. Generalizada na Sessão 132 a partir da
 // versão original (só pareamento, JSON hardcoded) pra também dar suporte ao
 // scan de QR de TOTP (retorna o secret já limpo via parseTotpSecret).
+//
+// `title`/`instructions`/`invalidMessage` são opcionais e nulos por padrão —
+// não dá pra usar `context.l10n` como valor default de parâmetro (não é
+// constante em tempo de compilação), então o fallback pros textos padrão
+// (em `AppLocalizations`) é resolvido em `build()`/`_onDetect`, não aqui.
 class ScanScreen<T> extends StatefulWidget {
-  final String title;
-  final String instructions;
-  final String invalidMessage;
+  final String? title;
+  final String? instructions;
+  final String? invalidMessage;
   final T? Function(String raw) parse;
 
   const ScanScreen({
     super.key,
-    this.title = 'Scan QR',
-    this.instructions = 'Point the camera at the QR code on your screen',
-    this.invalidMessage = 'Invalid QR — try again',
+    this.title,
+    this.instructions,
+    this.invalidMessage,
     required this.parse,
   });
 
@@ -41,7 +47,9 @@ class _ScanScreenState<T> extends State<ScanScreen<T>> {
     if (parsed == null) {
       setState(() => _scanned = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(widget.invalidMessage)),
+        SnackBar(
+          content: Text(widget.invalidMessage ?? context.l10n.scanScreenInvalidMessage),
+        ),
       );
       return;
     }
@@ -53,7 +61,7 @@ class _ScanScreenState<T> extends State<ScanScreen<T>> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(widget.title)),
+      appBar: AppBar(title: Text(widget.title ?? context.l10n.scanScreenTitle)),
       body: Stack(
         children: [
           MobileScanner(
@@ -64,7 +72,10 @@ class _ScanScreenState<T> extends State<ScanScreen<T>> {
                 child: Padding(
                   padding: const EdgeInsets.all(24),
                   child: Text(
-                    'Camera error: ${error.errorCode.name}\n${error.errorDetails?.message ?? ''}',
+                    context.l10n.scanScreenCameraError(
+                      error.errorCode.name,
+                      error.errorDetails?.message ?? '',
+                    ),
                     textAlign: TextAlign.center,
                     style: const TextStyle(color: Colors.white),
                   ),
@@ -83,7 +94,7 @@ class _ScanScreenState<T> extends State<ScanScreen<T>> {
             left: 32,
             right: 32,
             child: Text(
-              widget.instructions,
+              widget.instructions ?? context.l10n.scanScreenInstructions,
               textAlign: TextAlign.center,
               style: const TextStyle(color: Colors.white, fontSize: 14),
             ),

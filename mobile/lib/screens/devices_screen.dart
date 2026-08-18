@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../l10n/l10n_extensions.dart';
 import '../services/blockchain_service.dart';
 import '../services/device_key_service.dart';
 import '../services/local_storage_service.dart';
@@ -106,7 +107,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
     if (_encryptionPubKey == null) return;
     Clipboard.setData(ClipboardData(text: _encryptionPubKey!));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Encryption key copied!')),
+      SnackBar(content: Text(context.l10n.devicesScreenEncryptionKeyCopiedSnackbar)),
     );
   }
 
@@ -125,7 +126,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
     if (_deviceAddress == null) return;
     Clipboard.setData(ClipboardData(text: _deviceAddress!));
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Address copied!')),
+      SnackBar(content: Text(context.l10n.devicesScreenAddressCopiedSnackbar)),
     );
   }
 
@@ -154,23 +155,23 @@ class _DevicesScreenState extends State<DevicesScreen> {
                     children: [
                       const Icon(Icons.phone_android),
                       const SizedBox(width: 8),
-                      const Text(
-                        'This device',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      Text(
+                        context.l10n.devicesScreenThisDeviceLabel,
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
                       ),
                       const Spacer(),
                       _pairedIdentityId != null
                           ? Chip(
                               avatar: const Icon(Icons.verified, size: 14, color: AppColors.success),
                               label: Text(_pairedUsername != null
-                                  ? '@$_pairedUsername'
-                                  : 'Identity #$_pairedIdentityId'),
+                                  ? context.l10n.devicesScreenUsernameHandle(_pairedUsername!)
+                                  : context.l10n.devicesScreenIdentityChipFallback(_pairedIdentityId!)),
                               labelStyle: const TextStyle(color: AppColors.success),
                               backgroundColor: AppColors.successBg,
                               padding: EdgeInsets.zero,
                             )
-                          : const Chip(
-                              label: Text('Not registered'),
+                          : Chip(
+                              label: Text(context.l10n.devicesScreenNotRegisteredChip),
                               backgroundColor: AppColors.surfaceAlt,
                             ),
                     ],
@@ -179,9 +180,9 @@ class _DevicesScreenState extends State<DevicesScreen> {
                   const Divider(height: 24),
 
                   // Endereço do device
-                  const Text(
-                    'Address',
-                    style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                  Text(
+                    context.l10n.devicesScreenAddressLabel,
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
                   ),
                   const SizedBox(height: 4),
                   Row(
@@ -195,7 +196,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
                       IconButton(
                         icon: const Icon(Icons.copy, size: 18),
                         onPressed: _copyAddress,
-                        tooltip: 'Copy address',
+                        tooltip: context.l10n.devicesScreenCopyAddressTooltip,
                       ),
                     ],
                   ),
@@ -203,23 +204,23 @@ class _DevicesScreenState extends State<DevicesScreen> {
                   // Seção de identidade — só aparece se estiver pareado
                   if (_pairedIdentityId != null) ...[
                     const Divider(height: 24),
-                    const Text(
-                      'Identity',
-                      style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                    Text(
+                      context.l10n.devicesScreenIdentityLabel,
+                      style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       _pairedUsername != null
-                          ? '@$_pairedUsername'
-                          : '#$_pairedIdentityId',
+                          ? context.l10n.devicesScreenUsernameHandle(_pairedUsername!)
+                          : context.l10n.devicesScreenIdentityIdFallback(_pairedIdentityId!),
                       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
                     ),
 
                     if (_encryptionPubKey != null) ...[
                       const Divider(height: 24),
-                      const Text(
-                        'Encryption key',
-                        style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                      Text(
+                        context.l10n.devicesScreenEncryptionKeyLabel,
+                        style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
                       ),
                       const SizedBox(height: 4),
                       Row(
@@ -233,7 +234,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
                           IconButton(
                             icon: const Icon(Icons.copy, size: 18),
                             onPressed: _copyEncryptionKey,
-                            tooltip: 'Copy encryption key',
+                            tooltip: context.l10n.devicesScreenCopyEncryptionKeyTooltip,
                           ),
                         ],
                       ),
@@ -242,7 +243,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
                       TextButton.icon(
                         onPressed: _showEncryptionKey,
                         icon: const Icon(Icons.key, size: 18),
-                        label: const Text('Show encryption key'),
+                        label: Text(context.l10n.devicesScreenShowEncryptionKeyButton),
                       ),
                     ],
 
@@ -252,21 +253,20 @@ class _DevicesScreenState extends State<DevicesScreen> {
                         final confirmed = await showDialog<bool>(
                           context: context,
                           builder: (_) => AlertDialog(
-                            title: const Text('Unpair device?'),
-                            content: const Text(
-                              'This will remove the link between this device and your identity. '
-                              'You will need to pair again to use TruthID.',
+                            title: Text(context.l10n.devicesScreenUnpairDialogTitle),
+                            content: Text(
+                              context.l10n.devicesScreenUnpairDialogContent,
                             ),
                             actions: [
                               TextButton(
                                 onPressed: () => Navigator.pop(context, false),
-                                child: const Text('Cancel'),
+                                child: Text(context.l10n.devicesScreenCancelButton),
                               ),
                               TextButton(
                                 onPressed: () => Navigator.pop(context, true),
-                                child: const Text(
-                                  'Unpair',
-                                  style: TextStyle(color: AppColors.danger),
+                                child: Text(
+                                  context.l10n.devicesScreenUnpairConfirmButton,
+                                  style: const TextStyle(color: AppColors.danger),
                                 ),
                               ),
                             ],
@@ -278,9 +278,9 @@ class _DevicesScreenState extends State<DevicesScreen> {
                         }
                       },
                       icon: const Icon(Icons.link_off, size: 18, color: AppColors.danger),
-                      label: const Text(
-                        'Unpair',
-                        style: TextStyle(color: AppColors.danger),
+                      label: Text(
+                        context.l10n.devicesScreenUnpairButton,
+                        style: const TextStyle(color: AppColors.danger),
                       ),
                     ),
                   ],
@@ -294,26 +294,24 @@ class _DevicesScreenState extends State<DevicesScreen> {
             const SizedBox(height: 8),
             Card(
               color: AppColors.infoBg,
-              child: const Padding(
-                padding: EdgeInsets.all(12),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
                 child: Row(
                   children: [
-                    Icon(Icons.info_outline, color: AppColors.info, size: 18),
-                    SizedBox(width: 8),
+                    const Icon(Icons.info_outline, color: AppColors.info, size: 18),
+                    const SizedBox(width: 8),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Tap the button below to show a QR code with this '
-                            'device address. Scan that QR (or paste the address) '
-                            'in the desktop app to register it.',
-                            style: TextStyle(fontSize: 13, color: AppColors.info),
+                            context.l10n.devicesScreenPairingHintBody,
+                            style: const TextStyle(fontSize: 13, color: AppColors.info),
                           ),
-                          SizedBox(height: 6),
+                          const SizedBox(height: 6),
                           Text(
-                            'Pull down to check if already paired.',
-                            style: TextStyle(fontSize: 12, color: AppColors.textMuted),
+                            context.l10n.devicesScreenPairingHintFooter,
+                            style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
                           ),
                         ],
                       ),
@@ -328,7 +326,7 @@ class _DevicesScreenState extends State<DevicesScreen> {
               child: ElevatedButton.icon(
                 onPressed: _openPairing,
                 icon: const Icon(Icons.qr_code),
-                label: const Text('Show QR to pair'),
+                label: Text(context.l10n.devicesScreenShowQrButton),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
