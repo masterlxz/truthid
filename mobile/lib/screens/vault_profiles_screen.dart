@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../services/vault_repository.dart';
 import '../theme.dart';
+import '../l10n/l10n_extensions.dart';
 
 // Gerenciar perfis nomeados pelo usuário — mirror da seção "Gerenciar
 // perfis" do Desktop (VaultManagement.tsx). Só alcançável quando o device
@@ -59,13 +60,15 @@ class _VaultProfilesScreenState extends State<VaultProfilesScreen> {
     final newName = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Rename profile'),
+        title: Text(context.l10n.vaultProfilesScreenRenameTitle),
         content: TextField(controller: controller, autofocus: true),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(context.l10n.vaultProfilesScreenCancelButton)),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-            child: const Text('Rename'),
+            child: Text(context.l10n.vaultProfilesScreenRenameButton),
           ),
         ],
       ),
@@ -85,13 +88,16 @@ class _VaultProfilesScreenState extends State<VaultProfilesScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete profile?'),
-        content: Text('"$name" will be removed from every entry that uses it.'),
+        title: Text(context.l10n.vaultProfilesScreenDeleteTitle),
+        content: Text(context.l10n.vaultProfilesScreenDeleteBody(name)),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(context.l10n.vaultProfilesScreenCancelButton)),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Delete', style: TextStyle(color: AppColors.danger)),
+            child: Text(context.l10n.vaultProfilesScreenDeleteButton,
+                style: const TextStyle(color: AppColors.danger)),
           ),
         ],
       ),
@@ -110,7 +116,7 @@ class _VaultProfilesScreenState extends State<VaultProfilesScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Manage profiles')),
+      appBar: AppBar(title: Text(context.l10n.vaultProfilesScreenTitle)),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : Padding(
@@ -118,10 +124,9 @@ class _VaultProfilesScreenState extends State<VaultProfilesScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
-                    'Create profiles with any name you want and tag each password '
-                    'with as many as make sense.',
-                    style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+                  Text(
+                    context.l10n.vaultProfilesScreenIntro,
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
                   ),
                   const SizedBox(height: 16),
                   if (_error != null)
@@ -131,9 +136,9 @@ class _VaultProfilesScreenState extends State<VaultProfilesScreen> {
                     ),
                   Expanded(
                     child: _profiles.isEmpty
-                        ? const Center(
-                            child: Text('No profiles created yet.',
-                                style: TextStyle(color: AppColors.textMuted)),
+                        ? Center(
+                            child: Text(context.l10n.vaultProfilesScreenEmptyState,
+                                style: const TextStyle(color: AppColors.textMuted)),
                           )
                         : ListView(
                             children: _profiles
@@ -146,12 +151,14 @@ class _VaultProfilesScreenState extends State<VaultProfilesScreen> {
                                           children: [
                                             IconButton(
                                               icon: const Icon(Icons.edit),
-                                              tooltip: 'Rename',
+                                              tooltip: context.l10n
+                                                  .vaultProfilesScreenRenameTooltip,
                                               onPressed: () => _rename(p),
                                             ),
                                             IconButton(
                                               icon: const Icon(Icons.delete_outline, color: AppColors.danger),
-                                              tooltip: 'Delete',
+                                              tooltip: context.l10n
+                                                  .vaultProfilesScreenDeleteTooltip,
                                               onPressed: () => _delete(p),
                                             ),
                                           ],
@@ -167,7 +174,9 @@ class _VaultProfilesScreenState extends State<VaultProfilesScreen> {
                       Expanded(
                         child: TextField(
                           controller: _newNameCtrl,
-                          decoration: const InputDecoration(labelText: 'New profile name'),
+                          decoration: InputDecoration(
+                              labelText:
+                                  context.l10n.vaultProfilesScreenNewNameLabel),
                           onSubmitted: (_) => _add(),
                         ),
                       ),
@@ -178,7 +187,7 @@ class _VaultProfilesScreenState extends State<VaultProfilesScreen> {
                           backgroundColor: AppColors.accent,
                           foregroundColor: AppColors.background,
                         ),
-                        child: const Text('Add'),
+                        child: Text(context.l10n.vaultProfilesScreenAddButton),
                       ),
                     ],
                   ),

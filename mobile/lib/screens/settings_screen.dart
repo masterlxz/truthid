@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../services/bundler_config_service.dart';
 import '../theme.dart';
+import '../l10n/l10n_extensions.dart';
 import 'deeplink_self_test_screen.dart';
 import 'guardian_status_screen.dart';
 import 'security_screen.dart';
@@ -53,7 +54,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) {
       setState(() {
         _saving = false;
-        _saved = 'Settings saved. Changes apply on next login.';
+        _saved = context.l10n.settingsScreenSavedMessage;
       });
       Future.delayed(const Duration(seconds: 3), () {
         if (mounted) setState(() => _saved = null);
@@ -71,7 +72,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(title: Text(context.l10n.settingsScreenTitle)),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -79,36 +80,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
-                    'Bundler Configuration',
-                    style: TextStyle(
+                  Text(
+                    context.l10n.settingsScreenBundlerConfigTitle,
+                    style: const TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                       fontFamily: 'SpaceGrotesk',
                     ),
                   ),
                   const SizedBox(height: 4),
-                  const Text(
-                    'Your bundler submits user operations to the blockchain on your behalf. You need your own API key (free at pimlico.io) — or connect a self-hosted bundler.',
-                    style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+                  Text(
+                    context.l10n.settingsScreenBundlerConfigIntro,
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
                   ),
                   const SizedBox(height: 24),
                   TextField(
                     controller: _apiKeyCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Pimlico API Key',
-                      hintText: 'pim_...',
-                      helperText: 'Get a free key at dashboard.pimlico.io',
+                    decoration: InputDecoration(
+                      labelText: context.l10n.settingsScreenApiKeyLabel,
+                      hintText: context.l10n.settingsScreenApiKeyHint,
+                      helperText: context.l10n.settingsScreenApiKeyHelper,
                     ),
                     style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
                   ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: _networkCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Network',
-                      hintText: 'base',
-                      helperText: 'base, base-sepolia, or custom bundler URL',
+                    decoration: InputDecoration(
+                      labelText: context.l10n.settingsScreenNetworkLabel,
+                      hintText: context.l10n.settingsScreenNetworkHint,
+                      helperText: context.l10n.settingsScreenNetworkHelper,
                     ),
                     style: const TextStyle(fontFamily: 'monospace', fontSize: 14),
                   ),
@@ -129,7 +130,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               color: AppColors.background,
                             ),
                           )
-                        : const Text('Save', style: TextStyle(fontSize: 16)),
+                        : Text(context.l10n.settingsScreenSaveButton,
+                            style: const TextStyle(fontSize: 16)),
                   ),
                   if (_saved != null) ...[
                     const SizedBox(height: 16),
@@ -146,18 +148,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ],
                   const SizedBox(height: 32),
-                  const Text(
-                    'Why do I need my own key?',
-                    style: TextStyle(
+                  Text(
+                    context.l10n.settingsScreenWhyOwnKeyTitle,
+                    style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.bold,
                       fontFamily: 'SpaceGrotesk',
                     ),
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'TruthID is decentralized — there is no company server paying your blockchain fees. Your smart account holds ETH and pays the bundler directly. The API key is only to reach the bundler node.',
-                    style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+                  Text(
+                    context.l10n.settingsScreenWhyOwnKeyBody,
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
                   ),
                   const SizedBox(height: 32),
                   const Divider(),
@@ -165,10 +167,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.people_outline, color: AppColors.textMuted),
-                    title: const Text('Social Recovery'),
-                    subtitle: const Text(
-                      'View guardian status and active proposals',
-                      style: TextStyle(fontSize: 12),
+                    title: Text(context.l10n.settingsScreenSocialRecoveryTitle),
+                    subtitle: Text(
+                      context.l10n.settingsScreenSocialRecoverySubtitle,
+                      style: const TextStyle(fontSize: 12),
                     ),
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(
@@ -180,10 +182,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ListTile(
                     contentPadding: EdgeInsets.zero,
                     leading: const Icon(Icons.security, color: AppColors.textMuted),
-                    title: const Text('Security'),
-                    subtitle: const Text(
-                      'App lock via your device biometrics or PIN',
-                      style: TextStyle(fontSize: 12),
+                    title: Text(context.l10n.settingsScreenSecurityTitle),
+                    subtitle: Text(
+                      context.l10n.settingsScreenSecuritySubtitle,
+                      style: const TextStyle(fontSize: 12),
                     ),
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const SecurityScreen()),

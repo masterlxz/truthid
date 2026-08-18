@@ -15,6 +15,7 @@ import '../services/vault_repository.dart';
 import '../services/vault_sync_service.dart';
 import '../theme.dart';
 import '../widgets/info_row.dart';
+import '../l10n/l10n_extensions.dart';
 
 // Estados possíveis da tela — do QR escaneado até o envio de verdade pra
 // extensão. 13.9, fatia 1 (LAN) e fatia 2a (dead-drop IPFS/IPNS, só o lado
@@ -111,31 +112,30 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
   _Status? _validatePayload() {
     final v = widget.payload['v'];
     if (v != 1) {
-      _errorMsg = 'Invalid QR: unsupported schema version.';
+      _errorMsg = context.l10n.vaultSessionScreenErrorInvalidVersion;
       return _Status.error;
     }
 
     final sessionId = widget.payload['sessionId'] as String?;
     if (sessionId == null || sessionId.isEmpty) {
-      _errorMsg = 'Invalid QR: missing sessionId.';
+      _errorMsg = context.l10n.vaultSessionScreenErrorMissingSessionId;
       return _Status.error;
     }
 
     final ephemeralPubKey = widget.payload['ephemeralPubKey'] as String?;
     if (ephemeralPubKey == null || ephemeralPubKey.isEmpty) {
-      _errorMsg = 'Invalid QR: missing ephemeralPubKey.';
+      _errorMsg = context.l10n.vaultSessionScreenErrorMissingEphemeralPubKey;
       return _Status.error;
     }
 
     final expiresAtMs = widget.payload['expiresAt'];
     if (expiresAtMs is! int) {
-      _errorMsg = 'Invalid QR: missing expiresAt.';
+      _errorMsg = context.l10n.vaultSessionScreenErrorMissingExpiresAt;
       return _Status.error;
     }
     final expiresAt = DateTime.fromMillisecondsSinceEpoch(expiresAtMs);
     if (expiresAt.isBefore(DateTime.now())) {
-      _errorMsg = 'This QR code has expired — go back to the extension and '
-          'scan a fresh one.';
+      _errorMsg = context.l10n.vaultSessionScreenErrorExpiredQr;
       return _Status.error;
     }
 
@@ -213,7 +213,7 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
       if (expiresAt.isBefore(DateTime.now())) {
         setState(() {
           _status = _Status.error;
-          _errorMsg = 'Session expired before sending — scan the QR again.';
+          _errorMsg = context.l10n.vaultSessionScreenErrorSessionExpired;
         });
         return;
       }
@@ -248,7 +248,8 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
       if (!mounted) return;
       setState(() {
         _status = _Status.error;
-        _errorMsg = 'Failed to send to the extension: $e';
+        _errorMsg =
+            context.l10n.vaultSessionScreenErrorSendFailed(e.toString());
       });
     }
   }
@@ -277,7 +278,7 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Extension session')),
+      appBar: AppBar(title: Text(context.l10n.vaultSessionScreenTitle)),
       body: switch (_status) {
         _Status.info => _buildInfoUI(),
         _Status.selectingProfile => _buildProfilePickerUI(),
@@ -302,23 +303,25 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
             const Icon(Icons.extension_outlined,
                 size: 64, color: AppColors.accent),
             const SizedBox(height: 16),
-            const Text(
-              'Browser extension scan',
+            Text(
+              context.l10n.vaultSessionScreenInfoTitle,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'A browser extension wants to receive part of your vault.',
+            Text(
+              context.l10n.vaultSessionScreenInfoBody,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             const SizedBox(height: 32),
-            InfoRow(label: 'Session', value: _sessionId!),
+            InfoRow(
+                label: context.l10n.vaultSessionScreenSessionLabel,
+                value: _sessionId!),
             const SizedBox(height: 32),
             ElevatedButton(
               onPressed: _loadProfiles,
-              child: const Text('Continue'),
+              child: Text(context.l10n.vaultSessionScreenContinueButton),
             ),
           ],
         ),
@@ -333,21 +336,20 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'Which profile should be shared?',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          Text(
+            context.l10n.vaultSessionScreenProfilePickerTitle,
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
-          const Text(
-            'Only entries tagged with this profile will be considered.',
-            style: TextStyle(color: AppColors.textMuted),
+          Text(
+            context.l10n.vaultSessionScreenProfilePickerBody,
+            style: const TextStyle(color: AppColors.textMuted),
           ),
           const SizedBox(height: 24),
           if (profileNames.isEmpty)
-            const Text(
-              'No profiles created yet — create one from the Desktop app '
-              'and sync again.',
-              style: TextStyle(color: AppColors.textMuted),
+            Text(
+              context.l10n.vaultSessionScreenNoProfiles,
+              style: const TextStyle(color: AppColors.textMuted),
             )
           else
             ...profileNames.map(
@@ -380,20 +382,24 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: 16),
-            InfoRow(label: 'Profile', value: _selectedProfile ?? ''),
+            InfoRow(
+                label: context.l10n.vaultSessionScreenProfileLabel,
+                value: _selectedProfile ?? ''),
             const SizedBox(height: 8),
-            InfoRow(label: 'Matching entries', value: '${_matchingEntries.length}'),
+            InfoRow(
+                label: context.l10n.vaultSessionScreenMatchingEntriesLabel,
+                value: '${_matchingEntries.length}'),
             if (offline) ...[
               const SizedBox(height: 16),
-              const Text(
-                'Offline — showing entries from your last sync.',
-                style: TextStyle(color: AppColors.info),
+              Text(
+                context.l10n.vaultSessionScreenOfflineNotice,
+                style: const TextStyle(color: AppColors.info),
               ),
             ],
             const SizedBox(height: 32),
             ElevatedButton(
               onPressed: _sendToExtension,
-              child: const Text('Send to extension'),
+              child: Text(context.l10n.vaultSessionScreenSendButton),
             ),
           ],
         ),
@@ -411,25 +417,23 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
             const SizedBox(height: 48),
             const Center(child: CircularProgressIndicator()),
             const SizedBox(height: 24),
-            const Text(
-              'Waiting for your browser to connect...',
+            Text(
+              context.l10n.vaultSessionScreenSendingTitle,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Make sure your phone and computer are on the same Wi-Fi '
-              'network.',
+            Text(
+              context.l10n.vaultSessionScreenWifiHint,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             if (_localIps.isNotEmpty) ...[
               const SizedBox(height: 24),
-              const Text(
-                'If your browser can\'t find your phone automatically, enter '
-                'this IP address manually:',
+              Text(
+                context.l10n.vaultSessionScreenManualIpHint,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textMuted),
+                style: const TextStyle(color: AppColors.textMuted),
               ),
               const SizedBox(height: 8),
               ..._localIps.map(
@@ -462,35 +466,35 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
             const Icon(Icons.check_circle_outline,
                 size: 72, color: AppColors.accent),
             const SizedBox(height: 16),
-            const Text(
-              'Sent',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Text(
+              context.l10n.vaultSessionScreenSentTitle,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Your browser extension received the vault entries.',
+            Text(
+              context.l10n.vaultSessionScreenSentBody,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             if (_deadDropIpnsName != null) ...[
               const SizedBox(height: 8),
-              const Text(
-                'Dead-drop backup published (IPFS/IPNS).',
+              Text(
+                context.l10n.vaultSessionScreenDeadDropPublished,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
               ),
             ] else if (_deadDropError != null) ...[
               const SizedBox(height: 8),
-              const Text(
-                'Dead-drop backup unavailable this time.',
+              Text(
+                context.l10n.vaultSessionScreenDeadDropUnavailable,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
               ),
             ],
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Done'),
+              child: Text(context.l10n.vaultSessionScreenDoneButton),
             ),
           ],
         ),
@@ -507,22 +511,20 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
           children: [
             const Icon(Icons.wifi_off, size: 72, color: AppColors.textMuted),
             const SizedBox(height: 16),
-            const Text(
-              'Nothing arrived',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Text(
+              context.l10n.vaultSessionScreenTimeoutTitle,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Your browser extension never connected before this session '
-              'expired. Make sure both devices are on the same Wi-Fi '
-              'network and try again.',
+            Text(
+              context.l10n.vaultSessionScreenTimeoutBody,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: _sendToExtension,
-              child: const Text('Try again'),
+              child: Text(context.l10n.vaultSessionScreenTryAgainButton),
             ),
           ],
         ),
@@ -540,14 +542,14 @@ class _VaultSessionScreenState extends State<VaultSessionScreen> {
             const Icon(Icons.error_outline, size: 72, color: AppColors.danger),
             const SizedBox(height: 16),
             Text(
-              _errorMsg ?? 'Something went wrong.',
+              _errorMsg ?? context.l10n.vaultSessionScreenGenericError,
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Back'),
+              child: Text(context.l10n.vaultSessionScreenBackButton),
             ),
           ],
         ),

@@ -18,6 +18,7 @@ import '../services/vault_lan_server_service.dart';
 import '../services/vault_publish_service.dart';
 import '../services/vault_repository.dart';
 import '../theme.dart';
+import '../l10n/l10n_extensions.dart';
 
 // Diferente do irmão `PinApprovalScreen`, aqui não há fase 2 de entrega de
 // resultado — a extensão não roda servidor, não tem como receber um "sent"
@@ -169,37 +170,37 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
   _Status? _validatePayload() {
     final v = widget.payload['v'];
     if (v != 1) {
-      _errorMsg = 'Invalid QR: unsupported schema version.';
+      _errorMsg = context.l10n.vaultEditApprovalScreenErrorInvalidVersion;
       return _Status.error;
     }
 
     final sessionId = widget.payload['sessionId'] as String?;
     if (sessionId == null || sessionId.isEmpty) {
-      _errorMsg = 'Invalid QR: missing sessionId.';
+      _errorMsg = context.l10n.vaultEditApprovalScreenErrorMissingSessionId;
       return _Status.error;
     }
 
     final ephemeralPubKey = widget.payload['ephemeralPubKey'] as String?;
     if (ephemeralPubKey == null || ephemeralPubKey.isEmpty) {
-      _errorMsg = 'Invalid QR: missing ephemeralPubKey.';
+      _errorMsg =
+          context.l10n.vaultEditApprovalScreenErrorMissingEphemeralPubKey;
       return _Status.error;
     }
 
     final expiresAtMs = widget.payload['expiresAt'];
     if (expiresAtMs is! int) {
-      _errorMsg = 'Invalid QR: missing expiresAt.';
+      _errorMsg = context.l10n.vaultEditApprovalScreenErrorMissingExpiresAt;
       return _Status.error;
     }
     final expiresAt = DateTime.fromMillisecondsSinceEpoch(expiresAtMs);
     if (expiresAt.isBefore(DateTime.now())) {
-      _errorMsg = 'This QR code has expired — go back to the extension and '
-          'scan a fresh one.';
+      _errorMsg = context.l10n.vaultEditApprovalScreenErrorExpiredQr;
       return _Status.error;
     }
 
     final appName = (widget.payload['appName'] as String?)?.trim() ?? '';
     if (appName.isEmpty) {
-      _errorMsg = 'Invalid QR: missing appName.';
+      _errorMsg = context.l10n.vaultEditApprovalScreenErrorMissingAppName;
       return _Status.error;
     }
 
@@ -246,7 +247,8 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
       if (!mounted) return;
       setState(() {
         _status = _Status.error;
-        _errorMsg = 'Failed to decrypt the received proposal: $e';
+        _errorMsg = context.l10n
+            .vaultEditApprovalScreenErrorDecryptFailed(e.toString());
       });
     }
   }
@@ -303,7 +305,7 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
       if (!mounted) return null;
       setState(() {
         _status = _Status.error;
-        _errorMsg = "This phone isn't paired with a TruthID identity yet.";
+        _errorMsg = context.l10n.vaultEditApprovalScreenErrorNotPaired;
       });
       return null;
     }
@@ -324,7 +326,7 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
       setState(() {
         _status = _Status.error;
         _errorMsg =
-            'Still resolving your identity on-chain — try again in a moment.';
+            context.l10n.vaultEditApprovalScreenErrorResolvingIdentity;
       });
       return null;
     }
@@ -343,7 +345,8 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
       if (!mounted) return null;
       setState(() {
         _status = _Status.error;
-        _errorMsg = 'Could not resolve your smart account — try again.';
+        _errorMsg =
+            context.l10n.vaultEditApprovalScreenErrorResolveSmartAccount;
       });
       return null;
     }
@@ -423,7 +426,8 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
       if (!mounted) return;
       setState(() {
         _status = _Status.error;
-        _errorMsg = 'Failed to save and publish the new credential: $e';
+        _errorMsg = context.l10n
+            .vaultEditApprovalScreenErrorSaveFailed(e.toString());
       });
     } finally {
       _approving = false;
@@ -437,7 +441,7 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('New credential request')),
+      appBar: AppBar(title: Text(context.l10n.vaultEditApprovalScreenTitle)),
       body: switch (_status) {
         _Status.receivingContent => _buildReceivingUI(),
         _Status.awaitingApproval => _buildApprovalUI(),
@@ -460,24 +464,25 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
             const Center(child: CircularProgressIndicator()),
             const SizedBox(height: 24),
             Text(
-              '${_appName ?? 'An app'} wants to send a new credential...',
+              context.l10n.vaultEditApprovalScreenReceivingTitle(
+                _appName ??
+                    context.l10n.vaultEditApprovalScreenDefaultAppName,
+              ),
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Make sure your phone and computer are on the same Wi-Fi '
-              'network.',
+            Text(
+              context.l10n.vaultEditApprovalScreenWifiHint,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             if (_localIps.isNotEmpty) ...[
               const SizedBox(height: 24),
-              const Text(
-                'If the extension can\'t find your phone automatically, '
-                'enter this IP address manually:',
+              Text(
+                context.l10n.vaultEditApprovalScreenManualIpHint,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textMuted),
+                style: const TextStyle(color: AppColors.textMuted),
               ),
               const SizedBox(height: 8),
               ..._localIps.map(
@@ -515,19 +520,24 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Site', style: const TextStyle(color: AppColors.textMuted)),
+            Text(context.l10n.vaultEditApprovalScreenSiteLabel,
+                style: const TextStyle(color: AppColors.textMuted)),
             Text(site, style: const TextStyle(fontSize: 16)),
             const SizedBox(height: 4),
             Text(
-              isUpdate ? 'Updating existing entry' : 'New entry',
+              isUpdate
+                  ? context.l10n.vaultEditApprovalScreenUpdatingEntryLabel
+                  : context.l10n.vaultEditApprovalScreenNewEntryLabel,
               style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
             ),
             const SizedBox(height: 12),
-            Text('Username', style: const TextStyle(color: AppColors.textMuted)),
+            Text(context.l10n.vaultEditApprovalScreenUsernameLabel,
+                style: const TextStyle(color: AppColors.textMuted)),
             Text(username, style: const TextStyle(fontSize: 16)),
             if (password.isNotEmpty) ...[
               const SizedBox(height: 12),
-              Text('Password', style: const TextStyle(color: AppColors.textMuted)),
+              Text(context.l10n.vaultEditApprovalScreenPasswordLabel,
+                  style: const TextStyle(color: AppColors.textMuted)),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -552,7 +562,9 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
             ],
             if (hasPasskey) ...[
               const SizedBox(height: 12),
-              const Chip(label: Text('+ passkey')),
+              Chip(
+                  label: Text(
+                      context.l10n.vaultEditApprovalScreenPasskeyChip)),
             ],
           ],
         ),
@@ -562,9 +574,10 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
 
   Widget _buildApprovalUI() {
     final proposals = _proposals!;
-    final title = proposals.length == 1
-        ? '$_appName wants to save a new credential'
-        : '$_appName wants to save ${proposals.length} new credentials';
+    final title = context.l10n.vaultEditApprovalScreenApprovalTitle(
+      _appName ?? '',
+      proposals.length,
+    );
 
     return SingleChildScrollView(
       child: Padding(
@@ -589,7 +602,8 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
             ElevatedButton.icon(
               onPressed: _approve,
               icon: const Icon(Icons.check_circle_outline),
-              label: const Text('Approve', style: TextStyle(fontSize: 18)),
+              label: Text(context.l10n.vaultEditApprovalScreenApproveButton,
+                  style: const TextStyle(fontSize: 18)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.success,
                 foregroundColor: AppColors.background,
@@ -600,7 +614,8 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
             OutlinedButton.icon(
               onPressed: _reject,
               icon: const Icon(Icons.cancel_outlined),
-              label: const Text('Reject', style: TextStyle(fontSize: 18)),
+              label: Text(context.l10n.vaultEditApprovalScreenRejectButton,
+                  style: const TextStyle(fontSize: 18)),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.danger,
                 side: const BorderSide(color: AppColors.danger),
@@ -619,9 +634,7 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
 
   Widget _buildDoneUI() {
     final count = _proposals?.length ?? 1;
-    final message = count == 1
-        ? 'The new credential was saved to your vault and published.'
-        : 'The $count new credentials were saved to your vault and published.';
+    final message = context.l10n.vaultEditApprovalScreenDoneMessage(count);
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -631,9 +644,9 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
             const Icon(Icons.check_circle_outline,
                 size: 72, color: AppColors.accent),
             const SizedBox(height: 16),
-            const Text(
-              'Saved',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Text(
+              context.l10n.vaultEditApprovalScreenSavedTitle,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
             Text(
@@ -644,7 +657,7 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Done'),
+              child: Text(context.l10n.vaultEditApprovalScreenDoneButton),
             ),
           ],
         ),
@@ -661,22 +674,20 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
           children: [
             const Icon(Icons.wifi_off, size: 72, color: AppColors.textMuted),
             const SizedBox(height: 16),
-            const Text(
-              'Nothing arrived',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Text(
+              context.l10n.vaultEditApprovalScreenTimeoutTitle,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'The extension never connected before this request expired. '
-              'Make sure both devices are on the same Wi-Fi network and try '
-              'again.',
+            Text(
+              context.l10n.vaultEditApprovalScreenTimeoutBody,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Back'),
+              child: Text(context.l10n.vaultEditApprovalScreenBackButton),
             ),
           ],
         ),
@@ -702,7 +713,7 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
             const Icon(Icons.error_outline, size: 72, color: AppColors.danger),
             const SizedBox(height: 16),
             Text(
-              _errorMsg ?? 'Something went wrong.',
+              _errorMsg ?? context.l10n.vaultEditApprovalScreenGenericError,
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 16),
             ),
@@ -710,13 +721,13 @@ class _VaultEditApprovalScreenState extends State<VaultEditApprovalScreen> {
             if (canRetry) ...[
               ElevatedButton(
                 onPressed: _approve,
-                child: const Text('Try again'),
+                child: Text(context.l10n.vaultEditApprovalScreenTryAgainButton),
               ),
               const SizedBox(height: 12),
             ],
             OutlinedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Back'),
+              child: Text(context.l10n.vaultEditApprovalScreenBackButton),
             ),
           ],
         ),
