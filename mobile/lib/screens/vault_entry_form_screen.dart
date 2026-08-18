@@ -6,6 +6,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 
+import '../l10n/l10n_extensions.dart';
 import '../services/totp_service.dart';
 import '../services/vault_repository.dart';
 import '../services/webauthn_service.dart' as webauthn;
@@ -226,12 +227,13 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text('Generate password',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                Text(ctx.l10n.vaultEntryFormScreenGeneratePasswordLabel,
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 const SizedBox(height: 16),
                 Row(
                   children: [
-                    const Text('Length', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text(ctx.l10n.vaultEntryFormScreenLengthLabel,
+                        style: const TextStyle(fontWeight: FontWeight.bold)),
                     const Spacer(),
                     IconButton(
                       icon: const Icon(Icons.remove_circle_outline),
@@ -255,12 +257,14 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                 Wrap(
                   spacing: 8,
                   children: [
-                    ('Uppercase', options.uppercase,
+                    (ctx.l10n.vaultEntryFormScreenUppercaseLabel, options.uppercase,
                         (bool v) => options.copyWith(uppercase: v)),
-                    ('Lowercase', options.lowercase,
+                    (ctx.l10n.vaultEntryFormScreenLowercaseLabel, options.lowercase,
                         (bool v) => options.copyWith(lowercase: v)),
-                    ('Numbers', options.numbers, (bool v) => options.copyWith(numbers: v)),
-                    ('Symbols', options.symbols, (bool v) => options.copyWith(symbols: v)),
+                    (ctx.l10n.vaultEntryFormScreenNumbersLabel, options.numbers,
+                        (bool v) => options.copyWith(numbers: v)),
+                    (ctx.l10n.vaultEntryFormScreenSymbolsLabel, options.symbols,
+                        (bool v) => options.copyWith(symbols: v)),
                   ].map((entry) {
                     final (label, selected, apply) = entry;
                     return FilterChip(
@@ -290,7 +294,7 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                       ),
                       IconButton(
                         icon: const Icon(Icons.refresh),
-                        tooltip: 'Regenerate',
+                        tooltip: ctx.l10n.vaultEntryFormScreenRegenerateTooltip,
                         onPressed: () => setSheetState(regenerate),
                       ),
                     ],
@@ -308,7 +312,7 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                     foregroundColor: AppColors.background,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
-                  child: const Text('Use this password'),
+                  child: Text(ctx.l10n.vaultEntryFormScreenUsePasswordButton),
                 ),
               ],
             ),
@@ -452,8 +456,8 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
     final bytes = file?.bytes;
     if (bytes == null || !mounted) return;
     if (bytes.length > _maxDocumentBytes) {
-      setState(() => _docError =
-          'File too large (${_formatBytes(bytes.length)}) — limit is ${_formatBytes(_maxDocumentBytes)}.');
+      setState(() => _docError = context.l10n.vaultEntryFormScreenFileTooLargeError(
+          _formatBytes(bytes.length), _formatBytes(_maxDocumentBytes)));
       return;
     }
     final ext = file!.name.split('.').last.toLowerCase();
@@ -547,9 +551,8 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
     final secret = await Navigator.of(context).push<String>(
       MaterialPageRoute(
         builder: (_) => ScanScreen<String>(
-          title: 'Scan 2FA QR code',
-          instructions:
-              'Point the camera at the QR code shown when setting up 2FA',
+          title: context.l10n.vaultEntryFormScreenScanQrTitle,
+          instructions: context.l10n.vaultEntryFormScreenScanQrInstructions,
           parse: (raw) {
             try {
               return parseTotpSecret(raw);
@@ -587,7 +590,7 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
     final raw = capture?.barcodes.firstOrNull?.rawValue;
     if (raw == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('No QR code found in that image')),
+        SnackBar(content: Text(context.l10n.vaultEntryFormScreenNoQrFoundSnackbar)),
       );
       return;
     }
@@ -598,7 +601,7 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
       _onTotpChanged(secret);
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('QR found but not a valid 2FA secret: $e')),
+        SnackBar(content: Text(context.l10n.vaultEntryFormScreenQrInvalidSecretSnackbar('$e'))),
       );
     }
   }
@@ -667,7 +670,10 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(_isEditing ? 'Edit entry' : 'New entry')),
+      appBar: AppBar(
+          title: Text(_isEditing
+              ? context.l10n.vaultEntryFormScreenEditTitle
+              : context.l10n.vaultEntryFormScreenNewTitle)),
       body: _loadingProfiles
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -678,10 +684,10 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                   Wrap(
                     spacing: 8,
                     children: [
-                      (EntryType.credential, '🔑 Password'),
-                      (EntryType.document, '📄 Document'),
-                      (EntryType.address, '🏠 Address'),
-                      (EntryType.creditCard, '💳 Card'),
+                      (EntryType.credential, context.l10n.vaultEntryFormScreenTypeCredentialChip),
+                      (EntryType.document, context.l10n.vaultEntryFormScreenTypeDocumentChip),
+                      (EntryType.address, context.l10n.vaultEntryFormScreenTypeAddressChip),
+                      (EntryType.creditCard, context.l10n.vaultEntryFormScreenTypeCreditCardChip),
                     ].map((e) {
                       final (type, label) = e;
                       return ChoiceChip(
@@ -695,18 +701,23 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                   if (_type == EntryType.credential) ...[
                     TextField(
                       controller: _siteCtrl,
-                      decoration: const InputDecoration(labelText: 'Site *', hintText: 'e.g. github.com'),
+                      decoration: InputDecoration(
+                          labelText: context.l10n.vaultEntryFormScreenSiteLabel,
+                          hintText: context.l10n.vaultEntryFormScreenSiteHint),
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: _urlCtrl,
-                      decoration: const InputDecoration(labelText: 'URL', hintText: 'https://...'),
+                      decoration: InputDecoration(
+                          labelText: context.l10n.vaultEntryFormScreenUrlLabel,
+                          hintText: context.l10n.vaultEntryFormScreenUrlHint),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: _usernameCtrl,
-                      decoration: const InputDecoration(labelText: 'Username *'),
+                      decoration:
+                          InputDecoration(labelText: context.l10n.vaultEntryFormScreenUsernameLabel),
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 12),
@@ -718,7 +729,7 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                             controller: _passwordCtrl,
                             obscureText: !_showPassword,
                             decoration: InputDecoration(
-                              labelText: 'Password *',
+                              labelText: context.l10n.vaultEntryFormScreenPasswordLabel,
                               suffixIcon: IconButton(
                                 icon: Icon(_showPassword ? Icons.visibility_off : Icons.visibility),
                                 onPressed: () => setState(() => _showPassword = !_showPassword),
@@ -729,7 +740,7 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                         ),
                         IconButton(
                           icon: const Icon(Icons.casino_outlined),
-                          tooltip: 'Generate password',
+                          tooltip: context.l10n.vaultEntryFormScreenGeneratePasswordLabel,
                           onPressed: _openPasswordGenerator,
                         ),
                       ],
@@ -740,19 +751,24 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                   if (_type == EntryType.document) ...[
                     TextField(
                       controller: _docNameCtrl,
-                      decoration: const InputDecoration(labelText: 'Name *', hintText: 'e.g. ID card, Passport, Contract'),
+                      decoration: InputDecoration(
+                          labelText: context.l10n.vaultEntryFormScreenDocNameLabel,
+                          hintText: context.l10n.vaultEntryFormScreenDocNameHint),
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 12),
                     OutlinedButton.icon(
                       onPressed: _pickDocument,
                       icon: const Icon(Icons.attach_file),
-                      label: Text(_docFileName == null ? 'Choose file' : 'Change file'),
+                      label: Text(_docFileName == null
+                          ? context.l10n.vaultEntryFormScreenChooseFileButton
+                          : context.l10n.vaultEntryFormScreenChangeFileButton),
                     ),
                     if (_docFileName != null) ...[
                       const SizedBox(height: 8),
                       Text(
-                        '$_docFileName · ${_formatBytes(_docFileSizeBytes ?? 0)} · $_docMimeType',
+                        context.l10n.vaultEntryFormScreenFileInfoLine(_docFileName!,
+                            _formatBytes(_docFileSizeBytes ?? 0), _docMimeType ?? ''),
                         style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
                       ),
                     ],
@@ -765,92 +781,109 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                   if (_type == EntryType.address) ...[
                     TextField(
                       controller: _addrLabelCtrl,
-                      decoration: const InputDecoration(labelText: 'Label *', hintText: 'e.g. Home, Work, Delivery'),
+                      decoration: InputDecoration(
+                          labelText: context.l10n.vaultEntryFormScreenAddressLabelFieldLabel,
+                          hintText: context.l10n.vaultEntryFormScreenAddressLabelHint),
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: _addrFullNameCtrl,
-                      decoration: const InputDecoration(labelText: 'Full name *'),
+                      decoration:
+                          InputDecoration(labelText: context.l10n.vaultEntryFormScreenFullNameLabel),
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: _addrStreetCtrl,
-                      decoration: const InputDecoration(labelText: 'Street *'),
+                      decoration:
+                          InputDecoration(labelText: context.l10n.vaultEntryFormScreenStreetLabel),
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: _addrNumberCtrl,
-                      decoration: const InputDecoration(labelText: 'Number *'),
+                      decoration:
+                          InputDecoration(labelText: context.l10n.vaultEntryFormScreenNumberLabel),
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: _addrComplementCtrl,
-                      decoration: const InputDecoration(labelText: 'Complement'),
+                      decoration:
+                          InputDecoration(labelText: context.l10n.vaultEntryFormScreenComplementLabel),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: _addrNeighborhoodCtrl,
-                      decoration: const InputDecoration(labelText: 'Neighborhood *'),
+                      decoration: InputDecoration(
+                          labelText: context.l10n.vaultEntryFormScreenNeighborhoodLabel),
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: _addrCityCtrl,
-                      decoration: const InputDecoration(labelText: 'City *'),
+                      decoration:
+                          InputDecoration(labelText: context.l10n.vaultEntryFormScreenCityLabel),
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: _addrStateCtrl,
-                      decoration: const InputDecoration(labelText: 'State *'),
+                      decoration:
+                          InputDecoration(labelText: context.l10n.vaultEntryFormScreenStateLabel),
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: _addrZipCodeCtrl,
-                      decoration: const InputDecoration(labelText: 'ZIP code *'),
+                      decoration:
+                          InputDecoration(labelText: context.l10n.vaultEntryFormScreenZipCodeLabel),
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: _addrCountryCtrl,
-                      decoration: const InputDecoration(labelText: 'Country *'),
+                      decoration:
+                          InputDecoration(labelText: context.l10n.vaultEntryFormScreenCountryLabel),
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: _addrPhoneCtrl,
-                      decoration: const InputDecoration(labelText: 'Phone'),
+                      decoration:
+                          InputDecoration(labelText: context.l10n.vaultEntryFormScreenPhoneLabel),
                     ),
                     const SizedBox(height: 12),
                   ],
                   if (_type == EntryType.creditCard) ...[
                     TextField(
                       controller: _cardLabelCtrl,
-                      decoration: const InputDecoration(labelText: 'Label *', hintText: 'e.g. Nubank, Itaú Platinum'),
+                      decoration: InputDecoration(
+                          labelText: context.l10n.vaultEntryFormScreenCardLabelFieldLabel,
+                          hintText: context.l10n.vaultEntryFormScreenCardLabelHint),
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: _cardHolderNameCtrl,
-                      decoration: const InputDecoration(labelText: 'Card holder *'),
+                      decoration:
+                          InputDecoration(labelText: context.l10n.vaultEntryFormScreenCardHolderLabel),
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: _cardNumberCtrl,
-                      decoration: const InputDecoration(labelText: 'Card number *'),
+                      decoration:
+                          InputDecoration(labelText: context.l10n.vaultEntryFormScreenCardNumberLabel),
                       keyboardType: TextInputType.number,
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<CardNetwork>(
                       initialValue: _cardNetwork,
-                      decoration: const InputDecoration(labelText: 'Network *'),
+                      decoration:
+                          InputDecoration(labelText: context.l10n.vaultEntryFormScreenNetworkLabel),
                       items: CardNetwork.values
                           .map((n) => DropdownMenuItem(value: n, child: Text(n.name)))
                           .toList(),
@@ -862,7 +895,9 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                         Expanded(
                           child: TextField(
                             controller: _cardExpiryMonthCtrl,
-                            decoration: const InputDecoration(labelText: 'Exp. month *', hintText: 'MM'),
+                            decoration: InputDecoration(
+                                labelText: context.l10n.vaultEntryFormScreenExpiryMonthLabel,
+                                hintText: context.l10n.vaultEntryFormScreenExpiryMonthHint),
                             onChanged: (_) => setState(() {}),
                           ),
                         ),
@@ -870,7 +905,9 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                         Expanded(
                           child: TextField(
                             controller: _cardExpiryYearCtrl,
-                            decoration: const InputDecoration(labelText: 'Exp. year *', hintText: 'YYYY'),
+                            decoration: InputDecoration(
+                                labelText: context.l10n.vaultEntryFormScreenExpiryYearLabel,
+                                hintText: context.l10n.vaultEntryFormScreenExpiryYearHint),
                             onChanged: (_) => setState(() {}),
                           ),
                         ),
@@ -879,20 +916,23 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                     const SizedBox(height: 12),
                     TextField(
                       controller: _cardCvvCtrl,
-                      decoration: const InputDecoration(labelText: 'CVV *'),
+                      decoration:
+                          InputDecoration(labelText: context.l10n.vaultEntryFormScreenCvvLabel),
                       keyboardType: TextInputType.number,
                       onChanged: (_) => setState(() {}),
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: _cardBankCtrl,
-                      decoration: const InputDecoration(labelText: 'Bank'),
+                      decoration:
+                          InputDecoration(labelText: context.l10n.vaultEntryFormScreenBankLabel),
                     ),
                     const SizedBox(height: 12),
                   ],
                   TextField(
                     controller: _notesCtrl,
-                    decoration: const InputDecoration(labelText: 'Notes'),
+                    decoration:
+                        InputDecoration(labelText: context.l10n.vaultEntryFormScreenNotesLabel),
                     maxLines: 3,
                   ),
                   const SizedBox(height: 12),
@@ -900,20 +940,20 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                     TextField(
                       controller: _totpSecretCtrl,
                       decoration: InputDecoration(
-                        labelText: '2FA secret (optional)',
-                        hintText: 'base32 secret or otpauth://... URI',
+                        labelText: context.l10n.vaultEntryFormScreenTotpSecretLabel,
+                        hintText: context.l10n.vaultEntryFormScreenTotpSecretHint,
                         errorText: _totpError,
                         suffixIcon: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             IconButton(
                               icon: const Icon(Icons.qr_code_scanner),
-                              tooltip: 'Scan QR code',
+                              tooltip: context.l10n.vaultEntryFormScreenScanQrTooltip,
                               onPressed: _scanTotpQr,
                             ),
                             IconButton(
                               icon: const Icon(Icons.photo_library_outlined),
-                              tooltip: 'Upload QR from photo',
+                              tooltip: context.l10n.vaultEntryFormScreenUploadQrTooltip,
                               onPressed: _pickTotpQrImage,
                             ),
                           ],
@@ -924,7 +964,8 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                     const SizedBox(height: 12),
                     Row(
                       children: [
-                        const Text('Passkey: ', style: TextStyle(fontWeight: FontWeight.bold)),
+                        Text(context.l10n.vaultEntryFormScreenPasskeyLabel,
+                            style: const TextStyle(fontWeight: FontWeight.bold)),
                         if (_passkey != null)
                           Expanded(
                             child: Text(_passkey!.rpId,
@@ -933,18 +974,21 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                           ),
                         TextButton(
                           onPressed: _generatePasskey,
-                          child: Text(_passkey == null ? 'Gerar passkey' : 'Recriar'),
+                          child: Text(_passkey == null
+                              ? context.l10n.vaultEntryFormScreenGeneratePasskeyButton
+                              : context.l10n.vaultEntryFormScreenRecreatePasskeyButton),
                         ),
                       ],
                     ),
                     const SizedBox(height: 16),
                   ],
-                  const Text('Profiles', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text(context.l10n.vaultEntryFormScreenProfilesLabel,
+                      style: const TextStyle(fontWeight: FontWeight.bold)),
                   const SizedBox(height: 8),
                   if (_profileOptions.isEmpty)
-                    const Text(
-                      'No profiles created yet — create one from the Desktop app.',
-                      style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+                    Text(
+                      context.l10n.vaultEntryFormScreenNoProfilesMessage,
+                      style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
                     )
                   else
                     Wrap(
@@ -979,7 +1023,7 @@ class _VaultEntryFormScreenState extends State<VaultEntryFormScreen> {
                         ? const SizedBox(
                             width: 20, height: 20,
                             child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.background))
-                        : const Text('Save'),
+                        : Text(context.l10n.vaultEntryFormScreenSaveButton),
                   ),
                 ],
               ),

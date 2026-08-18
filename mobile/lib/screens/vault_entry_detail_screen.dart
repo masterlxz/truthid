@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../l10n/l10n_extensions.dart';
 import '../services/totp_service.dart';
 import '../services/vault_repository.dart';
 import '../services/webauthn_service.dart' as webauthn;
@@ -50,17 +51,20 @@ class _VaultEntryDetailScreenState extends State<VaultEntryDetailScreen> {
 
   // Fase 15.3 — título por tipo, substitui `entry.site` hardcoded (AppBar +
   // diálogo de exclusão), mirror do `entryTitle`/título por tipo do Desktop.
-  String get _title => switch (_entry.type) {
+  String _title(BuildContext context) => switch (_entry.type) {
         EntryType.credential => _entry.site,
-        EntryType.document => _entry.document?.name ?? 'Document',
-        EntryType.address => _entry.address?.label ?? 'Address',
-        EntryType.creditCard => _entry.creditCard?.label ?? 'Card',
+        EntryType.document =>
+          _entry.document?.name ?? context.l10n.vaultEntryDetailScreenDocumentFallbackTitle,
+        EntryType.address =>
+          _entry.address?.label ?? context.l10n.vaultEntryDetailScreenAddressFallbackTitle,
+        EntryType.creditCard =>
+          _entry.creditCard?.label ?? context.l10n.vaultEntryDetailScreenCardFallbackTitle,
       };
 
   void _copy(String label, String value) {
     Clipboard.setData(ClipboardData(text: value));
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$label copied!')),
+      SnackBar(content: Text(context.l10n.vaultEntryDetailScreenCopiedSnackbar(label))),
     );
   }
 
@@ -85,7 +89,9 @@ class _VaultEntryDetailScreenState extends State<VaultEntryDetailScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not load document: $e')),
+          SnackBar(
+              content:
+                  Text(context.l10n.vaultEntryDetailScreenLoadDocumentFailedSnackbar('$e'))),
         );
       }
       return;
@@ -97,7 +103,7 @@ class _VaultEntryDetailScreenState extends State<VaultEntryDetailScreen> {
     );
     if (path == null || !mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Document saved ✓')),
+      SnackBar(content: Text(context.l10n.vaultEntryDetailScreenDocumentSavedSnackbar)),
     );
   }
 
@@ -120,13 +126,17 @@ class _VaultEntryDetailScreenState extends State<VaultEntryDetailScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete entry?'),
-        content: Text('This will remove "$_title" from your vault.'),
+        title: Text(ctx.l10n.vaultEntryDetailScreenDeleteDialogTitle),
+        content: Text(
+            ctx.l10n.vaultEntryDetailScreenDeleteDialogContent(_title(ctx))),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(ctx.l10n.vaultEntryDetailScreenCancelButton)),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Delete', style: TextStyle(color: AppColors.danger)),
+            child: Text(ctx.l10n.vaultEntryDetailScreenDeleteButton,
+                style: const TextStyle(color: AppColors.danger)),
           ),
         ],
       ),
@@ -144,7 +154,7 @@ class _VaultEntryDetailScreenState extends State<VaultEntryDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(_title),
+        title: Text(_title(context)),
         actions: widget.canWrite
             ? [
                 IconButton(icon: const Icon(Icons.edit), onPressed: _deleting ? null : _edit),
@@ -161,31 +171,34 @@ class _VaultEntryDetailScreenState extends State<VaultEntryDetailScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             if (entry.type == EntryType.credential) ...[
-              InfoRow(label: 'Site', value: entry.site),
+              InfoRow(label: context.l10n.vaultEntryDetailScreenSiteLabel, value: entry.site),
               if (entry.url.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 _LinkRow(url: entry.url),
               ],
               const SizedBox(height: 8),
               _CopyableRow(
-                label: 'Username',
+                label: context.l10n.vaultEntryDetailScreenUsernameLabel,
                 value: entry.username,
-                onCopy: () => _copy('Username', entry.username),
+                onCopy: () =>
+                    _copy(context.l10n.vaultEntryDetailScreenUsernameLabel, entry.username),
               ),
               const SizedBox(height: 8),
               _CopyableRow(
-                label: 'Password',
+                label: context.l10n.vaultEntryDetailScreenPasswordLabel,
                 value: entry.password,
                 masked: !_passwordVisible,
                 onToggleVisibility: () =>
                     setState(() => _passwordVisible = !_passwordVisible),
-                onCopy: () => _copy('Password', entry.password),
+                onCopy: () =>
+                    _copy(context.l10n.vaultEntryDetailScreenPasswordLabel, entry.password),
               ),
               if (entry.totpSecret != null && entry.totpSecret!.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 _TotpCodeRow(
                   secret: entry.totpSecret!,
-                  onCopy: (code) => _copy('2FA code', code),
+                  onCopy: (code) =>
+                      _copy(context.l10n.vaultEntryDetailScreenTotpCodeLabel, code),
                 ),
               ],
               if (entry.passkey != null) ...[
@@ -194,83 +207,84 @@ class _VaultEntryDetailScreenState extends State<VaultEntryDetailScreen> {
               ],
             ],
             if (entry.type == EntryType.document && entry.document != null) ...[
-              InfoRow(label: 'Name', value: entry.document!.name),
+              InfoRow(label: context.l10n.vaultEntryDetailScreenNameLabel, value: entry.document!.name),
               const SizedBox(height: 8),
-              InfoRow(label: 'File', value: entry.document!.fileName),
+              InfoRow(label: context.l10n.vaultEntryDetailScreenFileLabel, value: entry.document!.fileName),
               const SizedBox(height: 8),
               InfoRow(
-                label: 'Size',
-                value:
-                    '${_formatBytes(entry.document!.fileSizeBytes)} · ${entry.document!.mimeType}',
+                label: context.l10n.vaultEntryDetailScreenSizeLabel,
+                value: context.l10n.vaultEntryDetailScreenSizeValue(
+                    _formatBytes(entry.document!.fileSizeBytes), entry.document!.mimeType),
               ),
               const SizedBox(height: 16),
               OutlinedButton.icon(
                 onPressed: () => _downloadDocument(entry.document!),
                 icon: const Icon(Icons.download),
-                label: const Text('Save to device'),
+                label: Text(context.l10n.vaultEntryDetailScreenSaveToDeviceButton),
               ),
             ],
             if (entry.type == EntryType.address && entry.address != null) ...[
-              InfoRow(label: 'Full name', value: entry.address!.fullName),
+              InfoRow(label: context.l10n.vaultEntryDetailScreenFullNameLabel, value: entry.address!.fullName),
               const SizedBox(height: 8),
               InfoRow(
-                label: 'Street',
+                label: context.l10n.vaultEntryDetailScreenStreetLabel,
                 value: '${entry.address!.street}, ${entry.address!.number}',
               ),
               if (entry.address!.complement != null && entry.address!.complement!.isNotEmpty) ...[
                 const SizedBox(height: 8),
-                InfoRow(label: 'Complement', value: entry.address!.complement!),
+                InfoRow(label: context.l10n.vaultEntryDetailScreenComplementLabel, value: entry.address!.complement!),
               ],
               const SizedBox(height: 8),
-              InfoRow(label: 'Neighborhood', value: entry.address!.neighborhood),
+              InfoRow(label: context.l10n.vaultEntryDetailScreenNeighborhoodLabel, value: entry.address!.neighborhood),
               const SizedBox(height: 8),
               InfoRow(
-                label: 'City/State',
+                label: context.l10n.vaultEntryDetailScreenCityStateLabel,
                 value: '${entry.address!.city}/${entry.address!.state}',
               ),
               const SizedBox(height: 8),
-              InfoRow(label: 'ZIP code', value: entry.address!.zipCode),
+              InfoRow(label: context.l10n.vaultEntryDetailScreenZipCodeLabel, value: entry.address!.zipCode),
               const SizedBox(height: 8),
-              InfoRow(label: 'Country', value: entry.address!.country),
+              InfoRow(label: context.l10n.vaultEntryDetailScreenCountryLabel, value: entry.address!.country),
               if (entry.address!.phone != null && entry.address!.phone!.isNotEmpty) ...[
                 const SizedBox(height: 8),
-                InfoRow(label: 'Phone', value: entry.address!.phone!),
+                InfoRow(label: context.l10n.vaultEntryDetailScreenPhoneLabel, value: entry.address!.phone!),
               ],
             ],
             if (entry.type == EntryType.creditCard && entry.creditCard != null) ...[
-              InfoRow(label: 'Card holder', value: entry.creditCard!.cardHolderName),
+              InfoRow(label: context.l10n.vaultEntryDetailScreenCardHolderLabel, value: entry.creditCard!.cardHolderName),
               const SizedBox(height: 8),
               _CopyableRow(
-                label: 'Card number',
+                label: context.l10n.vaultEntryDetailScreenCardNumberLabel,
                 value: entry.creditCard!.cardNumber,
                 masked: !_cardNumberVisible,
                 onToggleVisibility: () =>
                     setState(() => _cardNumberVisible = !_cardNumberVisible),
-                onCopy: () => _copy('Card number', entry.creditCard!.cardNumber),
+                onCopy: () => _copy(
+                    context.l10n.vaultEntryDetailScreenCardNumberLabel, entry.creditCard!.cardNumber),
               ),
               const SizedBox(height: 8),
               _CopyableRow(
-                label: 'CVV',
+                label: context.l10n.vaultEntryDetailScreenCvvLabel,
                 value: entry.creditCard!.cvv,
                 masked: !_cvvVisible,
                 onToggleVisibility: () => setState(() => _cvvVisible = !_cvvVisible),
-                onCopy: () => _copy('CVV', entry.creditCard!.cvv),
+                onCopy: () => _copy(context.l10n.vaultEntryDetailScreenCvvLabel, entry.creditCard!.cvv),
               ),
               const SizedBox(height: 8),
               InfoRow(
-                label: 'Expiry',
+                label: context.l10n.vaultEntryDetailScreenExpiryLabel,
                 value: '${entry.creditCard!.expiryMonth}/${entry.creditCard!.expiryYear}',
               ),
               const SizedBox(height: 8),
-              InfoRow(label: 'Network', value: entry.creditCard!.cardNetwork.name),
+              InfoRow(label: context.l10n.vaultEntryDetailScreenNetworkLabel, value: entry.creditCard!.cardNetwork.name),
               if (entry.creditCard!.bank != null && entry.creditCard!.bank!.isNotEmpty) ...[
                 const SizedBox(height: 8),
-                InfoRow(label: 'Bank', value: entry.creditCard!.bank!),
+                InfoRow(label: context.l10n.vaultEntryDetailScreenBankLabel, value: entry.creditCard!.bank!),
               ],
             ],
             if (entry.notes.isNotEmpty) ...[
               const SizedBox(height: 8),
-              InfoRow(label: 'Notes', value: entry.notes),
+              InfoRow(label: context.l10n.vaultEntryDetailScreenNotesLabel, value: entry.notes),
             ],
             if (entry.profiles.isNotEmpty) ...[
               const SizedBox(height: 16),
@@ -307,8 +321,8 @@ class _LinkRow extends StatelessWidget {
         ),
         child: Row(
           children: [
-            const Text('URL: ',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+            Text(context.l10n.vaultEntryDetailScreenUrlLabel,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
             Expanded(
               child: Text(
                 url,
@@ -380,7 +394,8 @@ class _TotpCodeRowState extends State<_TotpCodeRow> {
   @override
   Widget build(BuildContext context) {
     if (_error != null) {
-      return Text('2FA: $_error', style: const TextStyle(color: AppColors.danger));
+      return Text(context.l10n.vaultEntryDetailScreenTotpErrorText('$_error'),
+          style: const TextStyle(color: AppColors.danger));
     }
     final formatted = '${_code.substring(0, 3)} ${_code.substring(3)}';
     return Container(
@@ -391,12 +406,14 @@ class _TotpCodeRowState extends State<_TotpCodeRow> {
       ),
       child: Row(
         children: [
-          const Text('2FA: ', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
+          Text(context.l10n.vaultEntryDetailScreenTotpLabel,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
           Expanded(
             child: Text(formatted,
                 style: const TextStyle(fontFamily: 'monospace', fontSize: 15)),
           ),
-          Text('${_remaining}s', style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+          Text(context.l10n.vaultEntryDetailScreenTotpSecondsRemaining(_remaining),
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
           IconButton(
             icon: const Icon(Icons.copy, size: 20, color: AppColors.textMuted),
             onPressed: () => widget.onCopy(_code),
@@ -483,7 +500,7 @@ class _PasskeyRowState extends State<_PasskeyRow> {
                   ? '✓'
                   : _result == _PasskeyTestResult.error
                       ? '✕'
-                      : 'Testar assinatura',
+                      : context.l10n.vaultEntryDetailScreenTestSignatureButton,
             ),
           ),
         ],

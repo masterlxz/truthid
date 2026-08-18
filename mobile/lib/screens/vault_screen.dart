@@ -14,6 +14,7 @@ import '../services/vault_key_service.dart';
 import '../services/vault_publish_service.dart';
 import '../services/vault_repository.dart';
 import '../services/vault_sync_service.dart';
+import '../l10n/l10n_extensions.dart';
 import '../theme.dart';
 import '../widgets/address_summary.dart';
 import '../widgets/card_summary.dart';
@@ -139,8 +140,8 @@ class _VaultScreenState extends State<VaultScreen> {
       await _load();
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Vault key still not available on-chain.'),
+        SnackBar(
+          content: Text(context.l10n.vaultScreenVaultKeyUnavailableSnackbar),
         ),
       );
     }
@@ -260,7 +261,7 @@ class _VaultScreenState extends State<VaultScreen> {
     final smartAccountAddress = _smartAccountAddress;
     if (smartAccountAddress == null) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Could not resolve your smart account. Check your connection.')),
+        SnackBar(content: Text(context.l10n.vaultScreenSmartAccountUnresolvedSnackbar)),
       );
       return;
     }
@@ -344,7 +345,7 @@ class _VaultScreenState extends State<VaultScreen> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to update favorite: $e')),
+        SnackBar(content: Text(context.l10n.vaultScreenFavoriteUpdateFailedSnackbar('$e'))),
       );
     }
   }
@@ -364,15 +365,15 @@ class _VaultScreenState extends State<VaultScreen> {
             children: [
               const Icon(Icons.link_off, size: 64, color: AppColors.textMuted),
               const SizedBox(height: 16),
-              const Text(
-                'Device not paired',
-                style: TextStyle(fontSize: 18, color: AppColors.textMuted),
+              Text(
+                context.l10n.vaultScreenNotPairedTitle,
+                style: const TextStyle(fontSize: 18, color: AppColors.textMuted),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Pair this device with an identity to see your vault.',
+              Text(
+                context.l10n.vaultScreenNotPairedSubtitle,
                 textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 14, color: AppColors.textMuted),
+                style: const TextStyle(fontSize: 14, color: AppColors.textMuted),
               ),
             ],
           ),
@@ -390,9 +391,9 @@ class _VaultScreenState extends State<VaultScreen> {
         children: [
           Row(
             children: [
-              const Expanded(
-                child: Text('Vault',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              Expanded(
+                child: Text(context.l10n.vaultScreenTitle,
+                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               ),
               // Fora da guarda de _canWrite de propósito: export/import não
               // dependem de permissão de escrita on-chain (só leem/escrevem
@@ -400,7 +401,7 @@ class _VaultScreenState extends State<VaultScreen> {
               // fazer backup do que já vê.
               IconButton(
                 icon: const Icon(Icons.save_alt),
-                tooltip: 'Backup / restore',
+                tooltip: context.l10n.vaultScreenBackupRestoreTooltip,
                 onPressed: () => Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => VaultBackupScreen(repository: _repository),
@@ -410,7 +411,7 @@ class _VaultScreenState extends State<VaultScreen> {
               if (_canWrite) ...[
                 IconButton(
                   icon: const Icon(Icons.cloud_outlined),
-                  tooltip: 'Pinning providers',
+                  tooltip: context.l10n.vaultScreenPinningProvidersTooltip,
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => const PinningProvidersScreen(),
@@ -419,7 +420,7 @@ class _VaultScreenState extends State<VaultScreen> {
                 ),
                 IconButton(
                   icon: const Icon(Icons.account_balance_wallet_outlined),
-                  tooltip: 'Arweave wallet',
+                  tooltip: context.l10n.vaultScreenArweaveWalletTooltip,
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => const ArweaveWalletScreen(),
@@ -428,7 +429,7 @@ class _VaultScreenState extends State<VaultScreen> {
                 ),
                 IconButton(
                   icon: const Icon(Icons.sell_outlined),
-                  tooltip: 'Manage profiles',
+                  tooltip: context.l10n.vaultScreenManageProfilesTooltip,
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => VaultProfilesScreen(repository: _repository),
@@ -438,7 +439,7 @@ class _VaultScreenState extends State<VaultScreen> {
                 if (_identityId != null)
                   IconButton(
                     icon: const Icon(Icons.security),
-                    tooltip: 'Device permissions',
+                    tooltip: context.l10n.vaultScreenDevicePermissionsTooltip,
                     onPressed: () => Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => VaultDevicePermissionsScreen(
@@ -450,7 +451,7 @@ class _VaultScreenState extends State<VaultScreen> {
                   ),
                 IconButton(
                   icon: const Icon(Icons.add),
-                  tooltip: 'New entry',
+                  tooltip: context.l10n.vaultScreenNewEntryTooltip,
                   onPressed: _openNewEntry,
                 ),
               ],
@@ -458,8 +459,8 @@ class _VaultScreenState extends State<VaultScreen> {
           ),
           Text(
             _canWrite
-                ? 'You can add, edit and publish entries from this device.'
-                : 'Read-only here — manage entries from the Desktop app.',
+                ? context.l10n.vaultScreenWritePermissionHint
+                : context.l10n.vaultScreenReadOnlyHint,
             style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
           ),
           if (_canWrite) ...[
@@ -477,8 +478,8 @@ class _VaultScreenState extends State<VaultScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Text(
-                  'Offline — showing entries from your last sync.',
-                  style: TextStyle(color: AppColors.info),
+                  context.l10n.vaultScreenOfflineCacheMessage,
+                  style: const TextStyle(color: AppColors.info),
                 ),
               ),
             ),
@@ -487,45 +488,38 @@ class _VaultScreenState extends State<VaultScreen> {
           if (_status == VaultSyncStatus.noVaultPublished)
             _buildEmptyState(
               icon: Icons.inventory_2_outlined,
-              title: 'No vault published yet',
-              subtitle: 'Publish a vault from the Desktop app first.',
+              title: context.l10n.vaultScreenNoVaultPublishedTitle,
+              subtitle: context.l10n.vaultScreenNoVaultPublishedSubtitle,
             )
           else if (_status == VaultSyncStatus.noVaultKey)
             _buildEmptyState(
               icon: Icons.key_off,
-              title: 'Vault key not available',
-              subtitle:
-                  'This can happen if the app was interrupted during '
-                  'pairing. No need to re-pair — just try again.',
+              title: context.l10n.vaultScreenNoVaultKeyTitle,
+              subtitle: context.l10n.vaultScreenNoVaultKeySubtitle,
               action: _isRetryingVaultKey
                   ? const CircularProgressIndicator()
                   : OutlinedButton(
                       onPressed: _retryVaultKey,
-                      child: const Text('Try again'),
+                      child: Text(context.l10n.vaultScreenRetryButton),
                     ),
             )
           else if (_status == VaultSyncStatus.syncFailedNoCache)
             _legacyIpfsCid
                 ? _buildEmptyState(
                     icon: Icons.cloud_off,
-                    title: 'Vault on legacy storage',
-                    subtitle:
-                        'This vault is still on legacy IPFS storage, which no '
-                        'longer has dedicated pinning, and this device has no '
-                        'local cache to fall back on. Ask a device that '
-                        'already has this vault synced to republish it to '
-                        'Arweave.',
+                    title: context.l10n.vaultScreenLegacyStorageTitle,
+                    subtitle: context.l10n.vaultScreenLegacyStorageNoCacheSubtitle,
                   )
                 : _buildEmptyState(
                     icon: Icons.cloud_off,
-                    title: 'Could not load your vault',
-                    subtitle: _error ?? 'Check your connection and try again.',
+                    title: context.l10n.vaultScreenLoadFailedTitle,
+                    subtitle: _error ?? context.l10n.vaultScreenLoadFailedFallbackSubtitle,
                   )
           else if (showList) ...[
             TextField(
-              decoration: const InputDecoration(
-                prefixIcon: Icon(Icons.search),
-                hintText: 'Search by site, username or profile',
+              decoration: InputDecoration(
+                prefixIcon: const Icon(Icons.search),
+                hintText: context.l10n.vaultScreenSearchHint,
               ),
               onChanged: (v) => setState(() => _query = v),
             ),
@@ -536,8 +530,8 @@ class _VaultScreenState extends State<VaultScreen> {
                 child: Center(
                   child: Text(
                     _entries.isEmpty
-                        ? 'No entries yet'
-                        : 'No entries match your search',
+                        ? context.l10n.vaultScreenNoEntriesYet
+                        : context.l10n.vaultScreenNoEntriesMatchSearch,
                     style: const TextStyle(color: AppColors.textMuted),
                   ),
                 ),
@@ -580,18 +574,18 @@ class _VaultScreenState extends State<VaultScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'This vault is still on legacy IPFS storage, which no longer has '
-              'dedicated pinning — a new device without a local cache may fail '
-              'to load it. Republish to migrate to Arweave.',
-              style: TextStyle(color: AppColors.info, fontSize: 12),
+            Text(
+              context.l10n.vaultScreenLegacyStorageBannerBody,
+              style: const TextStyle(color: AppColors.info, fontSize: 12),
             ),
             const SizedBox(height: 8),
             Align(
               alignment: Alignment.centerRight,
               child: ElevatedButton(
                 onPressed: _publishing ? null : _publish,
-                child: Text(_publishing ? 'Publishing...' : 'Migrate to Arweave'),
+                child: Text(_publishing
+                    ? context.l10n.vaultScreenPublishingButton
+                    : context.l10n.vaultScreenMigrateToArweaveButton),
               ),
             ),
           ],
@@ -612,16 +606,18 @@ class _VaultScreenState extends State<VaultScreen> {
                 Expanded(
                   child: Text(
                     _justPublished
-                        ? 'Published ✓'
+                        ? context.l10n.vaultScreenPublishedCheckmark
                         : _pendingChanges > 0
-                            ? '$_pendingChanges pending change${_pendingChanges > 1 ? "s" : ""}'
-                            : 'Everything published',
+                            ? context.l10n.vaultScreenPendingChanges(_pendingChanges)
+                            : context.l10n.vaultScreenAllPublished,
                     style: const TextStyle(color: AppColors.textMuted),
                   ),
                 ),
                 ElevatedButton(
                   onPressed: (_publishing || _pendingChanges == 0) ? null : _publish,
-                  child: Text(_publishing ? 'Publishing...' : 'Publish'),
+                  child: Text(_publishing
+                      ? context.l10n.vaultScreenPublishingButton
+                      : context.l10n.vaultScreenPublishButtonLabel),
                 ),
               ],
             ),
@@ -678,13 +674,15 @@ class _VaultEntryCard extends StatelessWidget {
     required this.onToggleFavorite,
   });
 
-  String get _title => switch (entry.type) {
+  String _title(BuildContext context) => switch (entry.type) {
         EntryType.credential => entry.site,
-        EntryType.document => entry.document?.name ?? 'Document',
-        EntryType.address =>
-          entry.address == null ? 'Address' : addressTitle(entry.address!),
+        EntryType.document =>
+          entry.document?.name ?? context.l10n.vaultScreenEntryCardDocumentFallbackTitle,
+        EntryType.address => entry.address == null
+            ? context.l10n.vaultScreenEntryCardAddressFallbackTitle
+            : addressTitle(entry.address!),
         EntryType.creditCard => entry.creditCard == null
-            ? 'Card'
+            ? context.l10n.vaultScreenEntryCardCardFallbackTitle
             : cardTitle(entry.creditCard!),
       };
 
@@ -737,7 +735,7 @@ class _VaultEntryCard extends StatelessWidget {
             Text(_entryTypeIcon[entry.type] ?? '', style: const TextStyle(fontSize: 14)),
             const SizedBox(width: 6),
             Expanded(
-              child: Text(_title,
+              child: Text(_title(context),
                   style: const TextStyle(fontWeight: FontWeight.w600),
                   overflow: TextOverflow.ellipsis),
             ),
