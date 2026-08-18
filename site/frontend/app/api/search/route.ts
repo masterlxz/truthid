@@ -7,6 +7,7 @@ import { createFromSource } from "fumadocs-core/search/server";
 // force-static is required for `output: "export"` builds (see next.config.ts).
 export const dynamic = "force-static";
 
-export const { staticGET: GET } = createFromSource(source, {
-  language: "english",
-});
+// No `language` option: the default `multilingual` tokenizer handles
+// en/pt-BR/es/zh-CN out of the box (the per-locale `language`/`localeMap`
+// option is deprecated as of the installed fumadocs-core version).
+export const { staticGET: GET } = createFromSource(source);

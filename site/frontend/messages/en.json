@@ -1,0 +1,22 @@
+{
+  "metadata": {
+    "title": "TruthID",
+    "description": "TruthID — self-sovereign identity"
+  },
+  "layout": {
+    "navTitle": "TruthID"
+  },
+  "home": {
+    "heading": "TruthID",
+    "subtitle": "Sign in to continue. Login is OAuth-only — no password of your own.",
+    "signInError": "Could not sign in ({error}). Please try again.",
+    "signInWithGoogle": "Sign in with Google"
+  },
+  "dashboard": {
+    "loading": "Loading…",
+    "notSignedIn": "You are not signed in.",
+    "back": "Back",
+    "hello": "Hello, {name}",
+    "signOut": "Sign out"
+  }
+}

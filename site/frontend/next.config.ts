@@ -1,7 +1,9 @@
 import type { NextConfig } from "next";
 import { createMDX } from "fumadocs-mdx/next";
+import createNextIntlPlugin from "next-intl/plugin";
 
 const withMDX = createMDX();
+const withNextIntl = createNextIntlPlugin();
 
 // Set by the "Deploy Docs" GitHub Actions workflow to produce a static
 // export of just the /docs subtree for GitHub Pages — see
@@ -20,4 +22,4 @@ const nextConfig: NextConfig = {
     : {}),
 };
 
-export default withMDX(nextConfig);
+export default withNextIntl(withMDX(nextConfig));

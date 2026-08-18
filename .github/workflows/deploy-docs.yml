@@ -43,7 +43,7 @@ jobs:
 
       - name: Remove routes that need the Rails backend (landing page, dashboard)
         working-directory: site/frontend
-        run: rm -f app/page.tsx && rm -rf app/dashboard
+        run: rm -f "app/[locale]/page.tsx" && rm -rf "app/[locale]/dashboard"
 
       - name: Build static export
         working-directory: site/frontend
