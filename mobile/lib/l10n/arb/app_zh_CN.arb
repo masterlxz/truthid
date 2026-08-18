@@ -1,0 +1,2830 @@
+{
+  "@@locale": "zh_CN",
+  "appTitle": "TruthID",
+  "@appTitle": {
+    "description": "App name, shown in the AppBar title"
+  },
+  "appSettingsTooltip": "设置",
+  "@appSettingsTooltip": {
+    "description": "Tooltip for the settings icon button in the app bar"
+  },
+  "appSupportTooltip": "支持 TruthID",
+  "@appSupportTooltip": {
+    "description": "Tooltip for the donation/support icon button in the app bar"
+  },
+  "appScanTooltip": "扫描二维码",
+  "@appScanTooltip": {
+    "description": "Tooltip for the central floating action button that opens the QR scanner"
+  },
+  "appNavDevicesTab": "设备",
+  "@appNavDevicesTab": {
+    "description": "Bottom navigation tab label for the Devices screen"
+  },
+  "appNavSessionsTab": "会话",
+  "@appNavSessionsTab": {
+    "description": "Bottom navigation tab label for the Sessions screen"
+  },
+  "appNavWalletTab": "钱包",
+  "@appNavWalletTab": {
+    "description": "Bottom navigation tab label for the Wallet screen"
+  },
+  "appNavVaultTab": "密码库",
+  "@appNavVaultTab": {
+    "description": "Bottom navigation tab label for the Vault screen"
+  },
+  "appLockedMessage": "TruthID 已锁定",
+  "@appLockedMessage": {
+    "description": "Message shown on the lock overlay when the app is locked"
+  },
+  "appUnlockButton": "解锁",
+  "@appUnlockButton": {
+    "description": "Button label to trigger biometric/PIN authentication on the lock overlay"
+  },
+  "appUpdateBannerAvailable": "TruthID {version} 可用",
+  "@appUpdateBannerAvailable": {
+    "description": "Banner text shown when a newer app version is available for download",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "appUpdateBannerDownloadButton": "下载",
+  "@appUpdateBannerDownloadButton": {
+    "description": "Button label in the update banner to open the download page"
+  },
+  "appDonationSheetTitle": "支持 TruthID",
+  "@appDonationSheetTitle": {
+    "description": "Title of the bottom sheet asking for donations"
+  },
+  "appDonationSheetBody": "TruthID 是开源且免费的。\n如果它对您有帮助，欢迎打赏支持。",
+  "@appDonationSheetBody": {
+    "description": "Body text of the donation bottom sheet"
+  },
+  "appDonationSheetCopyButton": "复制地址",
+  "@appDonationSheetCopyButton": {
+    "description": "Button label to copy the donation wallet address to the clipboard"
+  },
+  "appDonationSheetCopiedButton": "已复制！",
+  "@appDonationSheetCopiedButton": {
+    "description": "Button label shown briefly after the donation address was copied"
+  },
+  "appDonationSheetFootnote": "支持任意 EVM 链 · 建议 0.001 ETH",
+  "@appDonationSheetFootnote": {
+    "description": "Footnote below the donation QR code explaining accepted chains/suggested amount"
+  },
+  "devicesScreenEncryptionKeyCopiedSnackbar": "加密密钥已复制！",
+  "@devicesScreenEncryptionKeyCopiedSnackbar": {
+    "description": "Snackbar shown on the Devices screen after copying the encryption public key to the clipboard."
+  },
+  "devicesScreenAddressCopiedSnackbar": "地址已复制！",
+  "@devicesScreenAddressCopiedSnackbar": {
+    "description": "Snackbar shown on the Devices screen after copying the device address to the clipboard."
+  },
+  "devicesScreenThisDeviceLabel": "此设备",
+  "@devicesScreenThisDeviceLabel": {
+    "description": "Bold header label on the Devices screen card identifying the current device."
+  },
+  "devicesScreenUsernameHandle": "@{username}",
+  "@devicesScreenUsernameHandle": {
+    "description": "Username displayed as a handle (e.g. @alice) on the Devices screen when the paired identity has a username.",
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "devicesScreenIdentityChipFallback": "身份 #{identityId}",
+  "@devicesScreenIdentityChipFallback": {
+    "description": "Chip label on the Devices screen showing the paired identity by numeric id when no username is set.",
+    "placeholders": {
+      "identityId": {
+        "type": "String"
+      }
+    }
+  },
+  "devicesScreenNotRegisteredChip": "未注册",
+  "@devicesScreenNotRegisteredChip": {
+    "description": "Chip label on the Devices screen shown when the device is not yet paired with any identity."
+  },
+  "devicesScreenAddressLabel": "地址",
+  "@devicesScreenAddressLabel": {
+    "description": "Small muted section label above the device address on the Devices screen."
+  },
+  "devicesScreenCopyAddressTooltip": "复制地址",
+  "@devicesScreenCopyAddressTooltip": {
+    "description": "Tooltip for the icon button that copies the device address on the Devices screen."
+  },
+  "devicesScreenIdentityLabel": "身份",
+  "@devicesScreenIdentityLabel": {
+    "description": "Small muted section label above the paired identity info on the Devices screen."
+  },
+  "devicesScreenIdentityIdFallback": "#{identityId}",
+  "@devicesScreenIdentityIdFallback": {
+    "description": "Fallback display of the paired identity by numeric id (no @ prefix) in the Identity section of the Devices screen when no username is set.",
+    "placeholders": {
+      "identityId": {
+        "type": "String"
+      }
+    }
+  },
+  "devicesScreenEncryptionKeyLabel": "加密密钥",
+  "@devicesScreenEncryptionKeyLabel": {
+    "description": "Small muted section label above the encryption public key on the Devices screen."
+  },
+  "devicesScreenCopyEncryptionKeyTooltip": "复制加密密钥",
+  "@devicesScreenCopyEncryptionKeyTooltip": {
+    "description": "Tooltip for the icon button that copies the encryption public key on the Devices screen."
+  },
+  "devicesScreenShowEncryptionKeyButton": "显示加密密钥",
+  "@devicesScreenShowEncryptionKeyButton": {
+    "description": "Button label to reveal the encryption key on the Devices screen."
+  },
+  "devicesScreenUnpairDialogTitle": "解除设备配对？",
+  "@devicesScreenUnpairDialogTitle": {
+    "description": "Title of the confirmation dialog shown when the user taps Unpair on the Devices screen."
+  },
+  "devicesScreenUnpairDialogContent": "这将移除此设备与您身份之间的关联。之后需要重新配对才能使用 TruthID。",
+  "@devicesScreenUnpairDialogContent": {
+    "description": "Body text of the confirmation dialog explaining the consequences of unpairing the device."
+  },
+  "devicesScreenCancelButton": "取消",
+  "@devicesScreenCancelButton": {
+    "description": "Cancel button label in the unpair confirmation dialog on the Devices screen."
+  },
+  "devicesScreenUnpairConfirmButton": "解除配对",
+  "@devicesScreenUnpairConfirmButton": {
+    "description": "Confirm button label (destructive) in the unpair confirmation dialog on the Devices screen."
+  },
+  "devicesScreenUnpairButton": "解除配对",
+  "@devicesScreenUnpairButton": {
+    "description": "Main destructive button label to unpair the device, shown below the identity section on the Devices screen."
+  },
+  "devicesScreenPairingHintBody": "点击下方按钮显示包含此设备地址的二维码。在桌面应用中扫描该二维码（或粘贴地址）以完成注册。",
+  "@devicesScreenPairingHintBody": {
+    "description": "Info card body text on the Devices screen explaining how to pair via QR code."
+  },
+  "devicesScreenPairingHintFooter": "下拉刷新以检查是否已完成配对。",
+  "@devicesScreenPairingHintFooter": {
+    "description": "Info card footer text on the Devices screen hinting at pull-to-refresh to check pairing status."
+  },
+  "devicesScreenShowQrButton": "显示二维码以配对",
+  "@devicesScreenShowQrButton": {
+    "description": "Primary button label on the Devices screen that opens the pairing QR code screen."
+  },
+  "scanScreenInvalidMessage": "二维码无效 — 请重试",
+  "@scanScreenInvalidMessage": {
+    "description": "Default snackbar message on the generic Scan screen when the scanned QR code fails to parse (used when no custom invalidMessage is supplied)."
+  },
+  "scanScreenTitle": "扫描二维码",
+  "@scanScreenTitle": {
+    "description": "Default app bar title on the generic Scan screen (used when no custom title is supplied)."
+  },
+  "scanScreenCameraError": "摄像头错误：{errorCode}\n{errorDetails}",
+  "@scanScreenCameraError": {
+    "description": "Error message shown on the Scan screen when the camera fails, combining the error code and optional details.",
+    "placeholders": {
+      "errorCode": {
+        "type": "String"
+      },
+      "errorDetails": {
+        "type": "String"
+      }
+    }
+  },
+  "scanScreenInstructions": "将摄像头对准屏幕上的二维码",
+  "@scanScreenInstructions": {
+    "description": "Default on-screen instructions on the generic Scan screen (used when no custom instructions are supplied)."
+  },
+  "securityScreenNoBiometricsError": "您的设备未设置生物识别或 PIN/图案/密码。请先在手机的系统设置中设置一种。",
+  "@securityScreenNoBiometricsError": {
+    "description": "Error message on the Security screen when the user tries to enable app lock but the device has no biometrics/PIN configured."
+  },
+  "securityScreenAuthFailedError": "身份验证失败或已取消 — 应用锁未启用。",
+  "@securityScreenAuthFailedError": {
+    "description": "Error message on the Security screen when the local authentication prompt fails or is cancelled while enabling app lock."
+  },
+  "securityScreenTitle": "安全",
+  "@securityScreenTitle": {
+    "description": "App bar title of the Security screen."
+  },
+  "securityScreenAppLockTitle": "应用锁",
+  "@securityScreenAppLockTitle": {
+    "description": "Title of the SwitchListTile that toggles app lock on the Security screen."
+  },
+  "securityScreenAppLockSubtitle": "打开 TruthID 时需要手机的生物识别或 PIN/图案/密码。TruthID 从不会看到或存储这些信息 — 它只是请求您的设备确认是您本人。",
+  "@securityScreenAppLockSubtitle": {
+    "description": "Subtitle explaining what the app lock switch does on the Security screen."
+  },
+  "securityScreenNoBiometricsWarning": "未检测到生物识别或设备 PIN/图案/密码 — 请在手机的系统设置中设置一种以使用应用锁。",
+  "@securityScreenNoBiometricsWarning": {
+    "description": "Warning banner on the Security screen shown when the device has no biometrics/PIN configured, disabling the app lock toggle."
+  },
+  "sessionsScreenRevokeDialogTitle": "撤销会话？",
+  "@sessionsScreenRevokeDialogTitle": {
+    "description": "Title of the confirmation dialog shown when the user taps to revoke a session on the Sessions screen."
+  },
+  "sessionsScreenRevokeDialogContent": "使用此会话的任何网站都会立即被登出。此操作无法撤销。",
+  "@sessionsScreenRevokeDialogContent": {
+    "description": "Body text of the confirmation dialog explaining the consequences of revoking a session."
+  },
+  "sessionsScreenCancelButton": "取消",
+  "@sessionsScreenCancelButton": {
+    "description": "Cancel button label in the revoke session confirmation dialog on the Sessions screen."
+  },
+  "sessionsScreenRevokeConfirmButton": "撤销",
+  "@sessionsScreenRevokeConfirmButton": {
+    "description": "Confirm button label (destructive) in the revoke session confirmation dialog on the Sessions screen."
+  },
+  "sessionsScreenSmartAccountUnresolvedError": "无法解析您的智能账户。请检查网络连接。",
+  "@sessionsScreenSmartAccountUnresolvedError": {
+    "description": "Snackbar error shown on the Sessions screen when the user's smart account address cannot be resolved before revoking a session."
+  },
+  "sessionsScreenRevokeFailedError": "无法撤销该会话。请确保您的账户有足够的 ETH 支付 Gas 费用。",
+  "@sessionsScreenRevokeFailedError": {
+    "description": "Snackbar error shown on the Sessions screen when revoking a session fails on-chain."
+  },
+  "sessionsScreenNotPairedTitle": "设备未配对",
+  "@sessionsScreenNotPairedTitle": {
+    "description": "Title shown on the Sessions screen empty state when the device is not paired with any identity."
+  },
+  "sessionsScreenNotPairedBody": "将此设备与身份配对后即可查看活跃会话。",
+  "@sessionsScreenNotPairedBody": {
+    "description": "Body text shown on the Sessions screen empty state when the device is not paired with any identity."
+  },
+  "sessionsScreenUsernameHandle": "@{username}",
+  "@sessionsScreenUsernameHandle": {
+    "description": "Username displayed as a handle (e.g. @alice) in the Sessions screen header when the paired identity has a username.",
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "sessionsScreenIdentityFallback": "身份 #{identityId}",
+  "@sessionsScreenIdentityFallback": {
+    "description": "Fallback header label on the Sessions screen showing the paired identity by numeric id when no username is set.",
+    "placeholders": {
+      "identityId": {
+        "type": "String"
+      }
+    }
+  },
+  "sessionsScreenActiveCount": "{count} 个活跃",
+  "@sessionsScreenActiveCount": {
+    "description": "Count of active (non-revoked) sessions shown in the header of the Sessions screen.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sessionsScreenDescription": "当您批准登录时，网站会创建会话。",
+  "@sessionsScreenDescription": {
+    "description": "Explanatory text shown below the header on the Sessions screen."
+  },
+  "sessionsScreenLoadErrorPrefix": "加载会话失败：{error}",
+  "@sessionsScreenLoadErrorPrefix": {
+    "description": "Error message shown on the Sessions screen when loading the session list fails, including the underlying error text.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "sessionsScreenEmptyState": "未找到任何会话",
+  "@sessionsScreenEmptyState": {
+    "description": "Empty state text shown on the Sessions screen when the session list is empty (but the device is paired)."
+  },
+  "sessionsScreenCurrentDeviceDate": "此设备 · {date}",
+  "@sessionsScreenCurrentDeviceDate": {
+    "description": "Subtitle on a session card indicating this is the current device, followed by the formatted creation date.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "sessionsScreenRevokedChip": "已撤销",
+  "@sessionsScreenRevokedChip": {
+    "description": "Chip label on a session card indicating the session has already been revoked."
+  },
+  "sessionsScreenRevokeTooltip": "撤销会话",
+  "@sessionsScreenRevokeTooltip": {
+    "description": "Tooltip for the icon button that revokes an individual session on a session card."
+  },
+  "showDeviceQrScreenTitle": "配对设备",
+  "@showDeviceQrScreenTitle": {
+    "description": "App bar title of the Show Device QR screen."
+  },
+  "showDeviceQrScreenInstructions": "在您的电脑上，打开“添加设备”并扫描此二维码（或粘贴下方字段 — 桌面应用没有摄像头）：",
+  "@showDeviceQrScreenInstructions": {
+    "description": "Instructions text on the Show Device QR screen explaining how to pair using the Desktop app."
+  },
+  "showDeviceQrScreenAddressLabel": "设备地址",
+  "@showDeviceQrScreenAddressLabel": {
+    "description": "Small muted section label above the device address on the Show Device QR screen."
+  },
+  "showDeviceQrScreenEncryptionKeyLabel": "加密密钥（接收密码库密钥所需）",
+  "@showDeviceQrScreenEncryptionKeyLabel": {
+    "description": "Small muted section label above the encryption public key on the Show Device QR screen."
+  },
+  "showDeviceQrScreenWaitingMessage": "正在等待电脑注册此设备...",
+  "@showDeviceQrScreenWaitingMessage": {
+    "description": "Status text on the Show Device QR screen shown while polling for the desktop to register the device."
+  },
+  "showDeviceQrScreenCheckingButton": "正在检查...",
+  "@showDeviceQrScreenCheckingButton": {
+    "description": "Label of the 'Check now' button on the Show Device QR screen while a check is in progress."
+  },
+  "showDeviceQrScreenCheckNowButton": "立即检查",
+  "@showDeviceQrScreenCheckNowButton": {
+    "description": "Label of the button on the Show Device QR screen that manually re-checks whether the device has been registered."
+  },
+  "showDeviceQrScreenPairedSuccessMessage": "配对成功！",
+  "@showDeviceQrScreenPairedSuccessMessage": {
+    "description": "Success message shown on the Show Device QR screen once the device has been confirmed paired."
+  },
+  "walletScreenActivitySessionCreated": "会话已创建",
+  "@walletScreenActivitySessionCreated": {
+    "description": "Wallet screen: activity feed label for a session-created event."
+  },
+  "walletScreenActivitySessionRevoked": "会话已撤销",
+  "@walletScreenActivitySessionRevoked": {
+    "description": "Wallet screen: activity feed label for a session-revoked event."
+  },
+  "walletScreenActivitySessionRevokedAll": "所有会话已撤销",
+  "@walletScreenActivitySessionRevokedAll": {
+    "description": "Wallet screen: activity feed label for an all-sessions-revoked event."
+  },
+  "walletScreenActivityDeviceRegistered": "设备已注册",
+  "@walletScreenActivityDeviceRegistered": {
+    "description": "Wallet screen: activity feed label for a device-registered event."
+  },
+  "walletScreenActivityDeviceRevoked": "设备已撤销",
+  "@walletScreenActivityDeviceRevoked": {
+    "description": "Wallet screen: activity feed label for a device-revoked event."
+  },
+  "walletScreenDepositButton": "存入",
+  "@walletScreenDepositButton": {
+    "description": "Wallet screen: label for the button/heading that opens the deposit sheet, and for the deposit sheet title itself."
+  },
+  "walletScreenDepositSheetBody": "向您的智能账户地址发送 ETH，为后续操作提供资金。",
+  "@walletScreenDepositSheetBody": {
+    "description": "Wallet screen: explanatory body text shown inside the deposit bottom sheet."
+  },
+  "walletScreenCopiedButton": "已复制！",
+  "@walletScreenCopiedButton": {
+    "description": "Wallet screen: deposit sheet button label shown briefly after the address was copied to the clipboard."
+  },
+  "walletScreenCopyAddressButton": "复制地址",
+  "@walletScreenCopyAddressButton": {
+    "description": "Wallet screen: deposit sheet button label to copy the smart account address to the clipboard."
+  },
+  "walletScreenBaseMainnetOnly": "仅限 Base 主网",
+  "@walletScreenBaseMainnetOnly": {
+    "description": "Wallet screen: deposit sheet footnote warning that only Base Mainnet is supported."
+  },
+  "walletScreenNotPairedTitle": "设备未配对",
+  "@walletScreenNotPairedTitle": {
+    "description": "Wallet screen: title shown when this device has no paired identity yet."
+  },
+  "walletScreenNotPairedBody": "将此设备与身份配对后即可查看您的智能账户。",
+  "@walletScreenNotPairedBody": {
+    "description": "Wallet screen: body text shown when this device has no paired identity yet."
+  },
+  "walletScreenUsernameHandle": "@{username}",
+  "@walletScreenUsernameHandle": {
+    "description": "Wallet screen: heading showing the paired identity's @username handle.",
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "walletScreenIdentityFallback": "身份 #{identityId}",
+  "@walletScreenIdentityFallback": {
+    "description": "Wallet screen: heading fallback showing the identity id when no username is set.",
+    "placeholders": {
+      "identityId": {
+        "type": "String"
+      }
+    }
+  },
+  "walletScreenBalanceLabel": "余额",
+  "@walletScreenBalanceLabel": {
+    "description": "Wallet screen: label above the smart account ETH balance."
+  },
+  "walletScreenWithdrawButton": "提现",
+  "@walletScreenWithdrawButton": {
+    "description": "Wallet screen: label for the button that opens the withdraw sheet, and for the withdraw sheet title itself."
+  },
+  "walletScreenCostByTypeTitle": "按类型划分的费用",
+  "@walletScreenCostByTypeTitle": {
+    "description": "Wallet screen: heading for the card breaking down gas cost by activity type."
+  },
+  "walletScreenSessionsLabel": "会话",
+  "@walletScreenSessionsLabel": {
+    "description": "Wallet screen: label for the sessions tile in the cost-by-type breakdown."
+  },
+  "walletScreenDevicesLabel": "设备",
+  "@walletScreenDevicesLabel": {
+    "description": "Wallet screen: label for the devices tile in the cost-by-type breakdown."
+  },
+  "walletScreenActivityTitle": "活动记录",
+  "@walletScreenActivityTitle": {
+    "description": "Wallet screen: heading for the on-chain activity list section."
+  },
+  "walletScreenRefreshButton": "刷新",
+  "@walletScreenRefreshButton": {
+    "description": "Wallet screen: button label to manually trigger a re-scan of activity."
+  },
+  "walletScreenScanningProgress": "正在扫描交易历史（区块 {scannedTo} / {latest}）...",
+  "@walletScreenScanningProgress": {
+    "description": "Wallet screen: progress message shown while scanning transaction history, with current and target block numbers.",
+    "placeholders": {
+      "scannedTo": {
+        "type": "int"
+      },
+      "latest": {
+        "type": "int"
+      }
+    }
+  },
+  "walletScreenScanningInProgress": "正在扫描交易历史...",
+  "@walletScreenScanningInProgress": {
+    "description": "Wallet screen: generic message shown while scanning transaction history before progress is known."
+  },
+  "walletScreenUpdating": "正在更新...",
+  "@walletScreenUpdating": {
+    "description": "Wallet screen: small status text shown while an activity re-scan is in progress after the first load."
+  },
+  "walletScreenActivityLoadError": "加载活动记录失败：{error}",
+  "@walletScreenActivityLoadError": {
+    "description": "Wallet screen: error message shown when the activity scan fails, including the error detail.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "walletScreenRetryButton": "重试",
+  "@walletScreenRetryButton": {
+    "description": "Wallet screen: button to retry the activity scan after a failure."
+  },
+  "walletScreenNoActivity": "暂无活动记录。",
+  "@walletScreenNoActivity": {
+    "description": "Wallet screen: empty-state message when there is no on-chain activity to show."
+  },
+  "walletScreenWithdrawError": "无法发送提现。请确保您的账户有足够的 ETH 支付 Gas 费用。",
+  "@walletScreenWithdrawError": {
+    "description": "Withdraw sheet: error message shown when submitting the withdrawal transaction fails."
+  },
+  "walletScreenWithdrawSuccessTitle": "提现已发送！",
+  "@walletScreenWithdrawSuccessTitle": {
+    "description": "Withdraw sheet: title shown on the success step after the withdrawal was sent."
+  },
+  "walletScreenCloseButton": "关闭",
+  "@walletScreenCloseButton": {
+    "description": "Withdraw sheet: button to close the sheet after a successful withdrawal."
+  },
+  "walletScreenDestinationAddressLabel": "目标地址",
+  "@walletScreenDestinationAddressLabel": {
+    "description": "Withdraw sheet: label for the text field where the user enters the destination wallet address."
+  },
+  "walletScreenAmountLabel": "金额（ETH）",
+  "@walletScreenAmountLabel": {
+    "description": "Withdraw sheet: label for the text field where the user enters the withdrawal amount in ETH."
+  },
+  "walletScreenMaxButton": "最大",
+  "@walletScreenMaxButton": {
+    "description": "Withdraw sheet: button that fills the amount field with the maximum available balance."
+  },
+  "walletScreenAvailableBalance": "可用：{amount} ETH",
+  "@walletScreenAvailableBalance": {
+    "description": "Withdraw sheet: hint text showing the available balance to withdraw, in ETH.",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "walletScreenSubmittingButton": "正在提交...",
+  "@walletScreenSubmittingButton": {
+    "description": "Withdraw sheet: submit button label while the withdrawal transaction is being submitted."
+  },
+  "arweaveWalletScreenTitle": "Arweave 钱包",
+  "@arweaveWalletScreenTitle": {
+    "description": "Arweave wallet screen: app bar title."
+  },
+  "arweaveWalletScreenIntro": "密码库（主数据块及附加文档）以及已授权的第三方应用都会发布到 Arweave — 这需要一个已充值 AR 的本地钱包。",
+  "@arweaveWalletScreenIntro": {
+    "description": "Arweave wallet screen: introductory paragraph explaining why an Arweave wallet is needed."
+  },
+  "arweaveWalletScreenGeneratingButton": "正在生成...",
+  "@arweaveWalletScreenGeneratingButton": {
+    "description": "Arweave wallet screen: button label while a new Arweave wallet is being generated."
+  },
+  "arweaveWalletScreenGenerateButton": "生成 Arweave 钱包",
+  "@arweaveWalletScreenGenerateButton": {
+    "description": "Arweave wallet screen: button label to generate a new Arweave wallet when none exists yet."
+  },
+  "arweaveWalletScreenCopiedButton": "✓ 已复制！",
+  "@arweaveWalletScreenCopiedButton": {
+    "description": "Arweave wallet screen: button label shown briefly after the wallet address was copied to the clipboard."
+  },
+  "arweaveWalletScreenCopyButton": "复制地址",
+  "@arweaveWalletScreenCopyButton": {
+    "description": "Arweave wallet screen: button label to copy the Arweave wallet address to the clipboard."
+  },
+  "arweaveWalletScreenBalanceLabel": "余额：{balance} AR",
+  "@arweaveWalletScreenBalanceLabel": {
+    "description": "Arweave wallet screen: shows the current wallet balance in AR once known.",
+    "placeholders": {
+      "balance": {
+        "type": "String"
+      }
+    }
+  },
+  "arweaveWalletScreenBalanceUnavailable": "暂时无法获取余额",
+  "@arweaveWalletScreenBalanceUnavailable": {
+    "description": "Arweave wallet screen: shown in place of the balance when it could not be fetched."
+  },
+  "arweaveWalletScreenNoBalanceHint": "尚无余额 — 请先在交易所购买 AR 并发送到上方地址，然后再发布。",
+  "@arweaveWalletScreenNoBalanceHint": {
+    "description": "Arweave wallet screen: hint shown when the wallet balance is zero, telling the user how to fund it."
+  },
+  "guardianStatusScreenReadyToExecute": "已就绪，可以执行",
+  "@guardianStatusScreenReadyToExecute": {
+    "description": "Guardian/social recovery screen: status shown when the recovery timelock has elapsed and the proposal can be executed."
+  },
+  "guardianStatusScreenTimeRemaining": "剩余 {days} 天 {hours} 小时 {minutes} 分钟",
+  "@guardianStatusScreenTimeRemaining": {
+    "description": "Guardian/social recovery screen: countdown showing the remaining timelock duration before a recovery proposal can be executed.",
+    "placeholders": {
+      "days": {
+        "type": "int"
+      },
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "guardianStatusScreenTitle": "社交恢复",
+  "@guardianStatusScreenTitle": {
+    "description": "Guardian/social recovery screen: app bar title."
+  },
+  "guardianStatusScreenNoIdentity": "未找到已配对的身份。请先配对此设备。",
+  "@guardianStatusScreenNoIdentity": {
+    "description": "Guardian/social recovery screen: message shown when this device has no paired identity."
+  },
+  "guardianStatusScreenUsernameHandle": "@{username}",
+  "@guardianStatusScreenUsernameHandle": {
+    "description": "Guardian/social recovery screen: heading showing the paired identity's @username handle.",
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "guardianStatusScreenSubtitle": "如果您失去了钱包访问权限，监护人可以帮助恢复您的身份。",
+  "@guardianStatusScreenSubtitle": {
+    "description": "Guardian/social recovery screen: subtitle explaining what guardians do."
+  },
+  "guardianStatusScreenNoGuardiansWarning": "尚未配置监护人。没有监护人的情况下，一旦失去钱包，身份将永久丢失。",
+  "@guardianStatusScreenNoGuardiansWarning": {
+    "description": "Guardian/social recovery screen: warning banner shown when no guardians are configured for the identity."
+  },
+  "guardianStatusScreenGuardiansCount": "监护人（{threshold} / {count}）",
+  "@guardianStatusScreenGuardiansCount": {
+    "description": "Guardian/social recovery screen: section heading showing the approval threshold and total number of guardians.",
+    "placeholders": {
+      "threshold": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "guardianStatusScreenTimelockDays": "时间锁：{days} 天",
+  "@guardianStatusScreenTimelockDays": {
+    "description": "Guardian/social recovery screen: shows the configured recovery timelock duration in days.",
+    "placeholders": {
+      "days": {
+        "type": "String"
+      }
+    }
+  },
+  "guardianStatusScreenProposedTitle": "已提议恢复",
+  "@guardianStatusScreenProposedTitle": {
+    "description": "Guardian/social recovery screen: heading of the card shown when a recovery proposal is pending."
+  },
+  "guardianStatusScreenProposedByLabel": "提议人",
+  "@guardianStatusScreenProposedByLabel": {
+    "description": "Guardian/social recovery screen: row label for who proposed the pending recovery."
+  },
+  "guardianStatusScreenNewControllerLabel": "新控制地址",
+  "@guardianStatusScreenNewControllerLabel": {
+    "description": "Guardian/social recovery screen: row label for the new controller address proposed in the pending recovery."
+  },
+  "guardianStatusScreenApprovalsLabel": "批准情况",
+  "@guardianStatusScreenApprovalsLabel": {
+    "description": "Guardian/social recovery screen: row label for the current approval count of the pending recovery proposal."
+  },
+  "guardianStatusScreenApprovalsValue": "{count} / {threshold}",
+  "@guardianStatusScreenApprovalsValue": {
+    "description": "Guardian/social recovery screen: value showing how many approvals a pending recovery proposal has out of the required threshold.",
+    "placeholders": {
+      "count": {
+        "type": "String"
+      },
+      "threshold": {
+        "type": "String"
+      }
+    }
+  },
+  "guardianStatusScreenTimelockLabel": "时间锁",
+  "@guardianStatusScreenTimelockLabel": {
+    "description": "Guardian/social recovery screen: row label for the remaining timelock of the pending recovery proposal."
+  },
+  "guardianStatusScreenRecoveryExecuted": "恢复已执行。身份的控制方已变更。",
+  "@guardianStatusScreenRecoveryExecuted": {
+    "description": "Guardian/social recovery screen: message shown when a recovery proposal has been executed."
+  },
+  "guardianStatusScreenRecoveryCancelled": "恢复已取消。无需操作。",
+  "@guardianStatusScreenRecoveryCancelled": {
+    "description": "Guardian/social recovery screen: message shown when a recovery proposal has been cancelled."
+  },
+  "guardianStatusScreenDesktopOnlyFootnote": "恢复操作只能在连接了 Ledger 钱包的 TruthID Desktop 中进行管理。",
+  "@guardianStatusScreenDesktopOnlyFootnote": {
+    "description": "Guardian/social recovery screen: footnote explaining that recovery actions require TruthID Desktop with a connected Ledger."
+  },
+  "approvalScreenTitle": "登录请求",
+  "@approvalScreenTitle": {
+    "description": "Title of the AppBar on the login approval screen"
+  },
+  "approvalScreenErrorMissingChallenge": "二维码无效：缺少 challenge。",
+  "@approvalScreenErrorMissingChallenge": {
+    "description": "Error shown when the scanned QR payload has no challenge field"
+  },
+  "approvalScreenErrorInvalidCallbackUrl": "二维码无效：callbackUrl 必须使用 https://。",
+  "@approvalScreenErrorInvalidCallbackUrl": {
+    "description": "Error shown when the QR's callbackUrl does not use https"
+  },
+  "approvalScreenErrorMissingIssuedAt": "二维码无效：缺少 issuedAt。",
+  "@approvalScreenErrorMissingIssuedAt": {
+    "description": "Error shown when the scanned QR payload has no issuedAt field"
+  },
+  "approvalScreenErrorExpiredInitial": "此二维码已过期 — 请向网站请求一个新的登录二维码。",
+  "@approvalScreenErrorExpiredInitial": {
+    "description": "Error shown right after scanning when the QR challenge is already past its TTL"
+  },
+  "approvalScreenErrorExpiredOnApprove": "此二维码已过期 — 请返回应用重新扫描一个新的。",
+  "@approvalScreenErrorExpiredOnApprove": {
+    "description": "Error shown when the challenge expires between scanning and tapping Approve"
+  },
+  "approvalScreenErrorNotPaired": "此设备尚未与任何身份配对。",
+  "@approvalScreenErrorNotPaired": {
+    "description": "Error shown when approving without a paired identity on this device"
+  },
+  "approvalScreenErrorIdentityLookupFailed": "无法在链上找到此身份。请检查网络连接。",
+  "@approvalScreenErrorIdentityLookupFailed": {
+    "description": "Error shown when the on-chain identity lookup throws or returns null"
+  },
+  "approvalScreenErrorSessionCreationFailed": "无法在链上创建会话。请确保您的账户有足够的 ETH 支付 Gas 费用。",
+  "@approvalScreenErrorSessionCreationFailed": {
+    "description": "Error shown when creating the login session on-chain fails"
+  },
+  "approvalScreenErrorPostResponseFailed": "无法向网站发送响应。请检查网络连接。",
+  "@approvalScreenErrorPostResponseFailed": {
+    "description": "Error shown when posting the signed response back to the site fails"
+  },
+  "approvalScreenUnknownSite": "未知网站",
+  "@approvalScreenUnknownSite": {
+    "description": "Fallback display name for the requesting site when no origin/callback URL is available"
+  },
+  "approvalScreenHeading": "收到登录请求",
+  "@approvalScreenHeading": {
+    "description": "Heading shown on the challenge screen for an incoming login request"
+  },
+  "approvalScreenSubheading": "一个网站正请求使用您的 TruthID 身份登录。",
+  "@approvalScreenSubheading": {
+    "description": "Subheading explaining the login request"
+  },
+  "approvalScreenSiteLabel": "网站",
+  "@approvalScreenSiteLabel": {
+    "description": "Label for the row showing the requesting site"
+  },
+  "approvalScreenTimeLabel": "时间",
+  "@approvalScreenTimeLabel": {
+    "description": "Label for the row showing the time the request was issued"
+  },
+  "approvalScreenSigningAsLabel": "登录身份",
+  "@approvalScreenSigningAsLabel": {
+    "description": "Label for the row showing which identity will sign in"
+  },
+  "approvalScreenIdentityValue": "身份 #{id}",
+  "@approvalScreenIdentityValue": {
+    "description": "Value shown next to 'Signing as', identifying the paired identity by id",
+    "placeholders": {
+      "id": {
+        "type": "String",
+        "example": "3"
+      }
+    }
+  },
+  "approvalScreenApproveButton": "批准",
+  "@approvalScreenApproveButton": {
+    "description": "Button label to approve the login request"
+  },
+  "approvalScreenRejectButton": "拒绝",
+  "@approvalScreenRejectButton": {
+    "description": "Button label to reject the login request"
+  },
+  "approvalScreenSubmittingMessage": "正在链上创建您的会话...",
+  "@approvalScreenSubmittingMessage": {
+    "description": "Message shown while the login session is being created on-chain"
+  },
+  "approvalScreenDoneMessage": "响应已发送！",
+  "@approvalScreenDoneMessage": {
+    "description": "Message shown once the login response was successfully sent to the site"
+  },
+  "approvalScreenBackButton": "返回",
+  "@approvalScreenBackButton": {
+    "description": "Button label to go back from the error screen"
+  },
+  "pinApprovalScreenTitle": "固定内容请求",
+  "@pinApprovalScreenTitle": {
+    "description": "Title of the AppBar on the pin-content approval screen"
+  },
+  "pinApprovalScreenErrorUnsupportedVersion": "二维码无效：不支持的 schema 版本。",
+  "@pinApprovalScreenErrorUnsupportedVersion": {
+    "description": "Error shown when the QR payload schema version is not supported"
+  },
+  "pinApprovalScreenErrorMissingSessionId": "二维码无效：缺少 sessionId。",
+  "@pinApprovalScreenErrorMissingSessionId": {
+    "description": "Error shown when the scanned QR payload has no sessionId field"
+  },
+  "pinApprovalScreenErrorMissingEphemeralPubKey": "二维码无效：缺少 ephemeralPubKey。",
+  "@pinApprovalScreenErrorMissingEphemeralPubKey": {
+    "description": "Error shown when the scanned QR payload has no ephemeralPubKey field"
+  },
+  "pinApprovalScreenErrorMissingExpiresAt": "二维码无效：缺少 expiresAt。",
+  "@pinApprovalScreenErrorMissingExpiresAt": {
+    "description": "Error shown when the scanned QR payload has no expiresAt field"
+  },
+  "pinApprovalScreenErrorExpired": "此二维码已过期 — 请返回应用重新扫描一个新的。",
+  "@pinApprovalScreenErrorExpired": {
+    "description": "Error shown when the scanned QR's expiresAt is already in the past"
+  },
+  "pinApprovalScreenErrorMissingAppName": "二维码无效：缺少 appName。",
+  "@pinApprovalScreenErrorMissingAppName": {
+    "description": "Error shown when the scanned QR payload has no appName field"
+  },
+  "pinApprovalScreenErrorDecryptFailed": "解密收到的内容失败：{error}",
+  "@pinApprovalScreenErrorDecryptFailed": {
+    "description": "Error shown when decrypting the content received from the requesting app fails",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "FormatException"
+      }
+    }
+  },
+  "pinApprovalScreenErrorSessionExpiredResponding": "会话在响应前已过期 — 请重新扫描二维码。",
+  "@pinApprovalScreenErrorSessionExpiredResponding": {
+    "description": "Error shown when the session expires right before sending the approval response"
+  },
+  "pinApprovalScreenErrorRespondFailed": "响应应用失败：{error}",
+  "@pinApprovalScreenErrorRespondFailed": {
+    "description": "Error shown when sending the response back to the requesting app fails",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "SocketException"
+      }
+    }
+  },
+  "pinApprovalScreenGenericAppName": "某应用",
+  "@pinApprovalScreenGenericAppName": {
+    "description": "Generic fallback name for the requesting app when its name is unknown"
+  },
+  "pinApprovalScreenReceivingHeading": "{appName} 想要发送内容以进行固定...",
+  "@pinApprovalScreenReceivingHeading": {
+    "description": "Heading shown while waiting to receive the content to pin from the requesting app",
+    "placeholders": {
+      "appName": {
+        "type": "String",
+        "example": "Practice Valuation"
+      }
+    }
+  },
+  "pinApprovalScreenWifiHint": "请确保您的手机和电脑处于同一 Wi-Fi 网络。",
+  "@pinApprovalScreenWifiHint": {
+    "description": "Hint shown while waiting for the requesting app to connect over the local network"
+  },
+  "pinApprovalScreenManualIpHint": "如果应用无法自动找到您的手机，请在下方手动输入此 IP 地址：",
+  "@pinApprovalScreenManualIpHint": {
+    "description": "Hint shown above the list of local IP addresses for manual entry on the requesting app"
+  },
+  "pinApprovalScreenApprovalHeading": "{appName} 想要将内容发布到 Arweave",
+  "@pinApprovalScreenApprovalHeading": {
+    "description": "Heading shown on the approval screen with the content ready to be pinned",
+    "placeholders": {
+      "appName": {
+        "type": "String",
+        "example": "Practice Valuation"
+      }
+    }
+  },
+  "pinApprovalScreenSizeLabel": "大小：{size}",
+  "@pinApprovalScreenSizeLabel": {
+    "description": "Label showing the size of the content to be pinned",
+    "placeholders": {
+      "size": {
+        "type": "String",
+        "example": "12.4 KB"
+      }
+    }
+  },
+  "pinApprovalScreenApproveButton": "批准",
+  "@pinApprovalScreenApproveButton": {
+    "description": "Button label to approve pinning the content"
+  },
+  "pinApprovalScreenRejectButton": "拒绝",
+  "@pinApprovalScreenRejectButton": {
+    "description": "Button label to reject pinning the content"
+  },
+  "pinApprovalScreenSentHeading": "已发送",
+  "@pinApprovalScreenSentHeading": {
+    "description": "Heading shown after the response was successfully sent to the app"
+  },
+  "pinApprovalScreenSentBody": "应用已收到您的响应。",
+  "@pinApprovalScreenSentBody": {
+    "description": "Body text confirming the requesting app received the response"
+  },
+  "pinApprovalScreenDeadDropPublished": "离线中转备份已发布（IPFS/IPNS）。",
+  "@pinApprovalScreenDeadDropPublished": {
+    "description": "Note shown when the dead-drop backup of the pinned content was published successfully"
+  },
+  "pinApprovalScreenDeadDropUnavailable": "此次离线中转备份不可用。",
+  "@pinApprovalScreenDeadDropUnavailable": {
+    "description": "Note shown when publishing the dead-drop backup failed"
+  },
+  "pinApprovalScreenDoneButton": "完成",
+  "@pinApprovalScreenDoneButton": {
+    "description": "Button label to close the screen after the response was sent"
+  },
+  "pinApprovalScreenTimeoutHeading": "未收到任何内容",
+  "@pinApprovalScreenTimeoutHeading": {
+    "description": "Heading shown when the request expired before the app connected"
+  },
+  "pinApprovalScreenTimeoutBody": "在此请求过期前，应用一直未能连接。请确保两台设备处于同一 Wi-Fi 网络，然后重试。",
+  "@pinApprovalScreenTimeoutBody": {
+    "description": "Body text explaining the timeout and suggesting to retry"
+  },
+  "pinApprovalScreenBackButton": "返回",
+  "@pinApprovalScreenBackButton": {
+    "description": "Button label to go back from the timeout/error screen"
+  },
+  "pinApprovalScreenGenericError": "出错了。",
+  "@pinApprovalScreenGenericError": {
+    "description": "Generic fallback error message when no specific error message is set"
+  },
+  "signMessageApprovalScreenTitle": "签署消息请求",
+  "@signMessageApprovalScreenTitle": {
+    "description": "Title of the AppBar on the sign-message approval screen"
+  },
+  "signMessageApprovalScreenErrorUnsupportedVersion": "二维码无效：不支持的 schema 版本。",
+  "@signMessageApprovalScreenErrorUnsupportedVersion": {
+    "description": "Error shown when the QR payload schema version is not supported"
+  },
+  "signMessageApprovalScreenErrorMissingSessionId": "二维码无效：缺少 sessionId。",
+  "@signMessageApprovalScreenErrorMissingSessionId": {
+    "description": "Error shown when the scanned QR payload has no sessionId field"
+  },
+  "signMessageApprovalScreenErrorInvalidCallback": "请求无效：缺少或格式错误的 callback。",
+  "@signMessageApprovalScreenErrorInvalidCallback": {
+    "description": "Error shown when the deep-link request's callback URL is missing or malformed"
+  },
+  "signMessageApprovalScreenErrorMissingEphemeralPubKey": "二维码无效：缺少 ephemeralPubKey。",
+  "@signMessageApprovalScreenErrorMissingEphemeralPubKey": {
+    "description": "Error shown when the scanned QR payload has no ephemeralPubKey field"
+  },
+  "signMessageApprovalScreenErrorMissingExpiresAt": "二维码无效：缺少 expiresAt。",
+  "@signMessageApprovalScreenErrorMissingExpiresAt": {
+    "description": "Error shown when the scanned QR payload has no expiresAt field"
+  },
+  "signMessageApprovalScreenErrorExpired": "此二维码已过期 — 请返回应用重新扫描一个新的。",
+  "@signMessageApprovalScreenErrorExpired": {
+    "description": "Error shown when the scanned QR's expiresAt is already in the past"
+  },
+  "signMessageApprovalScreenErrorMissingAppName": "二维码无效：缺少 appName。",
+  "@signMessageApprovalScreenErrorMissingAppName": {
+    "description": "Error shown when the scanned QR payload has no appName field"
+  },
+  "signMessageApprovalScreenErrorInvalidPurpose": "二维码无效：purpose 必须是 1-64 个 [A-Za-z0-9_.-] 字符。",
+  "@signMessageApprovalScreenErrorInvalidPurpose": {
+    "description": "Error shown when the requested key-derivation purpose fails validation"
+  },
+  "signMessageApprovalScreenErrorSessionExpiredResponding": "会话在响应前已过期 — 请重新扫描二维码。",
+  "@signMessageApprovalScreenErrorSessionExpiredResponding": {
+    "description": "Error shown when the session expires right before sending the approval response"
+  },
+  "signMessageApprovalScreenErrorRespondFailed": "响应应用失败：{error}",
+  "@signMessageApprovalScreenErrorRespondFailed": {
+    "description": "Error shown when sending the signed response back to the requesting app fails",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "SocketException"
+      }
+    }
+  },
+  "signMessageApprovalScreenPendingHeading": "{appName} 想要为自身派生一个签名密钥",
+  "@signMessageApprovalScreenPendingHeading": {
+    "description": "Heading shown on the approval screen for a sign-message/derive-key request",
+    "placeholders": {
+      "appName": {
+        "type": "String",
+        "example": "Practice Valuation"
+      }
+    }
+  },
+  "signMessageApprovalScreenPurposeLabel": "用途",
+  "@signMessageApprovalScreenPurposeLabel": {
+    "description": "Label for the row showing the key-derivation purpose"
+  },
+  "signMessageApprovalScreenMessagePreviewLabel": "将要签署的完整消息：",
+  "@signMessageApprovalScreenMessagePreviewLabel": {
+    "description": "Label above the preview of the exact message that will be signed"
+  },
+  "signMessageApprovalScreenApproveButton": "批准",
+  "@signMessageApprovalScreenApproveButton": {
+    "description": "Button label to approve the sign-message request"
+  },
+  "signMessageApprovalScreenRejectButton": "拒绝",
+  "@signMessageApprovalScreenRejectButton": {
+    "description": "Button label to reject the sign-message request"
+  },
+  "signMessageApprovalScreenWaitingHeading": "正在等待应用连接...",
+  "@signMessageApprovalScreenWaitingHeading": {
+    "description": "Heading shown while waiting for the requesting app to connect"
+  },
+  "signMessageApprovalScreenWifiHint": "请确保您的手机和电脑处于同一 Wi-Fi 网络。",
+  "@signMessageApprovalScreenWifiHint": {
+    "description": "Hint shown while waiting for the requesting app to connect over the local network"
+  },
+  "signMessageApprovalScreenManualIpHint": "如果应用无法自动找到您的手机，请在下方手动输入此 IP 地址：",
+  "@signMessageApprovalScreenManualIpHint": {
+    "description": "Hint shown above the list of local IP addresses for manual entry on the requesting app"
+  },
+  "signMessageApprovalScreenSentHeading": "已发送",
+  "@signMessageApprovalScreenSentHeading": {
+    "description": "Heading shown after the signed response was successfully sent to the app"
+  },
+  "signMessageApprovalScreenSentBody": "应用已收到您的响应。",
+  "@signMessageApprovalScreenSentBody": {
+    "description": "Body text confirming the requesting app received the response"
+  },
+  "signMessageApprovalScreenDeadDropPublished": "离线中转备份已发布（IPFS/IPNS）。",
+  "@signMessageApprovalScreenDeadDropPublished": {
+    "description": "Note shown when the dead-drop backup of the response was published successfully"
+  },
+  "signMessageApprovalScreenDeadDropUnavailable": "此次离线中转备份不可用。",
+  "@signMessageApprovalScreenDeadDropUnavailable": {
+    "description": "Note shown when publishing the dead-drop backup failed"
+  },
+  "signMessageApprovalScreenDoneButton": "完成",
+  "@signMessageApprovalScreenDoneButton": {
+    "description": "Button label to close the screen after the response was sent"
+  },
+  "signMessageApprovalScreenTimeoutHeading": "未收到任何内容",
+  "@signMessageApprovalScreenTimeoutHeading": {
+    "description": "Heading shown when the request expired before the app connected"
+  },
+  "signMessageApprovalScreenTimeoutBody": "在此请求过期前，应用一直未能连接。请确保两台设备处于同一 Wi-Fi 网络，然后重试。",
+  "@signMessageApprovalScreenTimeoutBody": {
+    "description": "Body text explaining the timeout and suggesting to retry"
+  },
+  "signMessageApprovalScreenBackButton": "返回",
+  "@signMessageApprovalScreenBackButton": {
+    "description": "Button label to go back from the timeout/error screen"
+  },
+  "signMessageApprovalScreenGenericError": "出错了。",
+  "@signMessageApprovalScreenGenericError": {
+    "description": "Generic fallback error message when no specific error message is set"
+  },
+  "signRequestApprovalScreenTitle": "签署并执行请求",
+  "@signRequestApprovalScreenTitle": {
+    "description": "Title of the AppBar on the sign-and-execute-transaction approval screen"
+  },
+  "signRequestApprovalScreenErrorUnsupportedVersion": "二维码无效：不支持的 schema 版本。",
+  "@signRequestApprovalScreenErrorUnsupportedVersion": {
+    "description": "Error shown when the QR payload schema version is not supported"
+  },
+  "signRequestApprovalScreenErrorMissingSessionId": "二维码无效：缺少 sessionId。",
+  "@signRequestApprovalScreenErrorMissingSessionId": {
+    "description": "Error shown when the scanned QR payload has no sessionId field"
+  },
+  "signRequestApprovalScreenErrorInvalidCallback": "请求无效：缺少或格式错误的 callback。",
+  "@signRequestApprovalScreenErrorInvalidCallback": {
+    "description": "Error shown when the deep-link request's callback URL is missing or malformed"
+  },
+  "signRequestApprovalScreenErrorMissingEphemeralPubKey": "二维码无效：缺少 ephemeralPubKey。",
+  "@signRequestApprovalScreenErrorMissingEphemeralPubKey": {
+    "description": "Error shown when the scanned QR payload has no ephemeralPubKey field"
+  },
+  "signRequestApprovalScreenErrorMissingExpiresAt": "二维码无效：缺少 expiresAt。",
+  "@signRequestApprovalScreenErrorMissingExpiresAt": {
+    "description": "Error shown when the scanned QR payload has no expiresAt field"
+  },
+  "signRequestApprovalScreenErrorExpired": "此二维码已过期 — 请返回应用重新扫描一个新的。",
+  "@signRequestApprovalScreenErrorExpired": {
+    "description": "Error shown when the scanned QR's expiresAt is already in the past"
+  },
+  "signRequestApprovalScreenErrorMissingAppName": "二维码无效：缺少 appName。",
+  "@signRequestApprovalScreenErrorMissingAppName": {
+    "description": "Error shown when the scanned QR payload has no appName field"
+  },
+  "signRequestApprovalScreenErrorMissingDest": "二维码无效：缺少 dest。",
+  "@signRequestApprovalScreenErrorMissingDest": {
+    "description": "Error shown when the scanned QR payload has no destination address field"
+  },
+  "signRequestApprovalScreenErrorMissingCallData": "二维码无效：缺少 callData。",
+  "@signRequestApprovalScreenErrorMissingCallData": {
+    "description": "Error shown when the scanned QR payload has no callData field"
+  },
+  "signRequestApprovalScreenErrorMissingFunctionSignature": "二维码无效：缺少 functionSignature。",
+  "@signRequestApprovalScreenErrorMissingFunctionSignature": {
+    "description": "Error shown when the scanned QR payload has no functionSignature field"
+  },
+  "signRequestApprovalScreenErrorNotPaired": "此手机尚未与任何 TruthID 身份配对。",
+  "@signRequestApprovalScreenErrorNotPaired": {
+    "description": "Error shown when trying to prepare the transaction without a paired identity on this device"
+  },
+  "signRequestApprovalScreenErrorResolvingIdentity": "仍在链上解析您的身份 — 请稍后重试。",
+  "@signRequestApprovalScreenErrorResolvingIdentity": {
+    "description": "Error shown when the identity is still being resolved on-chain and is not ready yet"
+  },
+  "signRequestApprovalScreenErrorSmartAccountUnresolved": "无法解析您的智能账户 — 请重试。",
+  "@signRequestApprovalScreenErrorSmartAccountUnresolved": {
+    "description": "Error shown when the smart account address could not be resolved"
+  },
+  "signRequestApprovalScreenErrorSmartAccountFailed": "解析智能账户失败：{error}",
+  "@signRequestApprovalScreenErrorSmartAccountFailed": {
+    "description": "Error shown when resolving the smart account throws an exception",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "TimeoutException"
+      }
+    }
+  },
+  "signRequestApprovalScreenErrorSessionExpiredResponding": "会话在响应前已过期 — 请重新扫描二维码。",
+  "@signRequestApprovalScreenErrorSessionExpiredResponding": {
+    "description": "Error shown when the session expires right before sending the approval response"
+  },
+  "signRequestApprovalScreenErrorRespondFailed": "响应应用失败：{error}",
+  "@signRequestApprovalScreenErrorRespondFailed": {
+    "description": "Error shown when sending the response back to the requesting app fails",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "SocketException"
+      }
+    }
+  },
+  "signRequestApprovalScreenResultExecuted": "交易已执行（UserOp {userOpHash}）。",
+  "@signRequestApprovalScreenResultExecuted": {
+    "description": "Result summary shown after the transaction was executed successfully",
+    "placeholders": {
+      "userOpHash": {
+        "type": "String",
+        "example": "0xabc123..."
+      }
+    }
+  },
+  "signRequestApprovalScreenResultFailed": "交易失败：{error}",
+  "@signRequestApprovalScreenResultFailed": {
+    "description": "Result summary shown after the transaction execution failed",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "execution reverted"
+      }
+    }
+  },
+  "signRequestApprovalScreenResultRejected": "您已拒绝此请求。",
+  "@signRequestApprovalScreenResultRejected": {
+    "description": "Result summary shown after the user rejected the transaction request"
+  },
+  "signRequestApprovalScreenPendingHeading": "{appName} 想要执行一笔交易",
+  "@signRequestApprovalScreenPendingHeading": {
+    "description": "Heading shown on the approval screen for a sign-and-execute-transaction request",
+    "placeholders": {
+      "appName": {
+        "type": "String",
+        "example": "Practice Valuation"
+      }
+    }
+  },
+  "signRequestApprovalScreenGasNotice": "您的智能账户将支付 Gas 费用。",
+  "@signRequestApprovalScreenGasNotice": {
+    "description": "Note reassuring the user their smart account covers the gas cost"
+  },
+  "signRequestApprovalScreenDestinationLabel": "目标地址",
+  "@signRequestApprovalScreenDestinationLabel": {
+    "description": "Label for the row showing the transaction's destination address"
+  },
+  "signRequestApprovalScreenValueLabel": "金额（wei）",
+  "@signRequestApprovalScreenValueLabel": {
+    "description": "Label for the row showing the transaction's value in wei"
+  },
+  "signRequestApprovalScreenFunctionVerifiedLabel": "函数（已验证）",
+  "@signRequestApprovalScreenFunctionVerifiedLabel": {
+    "description": "Label for the function-signature row when the function selector was verified"
+  },
+  "signRequestApprovalScreenFunctionUnverifiedLabel": "函数（未验证）",
+  "@signRequestApprovalScreenFunctionUnverifiedLabel": {
+    "description": "Label for the function-signature row when the function selector could not be verified"
+  },
+  "signRequestApprovalScreenRawCallDataLabel": "原始调用数据：",
+  "@signRequestApprovalScreenRawCallDataLabel": {
+    "description": "Label above the raw call data preview"
+  },
+  "signRequestApprovalScreenApproveButton": "批准",
+  "@signRequestApprovalScreenApproveButton": {
+    "description": "Button label to approve executing the transaction"
+  },
+  "signRequestApprovalScreenRejectButton": "拒绝",
+  "@signRequestApprovalScreenRejectButton": {
+    "description": "Button label to reject executing the transaction"
+  },
+  "signRequestApprovalScreenExecutingHeading": "正在执行交易...",
+  "@signRequestApprovalScreenExecutingHeading": {
+    "description": "Heading shown while the transaction is being sent and confirmed"
+  },
+  "signRequestApprovalScreenExecutingBody": "正在发送到 Bundler 并等待确认。这最多可能需要一分钟。",
+  "@signRequestApprovalScreenExecutingBody": {
+    "description": "Body text explaining the transaction is being sent to the bundler"
+  },
+  "signRequestApprovalScreenWaitingHeading": "正在等待应用连接...",
+  "@signRequestApprovalScreenWaitingHeading": {
+    "description": "Heading shown while waiting for the requesting app to connect"
+  },
+  "signRequestApprovalScreenWifiHint": "请确保您的手机和电脑处于同一 Wi-Fi 网络。",
+  "@signRequestApprovalScreenWifiHint": {
+    "description": "Hint shown while waiting for the requesting app to connect over the local network"
+  },
+  "signRequestApprovalScreenManualIpHint": "如果应用无法自动找到您的手机，请在下方手动输入此 IP 地址：",
+  "@signRequestApprovalScreenManualIpHint": {
+    "description": "Hint shown above the list of local IP addresses for manual entry on the requesting app"
+  },
+  "signRequestApprovalScreenSentHeading": "已发送",
+  "@signRequestApprovalScreenSentHeading": {
+    "description": "Heading shown after the response was successfully sent to the app"
+  },
+  "signRequestApprovalScreenSentBody": "应用已收到您的响应。",
+  "@signRequestApprovalScreenSentBody": {
+    "description": "Body text confirming the requesting app received the response"
+  },
+  "signRequestApprovalScreenDeadDropPublished": "离线中转备份已发布（IPFS/IPNS）。",
+  "@signRequestApprovalScreenDeadDropPublished": {
+    "description": "Note shown when the dead-drop backup of the response was published successfully"
+  },
+  "signRequestApprovalScreenDeadDropUnavailable": "此次离线中转备份不可用。",
+  "@signRequestApprovalScreenDeadDropUnavailable": {
+    "description": "Note shown when publishing the dead-drop backup failed"
+  },
+  "signRequestApprovalScreenDoneButton": "完成",
+  "@signRequestApprovalScreenDoneButton": {
+    "description": "Button label to close the screen after the response was sent"
+  },
+  "signRequestApprovalScreenTimeoutHeading": "未收到任何内容",
+  "@signRequestApprovalScreenTimeoutHeading": {
+    "description": "Heading shown when the request expired before the app connected"
+  },
+  "signRequestApprovalScreenTimeoutBody": "在此请求过期前，应用一直未能连接。请确保两台设备处于同一 Wi-Fi 网络，然后重试。",
+  "@signRequestApprovalScreenTimeoutBody": {
+    "description": "Body text explaining the timeout and suggesting to retry"
+  },
+  "signRequestApprovalScreenBackButton": "返回",
+  "@signRequestApprovalScreenBackButton": {
+    "description": "Button label to go back from the timeout/error screen"
+  },
+  "signRequestApprovalScreenGenericError": "出错了。",
+  "@signRequestApprovalScreenGenericError": {
+    "description": "Generic fallback error message when no specific error message is set"
+  },
+  "autofillAddressApprovalScreenTitle": "自动填写请求",
+  "@autofillAddressApprovalScreenTitle": {
+    "description": "App bar title on the address autofill approval screen"
+  },
+  "autofillAddressApprovalScreenErrorInvalidVersion": "二维码无效：不支持的 schema 版本。",
+  "@autofillAddressApprovalScreenErrorInvalidVersion": {
+    "description": "Error shown when the scanned QR payload has an unsupported schema version"
+  },
+  "autofillAddressApprovalScreenErrorMissingSessionId": "二维码无效：缺少 sessionId 字段。",
+  "@autofillAddressApprovalScreenErrorMissingSessionId": {
+    "description": "Error shown when the scanned QR payload is missing the sessionId field"
+  },
+  "autofillAddressApprovalScreenErrorMissingPubKey": "二维码无效：缺少 ephemeralPubKey 字段。",
+  "@autofillAddressApprovalScreenErrorMissingPubKey": {
+    "description": "Error shown when the scanned QR payload is missing the ephemeralPubKey field"
+  },
+  "autofillAddressApprovalScreenErrorMissingExpiresAt": "二维码无效：缺少 expiresAt 字段。",
+  "@autofillAddressApprovalScreenErrorMissingExpiresAt": {
+    "description": "Error shown when the scanned QR payload is missing the expiresAt field"
+  },
+  "autofillAddressApprovalScreenErrorExpiredQr": "此二维码已过期 — 请返回网站重试。",
+  "@autofillAddressApprovalScreenErrorExpiredQr": {
+    "description": "Error shown when the scanned QR code's expiry timestamp is in the past"
+  },
+  "autofillAddressApprovalScreenErrorMissingAppName": "二维码无效：缺少 appName 字段。",
+  "@autofillAddressApprovalScreenErrorMissingAppName": {
+    "description": "Error shown when the scanned QR payload is missing the appName field"
+  },
+  "autofillAddressApprovalScreenErrorSessionExpired": "会话在响应前已过期 — 请返回网站重试。",
+  "@autofillAddressApprovalScreenErrorSessionExpired": {
+    "description": "Error shown when the session expires before the user responds to the request"
+  },
+  "autofillAddressApprovalScreenErrorRespondFailed": "响应网站失败：{error}",
+  "@autofillAddressApprovalScreenErrorRespondFailed": {
+    "description": "Error shown when sending the response back to the site fails, with the exception detail",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "autofillAddressApprovalScreenPickerHeading": "{appName} 想要填写一个地址",
+  "@autofillAddressApprovalScreenPickerHeading": {
+    "description": "Heading on the address picker step, naming the requesting app",
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "autofillAddressApprovalScreenPickerPrompt": "选择要使用的已保存地址：",
+  "@autofillAddressApprovalScreenPickerPrompt": {
+    "description": "Prompt above the list of saved addresses to pick from"
+  },
+  "autofillAddressApprovalScreenDenyButton": "拒绝请求",
+  "@autofillAddressApprovalScreenDenyButton": {
+    "description": "Button on the address picker step to deny the autofill request"
+  },
+  "autofillAddressApprovalScreenConfirmHeading": "{appName} 想要用此地址填写表单",
+  "@autofillAddressApprovalScreenConfirmHeading": {
+    "description": "Heading on the address confirmation step, naming the requesting app",
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "autofillAddressApprovalScreenFieldLabel": "标签",
+  "@autofillAddressApprovalScreenFieldLabel": {
+    "description": "Field label for the address entry's label on the confirmation step"
+  },
+  "autofillAddressApprovalScreenFieldName": "姓名",
+  "@autofillAddressApprovalScreenFieldName": {
+    "description": "Field label for the address entry's full name on the confirmation step"
+  },
+  "autofillAddressApprovalScreenFieldStreet": "街道",
+  "@autofillAddressApprovalScreenFieldStreet": {
+    "description": "Field label for the address entry's street/number on the confirmation step"
+  },
+  "autofillAddressApprovalScreenFieldComplement": "补充地址",
+  "@autofillAddressApprovalScreenFieldComplement": {
+    "description": "Field label for the address entry's complement on the confirmation step"
+  },
+  "autofillAddressApprovalScreenFieldNeighborhood": "社区",
+  "@autofillAddressApprovalScreenFieldNeighborhood": {
+    "description": "Field label for the address entry's neighborhood on the confirmation step"
+  },
+  "autofillAddressApprovalScreenFieldCityState": "城市/省份",
+  "@autofillAddressApprovalScreenFieldCityState": {
+    "description": "Field label for the address entry's city/state on the confirmation step"
+  },
+  "autofillAddressApprovalScreenFieldZipCode": "邮政编码",
+  "@autofillAddressApprovalScreenFieldZipCode": {
+    "description": "Field label for the address entry's ZIP code on the confirmation step"
+  },
+  "autofillAddressApprovalScreenFieldCountry": "国家",
+  "@autofillAddressApprovalScreenFieldCountry": {
+    "description": "Field label for the address entry's country on the confirmation step"
+  },
+  "autofillAddressApprovalScreenApproveButton": "批准",
+  "@autofillAddressApprovalScreenApproveButton": {
+    "description": "Button to approve filling the form with the selected address"
+  },
+  "autofillAddressApprovalScreenRejectButton": "拒绝",
+  "@autofillAddressApprovalScreenRejectButton": {
+    "description": "Button to reject filling the form with the selected address"
+  },
+  "autofillAddressApprovalScreenChooseDifferentButton": "选择其他地址",
+  "@autofillAddressApprovalScreenChooseDifferentButton": {
+    "description": "Button to go back and pick a different saved address"
+  },
+  "autofillAddressApprovalScreenWaitingTitle": "正在等待网站连接...",
+  "@autofillAddressApprovalScreenWaitingTitle": {
+    "description": "Title shown while waiting for the site to connect over the cross-device channel"
+  },
+  "autofillAddressApprovalScreenWaitingSubtitle": "请确保您的手机和电脑处于同一 Wi-Fi 网络。",
+  "@autofillAddressApprovalScreenWaitingSubtitle": {
+    "description": "Subtitle shown while waiting for the site to connect, hinting at the Wi-Fi requirement"
+  },
+  "autofillAddressApprovalScreenManualIpPrompt": "如果网站无法自动找到您的手机，请在下方手动输入此 IP 地址：",
+  "@autofillAddressApprovalScreenManualIpPrompt": {
+    "description": "Prompt shown above the list of local IP addresses for manual entry on the site"
+  },
+  "autofillAddressApprovalScreenSentTitle": "已发送",
+  "@autofillAddressApprovalScreenSentTitle": {
+    "description": "Title shown after the address response was successfully sent to the site"
+  },
+  "autofillAddressApprovalScreenSentSubtitle": "网站已收到您的响应。",
+  "@autofillAddressApprovalScreenSentSubtitle": {
+    "description": "Subtitle shown after the address response was successfully sent to the site"
+  },
+  "autofillAddressApprovalScreenDeadDropPublished": "离线中转备份已发布（IPFS/IPNS）。",
+  "@autofillAddressApprovalScreenDeadDropPublished": {
+    "description": "Note shown when the dead-drop backup of the response was published successfully"
+  },
+  "autofillAddressApprovalScreenDeadDropUnavailable": "此次离线中转备份不可用。",
+  "@autofillAddressApprovalScreenDeadDropUnavailable": {
+    "description": "Note shown when the dead-drop backup of the response could not be published"
+  },
+  "autofillAddressApprovalScreenDoneButton": "完成",
+  "@autofillAddressApprovalScreenDoneButton": {
+    "description": "Button to dismiss the screen after the response was sent"
+  },
+  "autofillAddressApprovalScreenTimeoutTitle": "未收到任何内容",
+  "@autofillAddressApprovalScreenTimeoutTitle": {
+    "description": "Title shown when the site never connected before the request expired"
+  },
+  "autofillAddressApprovalScreenTimeoutSubtitle": "在此请求过期前，网站一直未能连接。请确保两台设备处于同一 Wi-Fi 网络，然后重试。",
+  "@autofillAddressApprovalScreenTimeoutSubtitle": {
+    "description": "Subtitle shown when the site never connected before the request expired"
+  },
+  "autofillAddressApprovalScreenBackButton": "返回",
+  "@autofillAddressApprovalScreenBackButton": {
+    "description": "Button to go back after a timeout or error"
+  },
+  "autofillAddressApprovalScreenGenericError": "出错了。",
+  "@autofillAddressApprovalScreenGenericError": {
+    "description": "Fallback error message shown when no specific error message is available"
+  },
+  "autofillCreditcardApprovalScreenTitle": "自动填写请求",
+  "@autofillCreditcardApprovalScreenTitle": {
+    "description": "App bar title on the credit card autofill approval screen"
+  },
+  "autofillCreditcardApprovalScreenErrorInvalidVersion": "二维码无效：不支持的 schema 版本。",
+  "@autofillCreditcardApprovalScreenErrorInvalidVersion": {
+    "description": "Error shown when the scanned QR payload has an unsupported schema version"
+  },
+  "autofillCreditcardApprovalScreenErrorMissingSessionId": "二维码无效：缺少 sessionId 字段。",
+  "@autofillCreditcardApprovalScreenErrorMissingSessionId": {
+    "description": "Error shown when the scanned QR payload is missing the sessionId field"
+  },
+  "autofillCreditcardApprovalScreenErrorMissingPubKey": "二维码无效：缺少 ephemeralPubKey 字段。",
+  "@autofillCreditcardApprovalScreenErrorMissingPubKey": {
+    "description": "Error shown when the scanned QR payload is missing the ephemeralPubKey field"
+  },
+  "autofillCreditcardApprovalScreenErrorMissingExpiresAt": "二维码无效：缺少 expiresAt 字段。",
+  "@autofillCreditcardApprovalScreenErrorMissingExpiresAt": {
+    "description": "Error shown when the scanned QR payload is missing the expiresAt field"
+  },
+  "autofillCreditcardApprovalScreenErrorExpiredQr": "此二维码已过期 — 请返回网站重试。",
+  "@autofillCreditcardApprovalScreenErrorExpiredQr": {
+    "description": "Error shown when the scanned QR code's expiry timestamp is in the past"
+  },
+  "autofillCreditcardApprovalScreenErrorMissingAppName": "二维码无效：缺少 appName 字段。",
+  "@autofillCreditcardApprovalScreenErrorMissingAppName": {
+    "description": "Error shown when the scanned QR payload is missing the appName field"
+  },
+  "autofillCreditcardApprovalScreenErrorSessionExpired": "会话在响应前已过期 — 请返回网站重试。",
+  "@autofillCreditcardApprovalScreenErrorSessionExpired": {
+    "description": "Error shown when the session expires before the user responds to the request"
+  },
+  "autofillCreditcardApprovalScreenErrorRespondFailed": "响应网站失败：{error}",
+  "@autofillCreditcardApprovalScreenErrorRespondFailed": {
+    "description": "Error shown when sending the response back to the site fails, with the exception detail",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "autofillCreditcardApprovalScreenPickerHeading": "{appName} 想要填写一张卡片",
+  "@autofillCreditcardApprovalScreenPickerHeading": {
+    "description": "Heading on the credit card picker step, naming the requesting app",
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "autofillCreditcardApprovalScreenPickerPrompt": "选择要使用的已保存卡片：",
+  "@autofillCreditcardApprovalScreenPickerPrompt": {
+    "description": "Prompt above the list of saved cards to pick from"
+  },
+  "autofillCreditcardApprovalScreenDenyButton": "拒绝请求",
+  "@autofillCreditcardApprovalScreenDenyButton": {
+    "description": "Button on the credit card picker step to deny the autofill request"
+  },
+  "autofillCreditcardApprovalScreenConfirmHeading": "{appName} 想要用此卡片填写表单",
+  "@autofillCreditcardApprovalScreenConfirmHeading": {
+    "description": "Heading on the credit card confirmation step, naming the requesting app",
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "autofillCreditcardApprovalScreenFieldLabel": "标签",
+  "@autofillCreditcardApprovalScreenFieldLabel": {
+    "description": "Field label for the card entry's label on the confirmation step"
+  },
+  "autofillCreditcardApprovalScreenFieldCardHolder": "持卡人",
+  "@autofillCreditcardApprovalScreenFieldCardHolder": {
+    "description": "Field label for the cardholder name on the confirmation step"
+  },
+  "autofillCreditcardApprovalScreenFieldCardNumber": "卡号",
+  "@autofillCreditcardApprovalScreenFieldCardNumber": {
+    "description": "Field label for the (maskable) card number on the confirmation step"
+  },
+  "autofillCreditcardApprovalScreenFieldExpiry": "有效期",
+  "@autofillCreditcardApprovalScreenFieldExpiry": {
+    "description": "Field label for the card's expiry month/year on the confirmation step"
+  },
+  "autofillCreditcardApprovalScreenFieldCvv": "CVV",
+  "@autofillCreditcardApprovalScreenFieldCvv": {
+    "description": "Field label for the (maskable) card CVV on the confirmation step"
+  },
+  "autofillCreditcardApprovalScreenFieldNetwork": "卡组织",
+  "@autofillCreditcardApprovalScreenFieldNetwork": {
+    "description": "Field label for the card network (e.g. Visa) on the confirmation step"
+  },
+  "autofillCreditcardApprovalScreenFieldBank": "银行",
+  "@autofillCreditcardApprovalScreenFieldBank": {
+    "description": "Field label for the issuing bank on the confirmation step, shown only when set"
+  },
+  "autofillCreditcardApprovalScreenApproveButton": "批准",
+  "@autofillCreditcardApprovalScreenApproveButton": {
+    "description": "Button to approve filling the form with the selected card"
+  },
+  "autofillCreditcardApprovalScreenRejectButton": "拒绝",
+  "@autofillCreditcardApprovalScreenRejectButton": {
+    "description": "Button to reject filling the form with the selected card"
+  },
+  "autofillCreditcardApprovalScreenChooseDifferentButton": "选择其他卡片",
+  "@autofillCreditcardApprovalScreenChooseDifferentButton": {
+    "description": "Button to go back and pick a different saved card"
+  },
+  "autofillCreditcardApprovalScreenWaitingTitle": "正在等待网站连接...",
+  "@autofillCreditcardApprovalScreenWaitingTitle": {
+    "description": "Title shown while waiting for the site to connect over the cross-device channel"
+  },
+  "autofillCreditcardApprovalScreenWaitingSubtitle": "请确保您的手机和电脑处于同一 Wi-Fi 网络。",
+  "@autofillCreditcardApprovalScreenWaitingSubtitle": {
+    "description": "Subtitle shown while waiting for the site to connect, hinting at the Wi-Fi requirement"
+  },
+  "autofillCreditcardApprovalScreenManualIpPrompt": "如果网站无法自动找到您的手机，请在下方手动输入此 IP 地址：",
+  "@autofillCreditcardApprovalScreenManualIpPrompt": {
+    "description": "Prompt shown above the list of local IP addresses for manual entry on the site"
+  },
+  "autofillCreditcardApprovalScreenSentTitle": "已发送",
+  "@autofillCreditcardApprovalScreenSentTitle": {
+    "description": "Title shown after the card response was successfully sent to the site"
+  },
+  "autofillCreditcardApprovalScreenSentSubtitle": "网站已收到您的响应。",
+  "@autofillCreditcardApprovalScreenSentSubtitle": {
+    "description": "Subtitle shown after the card response was successfully sent to the site"
+  },
+  "autofillCreditcardApprovalScreenDeadDropPublished": "离线中转备份已发布（IPFS/IPNS）。",
+  "@autofillCreditcardApprovalScreenDeadDropPublished": {
+    "description": "Note shown when the dead-drop backup of the response was published successfully"
+  },
+  "autofillCreditcardApprovalScreenDeadDropUnavailable": "此次离线中转备份不可用。",
+  "@autofillCreditcardApprovalScreenDeadDropUnavailable": {
+    "description": "Note shown when the dead-drop backup of the response could not be published"
+  },
+  "autofillCreditcardApprovalScreenDoneButton": "完成",
+  "@autofillCreditcardApprovalScreenDoneButton": {
+    "description": "Button to dismiss the screen after the response was sent"
+  },
+  "autofillCreditcardApprovalScreenTimeoutTitle": "未收到任何内容",
+  "@autofillCreditcardApprovalScreenTimeoutTitle": {
+    "description": "Title shown when the site never connected before the request expired"
+  },
+  "autofillCreditcardApprovalScreenTimeoutSubtitle": "在此请求过期前，网站一直未能连接。请确保两台设备处于同一 Wi-Fi 网络，然后重试。",
+  "@autofillCreditcardApprovalScreenTimeoutSubtitle": {
+    "description": "Subtitle shown when the site never connected before the request expired"
+  },
+  "autofillCreditcardApprovalScreenBackButton": "返回",
+  "@autofillCreditcardApprovalScreenBackButton": {
+    "description": "Button to go back after a timeout or error"
+  },
+  "autofillCreditcardApprovalScreenGenericError": "出错了。",
+  "@autofillCreditcardApprovalScreenGenericError": {
+    "description": "Fallback error message shown when no specific error message is available"
+  },
+  "autofillCreditcardApprovalScreenMaskedLabelSuffix": "{label}：",
+  "@autofillCreditcardApprovalScreenMaskedLabelSuffix": {
+    "description": "Label prefix (with trailing colon) for a maskable info row such as card number or CVV",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "autofillSystemFillScreenTitle": "自动填写请求",
+  "@autofillSystemFillScreenTitle": {
+    "description": "App bar title on the generic (system-fill) autofill screen"
+  },
+  "autofillSystemFillScreenLoadError": "加载密码库失败：{error}",
+  "@autofillSystemFillScreenLoadError": {
+    "description": "Error shown when loading the Vault's saved entries fails, with the exception detail",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "autofillSystemFillScreenRespondError": "响应失败：{error}",
+  "@autofillSystemFillScreenRespondError": {
+    "description": "Error shown when responding to the autofill request fails, with the exception detail",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "autofillSystemFillScreenEmptyAddresses": "您还没有任何已保存的地址。",
+  "@autofillSystemFillScreenEmptyAddresses": {
+    "description": "Empty-state message when no saved addresses exist and the form wants an address"
+  },
+  "autofillSystemFillScreenEmptyCards": "您还没有任何已保存的卡片。",
+  "@autofillSystemFillScreenEmptyCards": {
+    "description": "Empty-state message when no saved cards exist and the form wants a card"
+  },
+  "autofillSystemFillScreenEmptyCredentials": "您还没有任何已保存的凭据。",
+  "@autofillSystemFillScreenEmptyCredentials": {
+    "description": "Empty-state message when no saved credentials exist for the requested entry type"
+  },
+  "autofillSystemFillScreenCloseButton": "关闭",
+  "@autofillSystemFillScreenCloseButton": {
+    "description": "Button to close the screen, shown on the empty state and error state"
+  },
+  "autofillSystemFillScreenPickerPrompt": "选择要用于填写此表单的已保存条目：",
+  "@autofillSystemFillScreenPickerPrompt": {
+    "description": "Prompt above the list of saved entries to pick from"
+  },
+  "autofillSystemFillScreenCancelButton": "取消",
+  "@autofillSystemFillScreenCancelButton": {
+    "description": "Button to cancel the autofill request on the picker step"
+  },
+  "autofillSystemFillScreenGenericError": "出错了。",
+  "@autofillSystemFillScreenGenericError": {
+    "description": "Fallback error message shown when no specific error message is available"
+  },
+  "vaultDevicePermissionsScreenTitle": "设备权限",
+  "@vaultDevicePermissionsScreenTitle": {
+    "description": "App bar title on the Vault device permissions screen"
+  },
+  "vaultDevicePermissionsScreenExplanation": "控制已配对设备是否可以在此密码库中添加、编辑和发布条目。新设备默认为只读。",
+  "@vaultDevicePermissionsScreenExplanation": {
+    "description": "Explanatory text describing what the write-permission toggle controls"
+  },
+  "vaultDevicePermissionsScreenEmptyState": "尚未注册任何活跃设备。",
+  "@vaultDevicePermissionsScreenEmptyState": {
+    "description": "Empty-state message when there are no paired devices to show"
+  },
+  "vaultDevicePermissionsScreenCanWrite": "✓ 可写入",
+  "@vaultDevicePermissionsScreenCanWrite": {
+    "description": "Badge label for a device row that has write permission in this Vault"
+  },
+  "vaultDevicePermissionsScreenReadOnly": "只读",
+  "@vaultDevicePermissionsScreenReadOnly": {
+    "description": "Badge label for a device row that has read-only permission in this Vault"
+  },
+  "vaultScreenVaultKeyUnavailableSnackbar": "密码库密钥仍未在链上可用。",
+  "@vaultScreenVaultKeyUnavailableSnackbar": {
+    "description": "Snackbar shown on the Vault screen when the vault key still isn't available on-chain after a retry."
+  },
+  "vaultScreenSmartAccountUnresolvedSnackbar": "无法解析您的智能账户。请检查网络连接。",
+  "@vaultScreenSmartAccountUnresolvedSnackbar": {
+    "description": "Snackbar shown on the Vault screen when the smart account address could not be resolved."
+  },
+  "vaultScreenFavoriteUpdateFailedSnackbar": "更新收藏状态失败：{error}",
+  "@vaultScreenFavoriteUpdateFailedSnackbar": {
+    "description": "Snackbar shown on the Vault screen when toggling favorite status on an entry fails.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "vaultScreenNotPairedTitle": "设备未配对",
+  "@vaultScreenNotPairedTitle": {
+    "description": "Title shown on the Vault screen when this device is not paired with an identity."
+  },
+  "vaultScreenNotPairedSubtitle": "将此设备与身份配对后即可查看您的密码库。",
+  "@vaultScreenNotPairedSubtitle": {
+    "description": "Subtitle shown on the Vault screen when this device is not paired with an identity."
+  },
+  "vaultScreenTitle": "密码库",
+  "@vaultScreenTitle": {
+    "description": "Title of the Vault screen."
+  },
+  "vaultScreenBackupRestoreTooltip": "备份 / 恢复",
+  "@vaultScreenBackupRestoreTooltip": {
+    "description": "Tooltip for the backup/restore icon button on the Vault screen."
+  },
+  "vaultScreenPinningProvidersTooltip": "固定服务提供方",
+  "@vaultScreenPinningProvidersTooltip": {
+    "description": "Tooltip for the pinning providers icon button on the Vault screen."
+  },
+  "vaultScreenArweaveWalletTooltip": "Arweave 钱包",
+  "@vaultScreenArweaveWalletTooltip": {
+    "description": "Tooltip for the Arweave wallet icon button on the Vault screen."
+  },
+  "vaultScreenManageProfilesTooltip": "管理配置文件",
+  "@vaultScreenManageProfilesTooltip": {
+    "description": "Tooltip for the manage profiles icon button on the Vault screen."
+  },
+  "vaultScreenDevicePermissionsTooltip": "设备权限",
+  "@vaultScreenDevicePermissionsTooltip": {
+    "description": "Tooltip for the device permissions icon button on the Vault screen."
+  },
+  "vaultScreenNewEntryTooltip": "新条目",
+  "@vaultScreenNewEntryTooltip": {
+    "description": "Tooltip for the new entry icon button on the Vault screen."
+  },
+  "vaultScreenWritePermissionHint": "您可以在此设备上添加、编辑和发布条目。",
+  "@vaultScreenWritePermissionHint": {
+    "description": "Hint text shown on the Vault screen when this device has write permission."
+  },
+  "vaultScreenReadOnlyHint": "此处为只读 — 请从桌面应用管理条目。",
+  "@vaultScreenReadOnlyHint": {
+    "description": "Hint text shown on the Vault screen when this device is read-only."
+  },
+  "vaultScreenOfflineCacheMessage": "离线 — 正在显示上次同步的条目。",
+  "@vaultScreenOfflineCacheMessage": {
+    "description": "Message shown on the Vault screen when offline and displaying cached entries."
+  },
+  "vaultScreenNoVaultPublishedTitle": "尚未发布任何密码库",
+  "@vaultScreenNoVaultPublishedTitle": {
+    "description": "Empty-state title shown when no vault has been published yet."
+  },
+  "vaultScreenNoVaultPublishedSubtitle": "请先在桌面应用中发布一个密码库。",
+  "@vaultScreenNoVaultPublishedSubtitle": {
+    "description": "Empty-state subtitle shown when no vault has been published yet."
+  },
+  "vaultScreenNoVaultKeyTitle": "密码库密钥不可用",
+  "@vaultScreenNoVaultKeyTitle": {
+    "description": "Empty-state title shown when the vault key is not available."
+  },
+  "vaultScreenNoVaultKeySubtitle": "如果配对过程中应用被中断可能会出现这种情况。无需重新配对 — 只需再试一次。",
+  "@vaultScreenNoVaultKeySubtitle": {
+    "description": "Empty-state subtitle shown when the vault key is not available."
+  },
+  "vaultScreenRetryButton": "重试",
+  "@vaultScreenRetryButton": {
+    "description": "Button label to retry fetching the vault key on the Vault screen."
+  },
+  "vaultScreenLegacyStorageTitle": "密码库位于旧版存储",
+  "@vaultScreenLegacyStorageTitle": {
+    "description": "Empty-state title shown when the vault is on legacy IPFS storage with no local cache."
+  },
+  "vaultScreenLegacyStorageNoCacheSubtitle": "此密码库仍在旧版 IPFS 存储上，该存储已不再提供专用固定服务，而此设备也没有可用的本地缓存。请让一台已同步过此密码库的设备将其重新发布到 Arweave。",
+  "@vaultScreenLegacyStorageNoCacheSubtitle": {
+    "description": "Empty-state subtitle shown when the vault is on legacy IPFS storage with no local cache."
+  },
+  "vaultScreenLoadFailedTitle": "无法加载您的密码库",
+  "@vaultScreenLoadFailedTitle": {
+    "description": "Empty-state title shown when loading the vault failed."
+  },
+  "vaultScreenLoadFailedFallbackSubtitle": "请检查网络连接后重试。",
+  "@vaultScreenLoadFailedFallbackSubtitle": {
+    "description": "Fallback empty-state subtitle shown when loading the vault failed with no specific error."
+  },
+  "vaultScreenSearchHint": "按网站、用户名或配置文件搜索",
+  "@vaultScreenSearchHint": {
+    "description": "Hint text for the search field on the Vault screen."
+  },
+  "vaultScreenNoEntriesYet": "暂无条目",
+  "@vaultScreenNoEntriesYet": {
+    "description": "Message shown on the Vault screen when the vault has no entries at all."
+  },
+  "vaultScreenNoEntriesMatchSearch": "没有条目匹配您的搜索",
+  "@vaultScreenNoEntriesMatchSearch": {
+    "description": "Message shown on the Vault screen when a search yields no results."
+  },
+  "vaultScreenLegacyStorageBannerBody": "此密码库仍在旧版 IPFS 存储上，该存储已不再提供专用固定服务 — 没有本地缓存的新设备可能无法加载它。请重新发布以迁移到 Arweave。",
+  "@vaultScreenLegacyStorageBannerBody": {
+    "description": "Body text of the banner shown when the vault is still on legacy IPFS storage."
+  },
+  "vaultScreenPublishingButton": "正在发布...",
+  "@vaultScreenPublishingButton": {
+    "description": "Button label shown while a vault publish is in progress."
+  },
+  "vaultScreenMigrateToArweaveButton": "迁移到 Arweave",
+  "@vaultScreenMigrateToArweaveButton": {
+    "description": "Button label to republish/migrate a legacy vault to Arweave."
+  },
+  "vaultScreenPublishedCheckmark": "已发布 ✓",
+  "@vaultScreenPublishedCheckmark": {
+    "description": "Status text shown right after a vault publish succeeds."
+  },
+  "vaultScreenPendingChanges": "{count, plural, one{{count} 项待处理更改} other{{count} 项待处理更改}}",
+  "@vaultScreenPendingChanges": {
+    "description": "Status text on the Vault screen showing the number of unpublished pending changes.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "vaultScreenAllPublished": "全部已发布",
+  "@vaultScreenAllPublished": {
+    "description": "Status text shown on the Vault screen when there are no pending changes to publish."
+  },
+  "vaultScreenPublishButtonLabel": "发布",
+  "@vaultScreenPublishButtonLabel": {
+    "description": "Button label to publish pending vault changes."
+  },
+  "vaultScreenEntryCardDocumentFallbackTitle": "文档",
+  "@vaultScreenEntryCardDocumentFallbackTitle": {
+    "description": "Fallback title on a vault entry card when a document entry has no name."
+  },
+  "vaultScreenEntryCardAddressFallbackTitle": "地址",
+  "@vaultScreenEntryCardAddressFallbackTitle": {
+    "description": "Fallback title on a vault entry card when an address entry has no address set."
+  },
+  "vaultScreenEntryCardCardFallbackTitle": "银行卡",
+  "@vaultScreenEntryCardCardFallbackTitle": {
+    "description": "Fallback title on a vault entry card when a credit card entry has no card set."
+  },
+  "vaultEntryFormScreenGeneratePasswordLabel": "生成密码",
+  "@vaultEntryFormScreenGeneratePasswordLabel": {
+    "description": "Title of the password generator bottom sheet, and tooltip of the icon button that opens it, on the vault entry form screen."
+  },
+  "vaultEntryFormScreenLengthLabel": "长度",
+  "@vaultEntryFormScreenLengthLabel": {
+    "description": "Label for the password length control in the password generator bottom sheet."
+  },
+  "vaultEntryFormScreenUppercaseLabel": "大写字母",
+  "@vaultEntryFormScreenUppercaseLabel": {
+    "description": "Filter chip label for the uppercase-characters option in the password generator."
+  },
+  "vaultEntryFormScreenLowercaseLabel": "小写字母",
+  "@vaultEntryFormScreenLowercaseLabel": {
+    "description": "Filter chip label for the lowercase-characters option in the password generator."
+  },
+  "vaultEntryFormScreenNumbersLabel": "数字",
+  "@vaultEntryFormScreenNumbersLabel": {
+    "description": "Filter chip label for the numbers option in the password generator."
+  },
+  "vaultEntryFormScreenSymbolsLabel": "符号",
+  "@vaultEntryFormScreenSymbolsLabel": {
+    "description": "Filter chip label for the symbols option in the password generator."
+  },
+  "vaultEntryFormScreenRegenerateTooltip": "重新生成",
+  "@vaultEntryFormScreenRegenerateTooltip": {
+    "description": "Tooltip for the button that regenerates the password preview in the password generator."
+  },
+  "vaultEntryFormScreenUsePasswordButton": "使用此密码",
+  "@vaultEntryFormScreenUsePasswordButton": {
+    "description": "Button label to accept the generated password in the password generator bottom sheet."
+  },
+  "vaultEntryFormScreenFileTooLargeError": "文件过大（{size}）— 限制为 {limit}。",
+  "@vaultEntryFormScreenFileTooLargeError": {
+    "description": "Error message shown on the vault entry form when a chosen document file exceeds the size limit.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "vaultEntryFormScreenScanQrTitle": "扫描 2FA 二维码",
+  "@vaultEntryFormScreenScanQrTitle": {
+    "description": "Title of the camera scan screen used to scan a 2FA setup QR code."
+  },
+  "vaultEntryFormScreenScanQrInstructions": "将摄像头对准 2FA 设置界面上显示的二维码",
+  "@vaultEntryFormScreenScanQrInstructions": {
+    "description": "Instructions shown on the camera scan screen used to scan a 2FA setup QR code."
+  },
+  "vaultEntryFormScreenNoQrFoundSnackbar": "该图片中未找到二维码",
+  "@vaultEntryFormScreenNoQrFoundSnackbar": {
+    "description": "Snackbar shown when no QR code could be found in a picked image while setting up 2FA."
+  },
+  "vaultEntryFormScreenQrInvalidSecretSnackbar": "找到了二维码，但不是有效的 2FA 密钥：{error}",
+  "@vaultEntryFormScreenQrInvalidSecretSnackbar": {
+    "description": "Snackbar shown when a QR code was found in a picked image but it is not a valid 2FA secret.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "vaultEntryFormScreenEditTitle": "编辑条目",
+  "@vaultEntryFormScreenEditTitle": {
+    "description": "AppBar title of the vault entry form screen when editing an existing entry."
+  },
+  "vaultEntryFormScreenNewTitle": "新条目",
+  "@vaultEntryFormScreenNewTitle": {
+    "description": "AppBar title of the vault entry form screen when creating a new entry."
+  },
+  "vaultEntryFormScreenTypeCredentialChip": "🔑 密码",
+  "@vaultEntryFormScreenTypeCredentialChip": {
+    "description": "Choice chip label for the credential (password) entry type on the vault entry form screen."
+  },
+  "vaultEntryFormScreenTypeDocumentChip": "📄 文档",
+  "@vaultEntryFormScreenTypeDocumentChip": {
+    "description": "Choice chip label for the document entry type on the vault entry form screen."
+  },
+  "vaultEntryFormScreenTypeAddressChip": "🏠 地址",
+  "@vaultEntryFormScreenTypeAddressChip": {
+    "description": "Choice chip label for the address entry type on the vault entry form screen."
+  },
+  "vaultEntryFormScreenTypeCreditCardChip": "💳 银行卡",
+  "@vaultEntryFormScreenTypeCreditCardChip": {
+    "description": "Choice chip label for the credit card entry type on the vault entry form screen."
+  },
+  "vaultEntryFormScreenSiteLabel": "网站 *",
+  "@vaultEntryFormScreenSiteLabel": {
+    "description": "Label for the required site field on a credential entry."
+  },
+  "vaultEntryFormScreenSiteHint": "例如：github.com",
+  "@vaultEntryFormScreenSiteHint": {
+    "description": "Hint text for the site field on a credential entry."
+  },
+  "vaultEntryFormScreenUrlLabel": "网址",
+  "@vaultEntryFormScreenUrlLabel": {
+    "description": "Label for the URL field on a credential entry."
+  },
+  "vaultEntryFormScreenUrlHint": "https://...",
+  "@vaultEntryFormScreenUrlHint": {
+    "description": "Hint text for the URL field on a credential entry."
+  },
+  "vaultEntryFormScreenUsernameLabel": "用户名 *",
+  "@vaultEntryFormScreenUsernameLabel": {
+    "description": "Label for the required username field on a credential entry."
+  },
+  "vaultEntryFormScreenPasswordLabel": "密码 *",
+  "@vaultEntryFormScreenPasswordLabel": {
+    "description": "Label for the required password field on a credential entry."
+  },
+  "vaultEntryFormScreenDocNameLabel": "名称 *",
+  "@vaultEntryFormScreenDocNameLabel": {
+    "description": "Label for the required name field on a document entry."
+  },
+  "vaultEntryFormScreenDocNameHint": "例如：身份证、护照、合同",
+  "@vaultEntryFormScreenDocNameHint": {
+    "description": "Hint text for the name field on a document entry."
+  },
+  "vaultEntryFormScreenChooseFileButton": "选择文件",
+  "@vaultEntryFormScreenChooseFileButton": {
+    "description": "Button label to pick a file for a document entry when none is chosen yet."
+  },
+  "vaultEntryFormScreenChangeFileButton": "更换文件",
+  "@vaultEntryFormScreenChangeFileButton": {
+    "description": "Button label to replace the already-chosen file for a document entry."
+  },
+  "vaultEntryFormScreenFileInfoLine": "{fileName} · {size} · {mimeType}",
+  "@vaultEntryFormScreenFileInfoLine": {
+    "description": "Summary line showing the chosen document's file name, size and MIME type.",
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      },
+      "size": {
+        "type": "String"
+      },
+      "mimeType": {
+        "type": "String"
+      }
+    }
+  },
+  "vaultEntryFormScreenAddressLabelFieldLabel": "标签 *",
+  "@vaultEntryFormScreenAddressLabelFieldLabel": {
+    "description": "Label for the required label field on an address entry (e.g. Home, Work)."
+  },
+  "vaultEntryFormScreenAddressLabelHint": "例如：家、公司、收货地址",
+  "@vaultEntryFormScreenAddressLabelHint": {
+    "description": "Hint text for the label field on an address entry."
+  },
+  "vaultEntryFormScreenFullNameLabel": "全名 *",
+  "@vaultEntryFormScreenFullNameLabel": {
+    "description": "Label for the required full name field on an address entry."
+  },
+  "vaultEntryFormScreenStreetLabel": "街道 *",
+  "@vaultEntryFormScreenStreetLabel": {
+    "description": "Label for the required street field on an address entry."
+  },
+  "vaultEntryFormScreenNumberLabel": "门牌号 *",
+  "@vaultEntryFormScreenNumberLabel": {
+    "description": "Label for the required street number field on an address entry."
+  },
+  "vaultEntryFormScreenComplementLabel": "补充地址",
+  "@vaultEntryFormScreenComplementLabel": {
+    "description": "Label for the optional complement field on an address entry."
+  },
+  "vaultEntryFormScreenNeighborhoodLabel": "社区 *",
+  "@vaultEntryFormScreenNeighborhoodLabel": {
+    "description": "Label for the required neighborhood field on an address entry."
+  },
+  "vaultEntryFormScreenCityLabel": "城市 *",
+  "@vaultEntryFormScreenCityLabel": {
+    "description": "Label for the required city field on an address entry."
+  },
+  "vaultEntryFormScreenStateLabel": "省/州 *",
+  "@vaultEntryFormScreenStateLabel": {
+    "description": "Label for the required state field on an address entry."
+  },
+  "vaultEntryFormScreenZipCodeLabel": "邮政编码 *",
+  "@vaultEntryFormScreenZipCodeLabel": {
+    "description": "Label for the required ZIP code field on an address entry."
+  },
+  "vaultEntryFormScreenCountryLabel": "国家 *",
+  "@vaultEntryFormScreenCountryLabel": {
+    "description": "Label for the required country field on an address entry."
+  },
+  "vaultEntryFormScreenPhoneLabel": "电话",
+  "@vaultEntryFormScreenPhoneLabel": {
+    "description": "Label for the optional phone field on an address entry."
+  },
+  "vaultEntryFormScreenCardLabelFieldLabel": "标签 *",
+  "@vaultEntryFormScreenCardLabelFieldLabel": {
+    "description": "Label for the required label field on a credit card entry (e.g. Nubank)."
+  },
+  "vaultEntryFormScreenCardLabelHint": "例如：招商银行白金卡、Amex Gold",
+  "@vaultEntryFormScreenCardLabelHint": {
+    "description": "Hint text for the label field on a credit card entry."
+  },
+  "vaultEntryFormScreenCardHolderLabel": "持卡人 *",
+  "@vaultEntryFormScreenCardHolderLabel": {
+    "description": "Label for the required card holder name field on a credit card entry."
+  },
+  "vaultEntryFormScreenCardNumberLabel": "卡号 *",
+  "@vaultEntryFormScreenCardNumberLabel": {
+    "description": "Label for the required card number field on a credit card entry."
+  },
+  "vaultEntryFormScreenNetworkLabel": "卡组织 *",
+  "@vaultEntryFormScreenNetworkLabel": {
+    "description": "Label for the required card network dropdown on a credit card entry."
+  },
+  "vaultEntryFormScreenExpiryMonthLabel": "有效期 - 月 *",
+  "@vaultEntryFormScreenExpiryMonthLabel": {
+    "description": "Label for the required expiry month field on a credit card entry."
+  },
+  "vaultEntryFormScreenExpiryMonthHint": "MM",
+  "@vaultEntryFormScreenExpiryMonthHint": {
+    "description": "Hint text for the expiry month field on a credit card entry."
+  },
+  "vaultEntryFormScreenExpiryYearLabel": "有效期 - 年 *",
+  "@vaultEntryFormScreenExpiryYearLabel": {
+    "description": "Label for the required expiry year field on a credit card entry."
+  },
+  "vaultEntryFormScreenExpiryYearHint": "YYYY",
+  "@vaultEntryFormScreenExpiryYearHint": {
+    "description": "Hint text for the expiry year field on a credit card entry."
+  },
+  "vaultEntryFormScreenCvvLabel": "CVV *",
+  "@vaultEntryFormScreenCvvLabel": {
+    "description": "Label for the required CVV field on a credit card entry."
+  },
+  "vaultEntryFormScreenBankLabel": "银行",
+  "@vaultEntryFormScreenBankLabel": {
+    "description": "Label for the optional bank field on a credit card entry."
+  },
+  "vaultEntryFormScreenNotesLabel": "备注",
+  "@vaultEntryFormScreenNotesLabel": {
+    "description": "Label for the notes field shared by all vault entry types."
+  },
+  "vaultEntryFormScreenTotpSecretLabel": "2FA 密钥（可选）",
+  "@vaultEntryFormScreenTotpSecretLabel": {
+    "description": "Label for the optional TOTP secret field on a credential entry."
+  },
+  "vaultEntryFormScreenTotpSecretHint": "base32 密钥 或 otpauth://... URI",
+  "@vaultEntryFormScreenTotpSecretHint": {
+    "description": "Hint text for the TOTP secret field explaining accepted formats."
+  },
+  "vaultEntryFormScreenScanQrTooltip": "扫描二维码",
+  "@vaultEntryFormScreenScanQrTooltip": {
+    "description": "Tooltip for the icon button that opens the camera to scan a 2FA QR code."
+  },
+  "vaultEntryFormScreenUploadQrTooltip": "从照片上传二维码",
+  "@vaultEntryFormScreenUploadQrTooltip": {
+    "description": "Tooltip for the icon button that picks a saved image to decode a 2FA QR code from."
+  },
+  "vaultEntryFormScreenPasskeyLabel": "通行密钥：",
+  "@vaultEntryFormScreenPasskeyLabel": {
+    "description": "Label prefix shown before the passkey RP ID on the vault entry form screen."
+  },
+  "vaultEntryFormScreenGeneratePasskeyButton": "生成通行密钥",
+  "@vaultEntryFormScreenGeneratePasskeyButton": {
+    "description": "Button label to generate a new passkey for a credential entry, shown when none exists yet."
+  },
+  "vaultEntryFormScreenRecreatePasskeyButton": "重新生成",
+  "@vaultEntryFormScreenRecreatePasskeyButton": {
+    "description": "Button label to regenerate the passkey for a credential entry, shown when one already exists."
+  },
+  "vaultEntryFormScreenProfilesLabel": "配置文件",
+  "@vaultEntryFormScreenProfilesLabel": {
+    "description": "Section heading for the profile selector on the vault entry form screen."
+  },
+  "vaultEntryFormScreenNoProfilesMessage": "尚未创建任何配置文件 — 请在桌面应用中创建。",
+  "@vaultEntryFormScreenNoProfilesMessage": {
+    "description": "Message shown when there are no profiles to choose from on the vault entry form screen."
+  },
+  "vaultEntryFormScreenSaveButton": "保存",
+  "@vaultEntryFormScreenSaveButton": {
+    "description": "Button label to save the vault entry form."
+  },
+  "vaultEntryDetailScreenDocumentFallbackTitle": "文档",
+  "@vaultEntryDetailScreenDocumentFallbackTitle": {
+    "description": "Fallback title on the entry detail screen when a document entry has no name."
+  },
+  "vaultEntryDetailScreenAddressFallbackTitle": "地址",
+  "@vaultEntryDetailScreenAddressFallbackTitle": {
+    "description": "Fallback title on the entry detail screen when an address entry has no label."
+  },
+  "vaultEntryDetailScreenCardFallbackTitle": "银行卡",
+  "@vaultEntryDetailScreenCardFallbackTitle": {
+    "description": "Fallback title on the entry detail screen when a credit card entry has no label."
+  },
+  "vaultEntryDetailScreenCopiedSnackbar": "{label}已复制！",
+  "@vaultEntryDetailScreenCopiedSnackbar": {
+    "description": "Snackbar shown after copying a field's value to the clipboard on the entry detail screen.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "vaultEntryDetailScreenLoadDocumentFailedSnackbar": "无法加载文档：{error}",
+  "@vaultEntryDetailScreenLoadDocumentFailedSnackbar": {
+    "description": "Snackbar shown when downloading/loading a document's content fails.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "vaultEntryDetailScreenDocumentSavedSnackbar": "文档已保存 ✓",
+  "@vaultEntryDetailScreenDocumentSavedSnackbar": {
+    "description": "Snackbar shown after a document was successfully saved to the device."
+  },
+  "vaultEntryDetailScreenDeleteDialogTitle": "删除条目？",
+  "@vaultEntryDetailScreenDeleteDialogTitle": {
+    "description": "Title of the confirmation dialog shown before deleting a vault entry."
+  },
+  "vaultEntryDetailScreenDeleteDialogContent": "这将从您的密码库中移除“{title}”。",
+  "@vaultEntryDetailScreenDeleteDialogContent": {
+    "description": "Content of the confirmation dialog shown before deleting a vault entry, naming the entry.",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "vaultEntryDetailScreenCancelButton": "取消",
+  "@vaultEntryDetailScreenCancelButton": {
+    "description": "Cancel button label in the delete confirmation dialog on the entry detail screen."
+  },
+  "vaultEntryDetailScreenDeleteButton": "删除",
+  "@vaultEntryDetailScreenDeleteButton": {
+    "description": "Confirm delete button label in the delete confirmation dialog on the entry detail screen."
+  },
+  "vaultEntryDetailScreenSiteLabel": "网站",
+  "@vaultEntryDetailScreenSiteLabel": {
+    "description": "Row label for the site value of a credential entry on the detail screen."
+  },
+  "vaultEntryDetailScreenUsernameLabel": "用户名",
+  "@vaultEntryDetailScreenUsernameLabel": {
+    "description": "Row label for the username value of a credential entry on the detail screen."
+  },
+  "vaultEntryDetailScreenPasswordLabel": "密码",
+  "@vaultEntryDetailScreenPasswordLabel": {
+    "description": "Row label for the password value of a credential entry on the detail screen."
+  },
+  "vaultEntryDetailScreenTotpCodeLabel": "2FA 验证码",
+  "@vaultEntryDetailScreenTotpCodeLabel": {
+    "description": "Label used when copying the current TOTP code to the clipboard."
+  },
+  "vaultEntryDetailScreenNameLabel": "名称",
+  "@vaultEntryDetailScreenNameLabel": {
+    "description": "Row label for the name value of a document entry on the detail screen."
+  },
+  "vaultEntryDetailScreenFileLabel": "文件",
+  "@vaultEntryDetailScreenFileLabel": {
+    "description": "Row label for the file name value of a document entry on the detail screen."
+  },
+  "vaultEntryDetailScreenSizeLabel": "大小",
+  "@vaultEntryDetailScreenSizeLabel": {
+    "description": "Row label for the file size value of a document entry on the detail screen."
+  },
+  "vaultEntryDetailScreenSizeValue": "{size} · {mimeType}",
+  "@vaultEntryDetailScreenSizeValue": {
+    "description": "Row value combining a document's formatted file size and MIME type on the detail screen.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      },
+      "mimeType": {
+        "type": "String"
+      }
+    }
+  },
+  "vaultEntryDetailScreenSaveToDeviceButton": "保存到设备",
+  "@vaultEntryDetailScreenSaveToDeviceButton": {
+    "description": "Button label to download and save a document entry's file to the device."
+  },
+  "vaultEntryDetailScreenFullNameLabel": "全名",
+  "@vaultEntryDetailScreenFullNameLabel": {
+    "description": "Row label for the full name value of an address entry on the detail screen."
+  },
+  "vaultEntryDetailScreenStreetLabel": "街道",
+  "@vaultEntryDetailScreenStreetLabel": {
+    "description": "Row label for the street and number value of an address entry on the detail screen."
+  },
+  "vaultEntryDetailScreenComplementLabel": "补充地址",
+  "@vaultEntryDetailScreenComplementLabel": {
+    "description": "Row label for the complement value of an address entry on the detail screen."
+  },
+  "vaultEntryDetailScreenNeighborhoodLabel": "社区",
+  "@vaultEntryDetailScreenNeighborhoodLabel": {
+    "description": "Row label for the neighborhood value of an address entry on the detail screen."
+  },
+  "vaultEntryDetailScreenCityStateLabel": "城市/省份",
+  "@vaultEntryDetailScreenCityStateLabel": {
+    "description": "Row label for the combined city and state value of an address entry on the detail screen."
+  },
+  "vaultEntryDetailScreenZipCodeLabel": "邮政编码",
+  "@vaultEntryDetailScreenZipCodeLabel": {
+    "description": "Row label for the ZIP code value of an address entry on the detail screen."
+  },
+  "vaultEntryDetailScreenCountryLabel": "国家",
+  "@vaultEntryDetailScreenCountryLabel": {
+    "description": "Row label for the country value of an address entry on the detail screen."
+  },
+  "vaultEntryDetailScreenPhoneLabel": "电话",
+  "@vaultEntryDetailScreenPhoneLabel": {
+    "description": "Row label for the phone value of an address entry on the detail screen."
+  },
+  "vaultEntryDetailScreenCardHolderLabel": "持卡人",
+  "@vaultEntryDetailScreenCardHolderLabel": {
+    "description": "Row label for the card holder name value of a credit card entry on the detail screen."
+  },
+  "vaultEntryDetailScreenCardNumberLabel": "卡号",
+  "@vaultEntryDetailScreenCardNumberLabel": {
+    "description": "Row label for the card number value of a credit card entry on the detail screen."
+  },
+  "vaultEntryDetailScreenCvvLabel": "CVV",
+  "@vaultEntryDetailScreenCvvLabel": {
+    "description": "Row label for the CVV value of a credit card entry on the detail screen."
+  },
+  "vaultEntryDetailScreenExpiryLabel": "有效期",
+  "@vaultEntryDetailScreenExpiryLabel": {
+    "description": "Row label for the expiry month/year value of a credit card entry on the detail screen."
+  },
+  "vaultEntryDetailScreenNetworkLabel": "卡组织",
+  "@vaultEntryDetailScreenNetworkLabel": {
+    "description": "Row label for the card network value of a credit card entry on the detail screen."
+  },
+  "vaultEntryDetailScreenBankLabel": "银行",
+  "@vaultEntryDetailScreenBankLabel": {
+    "description": "Row label for the bank value of a credit card entry on the detail screen."
+  },
+  "vaultEntryDetailScreenNotesLabel": "备注",
+  "@vaultEntryDetailScreenNotesLabel": {
+    "description": "Row label for the notes value shared by all vault entry types on the detail screen."
+  },
+  "vaultEntryDetailScreenUrlLabel": "网址：",
+  "@vaultEntryDetailScreenUrlLabel": {
+    "description": "Label prefix shown before a credential entry's URL on the detail screen."
+  },
+  "vaultEntryDetailScreenTotpLabel": "2FA：",
+  "@vaultEntryDetailScreenTotpLabel": {
+    "description": "Label prefix shown before the live TOTP code on the detail screen."
+  },
+  "vaultEntryDetailScreenTotpErrorText": "2FA：{error}",
+  "@vaultEntryDetailScreenTotpErrorText": {
+    "description": "Error text shown instead of the TOTP code when generating it fails.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "vaultEntryDetailScreenTotpSecondsRemaining": "{seconds}秒",
+  "@vaultEntryDetailScreenTotpSecondsRemaining": {
+    "description": "Countdown showing the seconds remaining until the current TOTP code rotates.",
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "vaultEntryDetailScreenTestSignatureButton": "测试签名",
+  "@vaultEntryDetailScreenTestSignatureButton": {
+    "description": "Button label to run a local passkey signature test on the detail screen."
+  },
+  "vaultBackupScreenImportConfirmTitle": "导入备份？",
+  "@vaultBackupScreenImportConfirmTitle": {
+    "description": "Title of the confirm dialog before importing a backup file"
+  },
+  "vaultBackupScreenImportConfirmBody": "这将用备份文件的内容覆盖此设备上的整个本地密码库。此操作无法撤销。",
+  "@vaultBackupScreenImportConfirmBody": {
+    "description": "Warning body of the import confirmation dialog"
+  },
+  "vaultBackupScreenCancelButton": "取消",
+  "@vaultBackupScreenCancelButton": {
+    "description": "Cancel button in the import confirmation dialog"
+  },
+  "vaultBackupScreenImportConfirmButton": "导入",
+  "@vaultBackupScreenImportConfirmButton": {
+    "description": "Confirm button (destructive) in the import confirmation dialog"
+  },
+  "vaultBackupScreenTitle": "备份 / 恢复",
+  "@vaultBackupScreenTitle": {
+    "description": "App bar title of the vault backup/restore screen"
+  },
+  "vaultBackupScreenIntro": "将整个密码库（密码、2FA、通行密钥、配置文件）导出为 .truthid-backup 文件，或从中恢复。使用独立密码加密，与您的钱包无关 — 请妥善保管此密码，一旦丢失将无法找回。",
+  "@vaultBackupScreenIntro": {
+    "description": "Intro paragraph explaining the backup feature"
+  },
+  "vaultBackupScreenExportSectionTitle": "导出",
+  "@vaultBackupScreenExportSectionTitle": {
+    "description": "Section title for the export part of the screen"
+  },
+  "vaultBackupScreenExportPasswordLabel": "导出密码",
+  "@vaultBackupScreenExportPasswordLabel": {
+    "description": "Label of the export password text field"
+  },
+  "vaultBackupScreenConfirmPasswordLabel": "确认密码",
+  "@vaultBackupScreenConfirmPasswordLabel": {
+    "description": "Label of the confirm export password text field"
+  },
+  "vaultBackupScreenExportSuccess": "备份已保存 ✓",
+  "@vaultBackupScreenExportSuccess": {
+    "description": "Success message shown after exporting the backup"
+  },
+  "vaultBackupScreenExportingButton": "正在导出...",
+  "@vaultBackupScreenExportingButton": {
+    "description": "Export button label while the export is in progress"
+  },
+  "vaultBackupScreenExportButton": "导出备份",
+  "@vaultBackupScreenExportButton": {
+    "description": "Export button label in idle state"
+  },
+  "vaultBackupScreenImportSectionTitle": "导入",
+  "@vaultBackupScreenImportSectionTitle": {
+    "description": "Section title for the import part of the screen"
+  },
+  "vaultBackupScreenChooseFileButton": "选择 .truthid-backup 文件",
+  "@vaultBackupScreenChooseFileButton": {
+    "description": "Button label to pick a backup file to import"
+  },
+  "vaultBackupScreenBackupPasswordLabel": "备份密码",
+  "@vaultBackupScreenBackupPasswordLabel": {
+    "description": "Label of the import backup password text field"
+  },
+  "vaultBackupScreenImportSuccess": "备份已导入 ✓",
+  "@vaultBackupScreenImportSuccess": {
+    "description": "Success message shown after importing the backup"
+  },
+  "vaultBackupScreenImportingButton": "正在导入...",
+  "@vaultBackupScreenImportingButton": {
+    "description": "Import button label while the import is in progress"
+  },
+  "vaultBackupScreenImportButton": "导入",
+  "@vaultBackupScreenImportButton": {
+    "description": "Import button label in idle state"
+  },
+  "vaultEditApprovalScreenErrorInvalidVersion": "二维码无效：不支持的 schema 版本。",
+  "@vaultEditApprovalScreenErrorInvalidVersion": {
+    "description": "Validation error when the scanned QR payload has an unsupported schema version"
+  },
+  "vaultEditApprovalScreenErrorMissingSessionId": "二维码无效：缺少 sessionId。",
+  "@vaultEditApprovalScreenErrorMissingSessionId": {
+    "description": "Validation error when the scanned QR payload is missing sessionId"
+  },
+  "vaultEditApprovalScreenErrorMissingEphemeralPubKey": "二维码无效：缺少 ephemeralPubKey。",
+  "@vaultEditApprovalScreenErrorMissingEphemeralPubKey": {
+    "description": "Validation error when the scanned QR payload is missing ephemeralPubKey"
+  },
+  "vaultEditApprovalScreenErrorMissingExpiresAt": "二维码无效：缺少 expiresAt。",
+  "@vaultEditApprovalScreenErrorMissingExpiresAt": {
+    "description": "Validation error when the scanned QR payload is missing expiresAt"
+  },
+  "vaultEditApprovalScreenErrorExpiredQr": "此二维码已过期 — 请返回扩展程序重新扫描一个新的。",
+  "@vaultEditApprovalScreenErrorExpiredQr": {
+    "description": "Error shown when the scanned QR code has already expired"
+  },
+  "vaultEditApprovalScreenErrorMissingAppName": "二维码无效：缺少 appName。",
+  "@vaultEditApprovalScreenErrorMissingAppName": {
+    "description": "Validation error when the scanned QR payload is missing appName"
+  },
+  "vaultEditApprovalScreenErrorDecryptFailed": "解密收到的提案失败：{error}",
+  "@vaultEditApprovalScreenErrorDecryptFailed": {
+    "description": "Error shown when decrypting the received credential proposal fails",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "FormatException"
+      }
+    }
+  },
+  "vaultEditApprovalScreenErrorNotPaired": "此手机尚未与任何 TruthID 身份配对。",
+  "@vaultEditApprovalScreenErrorNotPaired": {
+    "description": "Error shown when the device has no paired identity"
+  },
+  "vaultEditApprovalScreenErrorResolvingIdentity": "仍在链上解析您的身份 — 请稍后重试。",
+  "@vaultEditApprovalScreenErrorResolvingIdentity": {
+    "description": "Error shown while the identity is still resolving on-chain"
+  },
+  "vaultEditApprovalScreenErrorResolveSmartAccount": "无法解析您的智能账户 — 请重试。",
+  "@vaultEditApprovalScreenErrorResolveSmartAccount": {
+    "description": "Error shown when the smart account address could not be resolved"
+  },
+  "vaultEditApprovalScreenErrorSaveFailed": "保存并发布新凭据失败：{error}",
+  "@vaultEditApprovalScreenErrorSaveFailed": {
+    "description": "Error shown when saving/publishing the new credential fails",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "Network error"
+      }
+    }
+  },
+  "vaultEditApprovalScreenTitle": "新凭据请求",
+  "@vaultEditApprovalScreenTitle": {
+    "description": "App bar title of the vault edit approval screen"
+  },
+  "vaultEditApprovalScreenReceivingTitle": "{appName} 想要发送一个新凭据...",
+  "@vaultEditApprovalScreenReceivingTitle": {
+    "description": "Title shown while receiving the credential proposal from the requesting app",
+    "placeholders": {
+      "appName": {
+        "type": "String",
+        "example": "My Browser Extension"
+      }
+    }
+  },
+  "vaultEditApprovalScreenDefaultAppName": "某应用",
+  "@vaultEditApprovalScreenDefaultAppName": {
+    "description": "Fallback app name used when the requesting app name is unknown"
+  },
+  "vaultEditApprovalScreenWifiHint": "请确保您的手机和电脑处于同一 Wi-Fi 网络。",
+  "@vaultEditApprovalScreenWifiHint": {
+    "description": "Hint asking the user to check both devices are on the same Wi-Fi network"
+  },
+  "vaultEditApprovalScreenManualIpHint": "如果扩展程序无法自动找到您的手机，请在下方手动输入此 IP 地址：",
+  "@vaultEditApprovalScreenManualIpHint": {
+    "description": "Hint shown above the list of manual IP addresses to enter in the extension"
+  },
+  "vaultEditApprovalScreenSiteLabel": "网站",
+  "@vaultEditApprovalScreenSiteLabel": {
+    "description": "Label for the site field of the proposed credential"
+  },
+  "vaultEditApprovalScreenUpdatingEntryLabel": "正在更新已有条目",
+  "@vaultEditApprovalScreenUpdatingEntryLabel": {
+    "description": "Label indicating the proposal updates an existing vault entry"
+  },
+  "vaultEditApprovalScreenNewEntryLabel": "新条目",
+  "@vaultEditApprovalScreenNewEntryLabel": {
+    "description": "Label indicating the proposal creates a new vault entry"
+  },
+  "vaultEditApprovalScreenUsernameLabel": "用户名",
+  "@vaultEditApprovalScreenUsernameLabel": {
+    "description": "Label for the username field of the proposed credential"
+  },
+  "vaultEditApprovalScreenPasswordLabel": "密码",
+  "@vaultEditApprovalScreenPasswordLabel": {
+    "description": "Label for the password field of the proposed credential"
+  },
+  "vaultEditApprovalScreenPasskeyChip": "+ 通行密钥",
+  "@vaultEditApprovalScreenPasskeyChip": {
+    "description": "Chip label indicating the proposal also includes a passkey"
+  },
+  "vaultEditApprovalScreenApprovalTitle": "{appName} 想要保存{count, plural, one{一项新凭据} other{{count} 项新凭据}}",
+  "@vaultEditApprovalScreenApprovalTitle": {
+    "description": "Title of the approval screen, singular/plural depending on how many credentials are proposed",
+    "placeholders": {
+      "appName": {
+        "type": "String",
+        "example": "My Browser Extension"
+      },
+      "count": {
+        "type": "num",
+        "format": "compact"
+      }
+    }
+  },
+  "vaultEditApprovalScreenApproveButton": "批准",
+  "@vaultEditApprovalScreenApproveButton": {
+    "description": "Button to approve saving the proposed credential(s)"
+  },
+  "vaultEditApprovalScreenRejectButton": "拒绝",
+  "@vaultEditApprovalScreenRejectButton": {
+    "description": "Button to reject the proposed credential(s)"
+  },
+  "vaultEditApprovalScreenDoneMessage": "{count, plural, one{新凭据已保存到您的密码库并发布。} other{{count} 项新凭据已保存到您的密码库并发布。}}",
+  "@vaultEditApprovalScreenDoneMessage": {
+    "description": "Confirmation message after the credential(s) were saved and published, singular/plural",
+    "placeholders": {
+      "count": {
+        "type": "num",
+        "format": "compact"
+      }
+    }
+  },
+  "vaultEditApprovalScreenSavedTitle": "已保存",
+  "@vaultEditApprovalScreenSavedTitle": {
+    "description": "Title shown on the success screen after saving the credential(s)"
+  },
+  "vaultEditApprovalScreenDoneButton": "完成",
+  "@vaultEditApprovalScreenDoneButton": {
+    "description": "Button to close the success screen"
+  },
+  "vaultEditApprovalScreenTimeoutTitle": "未收到任何内容",
+  "@vaultEditApprovalScreenTimeoutTitle": {
+    "description": "Title shown when the request expired without receiving anything"
+  },
+  "vaultEditApprovalScreenTimeoutBody": "在此请求过期前，扩展程序一直未能连接。请确保两台设备处于同一 Wi-Fi 网络，然后重试。",
+  "@vaultEditApprovalScreenTimeoutBody": {
+    "description": "Body explaining the timeout and suggesting to retry"
+  },
+  "vaultEditApprovalScreenBackButton": "返回",
+  "@vaultEditApprovalScreenBackButton": {
+    "description": "Button to go back from an error/timeout screen"
+  },
+  "vaultEditApprovalScreenGenericError": "出错了。",
+  "@vaultEditApprovalScreenGenericError": {
+    "description": "Generic fallback error message"
+  },
+  "vaultEditApprovalScreenTryAgainButton": "重试",
+  "@vaultEditApprovalScreenTryAgainButton": {
+    "description": "Button to retry the approval flow after an error"
+  },
+  "vaultProfilesScreenRenameTitle": "重命名配置文件",
+  "@vaultProfilesScreenRenameTitle": {
+    "description": "Title of the rename profile dialog"
+  },
+  "vaultProfilesScreenCancelButton": "取消",
+  "@vaultProfilesScreenCancelButton": {
+    "description": "Cancel button in the rename/delete profile dialogs"
+  },
+  "vaultProfilesScreenRenameButton": "重命名",
+  "@vaultProfilesScreenRenameButton": {
+    "description": "Confirm button in the rename profile dialog"
+  },
+  "vaultProfilesScreenDeleteTitle": "删除配置文件？",
+  "@vaultProfilesScreenDeleteTitle": {
+    "description": "Title of the delete profile confirmation dialog"
+  },
+  "vaultProfilesScreenDeleteBody": "“{name}”将从所有使用它的条目中移除。",
+  "@vaultProfilesScreenDeleteBody": {
+    "description": "Body of the delete profile confirmation dialog",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Work"
+      }
+    }
+  },
+  "vaultProfilesScreenDeleteButton": "删除",
+  "@vaultProfilesScreenDeleteButton": {
+    "description": "Confirm (destructive) button in the delete profile dialog"
+  },
+  "vaultProfilesScreenTitle": "管理配置文件",
+  "@vaultProfilesScreenTitle": {
+    "description": "App bar title of the manage vault profiles screen"
+  },
+  "vaultProfilesScreenIntro": "创建任意名称的配置文件，并为每个密码打上任意数量合适的配置文件标签。",
+  "@vaultProfilesScreenIntro": {
+    "description": "Intro paragraph explaining what profiles are for"
+  },
+  "vaultProfilesScreenEmptyState": "尚未创建任何配置文件。",
+  "@vaultProfilesScreenEmptyState": {
+    "description": "Empty state message when no profiles have been created"
+  },
+  "vaultProfilesScreenRenameTooltip": "重命名",
+  "@vaultProfilesScreenRenameTooltip": {
+    "description": "Tooltip of the rename icon button on a profile row"
+  },
+  "vaultProfilesScreenDeleteTooltip": "删除",
+  "@vaultProfilesScreenDeleteTooltip": {
+    "description": "Tooltip of the delete icon button on a profile row"
+  },
+  "vaultProfilesScreenNewNameLabel": "新配置文件名称",
+  "@vaultProfilesScreenNewNameLabel": {
+    "description": "Label of the text field to create a new profile"
+  },
+  "vaultProfilesScreenAddButton": "添加",
+  "@vaultProfilesScreenAddButton": {
+    "description": "Button to add a new profile"
+  },
+  "vaultSessionScreenErrorInvalidVersion": "二维码无效：不支持的 schema 版本。",
+  "@vaultSessionScreenErrorInvalidVersion": {
+    "description": "Validation error when the scanned QR payload has an unsupported schema version"
+  },
+  "vaultSessionScreenErrorMissingSessionId": "二维码无效：缺少 sessionId。",
+  "@vaultSessionScreenErrorMissingSessionId": {
+    "description": "Validation error when the scanned QR payload is missing sessionId"
+  },
+  "vaultSessionScreenErrorMissingEphemeralPubKey": "二维码无效：缺少 ephemeralPubKey。",
+  "@vaultSessionScreenErrorMissingEphemeralPubKey": {
+    "description": "Validation error when the scanned QR payload is missing ephemeralPubKey"
+  },
+  "vaultSessionScreenErrorMissingExpiresAt": "二维码无效：缺少 expiresAt。",
+  "@vaultSessionScreenErrorMissingExpiresAt": {
+    "description": "Validation error when the scanned QR payload is missing expiresAt"
+  },
+  "vaultSessionScreenErrorExpiredQr": "此二维码已过期 — 请返回扩展程序重新扫描一个新的。",
+  "@vaultSessionScreenErrorExpiredQr": {
+    "description": "Error shown when the scanned QR code has already expired"
+  },
+  "vaultSessionScreenErrorSessionExpired": "会话在发送前已过期 — 请重新扫描二维码。",
+  "@vaultSessionScreenErrorSessionExpired": {
+    "description": "Error shown when the session expires right before sending to the extension"
+  },
+  "vaultSessionScreenErrorSendFailed": "发送到扩展程序失败：{error}",
+  "@vaultSessionScreenErrorSendFailed": {
+    "description": "Error shown when sending the vault entries to the extension fails",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "Connection refused"
+      }
+    }
+  },
+  "vaultSessionScreenTitle": "扩展程序会话",
+  "@vaultSessionScreenTitle": {
+    "description": "App bar title of the vault-to-extension session screen"
+  },
+  "vaultSessionScreenInfoTitle": "浏览器扩展扫描",
+  "@vaultSessionScreenInfoTitle": {
+    "description": "Title of the initial info screen after scanning the extension's QR code"
+  },
+  "vaultSessionScreenInfoBody": "一个浏览器扩展想要接收您密码库的一部分。",
+  "@vaultSessionScreenInfoBody": {
+    "description": "Body explaining that a browser extension wants to receive part of the vault"
+  },
+  "vaultSessionScreenSessionLabel": "会话",
+  "@vaultSessionScreenSessionLabel": {
+    "description": "Label for the session id row on the info screen"
+  },
+  "vaultSessionScreenContinueButton": "继续",
+  "@vaultSessionScreenContinueButton": {
+    "description": "Button to continue from the info screen to profile selection"
+  },
+  "vaultSessionScreenProfilePickerTitle": "要分享哪个配置文件？",
+  "@vaultSessionScreenProfilePickerTitle": {
+    "description": "Title of the profile picker step"
+  },
+  "vaultSessionScreenProfilePickerBody": "只会考虑打上此配置文件标签的条目。",
+  "@vaultSessionScreenProfilePickerBody": {
+    "description": "Body explaining that only entries tagged with the chosen profile will be shared"
+  },
+  "vaultSessionScreenNoProfiles": "尚未创建任何配置文件 — 请在桌面应用中创建后重新同步。",
+  "@vaultSessionScreenNoProfiles": {
+    "description": "Message shown when there are no profiles to pick from"
+  },
+  "vaultSessionScreenProfileLabel": "配置文件",
+  "@vaultSessionScreenProfileLabel": {
+    "description": "Label for the selected profile row"
+  },
+  "vaultSessionScreenMatchingEntriesLabel": "匹配的条目",
+  "@vaultSessionScreenMatchingEntriesLabel": {
+    "description": "Label for the count of entries matching the selected profile"
+  },
+  "vaultSessionScreenOfflineNotice": "离线 — 正在显示上次同步的条目。",
+  "@vaultSessionScreenOfflineNotice": {
+    "description": "Notice shown when displaying entries from the last sync while offline"
+  },
+  "vaultSessionScreenSendButton": "发送到扩展程序",
+  "@vaultSessionScreenSendButton": {
+    "description": "Button to send the matching vault entries to the extension"
+  },
+  "vaultSessionScreenSendingTitle": "正在等待您的浏览器连接...",
+  "@vaultSessionScreenSendingTitle": {
+    "description": "Title shown while waiting for the browser extension to connect"
+  },
+  "vaultSessionScreenWifiHint": "请确保您的手机和电脑处于同一 Wi-Fi 网络。",
+  "@vaultSessionScreenWifiHint": {
+    "description": "Hint asking the user to check both devices are on the same Wi-Fi network"
+  },
+  "vaultSessionScreenManualIpHint": "如果您的浏览器无法自动找到您的手机，请在下方手动输入此 IP 地址：",
+  "@vaultSessionScreenManualIpHint": {
+    "description": "Hint shown above the list of manual IP addresses to enter in the browser"
+  },
+  "vaultSessionScreenSentTitle": "已发送",
+  "@vaultSessionScreenSentTitle": {
+    "description": "Title shown on the success screen after sending entries to the extension"
+  },
+  "vaultSessionScreenSentBody": "您的浏览器扩展已收到密码库条目。",
+  "@vaultSessionScreenSentBody": {
+    "description": "Body confirming the extension received the vault entries"
+  },
+  "vaultSessionScreenDeadDropPublished": "离线中转备份已发布（IPFS/IPNS）。",
+  "@vaultSessionScreenDeadDropPublished": {
+    "description": "Notice that the dead-drop backup was published successfully"
+  },
+  "vaultSessionScreenDeadDropUnavailable": "此次离线中转备份不可用。",
+  "@vaultSessionScreenDeadDropUnavailable": {
+    "description": "Notice that the dead-drop backup could not be published this time"
+  },
+  "vaultSessionScreenDoneButton": "完成",
+  "@vaultSessionScreenDoneButton": {
+    "description": "Button to close the success screen"
+  },
+  "vaultSessionScreenTimeoutTitle": "未收到任何内容",
+  "@vaultSessionScreenTimeoutTitle": {
+    "description": "Title shown when the session expired without the extension connecting"
+  },
+  "vaultSessionScreenTimeoutBody": "在此会话过期前，您的浏览器扩展一直未能连接。请确保两台设备处于同一 Wi-Fi 网络，然后重试。",
+  "@vaultSessionScreenTimeoutBody": {
+    "description": "Body explaining the timeout and suggesting to retry"
+  },
+  "vaultSessionScreenTryAgainButton": "重试",
+  "@vaultSessionScreenTryAgainButton": {
+    "description": "Button to retry sending to the extension after a timeout"
+  },
+  "vaultSessionScreenGenericError": "出错了。",
+  "@vaultSessionScreenGenericError": {
+    "description": "Generic fallback error message"
+  },
+  "vaultSessionScreenBackButton": "返回",
+  "@vaultSessionScreenBackButton": {
+    "description": "Button to go back from an error screen"
+  },
+  "pinningProvidersScreenKuboLocalDefaultName": "本地 Kubo",
+  "@pinningProvidersScreenKuboLocalDefaultName": {
+    "description": "Default name given to the local Kubo pinning provider when quick-added"
+  },
+  "pinningProvidersScreenTitle": "固定服务提供方",
+  "@pinningProvidersScreenTitle": {
+    "description": "App bar title of the pinning providers screen"
+  },
+  "pinningProvidersScreenIntro": "密码库本身现在直接发布到 Arweave（参见“Arweave 钱包”）。这些提供方仅用于与浏览器扩展进行批准操作时的跨设备传输通道（局域网/离线中转）— 它们不再是发布密码库流程的一部分。",
+  "@pinningProvidersScreenIntro": {
+    "description": "Intro paragraph explaining what pinning providers are used for now"
+  },
+  "pinningProvidersScreenEmptyState": "未配置任何提供方。",
+  "@pinningProvidersScreenEmptyState": {
+    "description": "Empty state message when no pinning providers are configured"
+  },
+  "pinningProvidersScreenAddKuboDefaultButton": "+ 添加本地 Kubo",
+  "@pinningProvidersScreenAddKuboDefaultButton": {
+    "description": "Button to quickly add the default local Kubo provider"
+  },
+  "pinningProvidersScreenTestTooltip": "测试",
+  "@pinningProvidersScreenTestTooltip": {
+    "description": "Tooltip of the icon button to test a provider's health"
+  },
+  "pinningProvidersScreenRemoveTooltip": "移除",
+  "@pinningProvidersScreenRemoveTooltip": {
+    "description": "Tooltip of the icon button to remove a provider"
+  },
+  "pinningProvidersScreenAddProviderButton": "+ 添加提供方",
+  "@pinningProvidersScreenAddProviderButton": {
+    "description": "Button to open the form for adding a new provider"
+  },
+  "pinningProvidersScreenNameLabel": "名称",
+  "@pinningProvidersScreenNameLabel": {
+    "description": "Label of the provider name text field"
+  },
+  "pinningProvidersScreenNameHint": "例如：Pinata",
+  "@pinningProvidersScreenNameHint": {
+    "description": "Hint/example text of the provider name field"
+  },
+  "pinningProvidersScreenTypeLabel": "类型",
+  "@pinningProvidersScreenTypeLabel": {
+    "description": "Label of the provider type dropdown"
+  },
+  "pinningProvidersScreenKindKuboOption": "kubo — IPFS 节点（上传）",
+  "@pinningProvidersScreenKindKuboOption": {
+    "description": "Dropdown option for the kubo provider kind"
+  },
+  "pinningProvidersScreenKindPsaOption": "psa — 固定服务 API",
+  "@pinningProvidersScreenKindPsaOption": {
+    "description": "Dropdown option for the psa provider kind"
+  },
+  "pinningProvidersScreenEndpointUrlLabel": "接口地址",
+  "@pinningProvidersScreenEndpointUrlLabel": {
+    "description": "Label of the endpoint URL text field"
+  },
+  "pinningProvidersScreenEndpointHintKubo": "http://localhost:5001",
+  "@pinningProvidersScreenEndpointHintKubo": {
+    "description": "Example endpoint URL hint shown when the provider kind is kubo"
+  },
+  "pinningProvidersScreenEndpointHintPsa": "https://api.pinata.cloud/psa",
+  "@pinningProvidersScreenEndpointHintPsa": {
+    "description": "Example endpoint URL hint shown when the provider kind is psa"
+  },
+  "pinningProvidersScreenApiKeyOptionalLabel": "API 密钥（可选）",
+  "@pinningProvidersScreenApiKeyOptionalLabel": {
+    "description": "Label of the API key field when the provider kind is kubo (optional)"
+  },
+  "pinningProvidersScreenApiKeyLabel": "API 密钥",
+  "@pinningProvidersScreenApiKeyLabel": {
+    "description": "Label of the API key field when the provider kind is psa (required)"
+  },
+  "pinningProvidersScreenApiKeyOptionalHint": "本地 Kubo 可留空",
+  "@pinningProvidersScreenApiKeyOptionalHint": {
+    "description": "Hint of the API key field when the provider kind is kubo"
+  },
+  "pinningProvidersScreenApiKeyHint": "Bearer 令牌",
+  "@pinningProvidersScreenApiKeyHint": {
+    "description": "Hint of the API key field when the provider kind is psa"
+  },
+  "pinningProvidersScreenAddButton": "添加",
+  "@pinningProvidersScreenAddButton": {
+    "description": "Button to submit the new provider form"
+  },
+  "pinningProvidersScreenCancelButton": "取消",
+  "@pinningProvidersScreenCancelButton": {
+    "description": "Button to cancel adding a new provider"
+  },
+  "settingsScreenTitle": "设置",
+  "@settingsScreenTitle": {
+    "description": "App bar title of the settings screen"
+  },
+  "settingsScreenBundlerConfigTitle": "Bundler 配置",
+  "@settingsScreenBundlerConfigTitle": {
+    "description": "Section title for the ERC-4337 bundler configuration"
+  },
+  "settingsScreenBundlerConfigIntro": "您的 Bundler 代表您向区块链提交用户操作。您需要拥有自己的 API 密钥（在 pimlico.io 免费获取），或连接自建的 Bundler。",
+  "@settingsScreenBundlerConfigIntro": {
+    "description": "Intro paragraph explaining what a bundler is"
+  },
+  "settingsScreenApiKeyLabel": "Pimlico API 密钥",
+  "@settingsScreenApiKeyLabel": {
+    "description": "Label of the bundler API key text field"
+  },
+  "settingsScreenApiKeyHint": "pim_...",
+  "@settingsScreenApiKeyHint": {
+    "description": "Hint/example text of the bundler API key field"
+  },
+  "settingsScreenApiKeyHelper": "在 dashboard.pimlico.io 免费获取密钥",
+  "@settingsScreenApiKeyHelper": {
+    "description": "Helper text below the bundler API key field"
+  },
+  "settingsScreenNetworkLabel": "网络",
+  "@settingsScreenNetworkLabel": {
+    "description": "Label of the network text field"
+  },
+  "settingsScreenNetworkHint": "base",
+  "@settingsScreenNetworkHint": {
+    "description": "Hint/example text of the network field"
+  },
+  "settingsScreenNetworkHelper": "base、base-sepolia 或自定义 Bundler 网址",
+  "@settingsScreenNetworkHelper": {
+    "description": "Helper text below the network field"
+  },
+  "settingsScreenSaveButton": "保存",
+  "@settingsScreenSaveButton": {
+    "description": "Button to save the bundler configuration"
+  },
+  "settingsScreenSavedMessage": "设置已保存。更改将在下次登录时生效。",
+  "@settingsScreenSavedMessage": {
+    "description": "Confirmation message shown after saving the settings"
+  },
+  "settingsScreenWhyOwnKeyTitle": "为什么我需要自己的密钥？",
+  "@settingsScreenWhyOwnKeyTitle": {
+    "description": "Title of the explanatory section about needing your own bundler API key"
+  },
+  "settingsScreenWhyOwnKeyBody": "TruthID 是去中心化的 — 没有公司服务器为您支付区块链费用。您的智能账户持有 ETH 并直接向 Bundler 支付费用。API 密钥仅用于连接到 Bundler 节点。",
+  "@settingsScreenWhyOwnKeyBody": {
+    "description": "Body explaining why the user needs their own bundler API key"
+  },
+  "settingsScreenSocialRecoveryTitle": "社交恢复",
+  "@settingsScreenSocialRecoveryTitle": {
+    "description": "Title of the list tile linking to the guardian status screen"
+  },
+  "settingsScreenSocialRecoverySubtitle": "查看监护人状态和活跃提议",
+  "@settingsScreenSocialRecoverySubtitle": {
+    "description": "Subtitle of the list tile linking to the guardian status screen"
+  },
+  "settingsScreenSecurityTitle": "安全",
+  "@settingsScreenSecurityTitle": {
+    "description": "Title of the list tile linking to the security screen"
+  },
+  "settingsScreenSecuritySubtitle": "通过设备生物识别或 PIN 锁定应用",
+  "@settingsScreenSecuritySubtitle": {
+    "description": "Subtitle of the list tile linking to the security screen"
+  }
+}

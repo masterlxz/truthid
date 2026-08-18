@@ -1,0 +1,2830 @@
+{
+  "@@locale": "pt",
+  "appTitle": "TruthID",
+  "@appTitle": {
+    "description": "App name, shown in the AppBar title"
+  },
+  "appSettingsTooltip": "Configurações",
+  "@appSettingsTooltip": {
+    "description": "Tooltip for the settings icon button in the app bar"
+  },
+  "appSupportTooltip": "Apoiar o TruthID",
+  "@appSupportTooltip": {
+    "description": "Tooltip for the donation/support icon button in the app bar"
+  },
+  "appScanTooltip": "Escanear QR",
+  "@appScanTooltip": {
+    "description": "Tooltip for the central floating action button that opens the QR scanner"
+  },
+  "appNavDevicesTab": "Dispositivos",
+  "@appNavDevicesTab": {
+    "description": "Bottom navigation tab label for the Devices screen"
+  },
+  "appNavSessionsTab": "Sessões",
+  "@appNavSessionsTab": {
+    "description": "Bottom navigation tab label for the Sessions screen"
+  },
+  "appNavWalletTab": "Carteira",
+  "@appNavWalletTab": {
+    "description": "Bottom navigation tab label for the Wallet screen"
+  },
+  "appNavVaultTab": "Vault",
+  "@appNavVaultTab": {
+    "description": "Bottom navigation tab label for the Vault screen"
+  },
+  "appLockedMessage": "O TruthID está bloqueado",
+  "@appLockedMessage": {
+    "description": "Message shown on the lock overlay when the app is locked"
+  },
+  "appUnlockButton": "Desbloquear",
+  "@appUnlockButton": {
+    "description": "Button label to trigger biometric/PIN authentication on the lock overlay"
+  },
+  "appUpdateBannerAvailable": "TruthID {version} disponível",
+  "@appUpdateBannerAvailable": {
+    "description": "Banner text shown when a newer app version is available for download",
+    "placeholders": {
+      "version": {
+        "type": "String"
+      }
+    }
+  },
+  "appUpdateBannerDownloadButton": "Baixar",
+  "@appUpdateBannerDownloadButton": {
+    "description": "Button label in the update banner to open the download page"
+  },
+  "appDonationSheetTitle": "Apoiar o TruthID",
+  "@appDonationSheetTitle": {
+    "description": "Title of the bottom sheet asking for donations"
+  },
+  "appDonationSheetBody": "O TruthID é open source e gratuito.\nSe ele te ajuda, considere enviar uma contribuição.",
+  "@appDonationSheetBody": {
+    "description": "Body text of the donation bottom sheet"
+  },
+  "appDonationSheetCopyButton": "Copiar endereço",
+  "@appDonationSheetCopyButton": {
+    "description": "Button label to copy the donation wallet address to the clipboard"
+  },
+  "appDonationSheetCopiedButton": "Copiado!",
+  "@appDonationSheetCopiedButton": {
+    "description": "Button label shown briefly after the donation address was copied"
+  },
+  "appDonationSheetFootnote": "Qualquer rede EVM · sugestão de 0,001 ETH",
+  "@appDonationSheetFootnote": {
+    "description": "Footnote below the donation QR code explaining accepted chains/suggested amount"
+  },
+  "devicesScreenEncryptionKeyCopiedSnackbar": "Chave de criptografia copiada!",
+  "@devicesScreenEncryptionKeyCopiedSnackbar": {
+    "description": "Snackbar shown on the Devices screen after copying the encryption public key to the clipboard."
+  },
+  "devicesScreenAddressCopiedSnackbar": "Endereço copiado!",
+  "@devicesScreenAddressCopiedSnackbar": {
+    "description": "Snackbar shown on the Devices screen after copying the device address to the clipboard."
+  },
+  "devicesScreenThisDeviceLabel": "Este dispositivo",
+  "@devicesScreenThisDeviceLabel": {
+    "description": "Bold header label on the Devices screen card identifying the current device."
+  },
+  "devicesScreenUsernameHandle": "@{username}",
+  "@devicesScreenUsernameHandle": {
+    "description": "Username displayed as a handle (e.g. @alice) on the Devices screen when the paired identity has a username.",
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "devicesScreenIdentityChipFallback": "Identidade #{identityId}",
+  "@devicesScreenIdentityChipFallback": {
+    "description": "Chip label on the Devices screen showing the paired identity by numeric id when no username is set.",
+    "placeholders": {
+      "identityId": {
+        "type": "String"
+      }
+    }
+  },
+  "devicesScreenNotRegisteredChip": "Não registrado",
+  "@devicesScreenNotRegisteredChip": {
+    "description": "Chip label on the Devices screen shown when the device is not yet paired with any identity."
+  },
+  "devicesScreenAddressLabel": "Endereço",
+  "@devicesScreenAddressLabel": {
+    "description": "Small muted section label above the device address on the Devices screen."
+  },
+  "devicesScreenCopyAddressTooltip": "Copiar endereço",
+  "@devicesScreenCopyAddressTooltip": {
+    "description": "Tooltip for the icon button that copies the device address on the Devices screen."
+  },
+  "devicesScreenIdentityLabel": "Identidade",
+  "@devicesScreenIdentityLabel": {
+    "description": "Small muted section label above the paired identity info on the Devices screen."
+  },
+  "devicesScreenIdentityIdFallback": "#{identityId}",
+  "@devicesScreenIdentityIdFallback": {
+    "description": "Fallback display of the paired identity by numeric id (no @ prefix) in the Identity section of the Devices screen when no username is set.",
+    "placeholders": {
+      "identityId": {
+        "type": "String"
+      }
+    }
+  },
+  "devicesScreenEncryptionKeyLabel": "Chave de criptografia",
+  "@devicesScreenEncryptionKeyLabel": {
+    "description": "Small muted section label above the encryption public key on the Devices screen."
+  },
+  "devicesScreenCopyEncryptionKeyTooltip": "Copiar chave de criptografia",
+  "@devicesScreenCopyEncryptionKeyTooltip": {
+    "description": "Tooltip for the icon button that copies the encryption public key on the Devices screen."
+  },
+  "devicesScreenShowEncryptionKeyButton": "Mostrar chave de criptografia",
+  "@devicesScreenShowEncryptionKeyButton": {
+    "description": "Button label to reveal the encryption key on the Devices screen."
+  },
+  "devicesScreenUnpairDialogTitle": "Desparear dispositivo?",
+  "@devicesScreenUnpairDialogTitle": {
+    "description": "Title of the confirmation dialog shown when the user taps Unpair on the Devices screen."
+  },
+  "devicesScreenUnpairDialogContent": "Isso vai remover o vínculo entre este dispositivo e sua identidade. Você vai precisar parear novamente para usar o TruthID.",
+  "@devicesScreenUnpairDialogContent": {
+    "description": "Body text of the confirmation dialog explaining the consequences of unpairing the device."
+  },
+  "devicesScreenCancelButton": "Cancelar",
+  "@devicesScreenCancelButton": {
+    "description": "Cancel button label in the unpair confirmation dialog on the Devices screen."
+  },
+  "devicesScreenUnpairConfirmButton": "Desparear",
+  "@devicesScreenUnpairConfirmButton": {
+    "description": "Confirm button label (destructive) in the unpair confirmation dialog on the Devices screen."
+  },
+  "devicesScreenUnpairButton": "Desparear",
+  "@devicesScreenUnpairButton": {
+    "description": "Main destructive button label to unpair the device, shown below the identity section on the Devices screen."
+  },
+  "devicesScreenPairingHintBody": "Toque no botão abaixo para mostrar um QR code com o endereço deste dispositivo. Escaneie esse QR (ou cole o endereço) no app Desktop para registrá-lo.",
+  "@devicesScreenPairingHintBody": {
+    "description": "Info card body text on the Devices screen explaining how to pair via QR code."
+  },
+  "devicesScreenPairingHintFooter": "Puxe para baixo para verificar se já foi pareado.",
+  "@devicesScreenPairingHintFooter": {
+    "description": "Info card footer text on the Devices screen hinting at pull-to-refresh to check pairing status."
+  },
+  "devicesScreenShowQrButton": "Mostrar QR para parear",
+  "@devicesScreenShowQrButton": {
+    "description": "Primary button label on the Devices screen that opens the pairing QR code screen."
+  },
+  "scanScreenInvalidMessage": "QR inválido — tente novamente",
+  "@scanScreenInvalidMessage": {
+    "description": "Default snackbar message on the generic Scan screen when the scanned QR code fails to parse (used when no custom invalidMessage is supplied)."
+  },
+  "scanScreenTitle": "Escanear QR",
+  "@scanScreenTitle": {
+    "description": "Default app bar title on the generic Scan screen (used when no custom title is supplied)."
+  },
+  "scanScreenCameraError": "Erro da câmera: {errorCode}\n{errorDetails}",
+  "@scanScreenCameraError": {
+    "description": "Error message shown on the Scan screen when the camera fails, combining the error code and optional details.",
+    "placeholders": {
+      "errorCode": {
+        "type": "String"
+      },
+      "errorDetails": {
+        "type": "String"
+      }
+    }
+  },
+  "scanScreenInstructions": "Aponte a câmera para o QR code na sua tela",
+  "@scanScreenInstructions": {
+    "description": "Default on-screen instructions on the generic Scan screen (used when no custom instructions are supplied)."
+  },
+  "securityScreenNoBiometricsError": "Seu dispositivo não tem biometria nem PIN/padrão/senha configurados. Configure um deles nas configurações do sistema do seu celular primeiro.",
+  "@securityScreenNoBiometricsError": {
+    "description": "Error message on the Security screen when the user tries to enable app lock but the device has no biometrics/PIN configured."
+  },
+  "securityScreenAuthFailedError": "Autenticação falhou ou foi cancelada — o bloqueio do app não foi ativado.",
+  "@securityScreenAuthFailedError": {
+    "description": "Error message on the Security screen when the local authentication prompt fails or is cancelled while enabling app lock."
+  },
+  "securityScreenTitle": "Segurança",
+  "@securityScreenTitle": {
+    "description": "App bar title of the Security screen."
+  },
+  "securityScreenAppLockTitle": "Bloqueio do app",
+  "@securityScreenAppLockTitle": {
+    "description": "Title of the SwitchListTile that toggles app lock on the Security screen."
+  },
+  "securityScreenAppLockSubtitle": "Exigir a biometria ou PIN/padrão/senha do seu celular para abrir o TruthID. O TruthID nunca vê nem armazena isso — ele só pede ao seu dispositivo para confirmar que é você.",
+  "@securityScreenAppLockSubtitle": {
+    "description": "Subtitle explaining what the app lock switch does on the Security screen."
+  },
+  "securityScreenNoBiometricsWarning": "Nenhuma biometria ou PIN/padrão/senha do dispositivo detectado — configure um deles nas configurações do sistema do seu celular para usar o bloqueio do app.",
+  "@securityScreenNoBiometricsWarning": {
+    "description": "Warning banner on the Security screen shown when the device has no biometrics/PIN configured, disabling the app lock toggle."
+  },
+  "sessionsScreenRevokeDialogTitle": "Revogar sessão?",
+  "@sessionsScreenRevokeDialogTitle": {
+    "description": "Title of the confirmation dialog shown when the user taps to revoke a session on the Sessions screen."
+  },
+  "sessionsScreenRevokeDialogContent": "Qualquer site usando esta sessão será desconectado imediatamente. Isso não pode ser desfeito.",
+  "@sessionsScreenRevokeDialogContent": {
+    "description": "Body text of the confirmation dialog explaining the consequences of revoking a session."
+  },
+  "sessionsScreenCancelButton": "Cancelar",
+  "@sessionsScreenCancelButton": {
+    "description": "Cancel button label in the revoke session confirmation dialog on the Sessions screen."
+  },
+  "sessionsScreenRevokeConfirmButton": "Revogar",
+  "@sessionsScreenRevokeConfirmButton": {
+    "description": "Confirm button label (destructive) in the revoke session confirmation dialog on the Sessions screen."
+  },
+  "sessionsScreenSmartAccountUnresolvedError": "Não foi possível resolver sua smart account. Verifique sua conexão.",
+  "@sessionsScreenSmartAccountUnresolvedError": {
+    "description": "Snackbar error shown on the Sessions screen when the user's smart account address cannot be resolved before revoking a session."
+  },
+  "sessionsScreenRevokeFailedError": "Não foi possível revogar a sessão. Confira se sua conta tem ETH suficiente para o gas.",
+  "@sessionsScreenRevokeFailedError": {
+    "description": "Snackbar error shown on the Sessions screen when revoking a session fails on-chain."
+  },
+  "sessionsScreenNotPairedTitle": "Dispositivo não pareado",
+  "@sessionsScreenNotPairedTitle": {
+    "description": "Title shown on the Sessions screen empty state when the device is not paired with any identity."
+  },
+  "sessionsScreenNotPairedBody": "Pareie este dispositivo com uma identidade para ver as sessões ativas.",
+  "@sessionsScreenNotPairedBody": {
+    "description": "Body text shown on the Sessions screen empty state when the device is not paired with any identity."
+  },
+  "sessionsScreenUsernameHandle": "@{username}",
+  "@sessionsScreenUsernameHandle": {
+    "description": "Username displayed as a handle (e.g. @alice) in the Sessions screen header when the paired identity has a username.",
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "sessionsScreenIdentityFallback": "Identidade #{identityId}",
+  "@sessionsScreenIdentityFallback": {
+    "description": "Fallback header label on the Sessions screen showing the paired identity by numeric id when no username is set.",
+    "placeholders": {
+      "identityId": {
+        "type": "String"
+      }
+    }
+  },
+  "sessionsScreenActiveCount": "{count} ativas",
+  "@sessionsScreenActiveCount": {
+    "description": "Count of active (non-revoked) sessions shown in the header of the Sessions screen.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "sessionsScreenDescription": "As sessões são criadas por sites quando você aprova um login.",
+  "@sessionsScreenDescription": {
+    "description": "Explanatory text shown below the header on the Sessions screen."
+  },
+  "sessionsScreenLoadErrorPrefix": "Erro ao carregar sessões: {error}",
+  "@sessionsScreenLoadErrorPrefix": {
+    "description": "Error message shown on the Sessions screen when loading the session list fails, including the underlying error text.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "sessionsScreenEmptyState": "Nenhuma sessão encontrada",
+  "@sessionsScreenEmptyState": {
+    "description": "Empty state text shown on the Sessions screen when the session list is empty (but the device is paired)."
+  },
+  "sessionsScreenCurrentDeviceDate": "Este dispositivo · {date}",
+  "@sessionsScreenCurrentDeviceDate": {
+    "description": "Subtitle on a session card indicating this is the current device, followed by the formatted creation date.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "sessionsScreenRevokedChip": "Revogada",
+  "@sessionsScreenRevokedChip": {
+    "description": "Chip label on a session card indicating the session has already been revoked."
+  },
+  "sessionsScreenRevokeTooltip": "Revogar sessão",
+  "@sessionsScreenRevokeTooltip": {
+    "description": "Tooltip for the icon button that revokes an individual session on a session card."
+  },
+  "showDeviceQrScreenTitle": "Parear dispositivo",
+  "@showDeviceQrScreenTitle": {
+    "description": "App bar title of the Show Device QR screen."
+  },
+  "showDeviceQrScreenInstructions": "No seu computador, abra \"Adicionar dispositivo\" e escaneie este QR code (ou cole os campos abaixo — o app Desktop não tem câmera):",
+  "@showDeviceQrScreenInstructions": {
+    "description": "Instructions text on the Show Device QR screen explaining how to pair using the Desktop app."
+  },
+  "showDeviceQrScreenAddressLabel": "Endereço do dispositivo",
+  "@showDeviceQrScreenAddressLabel": {
+    "description": "Small muted section label above the device address on the Show Device QR screen."
+  },
+  "showDeviceQrScreenEncryptionKeyLabel": "Chave de criptografia (necessária para receber a chave do Vault)",
+  "@showDeviceQrScreenEncryptionKeyLabel": {
+    "description": "Small muted section label above the encryption public key on the Show Device QR screen."
+  },
+  "showDeviceQrScreenWaitingMessage": "Aguardando o computador registrar este dispositivo...",
+  "@showDeviceQrScreenWaitingMessage": {
+    "description": "Status text on the Show Device QR screen shown while polling for the desktop to register the device."
+  },
+  "showDeviceQrScreenCheckingButton": "Verificando...",
+  "@showDeviceQrScreenCheckingButton": {
+    "description": "Label of the 'Check now' button on the Show Device QR screen while a check is in progress."
+  },
+  "showDeviceQrScreenCheckNowButton": "Verificar agora",
+  "@showDeviceQrScreenCheckNowButton": {
+    "description": "Label of the button on the Show Device QR screen that manually re-checks whether the device has been registered."
+  },
+  "showDeviceQrScreenPairedSuccessMessage": "Pareado com sucesso!",
+  "@showDeviceQrScreenPairedSuccessMessage": {
+    "description": "Success message shown on the Show Device QR screen once the device has been confirmed paired."
+  },
+  "walletScreenActivitySessionCreated": "Sessão criada",
+  "@walletScreenActivitySessionCreated": {
+    "description": "Wallet screen: activity feed label for a session-created event."
+  },
+  "walletScreenActivitySessionRevoked": "Sessão revogada",
+  "@walletScreenActivitySessionRevoked": {
+    "description": "Wallet screen: activity feed label for a session-revoked event."
+  },
+  "walletScreenActivitySessionRevokedAll": "Todas as sessões revogadas",
+  "@walletScreenActivitySessionRevokedAll": {
+    "description": "Wallet screen: activity feed label for an all-sessions-revoked event."
+  },
+  "walletScreenActivityDeviceRegistered": "Dispositivo registrado",
+  "@walletScreenActivityDeviceRegistered": {
+    "description": "Wallet screen: activity feed label for a device-registered event."
+  },
+  "walletScreenActivityDeviceRevoked": "Dispositivo revogado",
+  "@walletScreenActivityDeviceRevoked": {
+    "description": "Wallet screen: activity feed label for a device-revoked event."
+  },
+  "walletScreenDepositButton": "Depositar",
+  "@walletScreenDepositButton": {
+    "description": "Wallet screen: label for the button/heading that opens the deposit sheet, and for the deposit sheet title itself."
+  },
+  "walletScreenDepositSheetBody": "Envie ETH para o endereço da sua smart account para financiar operações futuras.",
+  "@walletScreenDepositSheetBody": {
+    "description": "Wallet screen: explanatory body text shown inside the deposit bottom sheet."
+  },
+  "walletScreenCopiedButton": "Copiado!",
+  "@walletScreenCopiedButton": {
+    "description": "Wallet screen: deposit sheet button label shown briefly after the address was copied to the clipboard."
+  },
+  "walletScreenCopyAddressButton": "Copiar endereço",
+  "@walletScreenCopyAddressButton": {
+    "description": "Wallet screen: deposit sheet button label to copy the smart account address to the clipboard."
+  },
+  "walletScreenBaseMainnetOnly": "Somente Base Mainnet",
+  "@walletScreenBaseMainnetOnly": {
+    "description": "Wallet screen: deposit sheet footnote warning that only Base Mainnet is supported."
+  },
+  "walletScreenNotPairedTitle": "Dispositivo não pareado",
+  "@walletScreenNotPairedTitle": {
+    "description": "Wallet screen: title shown when this device has no paired identity yet."
+  },
+  "walletScreenNotPairedBody": "Pareie este dispositivo com uma identidade para ver sua smart account.",
+  "@walletScreenNotPairedBody": {
+    "description": "Wallet screen: body text shown when this device has no paired identity yet."
+  },
+  "walletScreenUsernameHandle": "@{username}",
+  "@walletScreenUsernameHandle": {
+    "description": "Wallet screen: heading showing the paired identity's @username handle.",
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "walletScreenIdentityFallback": "Identidade #{identityId}",
+  "@walletScreenIdentityFallback": {
+    "description": "Wallet screen: heading fallback showing the identity id when no username is set.",
+    "placeholders": {
+      "identityId": {
+        "type": "String"
+      }
+    }
+  },
+  "walletScreenBalanceLabel": "Saldo",
+  "@walletScreenBalanceLabel": {
+    "description": "Wallet screen: label above the smart account ETH balance."
+  },
+  "walletScreenWithdrawButton": "Sacar",
+  "@walletScreenWithdrawButton": {
+    "description": "Wallet screen: label for the button that opens the withdraw sheet, and for the withdraw sheet title itself."
+  },
+  "walletScreenCostByTypeTitle": "Custo por tipo",
+  "@walletScreenCostByTypeTitle": {
+    "description": "Wallet screen: heading for the card breaking down gas cost by activity type."
+  },
+  "walletScreenSessionsLabel": "Sessões",
+  "@walletScreenSessionsLabel": {
+    "description": "Wallet screen: label for the sessions tile in the cost-by-type breakdown."
+  },
+  "walletScreenDevicesLabel": "Dispositivos",
+  "@walletScreenDevicesLabel": {
+    "description": "Wallet screen: label for the devices tile in the cost-by-type breakdown."
+  },
+  "walletScreenActivityTitle": "Atividade",
+  "@walletScreenActivityTitle": {
+    "description": "Wallet screen: heading for the on-chain activity list section."
+  },
+  "walletScreenRefreshButton": "Atualizar",
+  "@walletScreenRefreshButton": {
+    "description": "Wallet screen: button label to manually trigger a re-scan of activity."
+  },
+  "walletScreenScanningProgress": "Varrendo histórico de transações (bloco {scannedTo} de {latest})...",
+  "@walletScreenScanningProgress": {
+    "description": "Wallet screen: progress message shown while scanning transaction history, with current and target block numbers.",
+    "placeholders": {
+      "scannedTo": {
+        "type": "int"
+      },
+      "latest": {
+        "type": "int"
+      }
+    }
+  },
+  "walletScreenScanningInProgress": "Varrendo histórico de transações...",
+  "@walletScreenScanningInProgress": {
+    "description": "Wallet screen: generic message shown while scanning transaction history before progress is known."
+  },
+  "walletScreenUpdating": "Atualizando...",
+  "@walletScreenUpdating": {
+    "description": "Wallet screen: small status text shown while an activity re-scan is in progress after the first load."
+  },
+  "walletScreenActivityLoadError": "Falha ao carregar atividade: {error}",
+  "@walletScreenActivityLoadError": {
+    "description": "Wallet screen: error message shown when the activity scan fails, including the error detail.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "walletScreenRetryButton": "Tentar de novo",
+  "@walletScreenRetryButton": {
+    "description": "Wallet screen: button to retry the activity scan after a failure."
+  },
+  "walletScreenNoActivity": "Nenhuma atividade ainda.",
+  "@walletScreenNoActivity": {
+    "description": "Wallet screen: empty-state message when there is no on-chain activity to show."
+  },
+  "walletScreenWithdrawError": "Não foi possível enviar o saque. Confira se sua conta tem ETH suficiente para o gas.",
+  "@walletScreenWithdrawError": {
+    "description": "Withdraw sheet: error message shown when submitting the withdrawal transaction fails."
+  },
+  "walletScreenWithdrawSuccessTitle": "Saque enviado!",
+  "@walletScreenWithdrawSuccessTitle": {
+    "description": "Withdraw sheet: title shown on the success step after the withdrawal was sent."
+  },
+  "walletScreenCloseButton": "Fechar",
+  "@walletScreenCloseButton": {
+    "description": "Withdraw sheet: button to close the sheet after a successful withdrawal."
+  },
+  "walletScreenDestinationAddressLabel": "Endereço de destino",
+  "@walletScreenDestinationAddressLabel": {
+    "description": "Withdraw sheet: label for the text field where the user enters the destination wallet address."
+  },
+  "walletScreenAmountLabel": "Valor (ETH)",
+  "@walletScreenAmountLabel": {
+    "description": "Withdraw sheet: label for the text field where the user enters the withdrawal amount in ETH."
+  },
+  "walletScreenMaxButton": "Máx",
+  "@walletScreenMaxButton": {
+    "description": "Withdraw sheet: button that fills the amount field with the maximum available balance."
+  },
+  "walletScreenAvailableBalance": "Disponível: {amount} ETH",
+  "@walletScreenAvailableBalance": {
+    "description": "Withdraw sheet: hint text showing the available balance to withdraw, in ETH.",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "walletScreenSubmittingButton": "Enviando...",
+  "@walletScreenSubmittingButton": {
+    "description": "Withdraw sheet: submit button label while the withdrawal transaction is being submitted."
+  },
+  "arweaveWalletScreenTitle": "Carteira Arweave",
+  "@arweaveWalletScreenTitle": {
+    "description": "Arweave wallet screen: app bar title."
+  },
+  "arweaveWalletScreenIntro": "O vault (blob principal e documentos anexados) e apps de terceiros autorizados publicam no Arweave — isso exige uma carteira local financiada com AR.",
+  "@arweaveWalletScreenIntro": {
+    "description": "Arweave wallet screen: introductory paragraph explaining why an Arweave wallet is needed."
+  },
+  "arweaveWalletScreenGeneratingButton": "Gerando...",
+  "@arweaveWalletScreenGeneratingButton": {
+    "description": "Arweave wallet screen: button label while a new Arweave wallet is being generated."
+  },
+  "arweaveWalletScreenGenerateButton": "Gerar carteira Arweave",
+  "@arweaveWalletScreenGenerateButton": {
+    "description": "Arweave wallet screen: button label to generate a new Arweave wallet when none exists yet."
+  },
+  "arweaveWalletScreenCopiedButton": "✓ Copiado!",
+  "@arweaveWalletScreenCopiedButton": {
+    "description": "Arweave wallet screen: button label shown briefly after the wallet address was copied to the clipboard."
+  },
+  "arweaveWalletScreenCopyButton": "Copiar endereço",
+  "@arweaveWalletScreenCopyButton": {
+    "description": "Arweave wallet screen: button label to copy the Arweave wallet address to the clipboard."
+  },
+  "arweaveWalletScreenBalanceLabel": "Saldo: {balance} AR",
+  "@arweaveWalletScreenBalanceLabel": {
+    "description": "Arweave wallet screen: shows the current wallet balance in AR once known.",
+    "placeholders": {
+      "balance": {
+        "type": "String"
+      }
+    }
+  },
+  "arweaveWalletScreenBalanceUnavailable": "Saldo indisponível no momento",
+  "@arweaveWalletScreenBalanceUnavailable": {
+    "description": "Arweave wallet screen: shown in place of the balance when it could not be fetched."
+  },
+  "arweaveWalletScreenNoBalanceHint": "Ainda sem saldo — compre AR em uma exchange e envie para o endereço acima antes de publicar.",
+  "@arweaveWalletScreenNoBalanceHint": {
+    "description": "Arweave wallet screen: hint shown when the wallet balance is zero, telling the user how to fund it."
+  },
+  "guardianStatusScreenReadyToExecute": "Pronto para executar",
+  "@guardianStatusScreenReadyToExecute": {
+    "description": "Guardian/social recovery screen: status shown when the recovery timelock has elapsed and the proposal can be executed."
+  },
+  "guardianStatusScreenTimeRemaining": "{days}d {hours}h {minutes}min restantes",
+  "@guardianStatusScreenTimeRemaining": {
+    "description": "Guardian/social recovery screen: countdown showing the remaining timelock duration before a recovery proposal can be executed.",
+    "placeholders": {
+      "days": {
+        "type": "int"
+      },
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "guardianStatusScreenTitle": "Recuperação Social",
+  "@guardianStatusScreenTitle": {
+    "description": "Guardian/social recovery screen: app bar title."
+  },
+  "guardianStatusScreenNoIdentity": "Nenhuma identidade pareada encontrada. Pareie este dispositivo primeiro.",
+  "@guardianStatusScreenNoIdentity": {
+    "description": "Guardian/social recovery screen: message shown when this device has no paired identity."
+  },
+  "guardianStatusScreenUsernameHandle": "@{username}",
+  "@guardianStatusScreenUsernameHandle": {
+    "description": "Guardian/social recovery screen: heading showing the paired identity's @username handle.",
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "guardianStatusScreenSubtitle": "Guardiões podem ajudar a recuperar sua identidade se você perder o acesso à sua carteira.",
+  "@guardianStatusScreenSubtitle": {
+    "description": "Guardian/social recovery screen: subtitle explaining what guardians do."
+  },
+  "guardianStatusScreenNoGuardiansWarning": "Nenhum guardião configurado. Sem guardiões, perder sua carteira significa perda permanente da identidade.",
+  "@guardianStatusScreenNoGuardiansWarning": {
+    "description": "Guardian/social recovery screen: warning banner shown when no guardians are configured for the identity."
+  },
+  "guardianStatusScreenGuardiansCount": "Guardiões ({threshold} de {count})",
+  "@guardianStatusScreenGuardiansCount": {
+    "description": "Guardian/social recovery screen: section heading showing the approval threshold and total number of guardians.",
+    "placeholders": {
+      "threshold": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "guardianStatusScreenTimelockDays": "Timelock: {days} dias",
+  "@guardianStatusScreenTimelockDays": {
+    "description": "Guardian/social recovery screen: shows the configured recovery timelock duration in days.",
+    "placeholders": {
+      "days": {
+        "type": "String"
+      }
+    }
+  },
+  "guardianStatusScreenProposedTitle": "Recuperação proposta",
+  "@guardianStatusScreenProposedTitle": {
+    "description": "Guardian/social recovery screen: heading of the card shown when a recovery proposal is pending."
+  },
+  "guardianStatusScreenProposedByLabel": "Proposto por",
+  "@guardianStatusScreenProposedByLabel": {
+    "description": "Guardian/social recovery screen: row label for who proposed the pending recovery."
+  },
+  "guardianStatusScreenNewControllerLabel": "Novo controlador",
+  "@guardianStatusScreenNewControllerLabel": {
+    "description": "Guardian/social recovery screen: row label for the new controller address proposed in the pending recovery."
+  },
+  "guardianStatusScreenApprovalsLabel": "Aprovações",
+  "@guardianStatusScreenApprovalsLabel": {
+    "description": "Guardian/social recovery screen: row label for the current approval count of the pending recovery proposal."
+  },
+  "guardianStatusScreenApprovalsValue": "{count} de {threshold}",
+  "@guardianStatusScreenApprovalsValue": {
+    "description": "Guardian/social recovery screen: value showing how many approvals a pending recovery proposal has out of the required threshold.",
+    "placeholders": {
+      "count": {
+        "type": "String"
+      },
+      "threshold": {
+        "type": "String"
+      }
+    }
+  },
+  "guardianStatusScreenTimelockLabel": "Timelock",
+  "@guardianStatusScreenTimelockLabel": {
+    "description": "Guardian/social recovery screen: row label for the remaining timelock of the pending recovery proposal."
+  },
+  "guardianStatusScreenRecoveryExecuted": "Recuperação executada. O controlador da identidade foi alterado.",
+  "@guardianStatusScreenRecoveryExecuted": {
+    "description": "Guardian/social recovery screen: message shown when a recovery proposal has been executed."
+  },
+  "guardianStatusScreenRecoveryCancelled": "Recuperação cancelada. Nenhuma ação necessária.",
+  "@guardianStatusScreenRecoveryCancelled": {
+    "description": "Guardian/social recovery screen: message shown when a recovery proposal has been cancelled."
+  },
+  "guardianStatusScreenDesktopOnlyFootnote": "A recuperação só pode ser gerenciada pelo TruthID Desktop com sua carteira Ledger conectada.",
+  "@guardianStatusScreenDesktopOnlyFootnote": {
+    "description": "Guardian/social recovery screen: footnote explaining that recovery actions require TruthID Desktop with a connected Ledger."
+  },
+  "approvalScreenTitle": "Solicitação de login",
+  "@approvalScreenTitle": {
+    "description": "Title of the AppBar on the login approval screen"
+  },
+  "approvalScreenErrorMissingChallenge": "QR inválido: falta o challenge.",
+  "@approvalScreenErrorMissingChallenge": {
+    "description": "Error shown when the scanned QR payload has no challenge field"
+  },
+  "approvalScreenErrorInvalidCallbackUrl": "QR inválido: o callbackUrl precisa usar https://.",
+  "@approvalScreenErrorInvalidCallbackUrl": {
+    "description": "Error shown when the QR's callbackUrl does not use https"
+  },
+  "approvalScreenErrorMissingIssuedAt": "QR inválido: falta o issuedAt.",
+  "@approvalScreenErrorMissingIssuedAt": {
+    "description": "Error shown when the scanned QR payload has no issuedAt field"
+  },
+  "approvalScreenErrorExpiredInitial": "Este QR code expirou — peça ao site um novo QR code de login.",
+  "@approvalScreenErrorExpiredInitial": {
+    "description": "Error shown right after scanning when the QR challenge is already past its TTL"
+  },
+  "approvalScreenErrorExpiredOnApprove": "Este QR code expirou — volte ao app e escaneie um novo.",
+  "@approvalScreenErrorExpiredOnApprove": {
+    "description": "Error shown when the challenge expires between scanning and tapping Approve"
+  },
+  "approvalScreenErrorNotPaired": "Este dispositivo ainda não está pareado com nenhuma identidade.",
+  "@approvalScreenErrorNotPaired": {
+    "description": "Error shown when approving without a paired identity on this device"
+  },
+  "approvalScreenErrorIdentityLookupFailed": "Não foi possível encontrar esta identidade on-chain. Verifique sua conexão.",
+  "@approvalScreenErrorIdentityLookupFailed": {
+    "description": "Error shown when the on-chain identity lookup throws or returns null"
+  },
+  "approvalScreenErrorSessionCreationFailed": "Não foi possível criar a sessão on-chain. Confira se sua conta tem ETH suficiente para o gas.",
+  "@approvalScreenErrorSessionCreationFailed": {
+    "description": "Error shown when creating the login session on-chain fails"
+  },
+  "approvalScreenErrorPostResponseFailed": "Não foi possível enviar a resposta ao site. Verifique sua conexão.",
+  "@approvalScreenErrorPostResponseFailed": {
+    "description": "Error shown when posting the signed response back to the site fails"
+  },
+  "approvalScreenUnknownSite": "site desconhecido",
+  "@approvalScreenUnknownSite": {
+    "description": "Fallback display name for the requesting site when no origin/callback URL is available"
+  },
+  "approvalScreenHeading": "Solicitação de login recebida",
+  "@approvalScreenHeading": {
+    "description": "Heading shown on the challenge screen for an incoming login request"
+  },
+  "approvalScreenSubheading": "Um site está solicitando login com sua identidade TruthID.",
+  "@approvalScreenSubheading": {
+    "description": "Subheading explaining the login request"
+  },
+  "approvalScreenSiteLabel": "Site",
+  "@approvalScreenSiteLabel": {
+    "description": "Label for the row showing the requesting site"
+  },
+  "approvalScreenTimeLabel": "Horário",
+  "@approvalScreenTimeLabel": {
+    "description": "Label for the row showing the time the request was issued"
+  },
+  "approvalScreenSigningAsLabel": "Entrando como",
+  "@approvalScreenSigningAsLabel": {
+    "description": "Label for the row showing which identity will sign in"
+  },
+  "approvalScreenIdentityValue": "Identidade #{id}",
+  "@approvalScreenIdentityValue": {
+    "description": "Value shown next to 'Signing as', identifying the paired identity by id",
+    "placeholders": {
+      "id": {
+        "type": "String",
+        "example": "3"
+      }
+    }
+  },
+  "approvalScreenApproveButton": "Aprovar",
+  "@approvalScreenApproveButton": {
+    "description": "Button label to approve the login request"
+  },
+  "approvalScreenRejectButton": "Rejeitar",
+  "@approvalScreenRejectButton": {
+    "description": "Button label to reject the login request"
+  },
+  "approvalScreenSubmittingMessage": "Criando sua sessão on-chain...",
+  "@approvalScreenSubmittingMessage": {
+    "description": "Message shown while the login session is being created on-chain"
+  },
+  "approvalScreenDoneMessage": "Resposta enviada!",
+  "@approvalScreenDoneMessage": {
+    "description": "Message shown once the login response was successfully sent to the site"
+  },
+  "approvalScreenBackButton": "Voltar",
+  "@approvalScreenBackButton": {
+    "description": "Button label to go back from the error screen"
+  },
+  "pinApprovalScreenTitle": "Solicitação de publicação",
+  "@pinApprovalScreenTitle": {
+    "description": "Title of the AppBar on the pin-content approval screen"
+  },
+  "pinApprovalScreenErrorUnsupportedVersion": "QR inválido: versão do schema não suportada.",
+  "@pinApprovalScreenErrorUnsupportedVersion": {
+    "description": "Error shown when the QR payload schema version is not supported"
+  },
+  "pinApprovalScreenErrorMissingSessionId": "QR inválido: falta o sessionId.",
+  "@pinApprovalScreenErrorMissingSessionId": {
+    "description": "Error shown when the scanned QR payload has no sessionId field"
+  },
+  "pinApprovalScreenErrorMissingEphemeralPubKey": "QR inválido: falta o ephemeralPubKey.",
+  "@pinApprovalScreenErrorMissingEphemeralPubKey": {
+    "description": "Error shown when the scanned QR payload has no ephemeralPubKey field"
+  },
+  "pinApprovalScreenErrorMissingExpiresAt": "QR inválido: falta o expiresAt.",
+  "@pinApprovalScreenErrorMissingExpiresAt": {
+    "description": "Error shown when the scanned QR payload has no expiresAt field"
+  },
+  "pinApprovalScreenErrorExpired": "Este QR code expirou — volte ao app e escaneie um novo.",
+  "@pinApprovalScreenErrorExpired": {
+    "description": "Error shown when the scanned QR's expiresAt is already in the past"
+  },
+  "pinApprovalScreenErrorMissingAppName": "QR inválido: falta o appName.",
+  "@pinApprovalScreenErrorMissingAppName": {
+    "description": "Error shown when the scanned QR payload has no appName field"
+  },
+  "pinApprovalScreenErrorDecryptFailed": "Falha ao decifrar o conteúdo recebido: {error}",
+  "@pinApprovalScreenErrorDecryptFailed": {
+    "description": "Error shown when decrypting the content received from the requesting app fails",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "FormatException"
+      }
+    }
+  },
+  "pinApprovalScreenErrorSessionExpiredResponding": "A sessão expirou antes de responder — escaneie o QR novamente.",
+  "@pinApprovalScreenErrorSessionExpiredResponding": {
+    "description": "Error shown when the session expires right before sending the approval response"
+  },
+  "pinApprovalScreenErrorRespondFailed": "Falha ao responder ao app: {error}",
+  "@pinApprovalScreenErrorRespondFailed": {
+    "description": "Error shown when sending the response back to the requesting app fails",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "SocketException"
+      }
+    }
+  },
+  "pinApprovalScreenGenericAppName": "Um app",
+  "@pinApprovalScreenGenericAppName": {
+    "description": "Generic fallback name for the requesting app when its name is unknown"
+  },
+  "pinApprovalScreenReceivingHeading": "{appName} quer enviar conteúdo para publicar...",
+  "@pinApprovalScreenReceivingHeading": {
+    "description": "Heading shown while waiting to receive the content to pin from the requesting app",
+    "placeholders": {
+      "appName": {
+        "type": "String",
+        "example": "Practice Valuation"
+      }
+    }
+  },
+  "pinApprovalScreenWifiHint": "Confira se seu celular e computador estão na mesma rede Wi-Fi.",
+  "@pinApprovalScreenWifiHint": {
+    "description": "Hint shown while waiting for the requesting app to connect over the local network"
+  },
+  "pinApprovalScreenManualIpHint": "Se o app não conseguir encontrar seu celular automaticamente, informe este endereço IP manualmente:",
+  "@pinApprovalScreenManualIpHint": {
+    "description": "Hint shown above the list of local IP addresses for manual entry on the requesting app"
+  },
+  "pinApprovalScreenApprovalHeading": "{appName} quer publicar conteúdo no Arweave",
+  "@pinApprovalScreenApprovalHeading": {
+    "description": "Heading shown on the approval screen with the content ready to be pinned",
+    "placeholders": {
+      "appName": {
+        "type": "String",
+        "example": "Practice Valuation"
+      }
+    }
+  },
+  "pinApprovalScreenSizeLabel": "Tamanho: {size}",
+  "@pinApprovalScreenSizeLabel": {
+    "description": "Label showing the size of the content to be pinned",
+    "placeholders": {
+      "size": {
+        "type": "String",
+        "example": "12.4 KB"
+      }
+    }
+  },
+  "pinApprovalScreenApproveButton": "Aprovar",
+  "@pinApprovalScreenApproveButton": {
+    "description": "Button label to approve pinning the content"
+  },
+  "pinApprovalScreenRejectButton": "Rejeitar",
+  "@pinApprovalScreenRejectButton": {
+    "description": "Button label to reject pinning the content"
+  },
+  "pinApprovalScreenSentHeading": "Enviado",
+  "@pinApprovalScreenSentHeading": {
+    "description": "Heading shown after the response was successfully sent to the app"
+  },
+  "pinApprovalScreenSentBody": "O app recebeu sua resposta.",
+  "@pinApprovalScreenSentBody": {
+    "description": "Body text confirming the requesting app received the response"
+  },
+  "pinApprovalScreenDeadDropPublished": "Backup dead-drop publicado (IPFS/IPNS).",
+  "@pinApprovalScreenDeadDropPublished": {
+    "description": "Note shown when the dead-drop backup of the pinned content was published successfully"
+  },
+  "pinApprovalScreenDeadDropUnavailable": "Backup dead-drop indisponível desta vez.",
+  "@pinApprovalScreenDeadDropUnavailable": {
+    "description": "Note shown when publishing the dead-drop backup failed"
+  },
+  "pinApprovalScreenDoneButton": "Concluído",
+  "@pinApprovalScreenDoneButton": {
+    "description": "Button label to close the screen after the response was sent"
+  },
+  "pinApprovalScreenTimeoutHeading": "Nada chegou",
+  "@pinApprovalScreenTimeoutHeading": {
+    "description": "Heading shown when the request expired before the app connected"
+  },
+  "pinApprovalScreenTimeoutBody": "O app nunca se conectou antes desta solicitação expirar. Confira se os dois dispositivos estão na mesma rede Wi-Fi e tente novamente.",
+  "@pinApprovalScreenTimeoutBody": {
+    "description": "Body text explaining the timeout and suggesting to retry"
+  },
+  "pinApprovalScreenBackButton": "Voltar",
+  "@pinApprovalScreenBackButton": {
+    "description": "Button label to go back from the timeout/error screen"
+  },
+  "pinApprovalScreenGenericError": "Algo deu errado.",
+  "@pinApprovalScreenGenericError": {
+    "description": "Generic fallback error message when no specific error message is set"
+  },
+  "signMessageApprovalScreenTitle": "Solicitação de assinatura de mensagem",
+  "@signMessageApprovalScreenTitle": {
+    "description": "Title of the AppBar on the sign-message approval screen"
+  },
+  "signMessageApprovalScreenErrorUnsupportedVersion": "QR inválido: versão do schema não suportada.",
+  "@signMessageApprovalScreenErrorUnsupportedVersion": {
+    "description": "Error shown when the QR payload schema version is not supported"
+  },
+  "signMessageApprovalScreenErrorMissingSessionId": "QR inválido: falta o sessionId.",
+  "@signMessageApprovalScreenErrorMissingSessionId": {
+    "description": "Error shown when the scanned QR payload has no sessionId field"
+  },
+  "signMessageApprovalScreenErrorInvalidCallback": "Solicitação inválida: callback ausente ou malformado.",
+  "@signMessageApprovalScreenErrorInvalidCallback": {
+    "description": "Error shown when the deep-link request's callback URL is missing or malformed"
+  },
+  "signMessageApprovalScreenErrorMissingEphemeralPubKey": "QR inválido: falta o ephemeralPubKey.",
+  "@signMessageApprovalScreenErrorMissingEphemeralPubKey": {
+    "description": "Error shown when the scanned QR payload has no ephemeralPubKey field"
+  },
+  "signMessageApprovalScreenErrorMissingExpiresAt": "QR inválido: falta o expiresAt.",
+  "@signMessageApprovalScreenErrorMissingExpiresAt": {
+    "description": "Error shown when the scanned QR payload has no expiresAt field"
+  },
+  "signMessageApprovalScreenErrorExpired": "Este QR code expirou — volte ao app e escaneie um novo.",
+  "@signMessageApprovalScreenErrorExpired": {
+    "description": "Error shown when the scanned QR's expiresAt is already in the past"
+  },
+  "signMessageApprovalScreenErrorMissingAppName": "QR inválido: falta o appName.",
+  "@signMessageApprovalScreenErrorMissingAppName": {
+    "description": "Error shown when the scanned QR payload has no appName field"
+  },
+  "signMessageApprovalScreenErrorInvalidPurpose": "QR inválido: o purpose deve ter de 1 a 64 caracteres em [A-Za-z0-9_.-].",
+  "@signMessageApprovalScreenErrorInvalidPurpose": {
+    "description": "Error shown when the requested key-derivation purpose fails validation"
+  },
+  "signMessageApprovalScreenErrorSessionExpiredResponding": "A sessão expirou antes de responder — escaneie o QR novamente.",
+  "@signMessageApprovalScreenErrorSessionExpiredResponding": {
+    "description": "Error shown when the session expires right before sending the approval response"
+  },
+  "signMessageApprovalScreenErrorRespondFailed": "Falha ao responder ao app: {error}",
+  "@signMessageApprovalScreenErrorRespondFailed": {
+    "description": "Error shown when sending the signed response back to the requesting app fails",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "SocketException"
+      }
+    }
+  },
+  "signMessageApprovalScreenPendingHeading": "{appName} quer derivar uma chave de assinatura para si mesmo",
+  "@signMessageApprovalScreenPendingHeading": {
+    "description": "Heading shown on the approval screen for a sign-message/derive-key request",
+    "placeholders": {
+      "appName": {
+        "type": "String",
+        "example": "Practice Valuation"
+      }
+    }
+  },
+  "signMessageApprovalScreenPurposeLabel": "Propósito",
+  "@signMessageApprovalScreenPurposeLabel": {
+    "description": "Label for the row showing the key-derivation purpose"
+  },
+  "signMessageApprovalScreenMessagePreviewLabel": "Mensagem exata que será assinada:",
+  "@signMessageApprovalScreenMessagePreviewLabel": {
+    "description": "Label above the preview of the exact message that will be signed"
+  },
+  "signMessageApprovalScreenApproveButton": "Aprovar",
+  "@signMessageApprovalScreenApproveButton": {
+    "description": "Button label to approve the sign-message request"
+  },
+  "signMessageApprovalScreenRejectButton": "Rejeitar",
+  "@signMessageApprovalScreenRejectButton": {
+    "description": "Button label to reject the sign-message request"
+  },
+  "signMessageApprovalScreenWaitingHeading": "Aguardando o app se conectar...",
+  "@signMessageApprovalScreenWaitingHeading": {
+    "description": "Heading shown while waiting for the requesting app to connect"
+  },
+  "signMessageApprovalScreenWifiHint": "Confira se seu celular e computador estão na mesma rede Wi-Fi.",
+  "@signMessageApprovalScreenWifiHint": {
+    "description": "Hint shown while waiting for the requesting app to connect over the local network"
+  },
+  "signMessageApprovalScreenManualIpHint": "Se o app não conseguir encontrar seu celular automaticamente, informe este endereço IP manualmente:",
+  "@signMessageApprovalScreenManualIpHint": {
+    "description": "Hint shown above the list of local IP addresses for manual entry on the requesting app"
+  },
+  "signMessageApprovalScreenSentHeading": "Enviado",
+  "@signMessageApprovalScreenSentHeading": {
+    "description": "Heading shown after the signed response was successfully sent to the app"
+  },
+  "signMessageApprovalScreenSentBody": "O app recebeu sua resposta.",
+  "@signMessageApprovalScreenSentBody": {
+    "description": "Body text confirming the requesting app received the response"
+  },
+  "signMessageApprovalScreenDeadDropPublished": "Backup dead-drop publicado (IPFS/IPNS).",
+  "@signMessageApprovalScreenDeadDropPublished": {
+    "description": "Note shown when the dead-drop backup of the response was published successfully"
+  },
+  "signMessageApprovalScreenDeadDropUnavailable": "Backup dead-drop indisponível desta vez.",
+  "@signMessageApprovalScreenDeadDropUnavailable": {
+    "description": "Note shown when publishing the dead-drop backup failed"
+  },
+  "signMessageApprovalScreenDoneButton": "Concluído",
+  "@signMessageApprovalScreenDoneButton": {
+    "description": "Button label to close the screen after the response was sent"
+  },
+  "signMessageApprovalScreenTimeoutHeading": "Nada chegou",
+  "@signMessageApprovalScreenTimeoutHeading": {
+    "description": "Heading shown when the request expired before the app connected"
+  },
+  "signMessageApprovalScreenTimeoutBody": "O app nunca se conectou antes desta solicitação expirar. Confira se os dois dispositivos estão na mesma rede Wi-Fi e tente novamente.",
+  "@signMessageApprovalScreenTimeoutBody": {
+    "description": "Body text explaining the timeout and suggesting to retry"
+  },
+  "signMessageApprovalScreenBackButton": "Voltar",
+  "@signMessageApprovalScreenBackButton": {
+    "description": "Button label to go back from the timeout/error screen"
+  },
+  "signMessageApprovalScreenGenericError": "Algo deu errado.",
+  "@signMessageApprovalScreenGenericError": {
+    "description": "Generic fallback error message when no specific error message is set"
+  },
+  "signRequestApprovalScreenTitle": "Solicitação de assinatura e execução",
+  "@signRequestApprovalScreenTitle": {
+    "description": "Title of the AppBar on the sign-and-execute-transaction approval screen"
+  },
+  "signRequestApprovalScreenErrorUnsupportedVersion": "QR inválido: versão do schema não suportada.",
+  "@signRequestApprovalScreenErrorUnsupportedVersion": {
+    "description": "Error shown when the QR payload schema version is not supported"
+  },
+  "signRequestApprovalScreenErrorMissingSessionId": "QR inválido: falta o sessionId.",
+  "@signRequestApprovalScreenErrorMissingSessionId": {
+    "description": "Error shown when the scanned QR payload has no sessionId field"
+  },
+  "signRequestApprovalScreenErrorInvalidCallback": "Solicitação inválida: callback ausente ou malformado.",
+  "@signRequestApprovalScreenErrorInvalidCallback": {
+    "description": "Error shown when the deep-link request's callback URL is missing or malformed"
+  },
+  "signRequestApprovalScreenErrorMissingEphemeralPubKey": "QR inválido: falta o ephemeralPubKey.",
+  "@signRequestApprovalScreenErrorMissingEphemeralPubKey": {
+    "description": "Error shown when the scanned QR payload has no ephemeralPubKey field"
+  },
+  "signRequestApprovalScreenErrorMissingExpiresAt": "QR inválido: falta o expiresAt.",
+  "@signRequestApprovalScreenErrorMissingExpiresAt": {
+    "description": "Error shown when the scanned QR payload has no expiresAt field"
+  },
+  "signRequestApprovalScreenErrorExpired": "Este QR code expirou — volte ao app e escaneie um novo.",
+  "@signRequestApprovalScreenErrorExpired": {
+    "description": "Error shown when the scanned QR's expiresAt is already in the past"
+  },
+  "signRequestApprovalScreenErrorMissingAppName": "QR inválido: falta o appName.",
+  "@signRequestApprovalScreenErrorMissingAppName": {
+    "description": "Error shown when the scanned QR payload has no appName field"
+  },
+  "signRequestApprovalScreenErrorMissingDest": "QR inválido: falta o dest.",
+  "@signRequestApprovalScreenErrorMissingDest": {
+    "description": "Error shown when the scanned QR payload has no destination address field"
+  },
+  "signRequestApprovalScreenErrorMissingCallData": "QR inválido: falta o callData.",
+  "@signRequestApprovalScreenErrorMissingCallData": {
+    "description": "Error shown when the scanned QR payload has no callData field"
+  },
+  "signRequestApprovalScreenErrorMissingFunctionSignature": "QR inválido: falta o functionSignature.",
+  "@signRequestApprovalScreenErrorMissingFunctionSignature": {
+    "description": "Error shown when the scanned QR payload has no functionSignature field"
+  },
+  "signRequestApprovalScreenErrorNotPaired": "Este celular ainda não está pareado com uma identidade TruthID.",
+  "@signRequestApprovalScreenErrorNotPaired": {
+    "description": "Error shown when trying to prepare the transaction without a paired identity on this device"
+  },
+  "signRequestApprovalScreenErrorResolvingIdentity": "Ainda resolvendo sua identidade on-chain — tente novamente em instantes.",
+  "@signRequestApprovalScreenErrorResolvingIdentity": {
+    "description": "Error shown when the identity is still being resolved on-chain and is not ready yet"
+  },
+  "signRequestApprovalScreenErrorSmartAccountUnresolved": "Não foi possível resolver sua smart account — tente novamente.",
+  "@signRequestApprovalScreenErrorSmartAccountUnresolved": {
+    "description": "Error shown when the smart account address could not be resolved"
+  },
+  "signRequestApprovalScreenErrorSmartAccountFailed": "Falha ao resolver sua smart account: {error}",
+  "@signRequestApprovalScreenErrorSmartAccountFailed": {
+    "description": "Error shown when resolving the smart account throws an exception",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "TimeoutException"
+      }
+    }
+  },
+  "signRequestApprovalScreenErrorSessionExpiredResponding": "A sessão expirou antes de responder — escaneie o QR novamente.",
+  "@signRequestApprovalScreenErrorSessionExpiredResponding": {
+    "description": "Error shown when the session expires right before sending the approval response"
+  },
+  "signRequestApprovalScreenErrorRespondFailed": "Falha ao responder ao app: {error}",
+  "@signRequestApprovalScreenErrorRespondFailed": {
+    "description": "Error shown when sending the response back to the requesting app fails",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "SocketException"
+      }
+    }
+  },
+  "signRequestApprovalScreenResultExecuted": "Transação executada (UserOp {userOpHash}).",
+  "@signRequestApprovalScreenResultExecuted": {
+    "description": "Result summary shown after the transaction was executed successfully",
+    "placeholders": {
+      "userOpHash": {
+        "type": "String",
+        "example": "0xabc123..."
+      }
+    }
+  },
+  "signRequestApprovalScreenResultFailed": "A transação falhou: {error}",
+  "@signRequestApprovalScreenResultFailed": {
+    "description": "Result summary shown after the transaction execution failed",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "execution reverted"
+      }
+    }
+  },
+  "signRequestApprovalScreenResultRejected": "Você rejeitou esta solicitação.",
+  "@signRequestApprovalScreenResultRejected": {
+    "description": "Result summary shown after the user rejected the transaction request"
+  },
+  "signRequestApprovalScreenPendingHeading": "{appName} quer executar uma transação",
+  "@signRequestApprovalScreenPendingHeading": {
+    "description": "Heading shown on the approval screen for a sign-and-execute-transaction request",
+    "placeholders": {
+      "appName": {
+        "type": "String",
+        "example": "Practice Valuation"
+      }
+    }
+  },
+  "signRequestApprovalScreenGasNotice": "Sua smart account vai pagar o gas.",
+  "@signRequestApprovalScreenGasNotice": {
+    "description": "Note reassuring the user their smart account covers the gas cost"
+  },
+  "signRequestApprovalScreenDestinationLabel": "Destino",
+  "@signRequestApprovalScreenDestinationLabel": {
+    "description": "Label for the row showing the transaction's destination address"
+  },
+  "signRequestApprovalScreenValueLabel": "Valor (wei)",
+  "@signRequestApprovalScreenValueLabel": {
+    "description": "Label for the row showing the transaction's value in wei"
+  },
+  "signRequestApprovalScreenFunctionVerifiedLabel": "Função (verificada)",
+  "@signRequestApprovalScreenFunctionVerifiedLabel": {
+    "description": "Label for the function-signature row when the function selector was verified"
+  },
+  "signRequestApprovalScreenFunctionUnverifiedLabel": "Função (não verificada)",
+  "@signRequestApprovalScreenFunctionUnverifiedLabel": {
+    "description": "Label for the function-signature row when the function selector could not be verified"
+  },
+  "signRequestApprovalScreenRawCallDataLabel": "Dados brutos da chamada:",
+  "@signRequestApprovalScreenRawCallDataLabel": {
+    "description": "Label above the raw call data preview"
+  },
+  "signRequestApprovalScreenApproveButton": "Aprovar",
+  "@signRequestApprovalScreenApproveButton": {
+    "description": "Button label to approve executing the transaction"
+  },
+  "signRequestApprovalScreenRejectButton": "Rejeitar",
+  "@signRequestApprovalScreenRejectButton": {
+    "description": "Button label to reject executing the transaction"
+  },
+  "signRequestApprovalScreenExecutingHeading": "Executando transação...",
+  "@signRequestApprovalScreenExecutingHeading": {
+    "description": "Heading shown while the transaction is being sent and confirmed"
+  },
+  "signRequestApprovalScreenExecutingBody": "Enviando ao bundler e aguardando confirmação. Isso pode levar até um minuto.",
+  "@signRequestApprovalScreenExecutingBody": {
+    "description": "Body text explaining the transaction is being sent to the bundler"
+  },
+  "signRequestApprovalScreenWaitingHeading": "Aguardando o app se conectar...",
+  "@signRequestApprovalScreenWaitingHeading": {
+    "description": "Heading shown while waiting for the requesting app to connect"
+  },
+  "signRequestApprovalScreenWifiHint": "Confira se seu celular e computador estão na mesma rede Wi-Fi.",
+  "@signRequestApprovalScreenWifiHint": {
+    "description": "Hint shown while waiting for the requesting app to connect over the local network"
+  },
+  "signRequestApprovalScreenManualIpHint": "Se o app não conseguir encontrar seu celular automaticamente, informe este endereço IP manualmente:",
+  "@signRequestApprovalScreenManualIpHint": {
+    "description": "Hint shown above the list of local IP addresses for manual entry on the requesting app"
+  },
+  "signRequestApprovalScreenSentHeading": "Enviado",
+  "@signRequestApprovalScreenSentHeading": {
+    "description": "Heading shown after the response was successfully sent to the app"
+  },
+  "signRequestApprovalScreenSentBody": "O app recebeu sua resposta.",
+  "@signRequestApprovalScreenSentBody": {
+    "description": "Body text confirming the requesting app received the response"
+  },
+  "signRequestApprovalScreenDeadDropPublished": "Backup dead-drop publicado (IPFS/IPNS).",
+  "@signRequestApprovalScreenDeadDropPublished": {
+    "description": "Note shown when the dead-drop backup of the response was published successfully"
+  },
+  "signRequestApprovalScreenDeadDropUnavailable": "Backup dead-drop indisponível desta vez.",
+  "@signRequestApprovalScreenDeadDropUnavailable": {
+    "description": "Note shown when publishing the dead-drop backup failed"
+  },
+  "signRequestApprovalScreenDoneButton": "Concluído",
+  "@signRequestApprovalScreenDoneButton": {
+    "description": "Button label to close the screen after the response was sent"
+  },
+  "signRequestApprovalScreenTimeoutHeading": "Nada chegou",
+  "@signRequestApprovalScreenTimeoutHeading": {
+    "description": "Heading shown when the request expired before the app connected"
+  },
+  "signRequestApprovalScreenTimeoutBody": "O app nunca se conectou antes desta solicitação expirar. Confira se os dois dispositivos estão na mesma rede Wi-Fi e tente novamente.",
+  "@signRequestApprovalScreenTimeoutBody": {
+    "description": "Body text explaining the timeout and suggesting to retry"
+  },
+  "signRequestApprovalScreenBackButton": "Voltar",
+  "@signRequestApprovalScreenBackButton": {
+    "description": "Button label to go back from the timeout/error screen"
+  },
+  "signRequestApprovalScreenGenericError": "Algo deu errado.",
+  "@signRequestApprovalScreenGenericError": {
+    "description": "Generic fallback error message when no specific error message is set"
+  },
+  "autofillAddressApprovalScreenTitle": "Solicitação de preenchimento automático",
+  "@autofillAddressApprovalScreenTitle": {
+    "description": "App bar title on the address autofill approval screen"
+  },
+  "autofillAddressApprovalScreenErrorInvalidVersion": "QR inválido: versão do schema não suportada.",
+  "@autofillAddressApprovalScreenErrorInvalidVersion": {
+    "description": "Error shown when the scanned QR payload has an unsupported schema version"
+  },
+  "autofillAddressApprovalScreenErrorMissingSessionId": "QR inválido: falta o sessionId.",
+  "@autofillAddressApprovalScreenErrorMissingSessionId": {
+    "description": "Error shown when the scanned QR payload is missing the sessionId field"
+  },
+  "autofillAddressApprovalScreenErrorMissingPubKey": "QR inválido: falta o ephemeralPubKey.",
+  "@autofillAddressApprovalScreenErrorMissingPubKey": {
+    "description": "Error shown when the scanned QR payload is missing the ephemeralPubKey field"
+  },
+  "autofillAddressApprovalScreenErrorMissingExpiresAt": "QR inválido: falta o expiresAt.",
+  "@autofillAddressApprovalScreenErrorMissingExpiresAt": {
+    "description": "Error shown when the scanned QR payload is missing the expiresAt field"
+  },
+  "autofillAddressApprovalScreenErrorExpiredQr": "Este QR code expirou — volte ao site e tente novamente.",
+  "@autofillAddressApprovalScreenErrorExpiredQr": {
+    "description": "Error shown when the scanned QR code's expiry timestamp is in the past"
+  },
+  "autofillAddressApprovalScreenErrorMissingAppName": "QR inválido: falta o appName.",
+  "@autofillAddressApprovalScreenErrorMissingAppName": {
+    "description": "Error shown when the scanned QR payload is missing the appName field"
+  },
+  "autofillAddressApprovalScreenErrorSessionExpired": "A sessão expirou antes de responder — volte ao site e tente novamente.",
+  "@autofillAddressApprovalScreenErrorSessionExpired": {
+    "description": "Error shown when the session expires before the user responds to the request"
+  },
+  "autofillAddressApprovalScreenErrorRespondFailed": "Falha ao responder ao site: {error}",
+  "@autofillAddressApprovalScreenErrorRespondFailed": {
+    "description": "Error shown when sending the response back to the site fails, with the exception detail",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "autofillAddressApprovalScreenPickerHeading": "{appName} quer preencher um endereço",
+  "@autofillAddressApprovalScreenPickerHeading": {
+    "description": "Heading on the address picker step, naming the requesting app",
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "autofillAddressApprovalScreenPickerPrompt": "Escolha qual endereço salvo usar:",
+  "@autofillAddressApprovalScreenPickerPrompt": {
+    "description": "Prompt above the list of saved addresses to pick from"
+  },
+  "autofillAddressApprovalScreenDenyButton": "Negar solicitação",
+  "@autofillAddressApprovalScreenDenyButton": {
+    "description": "Button on the address picker step to deny the autofill request"
+  },
+  "autofillAddressApprovalScreenConfirmHeading": "{appName} quer preencher um formulário com este endereço",
+  "@autofillAddressApprovalScreenConfirmHeading": {
+    "description": "Heading on the address confirmation step, naming the requesting app",
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "autofillAddressApprovalScreenFieldLabel": "Etiqueta",
+  "@autofillAddressApprovalScreenFieldLabel": {
+    "description": "Field label for the address entry's label on the confirmation step"
+  },
+  "autofillAddressApprovalScreenFieldName": "Nome",
+  "@autofillAddressApprovalScreenFieldName": {
+    "description": "Field label for the address entry's full name on the confirmation step"
+  },
+  "autofillAddressApprovalScreenFieldStreet": "Rua",
+  "@autofillAddressApprovalScreenFieldStreet": {
+    "description": "Field label for the address entry's street/number on the confirmation step"
+  },
+  "autofillAddressApprovalScreenFieldComplement": "Complemento",
+  "@autofillAddressApprovalScreenFieldComplement": {
+    "description": "Field label for the address entry's complement on the confirmation step"
+  },
+  "autofillAddressApprovalScreenFieldNeighborhood": "Bairro",
+  "@autofillAddressApprovalScreenFieldNeighborhood": {
+    "description": "Field label for the address entry's neighborhood on the confirmation step"
+  },
+  "autofillAddressApprovalScreenFieldCityState": "Cidade/Estado",
+  "@autofillAddressApprovalScreenFieldCityState": {
+    "description": "Field label for the address entry's city/state on the confirmation step"
+  },
+  "autofillAddressApprovalScreenFieldZipCode": "CEP",
+  "@autofillAddressApprovalScreenFieldZipCode": {
+    "description": "Field label for the address entry's ZIP code on the confirmation step"
+  },
+  "autofillAddressApprovalScreenFieldCountry": "País",
+  "@autofillAddressApprovalScreenFieldCountry": {
+    "description": "Field label for the address entry's country on the confirmation step"
+  },
+  "autofillAddressApprovalScreenApproveButton": "Aprovar",
+  "@autofillAddressApprovalScreenApproveButton": {
+    "description": "Button to approve filling the form with the selected address"
+  },
+  "autofillAddressApprovalScreenRejectButton": "Rejeitar",
+  "@autofillAddressApprovalScreenRejectButton": {
+    "description": "Button to reject filling the form with the selected address"
+  },
+  "autofillAddressApprovalScreenChooseDifferentButton": "Escolher outro endereço",
+  "@autofillAddressApprovalScreenChooseDifferentButton": {
+    "description": "Button to go back and pick a different saved address"
+  },
+  "autofillAddressApprovalScreenWaitingTitle": "Aguardando o site se conectar...",
+  "@autofillAddressApprovalScreenWaitingTitle": {
+    "description": "Title shown while waiting for the site to connect over the cross-device channel"
+  },
+  "autofillAddressApprovalScreenWaitingSubtitle": "Confira se seu celular e computador estão na mesma rede Wi-Fi.",
+  "@autofillAddressApprovalScreenWaitingSubtitle": {
+    "description": "Subtitle shown while waiting for the site to connect, hinting at the Wi-Fi requirement"
+  },
+  "autofillAddressApprovalScreenManualIpPrompt": "Se o site não conseguir encontrar seu celular automaticamente, informe este endereço IP manualmente:",
+  "@autofillAddressApprovalScreenManualIpPrompt": {
+    "description": "Prompt shown above the list of local IP addresses for manual entry on the site"
+  },
+  "autofillAddressApprovalScreenSentTitle": "Enviado",
+  "@autofillAddressApprovalScreenSentTitle": {
+    "description": "Title shown after the address response was successfully sent to the site"
+  },
+  "autofillAddressApprovalScreenSentSubtitle": "O site recebeu sua resposta.",
+  "@autofillAddressApprovalScreenSentSubtitle": {
+    "description": "Subtitle shown after the address response was successfully sent to the site"
+  },
+  "autofillAddressApprovalScreenDeadDropPublished": "Backup dead-drop publicado (IPFS/IPNS).",
+  "@autofillAddressApprovalScreenDeadDropPublished": {
+    "description": "Note shown when the dead-drop backup of the response was published successfully"
+  },
+  "autofillAddressApprovalScreenDeadDropUnavailable": "Backup dead-drop indisponível desta vez.",
+  "@autofillAddressApprovalScreenDeadDropUnavailable": {
+    "description": "Note shown when the dead-drop backup of the response could not be published"
+  },
+  "autofillAddressApprovalScreenDoneButton": "Concluído",
+  "@autofillAddressApprovalScreenDoneButton": {
+    "description": "Button to dismiss the screen after the response was sent"
+  },
+  "autofillAddressApprovalScreenTimeoutTitle": "Nada chegou",
+  "@autofillAddressApprovalScreenTimeoutTitle": {
+    "description": "Title shown when the site never connected before the request expired"
+  },
+  "autofillAddressApprovalScreenTimeoutSubtitle": "O site nunca se conectou antes desta solicitação expirar. Confira se os dois dispositivos estão na mesma rede Wi-Fi e tente novamente.",
+  "@autofillAddressApprovalScreenTimeoutSubtitle": {
+    "description": "Subtitle shown when the site never connected before the request expired"
+  },
+  "autofillAddressApprovalScreenBackButton": "Voltar",
+  "@autofillAddressApprovalScreenBackButton": {
+    "description": "Button to go back after a timeout or error"
+  },
+  "autofillAddressApprovalScreenGenericError": "Algo deu errado.",
+  "@autofillAddressApprovalScreenGenericError": {
+    "description": "Fallback error message shown when no specific error message is available"
+  },
+  "autofillCreditcardApprovalScreenTitle": "Solicitação de preenchimento automático",
+  "@autofillCreditcardApprovalScreenTitle": {
+    "description": "App bar title on the credit card autofill approval screen"
+  },
+  "autofillCreditcardApprovalScreenErrorInvalidVersion": "QR inválido: versão do schema não suportada.",
+  "@autofillCreditcardApprovalScreenErrorInvalidVersion": {
+    "description": "Error shown when the scanned QR payload has an unsupported schema version"
+  },
+  "autofillCreditcardApprovalScreenErrorMissingSessionId": "QR inválido: falta o sessionId.",
+  "@autofillCreditcardApprovalScreenErrorMissingSessionId": {
+    "description": "Error shown when the scanned QR payload is missing the sessionId field"
+  },
+  "autofillCreditcardApprovalScreenErrorMissingPubKey": "QR inválido: falta o ephemeralPubKey.",
+  "@autofillCreditcardApprovalScreenErrorMissingPubKey": {
+    "description": "Error shown when the scanned QR payload is missing the ephemeralPubKey field"
+  },
+  "autofillCreditcardApprovalScreenErrorMissingExpiresAt": "QR inválido: falta o expiresAt.",
+  "@autofillCreditcardApprovalScreenErrorMissingExpiresAt": {
+    "description": "Error shown when the scanned QR payload is missing the expiresAt field"
+  },
+  "autofillCreditcardApprovalScreenErrorExpiredQr": "Este QR code expirou — volte ao site e tente novamente.",
+  "@autofillCreditcardApprovalScreenErrorExpiredQr": {
+    "description": "Error shown when the scanned QR code's expiry timestamp is in the past"
+  },
+  "autofillCreditcardApprovalScreenErrorMissingAppName": "QR inválido: falta o appName.",
+  "@autofillCreditcardApprovalScreenErrorMissingAppName": {
+    "description": "Error shown when the scanned QR payload is missing the appName field"
+  },
+  "autofillCreditcardApprovalScreenErrorSessionExpired": "A sessão expirou antes de responder — volte ao site e tente novamente.",
+  "@autofillCreditcardApprovalScreenErrorSessionExpired": {
+    "description": "Error shown when the session expires before the user responds to the request"
+  },
+  "autofillCreditcardApprovalScreenErrorRespondFailed": "Falha ao responder ao site: {error}",
+  "@autofillCreditcardApprovalScreenErrorRespondFailed": {
+    "description": "Error shown when sending the response back to the site fails, with the exception detail",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "autofillCreditcardApprovalScreenPickerHeading": "{appName} quer preencher um cartão",
+  "@autofillCreditcardApprovalScreenPickerHeading": {
+    "description": "Heading on the credit card picker step, naming the requesting app",
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "autofillCreditcardApprovalScreenPickerPrompt": "Escolha qual cartão salvo usar:",
+  "@autofillCreditcardApprovalScreenPickerPrompt": {
+    "description": "Prompt above the list of saved cards to pick from"
+  },
+  "autofillCreditcardApprovalScreenDenyButton": "Negar solicitação",
+  "@autofillCreditcardApprovalScreenDenyButton": {
+    "description": "Button on the credit card picker step to deny the autofill request"
+  },
+  "autofillCreditcardApprovalScreenConfirmHeading": "{appName} quer preencher um formulário com este cartão",
+  "@autofillCreditcardApprovalScreenConfirmHeading": {
+    "description": "Heading on the credit card confirmation step, naming the requesting app",
+    "placeholders": {
+      "appName": {
+        "type": "String"
+      }
+    }
+  },
+  "autofillCreditcardApprovalScreenFieldLabel": "Etiqueta",
+  "@autofillCreditcardApprovalScreenFieldLabel": {
+    "description": "Field label for the card entry's label on the confirmation step"
+  },
+  "autofillCreditcardApprovalScreenFieldCardHolder": "Titular",
+  "@autofillCreditcardApprovalScreenFieldCardHolder": {
+    "description": "Field label for the cardholder name on the confirmation step"
+  },
+  "autofillCreditcardApprovalScreenFieldCardNumber": "Número do cartão",
+  "@autofillCreditcardApprovalScreenFieldCardNumber": {
+    "description": "Field label for the (maskable) card number on the confirmation step"
+  },
+  "autofillCreditcardApprovalScreenFieldExpiry": "Validade",
+  "@autofillCreditcardApprovalScreenFieldExpiry": {
+    "description": "Field label for the card's expiry month/year on the confirmation step"
+  },
+  "autofillCreditcardApprovalScreenFieldCvv": "CVV",
+  "@autofillCreditcardApprovalScreenFieldCvv": {
+    "description": "Field label for the (maskable) card CVV on the confirmation step"
+  },
+  "autofillCreditcardApprovalScreenFieldNetwork": "Bandeira",
+  "@autofillCreditcardApprovalScreenFieldNetwork": {
+    "description": "Field label for the card network (e.g. Visa) on the confirmation step"
+  },
+  "autofillCreditcardApprovalScreenFieldBank": "Banco",
+  "@autofillCreditcardApprovalScreenFieldBank": {
+    "description": "Field label for the issuing bank on the confirmation step, shown only when set"
+  },
+  "autofillCreditcardApprovalScreenApproveButton": "Aprovar",
+  "@autofillCreditcardApprovalScreenApproveButton": {
+    "description": "Button to approve filling the form with the selected card"
+  },
+  "autofillCreditcardApprovalScreenRejectButton": "Rejeitar",
+  "@autofillCreditcardApprovalScreenRejectButton": {
+    "description": "Button to reject filling the form with the selected card"
+  },
+  "autofillCreditcardApprovalScreenChooseDifferentButton": "Escolher outro cartão",
+  "@autofillCreditcardApprovalScreenChooseDifferentButton": {
+    "description": "Button to go back and pick a different saved card"
+  },
+  "autofillCreditcardApprovalScreenWaitingTitle": "Aguardando o site se conectar...",
+  "@autofillCreditcardApprovalScreenWaitingTitle": {
+    "description": "Title shown while waiting for the site to connect over the cross-device channel"
+  },
+  "autofillCreditcardApprovalScreenWaitingSubtitle": "Confira se seu celular e computador estão na mesma rede Wi-Fi.",
+  "@autofillCreditcardApprovalScreenWaitingSubtitle": {
+    "description": "Subtitle shown while waiting for the site to connect, hinting at the Wi-Fi requirement"
+  },
+  "autofillCreditcardApprovalScreenManualIpPrompt": "Se o site não conseguir encontrar seu celular automaticamente, informe este endereço IP manualmente:",
+  "@autofillCreditcardApprovalScreenManualIpPrompt": {
+    "description": "Prompt shown above the list of local IP addresses for manual entry on the site"
+  },
+  "autofillCreditcardApprovalScreenSentTitle": "Enviado",
+  "@autofillCreditcardApprovalScreenSentTitle": {
+    "description": "Title shown after the card response was successfully sent to the site"
+  },
+  "autofillCreditcardApprovalScreenSentSubtitle": "O site recebeu sua resposta.",
+  "@autofillCreditcardApprovalScreenSentSubtitle": {
+    "description": "Subtitle shown after the card response was successfully sent to the site"
+  },
+  "autofillCreditcardApprovalScreenDeadDropPublished": "Backup dead-drop publicado (IPFS/IPNS).",
+  "@autofillCreditcardApprovalScreenDeadDropPublished": {
+    "description": "Note shown when the dead-drop backup of the response was published successfully"
+  },
+  "autofillCreditcardApprovalScreenDeadDropUnavailable": "Backup dead-drop indisponível desta vez.",
+  "@autofillCreditcardApprovalScreenDeadDropUnavailable": {
+    "description": "Note shown when the dead-drop backup of the response could not be published"
+  },
+  "autofillCreditcardApprovalScreenDoneButton": "Concluído",
+  "@autofillCreditcardApprovalScreenDoneButton": {
+    "description": "Button to dismiss the screen after the response was sent"
+  },
+  "autofillCreditcardApprovalScreenTimeoutTitle": "Nada chegou",
+  "@autofillCreditcardApprovalScreenTimeoutTitle": {
+    "description": "Title shown when the site never connected before the request expired"
+  },
+  "autofillCreditcardApprovalScreenTimeoutSubtitle": "O site nunca se conectou antes desta solicitação expirar. Confira se os dois dispositivos estão na mesma rede Wi-Fi e tente novamente.",
+  "@autofillCreditcardApprovalScreenTimeoutSubtitle": {
+    "description": "Subtitle shown when the site never connected before the request expired"
+  },
+  "autofillCreditcardApprovalScreenBackButton": "Voltar",
+  "@autofillCreditcardApprovalScreenBackButton": {
+    "description": "Button to go back after a timeout or error"
+  },
+  "autofillCreditcardApprovalScreenGenericError": "Algo deu errado.",
+  "@autofillCreditcardApprovalScreenGenericError": {
+    "description": "Fallback error message shown when no specific error message is available"
+  },
+  "autofillCreditcardApprovalScreenMaskedLabelSuffix": "{label}: ",
+  "@autofillCreditcardApprovalScreenMaskedLabelSuffix": {
+    "description": "Label prefix (with trailing colon) for a maskable info row such as card number or CVV",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "autofillSystemFillScreenTitle": "Solicitação de preenchimento automático",
+  "@autofillSystemFillScreenTitle": {
+    "description": "App bar title on the generic (system-fill) autofill screen"
+  },
+  "autofillSystemFillScreenLoadError": "Falha ao carregar o Vault: {error}",
+  "@autofillSystemFillScreenLoadError": {
+    "description": "Error shown when loading the Vault's saved entries fails, with the exception detail",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "autofillSystemFillScreenRespondError": "Falha ao responder: {error}",
+  "@autofillSystemFillScreenRespondError": {
+    "description": "Error shown when responding to the autofill request fails, with the exception detail",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "autofillSystemFillScreenEmptyAddresses": "Você ainda não tem endereços salvos.",
+  "@autofillSystemFillScreenEmptyAddresses": {
+    "description": "Empty-state message when no saved addresses exist and the form wants an address"
+  },
+  "autofillSystemFillScreenEmptyCards": "Você ainda não tem cartões salvos.",
+  "@autofillSystemFillScreenEmptyCards": {
+    "description": "Empty-state message when no saved cards exist and the form wants a card"
+  },
+  "autofillSystemFillScreenEmptyCredentials": "Você ainda não tem credenciais salvas.",
+  "@autofillSystemFillScreenEmptyCredentials": {
+    "description": "Empty-state message when no saved credentials exist for the requested entry type"
+  },
+  "autofillSystemFillScreenCloseButton": "Fechar",
+  "@autofillSystemFillScreenCloseButton": {
+    "description": "Button to close the screen, shown on the empty state and error state"
+  },
+  "autofillSystemFillScreenPickerPrompt": "Escolha qual entrada salva usar para preencher este formulário:",
+  "@autofillSystemFillScreenPickerPrompt": {
+    "description": "Prompt above the list of saved entries to pick from"
+  },
+  "autofillSystemFillScreenCancelButton": "Cancelar",
+  "@autofillSystemFillScreenCancelButton": {
+    "description": "Button to cancel the autofill request on the picker step"
+  },
+  "autofillSystemFillScreenGenericError": "Algo deu errado.",
+  "@autofillSystemFillScreenGenericError": {
+    "description": "Fallback error message shown when no specific error message is available"
+  },
+  "vaultDevicePermissionsScreenTitle": "Permissões por dispositivo",
+  "@vaultDevicePermissionsScreenTitle": {
+    "description": "App bar title on the Vault device permissions screen"
+  },
+  "vaultDevicePermissionsScreenExplanation": "Controla se um dispositivo pareado pode adicionar, editar e publicar entradas neste Vault. Por padrão, um novo dispositivo é somente leitura.",
+  "@vaultDevicePermissionsScreenExplanation": {
+    "description": "Explanatory text describing what the write-permission toggle controls"
+  },
+  "vaultDevicePermissionsScreenEmptyState": "Nenhum dispositivo ativo registrado.",
+  "@vaultDevicePermissionsScreenEmptyState": {
+    "description": "Empty-state message when there are no paired devices to show"
+  },
+  "vaultDevicePermissionsScreenCanWrite": "✓ Pode escrever",
+  "@vaultDevicePermissionsScreenCanWrite": {
+    "description": "Badge label for a device row that has write permission in this Vault"
+  },
+  "vaultDevicePermissionsScreenReadOnly": "Somente leitura",
+  "@vaultDevicePermissionsScreenReadOnly": {
+    "description": "Badge label for a device row that has read-only permission in this Vault"
+  },
+  "vaultScreenVaultKeyUnavailableSnackbar": "A chave do Vault ainda não está disponível on-chain.",
+  "@vaultScreenVaultKeyUnavailableSnackbar": {
+    "description": "Snackbar shown on the Vault screen when the vault key still isn't available on-chain after a retry."
+  },
+  "vaultScreenSmartAccountUnresolvedSnackbar": "Não foi possível resolver sua smart account. Verifique sua conexão.",
+  "@vaultScreenSmartAccountUnresolvedSnackbar": {
+    "description": "Snackbar shown on the Vault screen when the smart account address could not be resolved."
+  },
+  "vaultScreenFavoriteUpdateFailedSnackbar": "Falha ao atualizar favorito: {error}",
+  "@vaultScreenFavoriteUpdateFailedSnackbar": {
+    "description": "Snackbar shown on the Vault screen when toggling favorite status on an entry fails.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "vaultScreenNotPairedTitle": "Dispositivo não pareado",
+  "@vaultScreenNotPairedTitle": {
+    "description": "Title shown on the Vault screen when this device is not paired with an identity."
+  },
+  "vaultScreenNotPairedSubtitle": "Pareie este dispositivo com uma identidade para ver seu vault.",
+  "@vaultScreenNotPairedSubtitle": {
+    "description": "Subtitle shown on the Vault screen when this device is not paired with an identity."
+  },
+  "vaultScreenTitle": "Vault",
+  "@vaultScreenTitle": {
+    "description": "Title of the Vault screen."
+  },
+  "vaultScreenBackupRestoreTooltip": "Backup / restaurar",
+  "@vaultScreenBackupRestoreTooltip": {
+    "description": "Tooltip for the backup/restore icon button on the Vault screen."
+  },
+  "vaultScreenPinningProvidersTooltip": "Provedores de pinning",
+  "@vaultScreenPinningProvidersTooltip": {
+    "description": "Tooltip for the pinning providers icon button on the Vault screen."
+  },
+  "vaultScreenArweaveWalletTooltip": "Carteira Arweave",
+  "@vaultScreenArweaveWalletTooltip": {
+    "description": "Tooltip for the Arweave wallet icon button on the Vault screen."
+  },
+  "vaultScreenManageProfilesTooltip": "Gerenciar perfis",
+  "@vaultScreenManageProfilesTooltip": {
+    "description": "Tooltip for the manage profiles icon button on the Vault screen."
+  },
+  "vaultScreenDevicePermissionsTooltip": "Permissões por dispositivo",
+  "@vaultScreenDevicePermissionsTooltip": {
+    "description": "Tooltip for the device permissions icon button on the Vault screen."
+  },
+  "vaultScreenNewEntryTooltip": "Nova entrada",
+  "@vaultScreenNewEntryTooltip": {
+    "description": "Tooltip for the new entry icon button on the Vault screen."
+  },
+  "vaultScreenWritePermissionHint": "Você pode adicionar, editar e publicar entradas a partir deste dispositivo.",
+  "@vaultScreenWritePermissionHint": {
+    "description": "Hint text shown on the Vault screen when this device has write permission."
+  },
+  "vaultScreenReadOnlyHint": "Somente leitura aqui — gerencie as entradas pelo app Desktop.",
+  "@vaultScreenReadOnlyHint": {
+    "description": "Hint text shown on the Vault screen when this device is read-only."
+  },
+  "vaultScreenOfflineCacheMessage": "Offline — mostrando entradas da sua última sincronização.",
+  "@vaultScreenOfflineCacheMessage": {
+    "description": "Message shown on the Vault screen when offline and displaying cached entries."
+  },
+  "vaultScreenNoVaultPublishedTitle": "Nenhum vault publicado ainda",
+  "@vaultScreenNoVaultPublishedTitle": {
+    "description": "Empty-state title shown when no vault has been published yet."
+  },
+  "vaultScreenNoVaultPublishedSubtitle": "Publique um vault pelo app Desktop primeiro.",
+  "@vaultScreenNoVaultPublishedSubtitle": {
+    "description": "Empty-state subtitle shown when no vault has been published yet."
+  },
+  "vaultScreenNoVaultKeyTitle": "Chave do Vault não disponível",
+  "@vaultScreenNoVaultKeyTitle": {
+    "description": "Empty-state title shown when the vault key is not available."
+  },
+  "vaultScreenNoVaultKeySubtitle": "Isso pode acontecer se o app foi interrompido durante o pareamento. Não é preciso parear novamente — só tente de novo.",
+  "@vaultScreenNoVaultKeySubtitle": {
+    "description": "Empty-state subtitle shown when the vault key is not available."
+  },
+  "vaultScreenRetryButton": "Tentar novamente",
+  "@vaultScreenRetryButton": {
+    "description": "Button label to retry fetching the vault key on the Vault screen."
+  },
+  "vaultScreenLegacyStorageTitle": "Vault em armazenamento legado",
+  "@vaultScreenLegacyStorageTitle": {
+    "description": "Empty-state title shown when the vault is on legacy IPFS storage with no local cache."
+  },
+  "vaultScreenLegacyStorageNoCacheSubtitle": "Este vault ainda está no armazenamento legado do IPFS, que não tem mais pinning dedicado, e este dispositivo não tem um cache local para recorrer. Peça para um dispositivo que já tem este vault sincronizado republicá-lo no Arweave.",
+  "@vaultScreenLegacyStorageNoCacheSubtitle": {
+    "description": "Empty-state subtitle shown when the vault is on legacy IPFS storage with no local cache."
+  },
+  "vaultScreenLoadFailedTitle": "Não foi possível carregar seu vault",
+  "@vaultScreenLoadFailedTitle": {
+    "description": "Empty-state title shown when loading the vault failed."
+  },
+  "vaultScreenLoadFailedFallbackSubtitle": "Verifique sua conexão e tente novamente.",
+  "@vaultScreenLoadFailedFallbackSubtitle": {
+    "description": "Fallback empty-state subtitle shown when loading the vault failed with no specific error."
+  },
+  "vaultScreenSearchHint": "Buscar por site, usuário ou perfil",
+  "@vaultScreenSearchHint": {
+    "description": "Hint text for the search field on the Vault screen."
+  },
+  "vaultScreenNoEntriesYet": "Nenhuma entrada ainda",
+  "@vaultScreenNoEntriesYet": {
+    "description": "Message shown on the Vault screen when the vault has no entries at all."
+  },
+  "vaultScreenNoEntriesMatchSearch": "Nenhuma entrada corresponde à sua busca",
+  "@vaultScreenNoEntriesMatchSearch": {
+    "description": "Message shown on the Vault screen when a search yields no results."
+  },
+  "vaultScreenLegacyStorageBannerBody": "Este vault ainda está no armazenamento legado do IPFS, que não tem mais pinning dedicado — um dispositivo novo sem cache local pode falhar ao carregá-lo. Republique para migrar para o Arweave.",
+  "@vaultScreenLegacyStorageBannerBody": {
+    "description": "Body text of the banner shown when the vault is still on legacy IPFS storage."
+  },
+  "vaultScreenPublishingButton": "Publicando...",
+  "@vaultScreenPublishingButton": {
+    "description": "Button label shown while a vault publish is in progress."
+  },
+  "vaultScreenMigrateToArweaveButton": "Migrar para o Arweave",
+  "@vaultScreenMigrateToArweaveButton": {
+    "description": "Button label to republish/migrate a legacy vault to Arweave."
+  },
+  "vaultScreenPublishedCheckmark": "Publicado ✓",
+  "@vaultScreenPublishedCheckmark": {
+    "description": "Status text shown right after a vault publish succeeds."
+  },
+  "vaultScreenPendingChanges": "{count, plural, one{{count} alteração pendente} other{{count} alterações pendentes}}",
+  "@vaultScreenPendingChanges": {
+    "description": "Status text on the Vault screen showing the number of unpublished pending changes.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "vaultScreenAllPublished": "Tudo publicado",
+  "@vaultScreenAllPublished": {
+    "description": "Status text shown on the Vault screen when there are no pending changes to publish."
+  },
+  "vaultScreenPublishButtonLabel": "Publicar",
+  "@vaultScreenPublishButtonLabel": {
+    "description": "Button label to publish pending vault changes."
+  },
+  "vaultScreenEntryCardDocumentFallbackTitle": "Documento",
+  "@vaultScreenEntryCardDocumentFallbackTitle": {
+    "description": "Fallback title on a vault entry card when a document entry has no name."
+  },
+  "vaultScreenEntryCardAddressFallbackTitle": "Endereço",
+  "@vaultScreenEntryCardAddressFallbackTitle": {
+    "description": "Fallback title on a vault entry card when an address entry has no address set."
+  },
+  "vaultScreenEntryCardCardFallbackTitle": "Cartão",
+  "@vaultScreenEntryCardCardFallbackTitle": {
+    "description": "Fallback title on a vault entry card when a credit card entry has no card set."
+  },
+  "vaultEntryFormScreenGeneratePasswordLabel": "Gerar senha",
+  "@vaultEntryFormScreenGeneratePasswordLabel": {
+    "description": "Title of the password generator bottom sheet, and tooltip of the icon button that opens it, on the vault entry form screen."
+  },
+  "vaultEntryFormScreenLengthLabel": "Comprimento",
+  "@vaultEntryFormScreenLengthLabel": {
+    "description": "Label for the password length control in the password generator bottom sheet."
+  },
+  "vaultEntryFormScreenUppercaseLabel": "Maiúsculas",
+  "@vaultEntryFormScreenUppercaseLabel": {
+    "description": "Filter chip label for the uppercase-characters option in the password generator."
+  },
+  "vaultEntryFormScreenLowercaseLabel": "Minúsculas",
+  "@vaultEntryFormScreenLowercaseLabel": {
+    "description": "Filter chip label for the lowercase-characters option in the password generator."
+  },
+  "vaultEntryFormScreenNumbersLabel": "Números",
+  "@vaultEntryFormScreenNumbersLabel": {
+    "description": "Filter chip label for the numbers option in the password generator."
+  },
+  "vaultEntryFormScreenSymbolsLabel": "Símbolos",
+  "@vaultEntryFormScreenSymbolsLabel": {
+    "description": "Filter chip label for the symbols option in the password generator."
+  },
+  "vaultEntryFormScreenRegenerateTooltip": "Regenerar",
+  "@vaultEntryFormScreenRegenerateTooltip": {
+    "description": "Tooltip for the button that regenerates the password preview in the password generator."
+  },
+  "vaultEntryFormScreenUsePasswordButton": "Usar esta senha",
+  "@vaultEntryFormScreenUsePasswordButton": {
+    "description": "Button label to accept the generated password in the password generator bottom sheet."
+  },
+  "vaultEntryFormScreenFileTooLargeError": "Arquivo muito grande ({size}) — o limite é {limit}.",
+  "@vaultEntryFormScreenFileTooLargeError": {
+    "description": "Error message shown on the vault entry form when a chosen document file exceeds the size limit.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      },
+      "limit": {
+        "type": "String"
+      }
+    }
+  },
+  "vaultEntryFormScreenScanQrTitle": "Escanear QR code do 2FA",
+  "@vaultEntryFormScreenScanQrTitle": {
+    "description": "Title of the camera scan screen used to scan a 2FA setup QR code."
+  },
+  "vaultEntryFormScreenScanQrInstructions": "Aponte a câmera para o QR code mostrado ao configurar o 2FA",
+  "@vaultEntryFormScreenScanQrInstructions": {
+    "description": "Instructions shown on the camera scan screen used to scan a 2FA setup QR code."
+  },
+  "vaultEntryFormScreenNoQrFoundSnackbar": "Nenhum QR code encontrado nessa imagem",
+  "@vaultEntryFormScreenNoQrFoundSnackbar": {
+    "description": "Snackbar shown when no QR code could be found in a picked image while setting up 2FA."
+  },
+  "vaultEntryFormScreenQrInvalidSecretSnackbar": "QR encontrado, mas não é um segredo de 2FA válido: {error}",
+  "@vaultEntryFormScreenQrInvalidSecretSnackbar": {
+    "description": "Snackbar shown when a QR code was found in a picked image but it is not a valid 2FA secret.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "vaultEntryFormScreenEditTitle": "Editar entrada",
+  "@vaultEntryFormScreenEditTitle": {
+    "description": "AppBar title of the vault entry form screen when editing an existing entry."
+  },
+  "vaultEntryFormScreenNewTitle": "Nova entrada",
+  "@vaultEntryFormScreenNewTitle": {
+    "description": "AppBar title of the vault entry form screen when creating a new entry."
+  },
+  "vaultEntryFormScreenTypeCredentialChip": "🔑 Senha",
+  "@vaultEntryFormScreenTypeCredentialChip": {
+    "description": "Choice chip label for the credential (password) entry type on the vault entry form screen."
+  },
+  "vaultEntryFormScreenTypeDocumentChip": "📄 Documento",
+  "@vaultEntryFormScreenTypeDocumentChip": {
+    "description": "Choice chip label for the document entry type on the vault entry form screen."
+  },
+  "vaultEntryFormScreenTypeAddressChip": "🏠 Endereço",
+  "@vaultEntryFormScreenTypeAddressChip": {
+    "description": "Choice chip label for the address entry type on the vault entry form screen."
+  },
+  "vaultEntryFormScreenTypeCreditCardChip": "💳 Cartão",
+  "@vaultEntryFormScreenTypeCreditCardChip": {
+    "description": "Choice chip label for the credit card entry type on the vault entry form screen."
+  },
+  "vaultEntryFormScreenSiteLabel": "Site *",
+  "@vaultEntryFormScreenSiteLabel": {
+    "description": "Label for the required site field on a credential entry."
+  },
+  "vaultEntryFormScreenSiteHint": "ex: github.com",
+  "@vaultEntryFormScreenSiteHint": {
+    "description": "Hint text for the site field on a credential entry."
+  },
+  "vaultEntryFormScreenUrlLabel": "URL",
+  "@vaultEntryFormScreenUrlLabel": {
+    "description": "Label for the URL field on a credential entry."
+  },
+  "vaultEntryFormScreenUrlHint": "https://...",
+  "@vaultEntryFormScreenUrlHint": {
+    "description": "Hint text for the URL field on a credential entry."
+  },
+  "vaultEntryFormScreenUsernameLabel": "Usuário *",
+  "@vaultEntryFormScreenUsernameLabel": {
+    "description": "Label for the required username field on a credential entry."
+  },
+  "vaultEntryFormScreenPasswordLabel": "Senha *",
+  "@vaultEntryFormScreenPasswordLabel": {
+    "description": "Label for the required password field on a credential entry."
+  },
+  "vaultEntryFormScreenDocNameLabel": "Nome *",
+  "@vaultEntryFormScreenDocNameLabel": {
+    "description": "Label for the required name field on a document entry."
+  },
+  "vaultEntryFormScreenDocNameHint": "ex: RG, passaporte, contrato",
+  "@vaultEntryFormScreenDocNameHint": {
+    "description": "Hint text for the name field on a document entry."
+  },
+  "vaultEntryFormScreenChooseFileButton": "Escolher arquivo",
+  "@vaultEntryFormScreenChooseFileButton": {
+    "description": "Button label to pick a file for a document entry when none is chosen yet."
+  },
+  "vaultEntryFormScreenChangeFileButton": "Trocar arquivo",
+  "@vaultEntryFormScreenChangeFileButton": {
+    "description": "Button label to replace the already-chosen file for a document entry."
+  },
+  "vaultEntryFormScreenFileInfoLine": "{fileName} · {size} · {mimeType}",
+  "@vaultEntryFormScreenFileInfoLine": {
+    "description": "Summary line showing the chosen document's file name, size and MIME type.",
+    "placeholders": {
+      "fileName": {
+        "type": "String"
+      },
+      "size": {
+        "type": "String"
+      },
+      "mimeType": {
+        "type": "String"
+      }
+    }
+  },
+  "vaultEntryFormScreenAddressLabelFieldLabel": "Etiqueta *",
+  "@vaultEntryFormScreenAddressLabelFieldLabel": {
+    "description": "Label for the required label field on an address entry (e.g. Home, Work)."
+  },
+  "vaultEntryFormScreenAddressLabelHint": "ex: Casa, Trabalho, Entrega",
+  "@vaultEntryFormScreenAddressLabelHint": {
+    "description": "Hint text for the label field on an address entry."
+  },
+  "vaultEntryFormScreenFullNameLabel": "Nome completo *",
+  "@vaultEntryFormScreenFullNameLabel": {
+    "description": "Label for the required full name field on an address entry."
+  },
+  "vaultEntryFormScreenStreetLabel": "Rua *",
+  "@vaultEntryFormScreenStreetLabel": {
+    "description": "Label for the required street field on an address entry."
+  },
+  "vaultEntryFormScreenNumberLabel": "Número *",
+  "@vaultEntryFormScreenNumberLabel": {
+    "description": "Label for the required street number field on an address entry."
+  },
+  "vaultEntryFormScreenComplementLabel": "Complemento",
+  "@vaultEntryFormScreenComplementLabel": {
+    "description": "Label for the optional complement field on an address entry."
+  },
+  "vaultEntryFormScreenNeighborhoodLabel": "Bairro *",
+  "@vaultEntryFormScreenNeighborhoodLabel": {
+    "description": "Label for the required neighborhood field on an address entry."
+  },
+  "vaultEntryFormScreenCityLabel": "Cidade *",
+  "@vaultEntryFormScreenCityLabel": {
+    "description": "Label for the required city field on an address entry."
+  },
+  "vaultEntryFormScreenStateLabel": "Estado *",
+  "@vaultEntryFormScreenStateLabel": {
+    "description": "Label for the required state field on an address entry."
+  },
+  "vaultEntryFormScreenZipCodeLabel": "CEP *",
+  "@vaultEntryFormScreenZipCodeLabel": {
+    "description": "Label for the required ZIP code field on an address entry."
+  },
+  "vaultEntryFormScreenCountryLabel": "País *",
+  "@vaultEntryFormScreenCountryLabel": {
+    "description": "Label for the required country field on an address entry."
+  },
+  "vaultEntryFormScreenPhoneLabel": "Telefone",
+  "@vaultEntryFormScreenPhoneLabel": {
+    "description": "Label for the optional phone field on an address entry."
+  },
+  "vaultEntryFormScreenCardLabelFieldLabel": "Etiqueta *",
+  "@vaultEntryFormScreenCardLabelFieldLabel": {
+    "description": "Label for the required label field on a credit card entry (e.g. Nubank)."
+  },
+  "vaultEntryFormScreenCardLabelHint": "ex: Nubank, Itaú Platinum",
+  "@vaultEntryFormScreenCardLabelHint": {
+    "description": "Hint text for the label field on a credit card entry."
+  },
+  "vaultEntryFormScreenCardHolderLabel": "Titular *",
+  "@vaultEntryFormScreenCardHolderLabel": {
+    "description": "Label for the required card holder name field on a credit card entry."
+  },
+  "vaultEntryFormScreenCardNumberLabel": "Número do cartão *",
+  "@vaultEntryFormScreenCardNumberLabel": {
+    "description": "Label for the required card number field on a credit card entry."
+  },
+  "vaultEntryFormScreenNetworkLabel": "Bandeira *",
+  "@vaultEntryFormScreenNetworkLabel": {
+    "description": "Label for the required card network dropdown on a credit card entry."
+  },
+  "vaultEntryFormScreenExpiryMonthLabel": "Mês de validade *",
+  "@vaultEntryFormScreenExpiryMonthLabel": {
+    "description": "Label for the required expiry month field on a credit card entry."
+  },
+  "vaultEntryFormScreenExpiryMonthHint": "MM",
+  "@vaultEntryFormScreenExpiryMonthHint": {
+    "description": "Hint text for the expiry month field on a credit card entry."
+  },
+  "vaultEntryFormScreenExpiryYearLabel": "Ano de validade *",
+  "@vaultEntryFormScreenExpiryYearLabel": {
+    "description": "Label for the required expiry year field on a credit card entry."
+  },
+  "vaultEntryFormScreenExpiryYearHint": "AAAA",
+  "@vaultEntryFormScreenExpiryYearHint": {
+    "description": "Hint text for the expiry year field on a credit card entry."
+  },
+  "vaultEntryFormScreenCvvLabel": "CVV *",
+  "@vaultEntryFormScreenCvvLabel": {
+    "description": "Label for the required CVV field on a credit card entry."
+  },
+  "vaultEntryFormScreenBankLabel": "Banco",
+  "@vaultEntryFormScreenBankLabel": {
+    "description": "Label for the optional bank field on a credit card entry."
+  },
+  "vaultEntryFormScreenNotesLabel": "Notas",
+  "@vaultEntryFormScreenNotesLabel": {
+    "description": "Label for the notes field shared by all vault entry types."
+  },
+  "vaultEntryFormScreenTotpSecretLabel": "Segredo do 2FA (opcional)",
+  "@vaultEntryFormScreenTotpSecretLabel": {
+    "description": "Label for the optional TOTP secret field on a credential entry."
+  },
+  "vaultEntryFormScreenTotpSecretHint": "segredo base32 ou URI otpauth://...",
+  "@vaultEntryFormScreenTotpSecretHint": {
+    "description": "Hint text for the TOTP secret field explaining accepted formats."
+  },
+  "vaultEntryFormScreenScanQrTooltip": "Escanear QR code",
+  "@vaultEntryFormScreenScanQrTooltip": {
+    "description": "Tooltip for the icon button that opens the camera to scan a 2FA QR code."
+  },
+  "vaultEntryFormScreenUploadQrTooltip": "Carregar QR de uma foto",
+  "@vaultEntryFormScreenUploadQrTooltip": {
+    "description": "Tooltip for the icon button that picks a saved image to decode a 2FA QR code from."
+  },
+  "vaultEntryFormScreenPasskeyLabel": "Passkey: ",
+  "@vaultEntryFormScreenPasskeyLabel": {
+    "description": "Label prefix shown before the passkey RP ID on the vault entry form screen."
+  },
+  "vaultEntryFormScreenGeneratePasskeyButton": "Gerar passkey",
+  "@vaultEntryFormScreenGeneratePasskeyButton": {
+    "description": "Button label to generate a new passkey for a credential entry, shown when none exists yet."
+  },
+  "vaultEntryFormScreenRecreatePasskeyButton": "Recriar",
+  "@vaultEntryFormScreenRecreatePasskeyButton": {
+    "description": "Button label to regenerate the passkey for a credential entry, shown when one already exists."
+  },
+  "vaultEntryFormScreenProfilesLabel": "Perfis",
+  "@vaultEntryFormScreenProfilesLabel": {
+    "description": "Section heading for the profile selector on the vault entry form screen."
+  },
+  "vaultEntryFormScreenNoProfilesMessage": "Nenhum perfil criado ainda — crie um pelo app Desktop.",
+  "@vaultEntryFormScreenNoProfilesMessage": {
+    "description": "Message shown when there are no profiles to choose from on the vault entry form screen."
+  },
+  "vaultEntryFormScreenSaveButton": "Salvar",
+  "@vaultEntryFormScreenSaveButton": {
+    "description": "Button label to save the vault entry form."
+  },
+  "vaultEntryDetailScreenDocumentFallbackTitle": "Documento",
+  "@vaultEntryDetailScreenDocumentFallbackTitle": {
+    "description": "Fallback title on the entry detail screen when a document entry has no name."
+  },
+  "vaultEntryDetailScreenAddressFallbackTitle": "Endereço",
+  "@vaultEntryDetailScreenAddressFallbackTitle": {
+    "description": "Fallback title on the entry detail screen when an address entry has no label."
+  },
+  "vaultEntryDetailScreenCardFallbackTitle": "Cartão",
+  "@vaultEntryDetailScreenCardFallbackTitle": {
+    "description": "Fallback title on the entry detail screen when a credit card entry has no label."
+  },
+  "vaultEntryDetailScreenCopiedSnackbar": "{label} copiado!",
+  "@vaultEntryDetailScreenCopiedSnackbar": {
+    "description": "Snackbar shown after copying a field's value to the clipboard on the entry detail screen.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "vaultEntryDetailScreenLoadDocumentFailedSnackbar": "Não foi possível carregar o documento: {error}",
+  "@vaultEntryDetailScreenLoadDocumentFailedSnackbar": {
+    "description": "Snackbar shown when downloading/loading a document's content fails.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "vaultEntryDetailScreenDocumentSavedSnackbar": "Documento salvo ✓",
+  "@vaultEntryDetailScreenDocumentSavedSnackbar": {
+    "description": "Snackbar shown after a document was successfully saved to the device."
+  },
+  "vaultEntryDetailScreenDeleteDialogTitle": "Excluir entrada?",
+  "@vaultEntryDetailScreenDeleteDialogTitle": {
+    "description": "Title of the confirmation dialog shown before deleting a vault entry."
+  },
+  "vaultEntryDetailScreenDeleteDialogContent": "Isso vai remover \"{title}\" do seu vault.",
+  "@vaultEntryDetailScreenDeleteDialogContent": {
+    "description": "Content of the confirmation dialog shown before deleting a vault entry, naming the entry.",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "vaultEntryDetailScreenCancelButton": "Cancelar",
+  "@vaultEntryDetailScreenCancelButton": {
+    "description": "Cancel button label in the delete confirmation dialog on the entry detail screen."
+  },
+  "vaultEntryDetailScreenDeleteButton": "Excluir",
+  "@vaultEntryDetailScreenDeleteButton": {
+    "description": "Confirm delete button label in the delete confirmation dialog on the entry detail screen."
+  },
+  "vaultEntryDetailScreenSiteLabel": "Site",
+  "@vaultEntryDetailScreenSiteLabel": {
+    "description": "Row label for the site value of a credential entry on the detail screen."
+  },
+  "vaultEntryDetailScreenUsernameLabel": "Usuário",
+  "@vaultEntryDetailScreenUsernameLabel": {
+    "description": "Row label for the username value of a credential entry on the detail screen."
+  },
+  "vaultEntryDetailScreenPasswordLabel": "Senha",
+  "@vaultEntryDetailScreenPasswordLabel": {
+    "description": "Row label for the password value of a credential entry on the detail screen."
+  },
+  "vaultEntryDetailScreenTotpCodeLabel": "Código do 2FA",
+  "@vaultEntryDetailScreenTotpCodeLabel": {
+    "description": "Label used when copying the current TOTP code to the clipboard."
+  },
+  "vaultEntryDetailScreenNameLabel": "Nome",
+  "@vaultEntryDetailScreenNameLabel": {
+    "description": "Row label for the name value of a document entry on the detail screen."
+  },
+  "vaultEntryDetailScreenFileLabel": "Arquivo",
+  "@vaultEntryDetailScreenFileLabel": {
+    "description": "Row label for the file name value of a document entry on the detail screen."
+  },
+  "vaultEntryDetailScreenSizeLabel": "Tamanho",
+  "@vaultEntryDetailScreenSizeLabel": {
+    "description": "Row label for the file size value of a document entry on the detail screen."
+  },
+  "vaultEntryDetailScreenSizeValue": "{size} · {mimeType}",
+  "@vaultEntryDetailScreenSizeValue": {
+    "description": "Row value combining a document's formatted file size and MIME type on the detail screen.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      },
+      "mimeType": {
+        "type": "String"
+      }
+    }
+  },
+  "vaultEntryDetailScreenSaveToDeviceButton": "Salvar no dispositivo",
+  "@vaultEntryDetailScreenSaveToDeviceButton": {
+    "description": "Button label to download and save a document entry's file to the device."
+  },
+  "vaultEntryDetailScreenFullNameLabel": "Nome completo",
+  "@vaultEntryDetailScreenFullNameLabel": {
+    "description": "Row label for the full name value of an address entry on the detail screen."
+  },
+  "vaultEntryDetailScreenStreetLabel": "Rua",
+  "@vaultEntryDetailScreenStreetLabel": {
+    "description": "Row label for the street and number value of an address entry on the detail screen."
+  },
+  "vaultEntryDetailScreenComplementLabel": "Complemento",
+  "@vaultEntryDetailScreenComplementLabel": {
+    "description": "Row label for the complement value of an address entry on the detail screen."
+  },
+  "vaultEntryDetailScreenNeighborhoodLabel": "Bairro",
+  "@vaultEntryDetailScreenNeighborhoodLabel": {
+    "description": "Row label for the neighborhood value of an address entry on the detail screen."
+  },
+  "vaultEntryDetailScreenCityStateLabel": "Cidade/Estado",
+  "@vaultEntryDetailScreenCityStateLabel": {
+    "description": "Row label for the combined city and state value of an address entry on the detail screen."
+  },
+  "vaultEntryDetailScreenZipCodeLabel": "CEP",
+  "@vaultEntryDetailScreenZipCodeLabel": {
+    "description": "Row label for the ZIP code value of an address entry on the detail screen."
+  },
+  "vaultEntryDetailScreenCountryLabel": "País",
+  "@vaultEntryDetailScreenCountryLabel": {
+    "description": "Row label for the country value of an address entry on the detail screen."
+  },
+  "vaultEntryDetailScreenPhoneLabel": "Telefone",
+  "@vaultEntryDetailScreenPhoneLabel": {
+    "description": "Row label for the phone value of an address entry on the detail screen."
+  },
+  "vaultEntryDetailScreenCardHolderLabel": "Titular",
+  "@vaultEntryDetailScreenCardHolderLabel": {
+    "description": "Row label for the card holder name value of a credit card entry on the detail screen."
+  },
+  "vaultEntryDetailScreenCardNumberLabel": "Número do cartão",
+  "@vaultEntryDetailScreenCardNumberLabel": {
+    "description": "Row label for the card number value of a credit card entry on the detail screen."
+  },
+  "vaultEntryDetailScreenCvvLabel": "CVV",
+  "@vaultEntryDetailScreenCvvLabel": {
+    "description": "Row label for the CVV value of a credit card entry on the detail screen."
+  },
+  "vaultEntryDetailScreenExpiryLabel": "Validade",
+  "@vaultEntryDetailScreenExpiryLabel": {
+    "description": "Row label for the expiry month/year value of a credit card entry on the detail screen."
+  },
+  "vaultEntryDetailScreenNetworkLabel": "Bandeira",
+  "@vaultEntryDetailScreenNetworkLabel": {
+    "description": "Row label for the card network value of a credit card entry on the detail screen."
+  },
+  "vaultEntryDetailScreenBankLabel": "Banco",
+  "@vaultEntryDetailScreenBankLabel": {
+    "description": "Row label for the bank value of a credit card entry on the detail screen."
+  },
+  "vaultEntryDetailScreenNotesLabel": "Notas",
+  "@vaultEntryDetailScreenNotesLabel": {
+    "description": "Row label for the notes value shared by all vault entry types on the detail screen."
+  },
+  "vaultEntryDetailScreenUrlLabel": "URL: ",
+  "@vaultEntryDetailScreenUrlLabel": {
+    "description": "Label prefix shown before a credential entry's URL on the detail screen."
+  },
+  "vaultEntryDetailScreenTotpLabel": "2FA: ",
+  "@vaultEntryDetailScreenTotpLabel": {
+    "description": "Label prefix shown before the live TOTP code on the detail screen."
+  },
+  "vaultEntryDetailScreenTotpErrorText": "2FA: {error}",
+  "@vaultEntryDetailScreenTotpErrorText": {
+    "description": "Error text shown instead of the TOTP code when generating it fails.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "vaultEntryDetailScreenTotpSecondsRemaining": "{seconds}s",
+  "@vaultEntryDetailScreenTotpSecondsRemaining": {
+    "description": "Countdown showing the seconds remaining until the current TOTP code rotates.",
+    "placeholders": {
+      "seconds": {
+        "type": "int"
+      }
+    }
+  },
+  "vaultEntryDetailScreenTestSignatureButton": "Testar assinatura",
+  "@vaultEntryDetailScreenTestSignatureButton": {
+    "description": "Button label to run a local passkey signature test on the detail screen."
+  },
+  "vaultBackupScreenImportConfirmTitle": "Importar backup?",
+  "@vaultBackupScreenImportConfirmTitle": {
+    "description": "Title of the confirm dialog before importing a backup file"
+  },
+  "vaultBackupScreenImportConfirmBody": "Isso vai sobrescrever TODO o vault local deste dispositivo com o conteúdo do arquivo de backup. Isso não pode ser desfeito.",
+  "@vaultBackupScreenImportConfirmBody": {
+    "description": "Warning body of the import confirmation dialog"
+  },
+  "vaultBackupScreenCancelButton": "Cancelar",
+  "@vaultBackupScreenCancelButton": {
+    "description": "Cancel button in the import confirmation dialog"
+  },
+  "vaultBackupScreenImportConfirmButton": "Importar",
+  "@vaultBackupScreenImportConfirmButton": {
+    "description": "Confirm button (destructive) in the import confirmation dialog"
+  },
+  "vaultBackupScreenTitle": "Backup / restaurar",
+  "@vaultBackupScreenTitle": {
+    "description": "App bar title of the vault backup/restore screen"
+  },
+  "vaultBackupScreenIntro": "Exporte ou restaure o vault inteiro (senhas, 2FA, passkeys, perfis) como um arquivo .truthid-backup. Cifrado com senha própria, separada da sua carteira — guarde-a em local seguro, ela não pode ser recuperada.",
+  "@vaultBackupScreenIntro": {
+    "description": "Intro paragraph explaining the backup feature"
+  },
+  "vaultBackupScreenExportSectionTitle": "Exportar",
+  "@vaultBackupScreenExportSectionTitle": {
+    "description": "Section title for the export part of the screen"
+  },
+  "vaultBackupScreenExportPasswordLabel": "Senha de exportação",
+  "@vaultBackupScreenExportPasswordLabel": {
+    "description": "Label of the export password text field"
+  },
+  "vaultBackupScreenConfirmPasswordLabel": "Confirmar senha",
+  "@vaultBackupScreenConfirmPasswordLabel": {
+    "description": "Label of the confirm export password text field"
+  },
+  "vaultBackupScreenExportSuccess": "Backup salvo ✓",
+  "@vaultBackupScreenExportSuccess": {
+    "description": "Success message shown after exporting the backup"
+  },
+  "vaultBackupScreenExportingButton": "Exportando...",
+  "@vaultBackupScreenExportingButton": {
+    "description": "Export button label while the export is in progress"
+  },
+  "vaultBackupScreenExportButton": "Exportar backup",
+  "@vaultBackupScreenExportButton": {
+    "description": "Export button label in idle state"
+  },
+  "vaultBackupScreenImportSectionTitle": "Importar",
+  "@vaultBackupScreenImportSectionTitle": {
+    "description": "Section title for the import part of the screen"
+  },
+  "vaultBackupScreenChooseFileButton": "Escolher arquivo .truthid-backup",
+  "@vaultBackupScreenChooseFileButton": {
+    "description": "Button label to pick a backup file to import"
+  },
+  "vaultBackupScreenBackupPasswordLabel": "Senha do backup",
+  "@vaultBackupScreenBackupPasswordLabel": {
+    "description": "Label of the import backup password text field"
+  },
+  "vaultBackupScreenImportSuccess": "Backup importado ✓",
+  "@vaultBackupScreenImportSuccess": {
+    "description": "Success message shown after importing the backup"
+  },
+  "vaultBackupScreenImportingButton": "Importando...",
+  "@vaultBackupScreenImportingButton": {
+    "description": "Import button label while the import is in progress"
+  },
+  "vaultBackupScreenImportButton": "Importar",
+  "@vaultBackupScreenImportButton": {
+    "description": "Import button label in idle state"
+  },
+  "vaultEditApprovalScreenErrorInvalidVersion": "QR inválido: versão do schema não suportada.",
+  "@vaultEditApprovalScreenErrorInvalidVersion": {
+    "description": "Validation error when the scanned QR payload has an unsupported schema version"
+  },
+  "vaultEditApprovalScreenErrorMissingSessionId": "QR inválido: falta o sessionId.",
+  "@vaultEditApprovalScreenErrorMissingSessionId": {
+    "description": "Validation error when the scanned QR payload is missing sessionId"
+  },
+  "vaultEditApprovalScreenErrorMissingEphemeralPubKey": "QR inválido: falta o ephemeralPubKey.",
+  "@vaultEditApprovalScreenErrorMissingEphemeralPubKey": {
+    "description": "Validation error when the scanned QR payload is missing ephemeralPubKey"
+  },
+  "vaultEditApprovalScreenErrorMissingExpiresAt": "QR inválido: falta o expiresAt.",
+  "@vaultEditApprovalScreenErrorMissingExpiresAt": {
+    "description": "Validation error when the scanned QR payload is missing expiresAt"
+  },
+  "vaultEditApprovalScreenErrorExpiredQr": "Este QR code expirou — volte à extensão e escaneie um novo.",
+  "@vaultEditApprovalScreenErrorExpiredQr": {
+    "description": "Error shown when the scanned QR code has already expired"
+  },
+  "vaultEditApprovalScreenErrorMissingAppName": "QR inválido: falta o appName.",
+  "@vaultEditApprovalScreenErrorMissingAppName": {
+    "description": "Validation error when the scanned QR payload is missing appName"
+  },
+  "vaultEditApprovalScreenErrorDecryptFailed": "Falha ao decifrar a proposta recebida: {error}",
+  "@vaultEditApprovalScreenErrorDecryptFailed": {
+    "description": "Error shown when decrypting the received credential proposal fails",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "FormatException"
+      }
+    }
+  },
+  "vaultEditApprovalScreenErrorNotPaired": "Este celular ainda não está pareado com uma identidade TruthID.",
+  "@vaultEditApprovalScreenErrorNotPaired": {
+    "description": "Error shown when the device has no paired identity"
+  },
+  "vaultEditApprovalScreenErrorResolvingIdentity": "Ainda resolvendo sua identidade on-chain — tente novamente em instantes.",
+  "@vaultEditApprovalScreenErrorResolvingIdentity": {
+    "description": "Error shown while the identity is still resolving on-chain"
+  },
+  "vaultEditApprovalScreenErrorResolveSmartAccount": "Não foi possível resolver sua smart account — tente novamente.",
+  "@vaultEditApprovalScreenErrorResolveSmartAccount": {
+    "description": "Error shown when the smart account address could not be resolved"
+  },
+  "vaultEditApprovalScreenErrorSaveFailed": "Falha ao salvar e publicar a nova credencial: {error}",
+  "@vaultEditApprovalScreenErrorSaveFailed": {
+    "description": "Error shown when saving/publishing the new credential fails",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "Network error"
+      }
+    }
+  },
+  "vaultEditApprovalScreenTitle": "Solicitação de nova credencial",
+  "@vaultEditApprovalScreenTitle": {
+    "description": "App bar title of the vault edit approval screen"
+  },
+  "vaultEditApprovalScreenReceivingTitle": "{appName} quer enviar uma nova credencial...",
+  "@vaultEditApprovalScreenReceivingTitle": {
+    "description": "Title shown while receiving the credential proposal from the requesting app",
+    "placeholders": {
+      "appName": {
+        "type": "String",
+        "example": "My Browser Extension"
+      }
+    }
+  },
+  "vaultEditApprovalScreenDefaultAppName": "Um app",
+  "@vaultEditApprovalScreenDefaultAppName": {
+    "description": "Fallback app name used when the requesting app name is unknown"
+  },
+  "vaultEditApprovalScreenWifiHint": "Confira se seu celular e computador estão na mesma rede Wi-Fi.",
+  "@vaultEditApprovalScreenWifiHint": {
+    "description": "Hint asking the user to check both devices are on the same Wi-Fi network"
+  },
+  "vaultEditApprovalScreenManualIpHint": "Se a extensão não conseguir encontrar seu celular automaticamente, informe este endereço IP manualmente:",
+  "@vaultEditApprovalScreenManualIpHint": {
+    "description": "Hint shown above the list of manual IP addresses to enter in the extension"
+  },
+  "vaultEditApprovalScreenSiteLabel": "Site",
+  "@vaultEditApprovalScreenSiteLabel": {
+    "description": "Label for the site field of the proposed credential"
+  },
+  "vaultEditApprovalScreenUpdatingEntryLabel": "Atualizando entrada existente",
+  "@vaultEditApprovalScreenUpdatingEntryLabel": {
+    "description": "Label indicating the proposal updates an existing vault entry"
+  },
+  "vaultEditApprovalScreenNewEntryLabel": "Nova entrada",
+  "@vaultEditApprovalScreenNewEntryLabel": {
+    "description": "Label indicating the proposal creates a new vault entry"
+  },
+  "vaultEditApprovalScreenUsernameLabel": "Usuário",
+  "@vaultEditApprovalScreenUsernameLabel": {
+    "description": "Label for the username field of the proposed credential"
+  },
+  "vaultEditApprovalScreenPasswordLabel": "Senha",
+  "@vaultEditApprovalScreenPasswordLabel": {
+    "description": "Label for the password field of the proposed credential"
+  },
+  "vaultEditApprovalScreenPasskeyChip": "+ passkey",
+  "@vaultEditApprovalScreenPasskeyChip": {
+    "description": "Chip label indicating the proposal also includes a passkey"
+  },
+  "vaultEditApprovalScreenApprovalTitle": "{appName} quer salvar {count, plural, one{uma nova credencial} other{{count} novas credenciais}}",
+  "@vaultEditApprovalScreenApprovalTitle": {
+    "description": "Title of the approval screen, singular/plural depending on how many credentials are proposed",
+    "placeholders": {
+      "appName": {
+        "type": "String",
+        "example": "My Browser Extension"
+      },
+      "count": {
+        "type": "num",
+        "format": "compact"
+      }
+    }
+  },
+  "vaultEditApprovalScreenApproveButton": "Aprovar",
+  "@vaultEditApprovalScreenApproveButton": {
+    "description": "Button to approve saving the proposed credential(s)"
+  },
+  "vaultEditApprovalScreenRejectButton": "Rejeitar",
+  "@vaultEditApprovalScreenRejectButton": {
+    "description": "Button to reject the proposed credential(s)"
+  },
+  "vaultEditApprovalScreenDoneMessage": "{count, plural, one{A nova credencial foi salva no seu vault e publicada.} other{As {count} novas credenciais foram salvas no seu vault e publicadas.}}",
+  "@vaultEditApprovalScreenDoneMessage": {
+    "description": "Confirmation message after the credential(s) were saved and published, singular/plural",
+    "placeholders": {
+      "count": {
+        "type": "num",
+        "format": "compact"
+      }
+    }
+  },
+  "vaultEditApprovalScreenSavedTitle": "Salvo",
+  "@vaultEditApprovalScreenSavedTitle": {
+    "description": "Title shown on the success screen after saving the credential(s)"
+  },
+  "vaultEditApprovalScreenDoneButton": "Concluído",
+  "@vaultEditApprovalScreenDoneButton": {
+    "description": "Button to close the success screen"
+  },
+  "vaultEditApprovalScreenTimeoutTitle": "Nada chegou",
+  "@vaultEditApprovalScreenTimeoutTitle": {
+    "description": "Title shown when the request expired without receiving anything"
+  },
+  "vaultEditApprovalScreenTimeoutBody": "A extensão nunca se conectou antes desta solicitação expirar. Confira se os dois dispositivos estão na mesma rede Wi-Fi e tente novamente.",
+  "@vaultEditApprovalScreenTimeoutBody": {
+    "description": "Body explaining the timeout and suggesting to retry"
+  },
+  "vaultEditApprovalScreenBackButton": "Voltar",
+  "@vaultEditApprovalScreenBackButton": {
+    "description": "Button to go back from an error/timeout screen"
+  },
+  "vaultEditApprovalScreenGenericError": "Algo deu errado.",
+  "@vaultEditApprovalScreenGenericError": {
+    "description": "Generic fallback error message"
+  },
+  "vaultEditApprovalScreenTryAgainButton": "Tentar novamente",
+  "@vaultEditApprovalScreenTryAgainButton": {
+    "description": "Button to retry the approval flow after an error"
+  },
+  "vaultProfilesScreenRenameTitle": "Renomear perfil",
+  "@vaultProfilesScreenRenameTitle": {
+    "description": "Title of the rename profile dialog"
+  },
+  "vaultProfilesScreenCancelButton": "Cancelar",
+  "@vaultProfilesScreenCancelButton": {
+    "description": "Cancel button in the rename/delete profile dialogs"
+  },
+  "vaultProfilesScreenRenameButton": "Renomear",
+  "@vaultProfilesScreenRenameButton": {
+    "description": "Confirm button in the rename profile dialog"
+  },
+  "vaultProfilesScreenDeleteTitle": "Excluir perfil?",
+  "@vaultProfilesScreenDeleteTitle": {
+    "description": "Title of the delete profile confirmation dialog"
+  },
+  "vaultProfilesScreenDeleteBody": "\"{name}\" será removido de todas as entradas que o usam.",
+  "@vaultProfilesScreenDeleteBody": {
+    "description": "Body of the delete profile confirmation dialog",
+    "placeholders": {
+      "name": {
+        "type": "String",
+        "example": "Work"
+      }
+    }
+  },
+  "vaultProfilesScreenDeleteButton": "Excluir",
+  "@vaultProfilesScreenDeleteButton": {
+    "description": "Confirm (destructive) button in the delete profile dialog"
+  },
+  "vaultProfilesScreenTitle": "Gerenciar perfis",
+  "@vaultProfilesScreenTitle": {
+    "description": "App bar title of the manage vault profiles screen"
+  },
+  "vaultProfilesScreenIntro": "Crie perfis com o nome que você quiser, e marque cada senha com quantos perfis fizer sentido.",
+  "@vaultProfilesScreenIntro": {
+    "description": "Intro paragraph explaining what profiles are for"
+  },
+  "vaultProfilesScreenEmptyState": "Nenhum perfil criado ainda.",
+  "@vaultProfilesScreenEmptyState": {
+    "description": "Empty state message when no profiles have been created"
+  },
+  "vaultProfilesScreenRenameTooltip": "Renomear",
+  "@vaultProfilesScreenRenameTooltip": {
+    "description": "Tooltip of the rename icon button on a profile row"
+  },
+  "vaultProfilesScreenDeleteTooltip": "Excluir",
+  "@vaultProfilesScreenDeleteTooltip": {
+    "description": "Tooltip of the delete icon button on a profile row"
+  },
+  "vaultProfilesScreenNewNameLabel": "Nome do novo perfil",
+  "@vaultProfilesScreenNewNameLabel": {
+    "description": "Label of the text field to create a new profile"
+  },
+  "vaultProfilesScreenAddButton": "Adicionar",
+  "@vaultProfilesScreenAddButton": {
+    "description": "Button to add a new profile"
+  },
+  "vaultSessionScreenErrorInvalidVersion": "QR inválido: versão do schema não suportada.",
+  "@vaultSessionScreenErrorInvalidVersion": {
+    "description": "Validation error when the scanned QR payload has an unsupported schema version"
+  },
+  "vaultSessionScreenErrorMissingSessionId": "QR inválido: falta o sessionId.",
+  "@vaultSessionScreenErrorMissingSessionId": {
+    "description": "Validation error when the scanned QR payload is missing sessionId"
+  },
+  "vaultSessionScreenErrorMissingEphemeralPubKey": "QR inválido: falta o ephemeralPubKey.",
+  "@vaultSessionScreenErrorMissingEphemeralPubKey": {
+    "description": "Validation error when the scanned QR payload is missing ephemeralPubKey"
+  },
+  "vaultSessionScreenErrorMissingExpiresAt": "QR inválido: falta o expiresAt.",
+  "@vaultSessionScreenErrorMissingExpiresAt": {
+    "description": "Validation error when the scanned QR payload is missing expiresAt"
+  },
+  "vaultSessionScreenErrorExpiredQr": "Este QR code expirou — volte à extensão e escaneie um novo.",
+  "@vaultSessionScreenErrorExpiredQr": {
+    "description": "Error shown when the scanned QR code has already expired"
+  },
+  "vaultSessionScreenErrorSessionExpired": "A sessão expirou antes de enviar — escaneie o QR novamente.",
+  "@vaultSessionScreenErrorSessionExpired": {
+    "description": "Error shown when the session expires right before sending to the extension"
+  },
+  "vaultSessionScreenErrorSendFailed": "Falha ao enviar para a extensão: {error}",
+  "@vaultSessionScreenErrorSendFailed": {
+    "description": "Error shown when sending the vault entries to the extension fails",
+    "placeholders": {
+      "error": {
+        "type": "String",
+        "example": "Connection refused"
+      }
+    }
+  },
+  "vaultSessionScreenTitle": "Sessão da extensão",
+  "@vaultSessionScreenTitle": {
+    "description": "App bar title of the vault-to-extension session screen"
+  },
+  "vaultSessionScreenInfoTitle": "Leitura da extensão do navegador",
+  "@vaultSessionScreenInfoTitle": {
+    "description": "Title of the initial info screen after scanning the extension's QR code"
+  },
+  "vaultSessionScreenInfoBody": "Uma extensão do navegador quer receber parte do seu vault.",
+  "@vaultSessionScreenInfoBody": {
+    "description": "Body explaining that a browser extension wants to receive part of the vault"
+  },
+  "vaultSessionScreenSessionLabel": "Sessão",
+  "@vaultSessionScreenSessionLabel": {
+    "description": "Label for the session id row on the info screen"
+  },
+  "vaultSessionScreenContinueButton": "Continuar",
+  "@vaultSessionScreenContinueButton": {
+    "description": "Button to continue from the info screen to profile selection"
+  },
+  "vaultSessionScreenProfilePickerTitle": "Qual perfil deve ser compartilhado?",
+  "@vaultSessionScreenProfilePickerTitle": {
+    "description": "Title of the profile picker step"
+  },
+  "vaultSessionScreenProfilePickerBody": "Somente entradas marcadas com este perfil serão consideradas.",
+  "@vaultSessionScreenProfilePickerBody": {
+    "description": "Body explaining that only entries tagged with the chosen profile will be shared"
+  },
+  "vaultSessionScreenNoProfiles": "Nenhum perfil criado ainda — crie um pelo app Desktop e sincronize novamente.",
+  "@vaultSessionScreenNoProfiles": {
+    "description": "Message shown when there are no profiles to pick from"
+  },
+  "vaultSessionScreenProfileLabel": "Perfil",
+  "@vaultSessionScreenProfileLabel": {
+    "description": "Label for the selected profile row"
+  },
+  "vaultSessionScreenMatchingEntriesLabel": "Entradas correspondentes",
+  "@vaultSessionScreenMatchingEntriesLabel": {
+    "description": "Label for the count of entries matching the selected profile"
+  },
+  "vaultSessionScreenOfflineNotice": "Offline — mostrando entradas da sua última sincronização.",
+  "@vaultSessionScreenOfflineNotice": {
+    "description": "Notice shown when displaying entries from the last sync while offline"
+  },
+  "vaultSessionScreenSendButton": "Enviar para a extensão",
+  "@vaultSessionScreenSendButton": {
+    "description": "Button to send the matching vault entries to the extension"
+  },
+  "vaultSessionScreenSendingTitle": "Aguardando seu navegador se conectar...",
+  "@vaultSessionScreenSendingTitle": {
+    "description": "Title shown while waiting for the browser extension to connect"
+  },
+  "vaultSessionScreenWifiHint": "Confira se seu celular e computador estão na mesma rede Wi-Fi.",
+  "@vaultSessionScreenWifiHint": {
+    "description": "Hint asking the user to check both devices are on the same Wi-Fi network"
+  },
+  "vaultSessionScreenManualIpHint": "Se seu navegador não conseguir encontrar seu celular automaticamente, informe este endereço IP manualmente:",
+  "@vaultSessionScreenManualIpHint": {
+    "description": "Hint shown above the list of manual IP addresses to enter in the browser"
+  },
+  "vaultSessionScreenSentTitle": "Enviado",
+  "@vaultSessionScreenSentTitle": {
+    "description": "Title shown on the success screen after sending entries to the extension"
+  },
+  "vaultSessionScreenSentBody": "Sua extensão do navegador recebeu as entradas do vault.",
+  "@vaultSessionScreenSentBody": {
+    "description": "Body confirming the extension received the vault entries"
+  },
+  "vaultSessionScreenDeadDropPublished": "Backup dead-drop publicado (IPFS/IPNS).",
+  "@vaultSessionScreenDeadDropPublished": {
+    "description": "Notice that the dead-drop backup was published successfully"
+  },
+  "vaultSessionScreenDeadDropUnavailable": "Backup dead-drop indisponível desta vez.",
+  "@vaultSessionScreenDeadDropUnavailable": {
+    "description": "Notice that the dead-drop backup could not be published this time"
+  },
+  "vaultSessionScreenDoneButton": "Concluído",
+  "@vaultSessionScreenDoneButton": {
+    "description": "Button to close the success screen"
+  },
+  "vaultSessionScreenTimeoutTitle": "Nada chegou",
+  "@vaultSessionScreenTimeoutTitle": {
+    "description": "Title shown when the session expired without the extension connecting"
+  },
+  "vaultSessionScreenTimeoutBody": "Sua extensão do navegador nunca se conectou antes desta sessão expirar. Confira se os dois dispositivos estão na mesma rede Wi-Fi e tente novamente.",
+  "@vaultSessionScreenTimeoutBody": {
+    "description": "Body explaining the timeout and suggesting to retry"
+  },
+  "vaultSessionScreenTryAgainButton": "Tentar novamente",
+  "@vaultSessionScreenTryAgainButton": {
+    "description": "Button to retry sending to the extension after a timeout"
+  },
+  "vaultSessionScreenGenericError": "Algo deu errado.",
+  "@vaultSessionScreenGenericError": {
+    "description": "Generic fallback error message"
+  },
+  "vaultSessionScreenBackButton": "Voltar",
+  "@vaultSessionScreenBackButton": {
+    "description": "Button to go back from an error screen"
+  },
+  "pinningProvidersScreenKuboLocalDefaultName": "Kubo local",
+  "@pinningProvidersScreenKuboLocalDefaultName": {
+    "description": "Default name given to the local Kubo pinning provider when quick-added"
+  },
+  "pinningProvidersScreenTitle": "Provedores de Pinning",
+  "@pinningProvidersScreenTitle": {
+    "description": "App bar title of the pinning providers screen"
+  },
+  "pinningProvidersScreenIntro": "O vault agora publica diretamente no Arweave (veja \"Carteira Arweave\"). Esses provedores ainda são usados apenas para o canal de entrega entre dispositivos (LAN/dead-drop) nas aprovações com a extensão do navegador — eles não fazem mais parte da publicação do vault.",
+  "@pinningProvidersScreenIntro": {
+    "description": "Intro paragraph explaining what pinning providers are used for now"
+  },
+  "pinningProvidersScreenEmptyState": "Nenhum provedor configurado.",
+  "@pinningProvidersScreenEmptyState": {
+    "description": "Empty state message when no pinning providers are configured"
+  },
+  "pinningProvidersScreenAddKuboDefaultButton": "+ Adicionar Kubo local",
+  "@pinningProvidersScreenAddKuboDefaultButton": {
+    "description": "Button to quickly add the default local Kubo provider"
+  },
+  "pinningProvidersScreenTestTooltip": "Testar",
+  "@pinningProvidersScreenTestTooltip": {
+    "description": "Tooltip of the icon button to test a provider's health"
+  },
+  "pinningProvidersScreenRemoveTooltip": "Remover",
+  "@pinningProvidersScreenRemoveTooltip": {
+    "description": "Tooltip of the icon button to remove a provider"
+  },
+  "pinningProvidersScreenAddProviderButton": "+ Adicionar provedor",
+  "@pinningProvidersScreenAddProviderButton": {
+    "description": "Button to open the form for adding a new provider"
+  },
+  "pinningProvidersScreenNameLabel": "Nome",
+  "@pinningProvidersScreenNameLabel": {
+    "description": "Label of the provider name text field"
+  },
+  "pinningProvidersScreenNameHint": "ex: Pinata",
+  "@pinningProvidersScreenNameHint": {
+    "description": "Hint/example text of the provider name field"
+  },
+  "pinningProvidersScreenTypeLabel": "Tipo",
+  "@pinningProvidersScreenTypeLabel": {
+    "description": "Label of the provider type dropdown"
+  },
+  "pinningProvidersScreenKindKuboOption": "kubo — nó IPFS (upload)",
+  "@pinningProvidersScreenKindKuboOption": {
+    "description": "Dropdown option for the kubo provider kind"
+  },
+  "pinningProvidersScreenKindPsaOption": "psa — Pinning Service API",
+  "@pinningProvidersScreenKindPsaOption": {
+    "description": "Dropdown option for the psa provider kind"
+  },
+  "pinningProvidersScreenEndpointUrlLabel": "URL do endpoint",
+  "@pinningProvidersScreenEndpointUrlLabel": {
+    "description": "Label of the endpoint URL text field"
+  },
+  "pinningProvidersScreenEndpointHintKubo": "http://localhost:5001",
+  "@pinningProvidersScreenEndpointHintKubo": {
+    "description": "Example endpoint URL hint shown when the provider kind is kubo"
+  },
+  "pinningProvidersScreenEndpointHintPsa": "https://api.pinata.cloud/psa",
+  "@pinningProvidersScreenEndpointHintPsa": {
+    "description": "Example endpoint URL hint shown when the provider kind is psa"
+  },
+  "pinningProvidersScreenApiKeyOptionalLabel": "Chave de API (opcional)",
+  "@pinningProvidersScreenApiKeyOptionalLabel": {
+    "description": "Label of the API key field when the provider kind is kubo (optional)"
+  },
+  "pinningProvidersScreenApiKeyLabel": "Chave de API",
+  "@pinningProvidersScreenApiKeyLabel": {
+    "description": "Label of the API key field when the provider kind is psa (required)"
+  },
+  "pinningProvidersScreenApiKeyOptionalHint": "deixe em branco para Kubo local",
+  "@pinningProvidersScreenApiKeyOptionalHint": {
+    "description": "Hint of the API key field when the provider kind is kubo"
+  },
+  "pinningProvidersScreenApiKeyHint": "Token Bearer",
+  "@pinningProvidersScreenApiKeyHint": {
+    "description": "Hint of the API key field when the provider kind is psa"
+  },
+  "pinningProvidersScreenAddButton": "Adicionar",
+  "@pinningProvidersScreenAddButton": {
+    "description": "Button to submit the new provider form"
+  },
+  "pinningProvidersScreenCancelButton": "Cancelar",
+  "@pinningProvidersScreenCancelButton": {
+    "description": "Button to cancel adding a new provider"
+  },
+  "settingsScreenTitle": "Configurações",
+  "@settingsScreenTitle": {
+    "description": "App bar title of the settings screen"
+  },
+  "settingsScreenBundlerConfigTitle": "Configuração do Bundler",
+  "@settingsScreenBundlerConfigTitle": {
+    "description": "Section title for the ERC-4337 bundler configuration"
+  },
+  "settingsScreenBundlerConfigIntro": "Seu bundler envia as user operations para a blockchain em seu nome. Você precisa da sua própria chave de API (grátis em pimlico.io) — ou conectar um bundler auto-hospedado.",
+  "@settingsScreenBundlerConfigIntro": {
+    "description": "Intro paragraph explaining what a bundler is"
+  },
+  "settingsScreenApiKeyLabel": "Chave de API da Pimlico",
+  "@settingsScreenApiKeyLabel": {
+    "description": "Label of the bundler API key text field"
+  },
+  "settingsScreenApiKeyHint": "pim_...",
+  "@settingsScreenApiKeyHint": {
+    "description": "Hint/example text of the bundler API key field"
+  },
+  "settingsScreenApiKeyHelper": "Consiga uma chave grátis em dashboard.pimlico.io",
+  "@settingsScreenApiKeyHelper": {
+    "description": "Helper text below the bundler API key field"
+  },
+  "settingsScreenNetworkLabel": "Rede",
+  "@settingsScreenNetworkLabel": {
+    "description": "Label of the network text field"
+  },
+  "settingsScreenNetworkHint": "base",
+  "@settingsScreenNetworkHint": {
+    "description": "Hint/example text of the network field"
+  },
+  "settingsScreenNetworkHelper": "base, base-sepolia, ou URL de bundler personalizada",
+  "@settingsScreenNetworkHelper": {
+    "description": "Helper text below the network field"
+  },
+  "settingsScreenSaveButton": "Salvar",
+  "@settingsScreenSaveButton": {
+    "description": "Button to save the bundler configuration"
+  },
+  "settingsScreenSavedMessage": "Configurações salvas. As alterações valem a partir do próximo login.",
+  "@settingsScreenSavedMessage": {
+    "description": "Confirmation message shown after saving the settings"
+  },
+  "settingsScreenWhyOwnKeyTitle": "Por que preciso da minha própria chave?",
+  "@settingsScreenWhyOwnKeyTitle": {
+    "description": "Title of the explanatory section about needing your own bundler API key"
+  },
+  "settingsScreenWhyOwnKeyBody": "O TruthID é descentralizado — não existe um servidor de empresa pagando suas taxas de blockchain. Sua smart account guarda ETH e paga o bundler diretamente. A chave de API só serve para acessar o nó do bundler.",
+  "@settingsScreenWhyOwnKeyBody": {
+    "description": "Body explaining why the user needs their own bundler API key"
+  },
+  "settingsScreenSocialRecoveryTitle": "Recuperação Social",
+  "@settingsScreenSocialRecoveryTitle": {
+    "description": "Title of the list tile linking to the guardian status screen"
+  },
+  "settingsScreenSocialRecoverySubtitle": "Veja o status dos guardiões e propostas ativas",
+  "@settingsScreenSocialRecoverySubtitle": {
+    "description": "Subtitle of the list tile linking to the guardian status screen"
+  },
+  "settingsScreenSecurityTitle": "Segurança",
+  "@settingsScreenSecurityTitle": {
+    "description": "Title of the list tile linking to the security screen"
+  },
+  "settingsScreenSecuritySubtitle": "Bloqueio do app via biometria ou PIN do dispositivo",
+  "@settingsScreenSecuritySubtitle": {
+    "description": "Subtitle of the list tile linking to the security screen"
+  }
+}
