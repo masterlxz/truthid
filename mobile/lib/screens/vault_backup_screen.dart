@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../services/vault_repository.dart';
 import '../theme.dart';
+import '../l10n/l10n_extensions.dart';
 
 // Backup criptografado exportável do vault inteiro (item 4 do roadmap
 // pós-Fase 14) — mirror do "Backup" no Desktop (VaultBackup.tsx). Cifrado com
@@ -110,16 +111,16 @@ class _VaultBackupScreenState extends State<VaultBackupScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Import backup?'),
-        content: const Text(
-          'This will overwrite your ENTIRE local vault on this device with '
-          'the contents of the backup file. This cannot be undone.',
-        ),
+        title: Text(context.l10n.vaultBackupScreenImportConfirmTitle),
+        content: Text(context.l10n.vaultBackupScreenImportConfirmBody),
         actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(context.l10n.vaultBackupScreenCancelButton)),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('Import', style: TextStyle(color: AppColors.danger)),
+            child: Text(context.l10n.vaultBackupScreenImportConfirmButton,
+                style: const TextStyle(color: AppColors.danger)),
           ),
         ],
       ),
@@ -151,33 +152,33 @@ class _VaultBackupScreenState extends State<VaultBackupScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Backup / restore')),
+      appBar: AppBar(title: Text(context.l10n.vaultBackupScreenTitle)),
       body: Padding(
         padding: const EdgeInsets.all(24),
         child: ListView(
           children: [
-            const Text(
-              'Export or restore the entire vault (passwords, 2FA, passkeys, '
-              'profiles) as a .truthid-backup file. Encrypted with its own '
-              'password, separate from your wallet — keep it safe, it cannot '
-              'be recovered.',
-              style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+            Text(
+              context.l10n.vaultBackupScreenIntro,
+              style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
             ),
             const SizedBox(height: 24),
 
-            const Text('Export', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            Text(context.l10n.vaultBackupScreenExportSectionTitle,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 8),
             TextField(
               controller: _exportPasswordCtrl,
               obscureText: true,
-              decoration: const InputDecoration(labelText: 'Export password'),
+              decoration: InputDecoration(
+                  labelText: context.l10n.vaultBackupScreenExportPasswordLabel),
               onChanged: (_) => setState(() {}),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: _exportPasswordConfirmCtrl,
               obscureText: true,
-              decoration: const InputDecoration(labelText: 'Confirm password'),
+              decoration: InputDecoration(
+                  labelText: context.l10n.vaultBackupScreenConfirmPasswordLabel),
               onChanged: (_) => setState(() {}),
             ),
             if (_exportError != null)
@@ -186,9 +187,10 @@ class _VaultBackupScreenState extends State<VaultBackupScreen> {
                 child: Text(_exportError!, style: const TextStyle(color: AppColors.danger)),
               ),
             if (_exportDone)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: Text('Backup saved ✓', style: TextStyle(color: AppColors.textMuted)),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(context.l10n.vaultBackupScreenExportSuccess,
+                    style: const TextStyle(color: AppColors.textMuted)),
               ),
             const SizedBox(height: 12),
             ElevatedButton(
@@ -197,22 +199,27 @@ class _VaultBackupScreenState extends State<VaultBackupScreen> {
                 backgroundColor: AppColors.accent,
                 foregroundColor: AppColors.background,
               ),
-              child: Text(_exporting ? 'Exporting...' : 'Export backup'),
+              child: Text(_exporting
+                  ? context.l10n.vaultBackupScreenExportingButton
+                  : context.l10n.vaultBackupScreenExportButton),
             ),
 
             const SizedBox(height: 32),
 
-            const Text('Import', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            Text(context.l10n.vaultBackupScreenImportSectionTitle,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
             const SizedBox(height: 8),
             OutlinedButton(
               onPressed: _pickFile,
-              child: Text(_pickedFileName ?? 'Choose .truthid-backup file'),
+              child: Text(_pickedFileName ??
+                  context.l10n.vaultBackupScreenChooseFileButton),
             ),
             const SizedBox(height: 8),
             TextField(
               controller: _importPasswordCtrl,
               obscureText: true,
-              decoration: const InputDecoration(labelText: 'Backup password'),
+              decoration: InputDecoration(
+                  labelText: context.l10n.vaultBackupScreenBackupPasswordLabel),
               onChanged: (_) => setState(() {}),
             ),
             if (_importError != null)
@@ -221,9 +228,10 @@ class _VaultBackupScreenState extends State<VaultBackupScreen> {
                 child: Text(_importError!, style: const TextStyle(color: AppColors.danger)),
               ),
             if (_importDone)
-              const Padding(
-                padding: EdgeInsets.only(top: 8),
-                child: Text('Backup imported ✓', style: TextStyle(color: AppColors.textMuted)),
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(context.l10n.vaultBackupScreenImportSuccess,
+                    style: const TextStyle(color: AppColors.textMuted)),
               ),
             const SizedBox(height: 12),
             OutlinedButton(
@@ -236,7 +244,9 @@ class _VaultBackupScreenState extends State<VaultBackupScreen> {
                 foregroundColor: AppColors.danger,
                 side: const BorderSide(color: AppColors.danger),
               ),
-              child: Text(_importing ? 'Importing...' : 'Import'),
+              child: Text(_importing
+                  ? context.l10n.vaultBackupScreenImportingButton
+                  : context.l10n.vaultBackupScreenImportButton),
             ),
           ],
         ),

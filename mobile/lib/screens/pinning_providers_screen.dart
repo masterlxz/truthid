@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../services/ipfs_pin_client.dart';
 import '../services/pinning_provider_service.dart';
 import '../theme.dart';
+import '../l10n/l10n_extensions.dart';
 
 enum _HealthStatus { idle, checking, ok, error }
 
@@ -103,8 +104,8 @@ class _PinningProvidersScreenState extends State<PinningProvidersScreen> {
   void _handleAddKuboDefault() {
     _saveAll([
       ..._providers,
-      const PinningProvider(
-        name: 'Kubo local',
+      PinningProvider(
+        name: context.l10n.pinningProvidersScreenKuboLocalDefaultName,
         kind: 'kubo',
         endpointUrl: 'http://localhost:5001',
       ),
@@ -136,7 +137,7 @@ class _PinningProvidersScreenState extends State<PinningProvidersScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Pinning Providers')),
+      appBar: AppBar(title: Text(context.l10n.pinningProvidersScreenTitle)),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : SingleChildScrollView(
@@ -144,13 +145,9 @@ class _PinningProvidersScreenState extends State<PinningProvidersScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text(
-                    'The vault itself now publishes directly to Arweave (see '
-                    '"Arweave wallet"). These providers are still used only for '
-                    'the cross-device delivery channel (LAN/dead-drop) for '
-                    'approvals with the browser extension — they are no longer '
-                    'part of publishing the vault.',
-                    style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+                  Text(
+                    context.l10n.pinningProvidersScreenIntro,
+                    style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
                   ),
                   const SizedBox(height: 16),
                   if (_error != null)
@@ -161,12 +158,13 @@ class _PinningProvidersScreenState extends State<PinningProvidersScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const Text('No providers configured.',
-                              style: TextStyle(color: AppColors.textMuted)),
+                          Text(context.l10n.pinningProvidersScreenEmptyState,
+                              style: const TextStyle(color: AppColors.textMuted)),
                           const SizedBox(height: 12),
                           OutlinedButton(
                             onPressed: _handleAddKuboDefault,
-                            child: const Text('+ Add local Kubo'),
+                            child: Text(context.l10n
+                                .pinningProvidersScreenAddKuboDefaultButton),
                           ),
                         ],
                       ),
@@ -180,6 +178,10 @@ class _PinningProvidersScreenState extends State<PinningProvidersScreen> {
                         margin: const EdgeInsets.only(bottom: 8),
                         child: ListTile(
                           title: Text(p.name),
+                          // kind (enum técnico 'kubo'/'psa') e endpointUrl (URL)
+                          // são dado dinâmico/técnico, não texto de UI — não
+                          // localizados. O separador '·' também não carrega
+                          // conteúdo linguístico.
                           subtitle: Text('${p.kind} · ${p.endpointUrl}'),
                           leading: switch (status) {
                             _HealthStatus.ok => const Icon(Icons.check_circle, color: AppColors.success),
@@ -194,14 +196,14 @@ class _PinningProvidersScreenState extends State<PinningProvidersScreen> {
                             children: [
                               IconButton(
                                 icon: const Icon(Icons.refresh),
-                                tooltip: 'Test',
+                                tooltip: context.l10n.pinningProvidersScreenTestTooltip,
                                 onPressed: status == _HealthStatus.checking
                                     ? null
                                     : () => _handleCheck(i),
                               ),
                               IconButton(
                                 icon: const Icon(Icons.delete_outline, color: AppColors.danger),
-                                tooltip: 'Remove',
+                                tooltip: context.l10n.pinningProvidersScreenRemoveTooltip,
                                 onPressed: () => _handleRemove(i),
                               ),
                             ],
@@ -213,7 +215,7 @@ class _PinningProvidersScreenState extends State<PinningProvidersScreen> {
                   if (!_addOpen)
                     OutlinedButton(
                       onPressed: () => setState(() => _addOpen = true),
-                      child: const Text('+ Add provider'),
+                      child: Text(context.l10n.pinningProvidersScreenAddProviderButton),
                     )
                   else
                     Column(
@@ -221,16 +223,25 @@ class _PinningProvidersScreenState extends State<PinningProvidersScreen> {
                       children: [
                         TextField(
                           controller: _nameCtrl,
-                          decoration: const InputDecoration(labelText: 'Name', hintText: 'e.g. Pinata'),
+                          decoration: InputDecoration(
+                              labelText: context.l10n.pinningProvidersScreenNameLabel,
+                              hintText: context.l10n.pinningProvidersScreenNameHint),
                           onChanged: (_) => setState(() {}),
                         ),
                         const SizedBox(height: 12),
                         DropdownButtonFormField<String>(
                           initialValue: _kind,
-                          decoration: const InputDecoration(labelText: 'Type'),
-                          items: const [
-                            DropdownMenuItem(value: 'kubo', child: Text('kubo — IPFS node (upload)')),
-                            DropdownMenuItem(value: 'psa', child: Text('psa — Pinning Service API')),
+                          decoration: InputDecoration(
+                              labelText: context.l10n.pinningProvidersScreenTypeLabel),
+                          items: [
+                            DropdownMenuItem(
+                                value: 'kubo',
+                                child: Text(context.l10n
+                                    .pinningProvidersScreenKindKuboOption)),
+                            DropdownMenuItem(
+                                value: 'psa',
+                                child: Text(context.l10n
+                                    .pinningProvidersScreenKindPsaOption)),
                           ],
                           onChanged: (v) => setState(() => _kind = v ?? 'kubo'),
                         ),
@@ -238,10 +249,13 @@ class _PinningProvidersScreenState extends State<PinningProvidersScreen> {
                         TextField(
                           controller: _endpointCtrl,
                           decoration: InputDecoration(
-                            labelText: 'Endpoint URL',
+                            labelText:
+                                context.l10n.pinningProvidersScreenEndpointUrlLabel,
                             hintText: _kind == 'kubo'
-                                ? 'http://localhost:5001'
-                                : 'https://api.pinata.cloud/psa',
+                                ? context.l10n
+                                    .pinningProvidersScreenEndpointHintKubo
+                                : context.l10n
+                                    .pinningProvidersScreenEndpointHintPsa,
                           ),
                           onChanged: (_) => setState(() {}),
                         ),
@@ -250,8 +264,14 @@ class _PinningProvidersScreenState extends State<PinningProvidersScreen> {
                           controller: _apiKeyCtrl,
                           obscureText: !_showKey,
                           decoration: InputDecoration(
-                            labelText: _kind == 'kubo' ? 'API key (optional)' : 'API key',
-                            hintText: _kind == 'kubo' ? 'leave empty for local Kubo' : 'Bearer token',
+                            labelText: _kind == 'kubo'
+                                ? context.l10n
+                                    .pinningProvidersScreenApiKeyOptionalLabel
+                                : context.l10n.pinningProvidersScreenApiKeyLabel,
+                            hintText: _kind == 'kubo'
+                                ? context.l10n
+                                    .pinningProvidersScreenApiKeyOptionalHint
+                                : context.l10n.pinningProvidersScreenApiKeyHint,
                             suffixIcon: IconButton(
                               icon: Icon(_showKey ? Icons.visibility_off : Icons.visibility),
                               onPressed: () => setState(() => _showKey = !_showKey),
@@ -269,14 +289,16 @@ class _PinningProvidersScreenState extends State<PinningProvidersScreen> {
                                   backgroundColor: AppColors.accent,
                                   foregroundColor: AppColors.background,
                                 ),
-                                child: const Text('Add'),
+                                child: Text(
+                                    context.l10n.pinningProvidersScreenAddButton),
                               ),
                             ),
                             const SizedBox(width: 8),
                             Expanded(
                               child: OutlinedButton(
                                 onPressed: () => setState(() { _addOpen = false; _showKey = false; }),
-                                child: const Text('Cancel'),
+                                child: Text(context.l10n
+                                    .pinningProvidersScreenCancelButton),
                               ),
                             ),
                           ],
