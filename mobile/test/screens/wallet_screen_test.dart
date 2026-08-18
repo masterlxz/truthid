@@ -14,6 +14,8 @@ import 'package:truthid_mobile/services/local_storage_service.dart';
 import 'package:truthid_mobile/services/session_creator.dart';
 import 'package:truthid_mobile/services/smart_account_activity_scanner.dart';
 
+import '../utils/l10n_test_app.dart';
+
 class MockBlockchainService extends Mock implements BlockchainService {}
 
 class MockLocalStorageService extends Mock implements LocalStorageService {}
@@ -94,8 +96,8 @@ void main() {
   });
 
   Widget buildScreen() {
-    return MaterialApp(
-      home: Scaffold(
+    return wrapForTest(
+      Scaffold(
         body: WalletScreen(
           blockchainService: mockBlockchain,
           localStorageService: mockStorage,

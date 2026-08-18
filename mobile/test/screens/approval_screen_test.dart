@@ -11,6 +11,8 @@ import 'package:truthid_mobile/services/device_key_service.dart';
 import 'package:truthid_mobile/services/local_storage_service.dart';
 import 'package:truthid_mobile/services/session_creator.dart';
 
+import '../utils/l10n_test_app.dart';
+
 class MockDeviceKeyService extends Mock implements DeviceKeyService {}
 
 class MockBlockchainService extends Mock implements BlockchainService {}
@@ -73,8 +75,8 @@ void main() {
   });
 
   Widget buildScreen(Map<String, dynamic> payload) {
-    return MaterialApp(
-      home: ApprovalScreen(
+    return wrapForTest(
+      ApprovalScreen(
         payload: payload,
         keyService: mockKeyService,
         blockchainService: mockBlockchainService,

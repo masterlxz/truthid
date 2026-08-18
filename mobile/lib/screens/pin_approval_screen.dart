@@ -106,6 +106,12 @@ class _PinApprovalScreenState extends State<PinApprovalScreen> {
   late final ArweaveVaultPublisher _arweavePublisher;
   ResultDeliveryChannel? _deliveryChannel;
 
+  // `_validatePayload` usa `context.l10n`, que só fica disponível a partir
+  // de `didChangeDependencies()` (chamá-lo direto em `initState()` derruba
+  // um assert do framework). Guardado por `_initialized` pra rodar só uma
+  // vez, já que `didChangeDependencies()` pode re-disparar depois.
+  bool _initialized = false;
+
   @override
   void initState() {
     super.initState();
@@ -115,6 +121,13 @@ class _PinApprovalScreenState extends State<PinApprovalScreen> {
     _pinningProviderService =
         widget.pinningProviderService ?? PinningProviderService();
     _arweavePublisher = widget.arweavePublisher ?? ArweaveVaultPublisher();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
 
     final validationError = _validatePayload();
     if (validationError != null) {

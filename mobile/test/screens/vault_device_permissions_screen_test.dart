@@ -6,6 +6,8 @@ import 'package:truthid_mobile/screens/vault_device_permissions_screen.dart';
 import 'package:truthid_mobile/services/blockchain_service.dart';
 import 'package:truthid_mobile/services/vault_repository.dart';
 
+import '../utils/l10n_test_app.dart';
+
 // Mesma razão de vault_profiles_screen_test.dart: VaultRepository faz I/O
 // real de arquivo, que nunca resolve dentro da zona FakeAsync de um widget
 // test — sempre mockado nos testes de tela.
@@ -25,8 +27,8 @@ void main() {
     blockchain = MockBlockchainService();
   });
 
-  Widget buildScreen() => MaterialApp(
-        home: VaultDevicePermissionsScreen(
+  Widget buildScreen() => wrapForTest(
+        VaultDevicePermissionsScreen(
           identityId: '1',
           repository: repo,
           blockchainService: blockchain,

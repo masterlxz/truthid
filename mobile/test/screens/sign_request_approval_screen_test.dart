@@ -17,6 +17,8 @@ import 'package:truthid_mobile/services/remote_signer_lan_server.dart';
 import 'package:truthid_mobile/services/result_delivery_channel.dart';
 import 'package:truthid_mobile/services/session_creator.dart';
 
+import '../utils/l10n_test_app.dart';
+
 class MockBlockchainService extends Mock implements BlockchainService {}
 
 class MockLocalStorageService extends Mock implements LocalStorageService {}
@@ -126,8 +128,8 @@ void main() {
   });
 
   Widget buildScreen(Map<String, dynamic> payload) {
-    return MaterialApp(
-      home: SignRequestApprovalScreen(
+    return wrapForTest(
+      SignRequestApprovalScreen(
         payload: payload,
         sessionCreator: mockSessionCreator,
         blockchainService: mockBlockchain,
@@ -483,8 +485,8 @@ void main() {
       Map<String, dynamic> payload, {
       MockResultDeliveryChannel? deliveryChannel,
     }) {
-      return MaterialApp(
-        home: SignRequestApprovalScreen(
+      return wrapForTest(
+        SignRequestApprovalScreen(
           payload: payload,
           sessionCreator: mockSessionCreator,
           blockchainService: mockBlockchain,

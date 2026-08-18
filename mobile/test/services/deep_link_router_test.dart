@@ -4,6 +4,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:truthid_mobile/services/app_lock_service.dart';
 import 'package:truthid_mobile/services/deep_link_router.dart';
 
+import '../utils/l10n_test_app.dart';
+
 void main() {
   // Desbloqueado por padrão nos testes existentes, que não se importam com
   // o gate de app-lock (débito M1) — sem isso, o default fail-safe `true`
@@ -29,8 +31,8 @@ void main() {
     Map<String, dynamic> payload,
   ) async {
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
+      wrapForTest(
+        Scaffold(
           body: Builder(
             builder: (context) => ElevatedButton(
               onPressed: () => DeepLinkRouter.handlePayload(context, payload),

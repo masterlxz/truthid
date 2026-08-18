@@ -50,11 +50,28 @@ class _AutofillSystemFillScreenState extends State<AutofillSystemFillScreen> {
   late final VaultRepository _repository;
   late final AutofillBridgeService _bridge;
 
+  // `_load()` pode acabar chamando `context.l10n` no bloco catch (erro
+  // síncrono do repositório mockado, sem nenhum `await` real antes) — como
+  // isso roda dentro da mesma pilha síncrona de `initState()`, dispara o
+  // assert do framework contra dependência de InheritedWidget antes de
+  // `initState()` completar. Disparado em `didChangeDependencies()` (que já
+  // tem a dependência disponível), guardado por `_initialized` pra rodar só
+  // uma vez.
+  bool _initialized = false;
+
   @override
   void initState() {
     super.initState();
     _repository = widget.repository ?? VaultRepository();
     _bridge = widget.bridge ?? AutofillBridgeService();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
+
     _status = _Status.loading;
     unawaited(_load());
   }

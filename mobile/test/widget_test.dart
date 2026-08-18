@@ -1,4 +1,3 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:truthid_mobile/main.dart';
@@ -6,6 +5,8 @@ import 'package:truthid_mobile/screens/devices_screen.dart';
 import 'package:truthid_mobile/screens/sessions_screen.dart';
 import 'package:truthid_mobile/screens/vault_screen.dart';
 import 'package:truthid_mobile/screens/wallet_screen.dart';
+
+import 'utils/l10n_test_app.dart';
 
 void main() {
   testWidgets('App renders the root screen with all tabs', (WidgetTester tester) async {
@@ -27,7 +28,7 @@ void main() {
     // tap abaixo, e esperar isso resolver (pumpAndSettle) trava a suíte
     // porque DevicesScreen já dispara chamadas de rede reais que nunca
     // completam em ambiente de teste sandboxed.
-    await tester.pumpWidget(const MaterialApp(home: RootScreen()));
+    await tester.pumpWidget(wrapForTest(const RootScreen()));
 
     expect(find.byType(DevicesScreen), findsOneWidget);
     expect(find.byType(SessionsScreen), findsNothing);

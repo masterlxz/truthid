@@ -16,6 +16,8 @@ import 'package:truthid_mobile/services/vault_edit_dead_drop_polling_service.dar
 import 'package:truthid_mobile/services/vault_publish_service.dart';
 import 'package:truthid_mobile/services/vault_repository.dart';
 
+import '../utils/l10n_test_app.dart';
+
 class MockRemoteSignerLanServer extends Mock
     implements RemoteSignerLanServer {}
 
@@ -143,8 +145,8 @@ void main() {
   });
 
   Widget buildScreen(Map<String, dynamic> payload) {
-    return MaterialApp(
-      home: Navigator(
+    return wrapForTest(
+      Navigator(
         onGenerateRoute: (settings) => MaterialPageRoute(
           builder: (context) => Scaffold(
             body: Center(

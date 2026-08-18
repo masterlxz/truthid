@@ -6,6 +6,8 @@ import 'package:truthid_mobile/screens/autofill_address_approval_screen.dart';
 import 'package:truthid_mobile/services/result_delivery_channel.dart';
 import 'package:truthid_mobile/services/vault_repository.dart';
 
+import '../utils/l10n_test_app.dart';
+
 class MockVaultRepository extends Mock implements VaultRepository {}
 
 class MockResultDeliveryChannel extends Mock
@@ -81,8 +83,8 @@ void main() {
   });
 
   Widget buildScreen(Map<String, dynamic> payload) {
-    return MaterialApp(
-      home: AutofillAddressApprovalScreen(
+    return wrapForTest(
+      AutofillAddressApprovalScreen(
         payload: payload,
         repository: mockRepository,
         deliveryChannel: mockDelivery,

@@ -9,6 +9,8 @@ import 'package:mocktail/mocktail.dart';
 import 'package:truthid_mobile/main.dart';
 import 'package:truthid_mobile/services/app_lock_service.dart';
 
+import '../utils/l10n_test_app.dart';
+
 class MockFlutterSecureStorage extends Mock implements FlutterSecureStorage {}
 
 class MockLocalAuthentication extends Mock implements LocalAuthentication {}
@@ -45,7 +47,7 @@ void main() {
         )).thenAnswer((_) => authCompleter.future);
 
     final service = AppLockService(storage: mockStorage, localAuth: mockAuth);
-    await tester.pumpWidget(MaterialApp(home: AppLockGate(lockService: service)));
+    await tester.pumpWidget(wrapForTest(AppLockGate(lockService: service)));
     await tester.pump();
 
     expect(AppLockService.isLockedNotifier.value, isTrue);
@@ -66,7 +68,7 @@ void main() {
         .thenAnswer((_) async => null);
 
     final service = AppLockService(storage: mockStorage, localAuth: mockAuth);
-    await tester.pumpWidget(MaterialApp(home: AppLockGate(lockService: service)));
+    await tester.pumpWidget(wrapForTest(AppLockGate(lockService: service)));
     await tester.pump();
 
     expect(AppLockService.isLockedNotifier.value, isFalse);
@@ -83,7 +85,7 @@ void main() {
         .thenAnswer((_) async => null);
 
     final service = AppLockService(storage: mockStorage, localAuth: mockAuth);
-    await tester.pumpWidget(MaterialApp(home: AppLockGate(lockService: service)));
+    await tester.pumpWidget(wrapForTest(AppLockGate(lockService: service)));
     await tester.pump();
 
     expect(AppLockService.requestAuthentication, isNotNull);

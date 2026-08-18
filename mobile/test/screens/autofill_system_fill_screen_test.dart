@@ -6,6 +6,8 @@ import 'package:truthid_mobile/screens/autofill_system_fill_screen.dart';
 import 'package:truthid_mobile/services/autofill_bridge_service.dart';
 import 'package:truthid_mobile/services/vault_repository.dart';
 
+import '../utils/l10n_test_app.dart';
+
 class MockVaultRepository extends Mock implements VaultRepository {}
 
 class MockAutofillBridgeService extends Mock implements AutofillBridgeService {}
@@ -37,8 +39,8 @@ void main() {
   });
 
   Widget buildScreen(String entryType) {
-    return MaterialApp(
-      home: AutofillSystemFillScreen(
+    return wrapForTest(
+      AutofillSystemFillScreen(
         entryType: entryType,
         requestingPackage: 'com.example.app',
         repository: mockRepository,

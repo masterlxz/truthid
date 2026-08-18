@@ -88,6 +88,12 @@ class _AutofillAddressApprovalScreenState
   late final PinningProviderService _pinningProviderService;
   ResultDeliveryChannel? _deliveryChannel;
 
+  // `_validatePayload` usa `context.l10n`, que só fica disponível a partir
+  // de `didChangeDependencies()` (chamá-lo direto em `initState()` derruba
+  // um assert do framework). Guardado por `_initialized` pra rodar só uma
+  // vez, já que `didChangeDependencies()` pode re-disparar depois.
+  bool _initialized = false;
+
   @override
   void initState() {
     super.initState();
@@ -97,6 +103,13 @@ class _AutofillAddressApprovalScreenState
     _ipfsPinClient = widget.ipfsPinClient ?? IpfsPinClient();
     _pinningProviderService =
         widget.pinningProviderService ?? PinningProviderService();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
 
     final validationError = _validatePayload();
     if (validationError != null) {

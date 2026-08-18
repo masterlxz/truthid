@@ -5,6 +5,8 @@ import 'package:mocktail/mocktail.dart';
 import 'package:truthid_mobile/screens/vault_entry_form_screen.dart';
 import 'package:truthid_mobile/services/vault_repository.dart';
 
+import '../utils/l10n_test_app.dart';
+
 // Repositório mockado, não real — VaultRepository faz I/O real de arquivo,
 // que nunca resolve num widget test (mesmo motivo documentado em
 // vault_entry_detail_screen_test.dart, achado na Sessão 98). O CRUD real já
@@ -41,8 +43,8 @@ void main() {
     when(() => repo.listProfileNames()).thenAnswer((_) async => <String>[]);
   });
 
-  Widget buildScreen({VaultEntry? entry}) => MaterialApp(
-        home: VaultEntryFormScreen(entry: entry, repository: repo),
+  Widget buildScreen({VaultEntry? entry}) => wrapForTest(
+        VaultEntryFormScreen(entry: entry, repository: repo),
       );
 
   ElevatedButton saveButton(WidgetTester tester) =>

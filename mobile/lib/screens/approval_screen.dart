@@ -81,6 +81,14 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
   late final LocalStorageService _localStorageService;
   late final BundlerConfigService _bundlerConfigService;
 
+  // `_validatePayload` usa `context.l10n`, que depende de um InheritedWidget
+  // só disponível a partir de `didChangeDependencies()` — chamá-lo direto em
+  // `initState()` derruba um assert do framework (dependOnInheritedElement
+  // antes de initState() completar). Por isso a validação roda em
+  // `didChangeDependencies()`, guardada por `_initialized` pra rodar só uma
+  // vez (senão repetiria a cada mudança de dependência herdada).
+  bool _initialized = false;
+
   @override
   void initState() {
     super.initState();
@@ -93,6 +101,13 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
     // Caso contrario, constroi sob demanda em _approve() lendo a config
     // do bundler do secure storage (debito #27).
     _sessionCreator = widget.sessionCreator;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
 
     final callbackUrl = widget.payload['callbackUrl'] as String?;
     final challenge = widget.payload['challenge'] as Map<String, dynamic>?;

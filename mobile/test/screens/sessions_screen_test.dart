@@ -13,6 +13,8 @@ import 'package:truthid_mobile/services/device_key_service.dart';
 import 'package:truthid_mobile/services/local_storage_service.dart';
 import 'package:truthid_mobile/services/session_creator.dart';
 
+import '../utils/l10n_test_app.dart';
+
 class MockBlockchainService extends Mock implements BlockchainService {}
 
 class MockLocalStorageService extends Mock implements LocalStorageService {}
@@ -85,11 +87,11 @@ void main() {
   });
 
   Widget buildScreen() {
-    return MaterialApp(
-      // Na app real, SessionsScreen vive dentro do Scaffold/IndexedStack de
-      // RootScreen (main.dart) — o Scaffold aqui reproduz isso pra que
-      // ScaffoldMessenger.of(context) (usado pelo snackbar de erro) funcione.
-      home: Scaffold(
+    // Na app real, SessionsScreen vive dentro do Scaffold/IndexedStack de
+    // RootScreen (main.dart) — o Scaffold aqui reproduz isso pra que
+    // ScaffoldMessenger.of(context) (usado pelo snackbar de erro) funcione.
+    return wrapForTest(
+      Scaffold(
         body: SessionsScreen(
           blockchainService: mockBlockchain,
           localStorageService: mockStorage,

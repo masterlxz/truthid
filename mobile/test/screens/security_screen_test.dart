@@ -5,13 +5,15 @@ import 'package:mocktail/mocktail.dart';
 import 'package:truthid_mobile/screens/security_screen.dart';
 import 'package:truthid_mobile/services/app_lock_service.dart';
 
+import '../utils/l10n_test_app.dart';
+
 class MockAppLockService extends Mock implements AppLockService {}
 
 void main() {
   late MockAppLockService mockService;
 
   Widget buildScreen() =>
-      MaterialApp(home: SecurityScreen(lockService: mockService));
+      wrapForTest(SecurityScreen(lockService: mockService));
 
   setUp(() {
     mockService = MockAppLockService();

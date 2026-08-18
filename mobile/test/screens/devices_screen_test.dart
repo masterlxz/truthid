@@ -7,6 +7,8 @@ import 'package:truthid_mobile/services/blockchain_service.dart';
 import 'package:truthid_mobile/services/device_key_service.dart';
 import 'package:truthid_mobile/services/local_storage_service.dart';
 
+import '../utils/l10n_test_app.dart';
+
 class MockBlockchainService extends Mock implements BlockchainService {}
 
 class MockLocalStorageService extends Mock implements LocalStorageService {}
@@ -34,8 +36,8 @@ void main() {
   });
 
   Widget buildScreen() {
-    return MaterialApp(
-      home: Scaffold(
+    return wrapForTest(
+      Scaffold(
         body: DevicesScreen(
           blockchainService: mockBlockchain,
           localStorageService: mockStorage,

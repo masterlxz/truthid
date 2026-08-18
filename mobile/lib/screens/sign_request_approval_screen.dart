@@ -150,6 +150,12 @@ class _SignRequestApprovalScreenState
   late final PinningProviderService _pinningProviderService;
   ResultDeliveryChannel? _deliveryChannel;
 
+  // `_validatePayload` usa `context.l10n`, que só fica disponível a partir
+  // de `didChangeDependencies()` (chamá-lo direto em `initState()` derruba
+  // um assert do framework). Guardado por `_initialized` pra rodar só uma
+  // vez, já que `didChangeDependencies()` pode re-disparar depois.
+  bool _initialized = false;
+
   @override
   void initState() {
     super.initState();
@@ -164,6 +170,13 @@ class _SignRequestApprovalScreenState
     _pinningProviderService =
         widget.pinningProviderService ?? PinningProviderService();
     _sessionCreator = widget.sessionCreator;
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
 
     final invalid = _validatePayload();
     if (invalid != null) {

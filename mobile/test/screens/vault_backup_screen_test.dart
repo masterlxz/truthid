@@ -7,6 +7,8 @@ import 'package:mocktail/mocktail.dart';
 import 'package:truthid_mobile/screens/vault_backup_screen.dart';
 import 'package:truthid_mobile/services/vault_repository.dart';
 
+import '../utils/l10n_test_app.dart';
+
 // Repositório mockado, mesmo padrão de vault_profiles_screen_test.dart —
 // VaultRepository faz I/O real de arquivo, que nunca resolve dentro da zona
 // FakeAsync de um widget test.
@@ -30,7 +32,7 @@ void main() {
     repo = MockVaultRepository();
   });
 
-  Widget buildScreen() => MaterialApp(home: VaultBackupScreen(repository: repo));
+  Widget buildScreen() => wrapForTest(VaultBackupScreen(repository: repo));
 
   // A tela usa um ListView (export + import numa coluna comprida) — o
   // conteúdo abaixo da dobra não é montado no viewport padrão de teste

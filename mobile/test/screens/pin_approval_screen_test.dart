@@ -14,6 +14,8 @@ import 'package:truthid_mobile/services/pinning_provider_service.dart';
 import 'package:truthid_mobile/services/remote_signer_lan_server.dart';
 import 'package:truthid_mobile/services/result_delivery_channel.dart';
 
+import '../utils/l10n_test_app.dart';
+
 class MockEciesService extends Mock implements EciesService {}
 
 class MockRemoteSignerLanServer extends Mock
@@ -78,8 +80,8 @@ void main() {
   });
 
   Widget buildScreen(Map<String, dynamic> payload) {
-    return MaterialApp(
-      home: PinApprovalScreen(
+    return wrapForTest(
+      PinApprovalScreen(
         payload: payload,
         eciesService: mockEcies,
         lanServer: mockLanServer,

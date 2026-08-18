@@ -5,6 +5,8 @@ import 'package:mocktail/mocktail.dart';
 import 'package:truthid_mobile/screens/vault_entry_detail_screen.dart';
 import 'package:truthid_mobile/services/vault_repository.dart';
 
+import '../utils/l10n_test_app.dart';
+
 // Repositório mockado, não real — VaultRepository faz I/O real de arquivo
 // (dart:io), que nunca resolve dentro da zona FakeAsync de um widget test
 // (achado da Sessão 98, validação manual dos testes escritos na Sessão 97:
@@ -26,8 +28,8 @@ void main() {
   );
 
   Widget buildScreen({bool canWrite = false, VaultRepository? repository}) =>
-      MaterialApp(
-        home: VaultEntryDetailScreen(
+      wrapForTest(
+        VaultEntryDetailScreen(
           entry: entry,
           canWrite: canWrite,
           repository: repository,
@@ -90,8 +92,8 @@ void main() {
       final repo = MockVaultRepository();
       when(() => repo.deleteEntry(entry.id)).thenAnswer((_) async {});
 
-      await tester.pumpWidget(MaterialApp(
-        home: VaultEntryDetailScreen(entry: entry, canWrite: true, repository: repo),
+      await tester.pumpWidget(wrapForTest(
+        VaultEntryDetailScreen(entry: entry, canWrite: true, repository: repo),
       ));
 
       await tester.tap(find.byIcon(Icons.delete_outline));
