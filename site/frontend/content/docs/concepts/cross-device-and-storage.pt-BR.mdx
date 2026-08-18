@@ -1,0 +1,43 @@
+---
+title: Cross-Device e Armazenamento
+description: "Como os dispositivos se alcançam sem um servidor, como funciona a assinatura delegada, e como o vault é armazenado permanentemente no Arweave."
+---
+
+Dois problemas diferentes, cobertos juntos porque compartilham os mesmos transportes subjacentes: fazer um dos seus próprios dispositivos conversar com outro (cross-device), e fazer um pedaço de dado (o vault, um documento) persistir em algum lugar permanente (armazenamento).
+
+## Transporte cross-device: LAN + dead-drop [#cross-device-transport-lan--dead-drop]
+
+Quando o app mobile precisa responder a uma requisição de outro dispositivo — a extensão de navegador buscando uma credencial, outro dispositivo solicitando uma assinatura — ele usa dois canais **ao mesmo tempo**, não um como fallback do outro:
+
+- **LAN (caminho rápido)** — o dispositivo que responde roda um pequeno servidor HTTP local para exatamente uma requisição, e o solicitante varre a rede local em busca dele. Rápido quando funciona, mas exige que os dois dispositivos estejam na mesma rede e alcançáveis — o que falha silenciosamente em algumas redes (Wi-Fi corporativo com isolamento de cliente, algumas configurações de VPN) ou em navegadores com APIs de rede local restritas (veja [Extensão de Navegador → Brave](/docs/apps/extension#brave) para um exemplo concreto).
+- **Dead-drop (fallback de melhor esforço)** — o mesmo conteúdo, cifrado, enviado ao IPFS e publicado sob um nome IPNS de vida curta (um ponteiro mutável, diferente de um CID IPFS normal) embutido no QR code que o solicitante escaneou. Como ele roda em paralelo em vez de só entrar em ação depois que a LAN expira, o canal que responder primeiro vence — você não espera um timeout completo de LAN antes de recorrer ao fallback.
+
+O dead-drop é mantido deliberadamente no IPFS/IPNS de forma permanente, mesmo depois que o próprio armazenamento permanente do vault migrou para o Arweave (abaixo) — o Arweave não tem o conceito de um ponteiro mutável de TTL curto, que é exatamente o que uma entrega efêmera e única precisa, e CIDs IPFS normais também não podem ser atualizados no lugar. Trabalho diferente, ferramenta diferente, de propósito.
+
+## Assinatura delegada (incluindo apps de terceiros) [#delegated-signing-including-third-party-apps]
+
+Um dispositivo — desktop ou mobile — pode agir a partir de uma requisição de outra parte sem que essa parte jamais detenha suas chaves:
+
+- **Assinar uma mensagem** — assinar dados arbitrários com a chave do dispositivo, sem efeito on-chain.
+- **Assinar e executar** — assinar *e* submeter uma `UserOperation` através da smart account via um bundler, para uma ação on-chain de fato.
+- **Fixar/publicar (pin)** (`POST /truthid/v1/pin`) — deixar um app de terceiros publicar conteúdo de forma permanente usando seu próprio armazenamento já configurado, sem que esse app precise de sua própria configuração de armazenamento/pinning. Isso é voltado para outros apps que você usa e que querem armazenar algo em seu nome, usando sua identidade em vez da própria infraestrutura deles.
+
+Todos os três mostram uma tela de aprovação nomeando o app solicitante antes que qualquer coisa aconteça — o mesmo princípio da verificação de origem durante o login (veja [Como o TruthID Funciona → Fazendo login](/docs/concepts/how-it-works#logging-in)). Cada requisição individual recebe sua própria aprovação, tanto no desktop quanto no mobile — não há autorização persistente por app nem cota que permita a um app confiável pular o prompt em uma chamada posterior.
+
+A rota ainda se chama `/truthid/v1/pin` e o campo nas respostas ainda se chama `cid`, por compatibilidade retroativa com apps já integrados a ela — mas, a partir da migração para o Arweave abaixo, o que de fato é publicado é Arweave, não IPFS. Não leia o nome ao pé da letra.
+
+## Armazenamento permanente: Arweave
+
+O blob cifrado do vault e quaisquer documentos nele precisam viver em algum lugar permanente que não dependa de nenhum dispositivo específico estar online. Isso costumava ser o IPFS (via um serviço de pinning), e agora é o Arweave — uma rede de pagamento único e armazenamento permanente, acessada por um cliente escrito à mão (sem dependência de SDK de terceiros) que tanto o app desktop (Rust) quanto o mobile (Dart) implementam com o mesmo protocolo de rede.
+
+O campo de ponteiro on-chain do `VaultRegistry` ainda se chama literalmente `cid` (veja [Contratos Inteligentes → VaultRegistry](/docs/contracts#vaultregistry)) — um resquício de quando ele sempre continha um CID do IPFS. Desde a migração, o valor `cid` de um vault recém-publicado é algo como `ar://<arweave-transaction-id>`; ambos os apps verificam esse prefixo e buscam em um gateway do Arweave quando o encontram, recorrendo a um gateway do IPFS para o formato de CID puro que vaults mais antigos ainda podem ter.
+
+<Callout title="Ressalva conhecida: vaults antigos e o onboarding de novos dispositivos" type="warn">
+Uma identidade cujo vault não foi *republicado* desde a migração para o Arweave ainda aponta para o CID antigo do IPFS — e a infraestrutura de pinning dedicada que costumava manter CIDs antigos alcançáveis já foi desativada, então parear um dispositivo totalmente novo a essa identidade pode falhar ao buscar o vault (gateways públicos do IPFS expiram em conteúdo não fixado). Isso não é perda de dados — qualquer dispositivo que já tinha o vault em cache ainda o tem — mas ainda não há um fallback automático. Se você está pareando um dispositivo novo e ele não consegue encontrar seu vault, publique uma atualização recente a partir de um dispositivo que já o tenha (qualquer edição do vault republica no Arweave) antes de parear novamente.
+</Callout>
+
+## Próximos passos
+
+- [TruthID Vault](/docs/concepts/vault) — o que de fato é armazenado e cifrado
+- [Extensão de Navegador](/docs/apps/extension) — o principal consumidor do transporte LAN/dead-drop
+- [Contratos Inteligentes → VaultRegistry](/docs/contracts#vaultregistry) — o ponteiro on-chain, por completo

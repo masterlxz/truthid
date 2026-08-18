@@ -1,0 +1,310 @@
+---
+title: SDK Python
+description: "Referência completa da API para truthid-sdk no PyPI."
+---
+
+Referência completa da API para [`truthid-sdk`](https://pypi.org/project/truthid-sdk/) no PyPI. Novo no TruthID? Comece pelo [Guia rápido](/docs/quickstart) — esta página é a referência detalhada de cada método e tipo, para quando você estiver integrando de verdade.
+
+## Instalação
+
+```bash
+pip install truthid-sdk
+```
+
+Requer Python 3.10+.
+
+## `TruthIDClient`
+
+```python
+from truthid import TruthIDClient
+
+truthid = TruthIDClient()  # usa "base-mainnet" por padrão
+```
+
+### Construtor
+
+`TruthIDClient(network: str = "base-mainnet", rpc_url: Optional[str] = None)`
+
+| Campo | Tipo | Obrigatório | Descrição |
+|-------|------|----------|--------------|
+| `network` | `"base-sepolia"` ou `"base-mainnet"` | Não — padrão `"base-mainnet"` | De qual rede ler os contratos |
+| `rpc_url` | `Optional[str]` | Não | Endpoint de RPC customizado. Usa por padrão o RPC público da Base para a rede escolhida |
+
+Diferente do SDK TypeScript, `network` tem um padrão aqui — você só precisa passá-lo para sobrescrever ou para usar a testnet.
+
+## Métodos
+
+### `create_challenge(origin)`
+
+Cria um desafio de uso único para incorporar no QR code mostrado ao usuário.
+
+**Parâmetros**
+
+| Nome | Tipo | Descrição |
+|------|------|-------------|
+| `origin` | `str` | O domínio do seu site, ex.: `"yoursite.com"` |
+
+**Retorna** [`AuthChallenge`](#authchallenge)
+
+```python
+challenge = truthid.create_challenge("yoursite.com")
+# AuthChallenge(type="challenge", nonce="3f2e1a4b-...", issuedAt=1718000000000, origin="yoursite.com")
+```
+
+<Callout title="Armazene, depois apague" type="idea">
+Mantenha o desafio no servidor, indexado por `nonce`, até `verify_auth_response` rodar — depois apague-o imediatamente. Veja [Invalidação de nonce](#nonce-invalidation) abaixo.
+</Callout>
+
+**Construindo o QR code** — o app mobile espera exatamente este formato:
+
+```json
+{
+  "action": "truthid-auth",
+  "challenge": { "type": "challenge", "nonce": "...", "issuedAt": 1718000000000, "origin": "yoursite.com" },
+  "callbackUrl": "https://yoursite.com/auth/verify"
+}
+```
+
+`callbackUrl` **precisa** usar `https://` — o app mobile se recusa a enviar a resposta assinada para uma URL `http://` simples.
+
+---
+
+### `verify_auth_response(challenge, response, ttl_ms=30_000)`
+
+Verifica a resposta assinada recebida do celular do usuário. Executa seis verificações em sequência e para na primeira falha:
+
+1. O usuário aprovou (não rejeitou)
+2. O desafio está dentro do TTL (padrão: 30 segundos)
+3. O nonce corresponde ao desafio original
+4. A assinatura criptográfica é válida
+5. O dispositivo está registrado e ativo na blockchain
+6. Recupera o ID da identidade vinculada a esse dispositivo
+
+**Parâmetros**
+
+| Nome | Tipo | Descrição |
+|------|------|-------------|
+| `challenge` | [`AuthChallenge`](#authchallenge) | O desafio que você criou |
+| `response` | [`AuthResponse`](#authresponse) | A resposta recebida do celular |
+| `ttl_ms` *(opcional)* | `int` | Idade máxima do desafio em ms. Padrão: `30_000` |
+
+**Retorna** [`VerifyAuthResult`](#verifyauthresult)
+
+`AuthResponse` não tem um helper `from_dict` — monte-o campo a campo a partir do corpo JSON já parseado. Seus campos são camelCase (correspondendo ao formato de rede), não snake_case:
+
+```python
+from truthid import AuthResponse
+
+data = request.json  # { "approved": ..., "nonce": ..., "signature": ..., "deviceAddress": ... }
+
+response = AuthResponse(
+    approved=data["approved"],
+    nonce=data["nonce"],
+    signature=data["signature"],
+    deviceAddress=data["deviceAddress"],
+)
+
+result = truthid.verify_auth_response(challenge, response)
+
+if result.valid:
+    print(f"Authenticated! Identity ID: {result.identity_id}")
+else:
+    print(f"Failed: {result.reason}")
+```
+
+**Motivos de falha**
+
+| `reason` | Causa |
+|----------|-------|
+| `"User rejected the login request"` | Usuário tocou em "Rejeitar" no celular |
+| `"Challenge expired"` | Mais de `ttl_ms` ms se passaram desde `issuedAt` |
+| `"Nonce mismatch"` | O nonce da resposta não corresponde ao do desafio |
+| `"Invalid signature format"` | A assinatura está malformada |
+| `"Signature does not match device address"` | A assinatura não foi feita por `deviceAddress` |
+| `"Device is not active or has been revoked"` | O dispositivo foi revogado pelo dono da identidade |
+
+---
+
+### `verify_session(session_hash)` [#verify_sessionsession_hash]
+
+Verifica se um hash de sessão ainda é válido (não revogado). Chame isso nas requisições subsequentes após o login para confirmar que a sessão não foi revogada de outro dispositivo.
+
+**Parâmetros**
+
+| Nome | Tipo | Descrição |
+|------|------|-------------|
+| `session_hash` | `str` | String hex `bytes32` (`0x...`) |
+
+**Retorna** [`SessionInfo`](#sessioninfo)
+
+```python
+session = truthid.verify_session(session_hash)
+if session.exists and not session.revoked:
+    pass  # ainda logado
+```
+
+---
+
+### `check_device_status(device_pub_key)`
+
+Consulta o status atual de um dispositivo na blockchain.
+
+**Parâmetros**
+
+| Nome | Tipo | Descrição |
+|------|------|-------------|
+| `device_pub_key` | `str` | Endereço Ethereum do dispositivo (`0x...`) |
+
+**Retorna** [`DeviceStatus`](#devicestatus)
+
+```python
+status = truthid.check_device_status(device_pub_key)
+```
+
+---
+
+### `compute_smart_account_address(ledger_address, index=0)` [#compute_smart_account_addressledger_address-index0]
+
+Prevê o endereço de smart account (controladora) de um usuário via `CREATE2` — cálculo puramente local, sem chamada de RPC e sem servidor envolvido. Útil para mostrar um endereço de depósito, ou verificar um saldo, antes que a conta jamais tenha sido usada on-chain.
+
+**Parâmetros**
+
+| Nome | Tipo | Descrição |
+|------|------|-------------|
+| `ledger_address` | `str` | O endereço da carteira de hardware / EOA dona |
+| `index` *(opcional)* | `int` | Índice da conta, para múltiplas smart accounts por dono. Padrão: `0` |
+
+**Retorna** `str` — o endereço checksummed da smart account.
+
+```python
+smart_account = truthid.compute_smart_account_address(ledger_address)
+```
+
+Uma função independente também é exportada para quando você não precisa de uma instância completa de cliente:
+
+```python
+from truthid import compute_smart_account_address
+
+smart_account = compute_smart_account_address(ledger_address, network="base-mainnet")
+```
+
+## Tipos
+
+Todos os tipos a seguir são exportados de `truthid`. `AuthChallenge` e `AuthResponse` usam nomes de campo em **camelCase** porque espelham o formato JSON que o app mobile envia e assina diretamente — todo outro tipo segue o snake_case normal do Python, já que nunca cruza a rede.
+
+#### `AuthChallenge` [#authchallenge]
+
+```python
+@dataclass
+class AuthChallenge:
+    type: str
+    nonce: str
+    issuedAt: int  # timestamp Unix em ms
+    origin: str
+```
+
+#### `AuthResponse` [#authresponse]
+
+```python
+@dataclass
+class AuthResponse:
+    approved: bool
+    nonce: str
+    signature: str                          # assinatura secp256k1, em hex ("0x...")
+    deviceAddress: str                      # endereço Ethereum da chave do dispositivo
+    sessionSignature: Optional[str] = None  # personal_sign sobre keccak256(nonce) — sempre enviado junto com signature
+```
+
+#### `VerifyAuthResult` [#verifyauthresult]
+
+```python
+@dataclass
+class VerifyAuthResult:
+    valid: bool
+    identity_id: Optional[int] = None
+    device_address: Optional[str] = None
+    reason: Optional[str] = None
+```
+
+#### `SessionInfo` [#sessioninfo]
+
+```python
+@dataclass
+class SessionInfo:
+    exists: bool
+    revoked: bool
+    identity_id: Optional[int] = None
+    device_pub_key: Optional[str] = None
+    created_at: Optional[datetime] = None
+```
+
+#### `DeviceStatus` [#devicestatus]
+
+```python
+@dataclass
+class DeviceStatus:
+    exists: bool
+    active: bool
+    label: Optional[str] = None
+    identity_id: Optional[int] = None
+    added_at: Optional[datetime] = None
+```
+
+## Notas de segurança
+
+### Invalidação de nonce [#nonce-invalidation]
+
+Apague o desafio do seu armazenamento **antes** de chamar `verify_auth_response`, não depois — apagar depois deixa uma condição de corrida em que a mesma resposta assinada pode ser submetida duas vezes dentro da janela do TTL.
+
+```python
+# Ordem correta
+del pending_challenges[response.nonce]          # apague primeiro
+result = truthid.verify_auth_response(...)       # depois verifique
+```
+
+### TTL
+
+O padrão é 30 segundos, correspondendo à própria expiração de desafio do app mobile. Diminuí-lo é aceitável; aumentá-lo além de 30 segundos não tem efeito, já que o celular já se recusará a aceitar um desafio mais antigo.
+
+### Somente HTTPS
+
+O celular faz um `POST` da resposta assinada diretamente para a sua URL de callback — o app mobile recusa URLs que não sejam `https://`, e seu endpoint ainda precisa de um certificado TLS válido para a conexão ter sucesso.
+
+## Redes
+
+| Rede | Chain ID | Descrição |
+|---------|----------|--------------|
+| `"base-sepolia"` | 84532 | Testnet — para desenvolvimento |
+| `"base-mainnet"` | 8453 | Produção (padrão) |
+
+```python
+# Testnet durante o desenvolvimento
+truthid = TruthIDClient(network="base-sepolia")
+
+# RPC customizado em vez do endpoint público
+truthid = TruthIDClient(network="base-mainnet", rpc_url="https://your-private-rpc.example.com")
+```
+
+Os endereços dos contratos para ambas as redes estão em [Contratos inteligentes](/docs/intro#smart-contracts-base-mainnet-chain-8453).
+
+## Visibilidade da sessão — nada a fazer
+
+Logins concluídos já aparecem nos apps mobile/desktop do TruthID do usuário e podem ser revogados individualmente por lá. O celular registra a sessão on-chain por conta própria (via uma UserOperation) antes mesmo de chamar sua URL de callback — não há etapa de registro separada para você chamar.
+
+Se quiser confirmar que uma sessão chegou on-chain, derive seu hash a partir do nonce e chame `verify_session`:
+
+```python
+from web3 import Web3
+
+session_hash = "0x" + Web3.keccak(text=response.nonce).hex()
+session = truthid.verify_session(session_hash)
+if session.exists and not session.revoked:
+    pass  # confirmado on-chain
+```
+
+## Próximos passos
+
+- [Guia rápido](/docs/quickstart) — passo a passo completo, da instalação ao primeiro login
+- [Exemplo completo com Flask](https://github.com/masterlxz/truthid/blob/main/sdk/README.md#full-examples) com tokens de sessão e uma rota protegida
+- [Referência do SDK TypeScript](/docs/sdk/typescript)
+- [Referência do SDK Ruby](/docs/sdk/ruby)

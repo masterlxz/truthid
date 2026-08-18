@@ -1,0 +1,43 @@
+---
+title: Entre dispositivos y almacenamiento
+description: "Cómo los dispositivos se alcanzan entre sí sin un servidor, cómo funciona la firma delegada, y cómo el Vault se almacena permanentemente en Arweave."
+---
+
+Dos problemas distintos, cubiertos juntos porque comparten los mismos transportes subyacentes: lograr que uno de tus propios dispositivos hable con otro (entre dispositivos), y lograr que un dato (el Vault, un documento) persista en algún lugar permanente (almacenamiento).
+
+## Transporte entre dispositivos: LAN + dead-drop [#cross-device-transport-lan--dead-drop]
+
+Cuando la app móvil necesita responder a una solicitud de otro dispositivo — la extensión de navegador obteniendo una credencial, otro dispositivo solicitando una firma — usa dos canales **al mismo tiempo**, no uno como respaldo del otro:
+
+- **LAN (camino rápido)** — el dispositivo que responde corre un pequeño servidor HTTP local para exactamente una solicitud, y quien solicita escanea la red local en su búsqueda. Rápido cuando funciona, pero necesita que ambos dispositivos estén en la misma red y sean alcanzables — lo cual falla silenciosamente en algunas redes (Wi-Fi corporativo con aislamiento de clientes, algunas configuraciones de VPN) o navegadores con APIs de red local restringidas (ver [Extensión de navegador → Brave](/docs/apps/extension#brave) para un ejemplo concreto).
+- **Dead-drop (respaldo de mejor esfuerzo)** — el mismo contenido, cifrado, enviado a IPFS y publicado bajo un nombre IPNS de vida corta (un puntero mutable, a diferencia de un CID de IPFS normal) incrustado en el código QR que escaneó quien solicita. Como corre en paralelo en lugar de activarse solo después de que LAN agote su tiempo de espera, gana el canal que responda primero — no esperas a que se agote un timeout completo de LAN antes de recurrir al respaldo.
+
+El dead-drop se mantiene deliberadamente en IPFS/IPNS de forma permanente, incluso después de que el propio almacenamiento permanente del Vault se mudara a Arweave (abajo) — Arweave no tiene concepto de un puntero mutable de TTL corto, que es exactamente lo que necesita una entrega efímera de una sola vez, y los CID de IPFS normales tampoco pueden actualizarse in situ. Trabajo distinto, herramienta distinta, a propósito.
+
+## Firma delegada (incluyendo apps de terceros) [#delegated-signing-including-third-party-apps]
+
+Un dispositivo — escritorio o móvil — puede actuar sobre una solicitud de otra parte sin que esa parte tenga jamás tus claves:
+
+- **Firmar un mensaje** — firmar datos arbitrarios con la clave del dispositivo, sin efecto on-chain.
+- **Firmar y ejecutar** — firmar *y* enviar una `UserOperation` a través de la cuenta inteligente vía un bundler, para una acción real on-chain.
+- **Pin** (`POST /truthid/v1/pin`) — dejar que una app de terceros publique contenido permanentemente usando tu propio almacenamiento ya configurado, sin que esa app necesite su propia configuración de almacenamiento/pinning. Esto está dirigido a otras apps que usas y que quieren almacenar algo en tu nombre, usando tu identidad en lugar de su propia infraestructura.
+
+Las tres muestran una pantalla de aprobación que nombra la app solicitante antes de que ocurra nada — mismo principio que la verificación de origin durante el inicio de sesión (ver [Cómo funciona TruthID → Iniciar sesión](/docs/concepts/how-it-works#logging-in)). Cada solicitud individual recibe su propia aprobación, tanto en escritorio como en móvil — no hay autorización persistente por app ni cuota que le permita a una app de confianza saltarse el aviso en una llamada posterior.
+
+La ruta todavía se llama `/truthid/v1/pin` y el campo en las respuestas todavía se llama `cid` por compatibilidad hacia atrás con apps ya integradas contra ella — pero a partir de la migración a Arweave de abajo, lo que realmente se publica es Arweave, no IPFS. No tomes el nombre literalmente.
+
+## Almacenamiento permanente: Arweave
+
+El blob cifrado del Vault y cualquier documento en él necesitan vivir en algún lugar permanente que no dependa de que ningún dispositivo en particular esté en línea. Eso solía ser IPFS (vía un servicio de pinning), y ahora es Arweave — una red de pago único y almacenamiento permanente, alcanzada mediante un cliente escrito a mano (sin dependencia de un SDK de terceros) que tanto la app de escritorio (Rust) como la móvil (Dart) implementan siguiendo el mismo protocolo de cable.
+
+El campo puntero on-chain de `VaultRegistry` todavía se llama literalmente `cid` (ver [Contratos inteligentes → VaultRegistry](/docs/contracts#vaultregistry)) — un remanente de cuando solo contenía un CID de IPFS. Desde la migración, el valor `cid` de un Vault recién publicado luce como `ar://<arweave-transaction-id>` en su lugar; ambas apps verifican ese prefijo y obtienen los datos desde un gateway de Arweave cuando lo ven, recurriendo a un gateway de IPFS para el formato de CID simple que los Vaults más antiguos podrían todavía tener.
+
+<Callout title="Advertencia conocida: Vaults antiguos y la incorporación de dispositivos nuevos" type="warn">
+Una identidad cuyo Vault no se ha *republicado* desde la migración a Arweave todavía apunta a su antiguo CID de IPFS — y la infraestructura de pinning dedicada que solía mantener alcanzables los CID antiguos ha sido dada de baja desde entonces, así que emparejar un dispositivo completamente nuevo con esa identidad puede fallar al obtener el Vault (los gateways públicos de IPFS agotan el tiempo de espera en contenido no fijado). Esto no es pérdida de datos — cualquier dispositivo que ya tenga el Vault en caché todavía lo tiene — pero todavía no hay un respaldo automático. Si estás emparejando un dispositivo nuevo y no puede encontrar tu Vault, publica una actualización reciente desde un dispositivo que ya lo tenga (cualquier edición del Vault lo republica en Arweave) antes de volver a emparejar.
+</Callout>
+
+## Próximos pasos
+
+- [TruthID Vault](/docs/concepts/vault) — qué es lo que realmente se almacena y cifra
+- [Extensión de navegador](/docs/apps/extension) — el principal consumidor del transporte LAN/dead-drop
+- [Contratos inteligentes → VaultRegistry](/docs/contracts#vaultregistry) — el puntero on-chain, en detalle

@@ -1,0 +1,85 @@
+---
+title: Introducción
+description: "Autenticación descentralizada que reemplaza el inicio de sesión con Google, Apple o Microsoft — sin contraseña, sin proveedor de identidad externo."
+---
+
+TruthID es autenticación descentralizada que reemplaza "Iniciar sesión con Google/Apple/Microsoft". Los usuarios son dueños de su identidad a través de una wallet blockchain y se autentican con dispositivos de confianza — sin contraseña, sin correo electrónico, sin un proveedor de identidad externo en el medio.
+
+## Por qué
+
+Los proveedores de identidad centralizados generan bloqueos de cuenta, recolección de datos y un único punto de fallo. TruthID le da a los usuarios soberanía sobre su propia identidad (una wallet que controlan) mientras le da a los integradores un SDK simple para verificar inicios de sesión contra una blockchain pública.
+
+## Requisitos previos [#prerequisites]
+
+TruthID tiene dos tipos de usuarios — personas que inician sesión en un sitio, y desarrolladores que agregan TruthID a uno. Cada lado necesita cosas distintas.
+
+**Para iniciar sesión con TruthID:**
+- Una identidad registrada on-chain — creada una vez con cualquier wallet EVM (MetaMask, Rabby, Ledger, Trezor, WalletConnect) que tenga una pequeña cantidad de ETH en [Base](https://base.org) para cubrir el gas de configuración (típicamente muy por debajo de un centavo). Esa wallet se convierte en la propietaria de una cuenta inteligente creada durante la configuración, y no se necesita de nuevo después de eso — la cuenta inteligente paga su propio gas de ahí en adelante. Ver [Cuenta inteligente y gas](/docs/smart-account) para el flujo completo de configuración y el costo.
+- Un dispositivo de confianza emparejado con esa identidad — la app de escritorio o la app móvil. La clave privada del dispositivo nunca sale de él; la wallet mencionada arriba solo se necesita una vez, para crear la identidad, no para los inicios de sesión del día a día.
+
+**Para integrar TruthID en tu app:**
+- Un backend que pueda recibir una solicitud HTTPS `POST` (la respuesta de inicio de sesión firmada). Cualquier lenguaje funciona — existen SDKs oficiales para TypeScript, Python y Ruby (ver [Integrando TruthID](#integrating-truthid) abajo), y otros lenguajes pueden verificar directamente contra los contratos públicos.
+- Una forma de renderizar un código QR en tu página de inicio de sesión — el SDK construye el payload, tu frontend solo necesita cualquier librería de renderizado de QR.
+- Nada más que aprovisionar: sin base de datos, sin servidor, sin cuenta de terceros.
+
+## Arquitectura
+
+TruthID es un conjunto de piezas independientes que todas leen y escriben en los mismos seis contratos en Base Mainnet — no hay un servidor central que las una.
+
+| Componente | Stack | Ruta |
+|---|---|---|
+| Contratos inteligentes | Solidity (Foundry) | [`contracts/`](https://github.com/masterlxz/truthid/tree/main/contracts) |
+| App de escritorio | Tauri + Rust + React + TypeScript | [`desktop/`](https://github.com/masterlxz/truthid/tree/main/desktop) |
+| App móvil | Flutter | [`mobile/`](https://github.com/masterlxz/truthid/tree/main/mobile) |
+| Extensión de navegador | WXT (familia Chrome + Firefox) | [`extension/`](https://github.com/masterlxz/truthid/tree/main/extension) |
+| SDKs | TypeScript, Python, Ruby, Dart | [`sdk/`](https://github.com/masterlxz/truthid/tree/main/sdk) |
+| Este sitio | Rails + Next.js/Fumadocs | [`site/`](https://github.com/masterlxz/truthid/tree/main/site) |
+| Pruebas de integración | viem + tsx, contra un Anvil local | [`integration/`](https://github.com/masterlxz/truthid/tree/main/integration) |
+
+No hay un relay, servidor de señalización ni backend operado por TruthID para el propio camino de inicio de sesión/emparejamiento — todo mensaje off-chain viaja dentro de un código QR o va directamente entre el teléfono del usuario y el backend propio del integrador. Ver [Estructura del repositorio](/docs/structure) para saber qué vive dónde.
+
+## Cómo funciona
+
+- **Identidad** — un nombre de usuario vinculado a una wallet controladora, creado on-chain (`IdentityRegistry`).
+- **Dispositivos de confianza** — cada dispositivo (escritorio, teléfono) genera su propio par de claves localmente; las claves privadas nunca salen del dispositivo. Los dispositivos se registran on-chain (`DeviceRegistry`) mediante un esquema de compromiso y revelación (commit-reveal) que evita el front-running.
+- **Inicio de sesión** — un sitio web incrusta un desafío firmado directamente en un código QR junto con una URL de callback. El teléfono del usuario lo escanea, firma localmente, y hace `POST` de la respuesta directamente a ese callback. El backend del integrador verifica la firma y el estado del dispositivo on-chain usando un SDK de TruthID.
+- **Sesiones** — solo se almacena on-chain un hash `keccak256` de los datos de la sesión (`SessionRegistry`); lo que representa ese hash permanece local en el dispositivo del usuario.
+- **Recuperación** — las identidades pueden configurar guardianes M-de-N para recuperar una wallet controladora perdida, con un plazo de espera de 7 días antes de que la recuperación surta efecto (`RecoveryManager`).
+
+Ningún servidor operado por TruthID está en este camino — el desafío viaja dentro del código QR, y la respuesta firmada va directamente del teléfono a tu propio backend por HTTPS. Para el recorrido completo — formatos exactos de mensajes, el modelo de firmante de la cuenta inteligente, qué es público on-chain versus solo local — ver [Cómo funciona TruthID](/docs/concepts/how-it-works).
+
+## Integrando TruthID [#integrating-truthid]
+
+Usa uno de los SDKs oficiales — envuelven la creación de desafíos, la verificación de firmas y las lecturas on-chain para que tu backend nunca hable directamente con la blockchain:
+
+| SDK | Paquete |
+|---|---|
+| TypeScript | [`truthid-sdk`](https://www.npmjs.com/package/truthid-sdk) en npm |
+| Python | [`truthid-sdk`](https://pypi.org/project/truthid-sdk/) en PyPI |
+| Ruby | [`truthid-sdk`](https://rubygems.org/gems/truthid-sdk) en RubyGems |
+| Dart | `truthid_sdk` — todavía no publicado en pub.dev, ver [SDK de Dart → Instalación](/docs/sdk/dart#installation) |
+
+La referencia completa de API para cada SDK — cada método, tipo y nota de seguridad — vive en la [Referencia de SDK](/docs/sdk/typescript). Ejemplos de framework (Express / Flask / Sinatra) están en [`sdk/README.md`](https://github.com/masterlxz/truthid/blob/main/sdk/README.md#full-examples).
+
+## Contratos inteligentes (Base Mainnet, chain 8453) [#smart-contracts-base-mainnet-chain-8453]
+
+| Contrato | Dirección |
+|---|---|
+| `IdentityRegistry` | [`0x97787D6EE3EfD76962dc7E3Bf143E659D9961962`](https://basescan.org/address/0x97787D6EE3EfD76962dc7E3Bf143E659D9961962) |
+| `DeviceRegistry` | [`0x937702CBABDab0EEBD1A29f0a7A658FeF4582543`](https://basescan.org/address/0x937702CBABDab0EEBD1A29f0a7A658FeF4582543) |
+| `RecoveryManager` | [`0x42Ca394c23aB027e877B9900B384f59E2Af23470`](https://basescan.org/address/0x42Ca394c23aB027e877B9900B384f59E2Af23470) |
+| `SessionRegistry` | [`0x8C65527eDA3ce7754Bf87B34aC4ec8ce74D647e2`](https://basescan.org/address/0x8C65527eDA3ce7754Bf87B34aC4ec8ce74D647e2) |
+| `TruthIDAccountFactory` | [`0xc2C86cB7d8694EcA8BaAdD95B14842E8643aB262`](https://basescan.org/address/0xc2C86cB7d8694EcA8BaAdD95B14842E8643aB262) |
+| `VaultRegistry` | [`0x07449b0c8dAE1252f59A5C0992D1413113a849B4`](https://basescan.org/address/0x07449b0c8dAE1252f59A5C0992D1413113a849B4) |
+
+Todos los contratos están verificados en Basescan y no tienen proxy de actualización. El controlador de cada identidad es a su vez una cuenta inteligente (ERC-4337) desplegada por la factory de arriba — paga su propio gas después de una configuración única, así que los inicios de sesión del día a día nunca tocan la wallet propietaria. Direcciones en testnet, ABIs, referencia de funciones y costos de gas reales: [Contratos inteligentes](/docs/contracts). Flujo de configuración y el modelo de cuenta inteligente: [Cuenta inteligente y gas](/docs/smart-account).
+
+## Código fuente
+
+TruthID es de código abierto bajo la licencia MIT: [github.com/masterlxz/truthid](https://github.com/masterlxz/truthid).
+
+## Próximos pasos
+
+- [Por qué TruthID](/docs/concepts/vision) — el problema que resuelve y para quién es
+- [Cómo funciona TruthID](/docs/concepts/how-it-works) — el recorrido completo del protocolo
+- [Guía rápida](/docs/quickstart) — agrega el inicio de sesión de TruthID a tu backend

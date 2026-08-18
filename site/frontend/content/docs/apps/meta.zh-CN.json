@@ -1,0 +1,4 @@
+{
+  "title": "客户端应用",
+  "pages": ["desktop", "mobile", "extension"]
+}

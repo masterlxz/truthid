@@ -1,0 +1,324 @@
+---
+title: TypeScript SDK
+description: "npm 上 truthid-sdk 的完整 API 参考。"
+---
+
+npm 上 [`truthid-sdk`](https://www.npmjs.com/package/truthid-sdk) 的完整 API 参考。刚接触 TruthID？请先看[快速开始](/docs/quickstart) — 本页是您正式集成时，每一个方法和类型的详细参考。
+
+## 安装
+
+```bash
+npm install truthid-sdk
+```
+
+需要 Node.js 16+。
+
+## `TruthIDClient`
+
+```typescript
+import { TruthIDClient } from "truthid-sdk";
+
+const truthid = new TruthIDClient({ network: "base-mainnet" });
+```
+
+### 构造函数
+
+`new TruthIDClient(config: TruthIDClientConfig)`
+
+| 字段 | 类型 | 是否必需 | 说明 |
+|-------|------|----------|--------------|
+| `network` | `"base-sepolia" \| "base-mainnet"` | 是 — 没有默认值 | 从哪个网络读取合约 |
+| `rpcUrl` | `string` | 否 | 自定义 RPC 端点。默认使用所选网络的公共 Base RPC |
+
+与 Python 和 Ruby SDK 不同，这里的 `network` 没有默认值 — 每次构造客户端时都必须显式传入。
+
+## 方法
+
+### `createChallenge(origin)`
+
+创建一个一次性挑战，嵌入展示给用户的二维码中。
+
+**参数**
+
+| 名称 | 类型 | 说明 |
+|------|------|-------------|
+| `origin` | `string` | 您站点的域名，例如 `"yoursite.com"` |
+
+**返回** [`AuthChallenge`](#authchallenge)
+
+```typescript
+const challenge = truthid.createChallenge("yoursite.com");
+// {
+//   type: "challenge",
+//   nonce: "3f2e1a4b-...",
+//   issuedAt: 1718000000000,
+//   origin: "yoursite.com"
+// }
+```
+
+<Callout title="先存储，再删除" type="idea">
+把挑战保存在服务端，以 `nonce` 为键，直到 `verifyAuthResponse` 运行为止 — 然后立即删除它。见下方的 [Nonce 失效处理](#nonce-失效处理)。
+</Callout>
+
+**构建二维码** — 移动端应用要求这个精确的结构：
+
+```json
+{
+  "action": "truthid-auth",
+  "challenge": { "type": "challenge", "nonce": "...", "issuedAt": 1718000000000, "origin": "yoursite.com" },
+  "callbackUrl": "https://yoursite.com/auth/verify"
+}
+```
+
+`callbackUrl` **必须**使用 `https://` — 移动端应用拒绝把已签名的响应发到明文 `http://` URL。
+
+---
+
+### `verifyAuthResponse(params)`
+
+验证从用户手机收到的已签名响应。依次运行六项检查，在第一次失败时停止：
+
+1. 用户已批准（未拒绝）
+2. 挑战在 TTL 之内（默认：30 秒）
+3. Nonce 与原始挑战匹配
+4. 密码学签名有效
+5. 设备已在区块链上注册且处于活跃状态
+6. 获取与该设备关联的身份 ID
+
+**参数**（[`VerifyAuthParams`](#verifyauthparams)）
+
+| 名称 | 类型 | 说明 |
+|------|------|-------------|
+| `challenge` | [`AuthChallenge`](#authchallenge) | 您创建的挑战 |
+| `response` | [`AuthResponse`](#authresponse) | 从手机收到的响应 |
+| `ttlMs`（可选） | `number` | 挑战的最大存活时间（毫秒）。默认：`30_000` |
+
+**返回** [`VerifyAuthResult`](#verifyauthresult)
+
+```typescript
+const result = await truthid.verifyAuthResponse({ challenge, response });
+
+if (result.valid) {
+  console.log("Authenticated! Identity ID:", result.identityId);
+} else {
+  console.log("Failed:", result.reason);
+}
+```
+
+**失败原因**
+
+| `reason` | 原因 |
+|----------|-------|
+| `"User rejected the login request"` | 用户在手机上点击了"拒绝" |
+| `"Challenge expired"` | 自 `issuedAt` 起，经过的时间超过了 `ttlMs` 毫秒 |
+| `"Nonce mismatch"` | 响应的 nonce 与挑战的不匹配 |
+| `"Invalid signature format"` | 签名格式不正确 |
+| `"Signature does not match device address"` | 签名不是由 `deviceAddress` 做出的 |
+| `"Device is not active or has been revoked"` | 该设备已被身份所有者撤销 |
+
+---
+
+### `verifySession(sessionHash)`
+
+检查一个会话哈希是否仍然有效（未被撤销）。在登录后的后续请求中调用它，以确认会话没有从另一台设备被撤销。
+
+**参数**
+
+| 名称 | 类型 | 说明 |
+|------|------|-------------|
+| `sessionHash` | `string` | `bytes32` 十六进制字符串（`0x...`） |
+
+**返回** [`SessionInfo`](#sessioninfo)
+
+```typescript
+const session = await truthid.verifySession(sessionHash);
+if (session.exists && !session.revoked) {
+  // still logged in
+}
+```
+
+---
+
+### `checkDeviceStatus(devicePubKey)`
+
+在区块链上查询一台设备的当前状态。
+
+**参数**
+
+| 名称 | 类型 | 说明 |
+|------|------|-------------|
+| `devicePubKey` | `string` | 该设备的以太坊地址（`0x...`） |
+
+**返回** [`DeviceStatus`](#devicestatus)
+
+```typescript
+const status = await truthid.checkDeviceStatus(devicePubKey);
+```
+
+---
+
+### 会话可见性 — 无需额外操作
+
+已完成的登录会自动出现在用户的 TruthID 移动端/桌面端应用中，并可以从那里单独撤销。手机会在调用您的 `callbackUrl` 之前，自行在链上注册会话（通过一笔 UserOperation）— 没有需要您额外调用的单独注册步骤。
+
+如果您想再次确认某个会话确实上链，可以从 nonce 推导出它的哈希，并调用 [`verifySession`](#verifysessionsessionhash)：
+
+```typescript
+import { keccak256, toBytes } from "viem";
+
+const sessionHash = keccak256(toBytes(response.nonce));
+const session = await truthid.verifySession(sessionHash);
+if (session.exists && !session.revoked) {
+  // confirmed on-chain
+}
+```
+
+---
+
+### `computeSmartAccountAddress(ledgerAddress, index?)`
+
+通过 `CREATE2` 预测用户的智能账户（控制方）地址 — 纯本地计算，不需要 RPC 调用，也不涉及服务器。适用于在账户从未上链使用过之前，展示一个存款地址或查询余额。
+
+**参数**
+
+| 名称 | 类型 | 说明 |
+|------|------|-------------|
+| `ledgerAddress` | `` `0x${string}` `` | 拥有该账户的硬件钱包/EOA 地址 |
+| `index`（可选） | `bigint` | 账户索引，用于每个所有者拥有多个智能账户的情况。默认：`0n` |
+
+**返回** `` `0x${string}` `` — 带校验和的智能账户地址。
+
+```typescript
+const smartAccount = truthid.computeSmartAccountAddress(ledgerAddress);
+```
+
+当您不需要完整的客户端实例时，也导出了一个独立函数：
+
+```typescript
+import { computeSmartAccountAddress } from "truthid-sdk";
+
+const smartAccount = computeSmartAccountAddress(ledgerAddress, "base-mainnet");
+```
+
+## 类型
+
+以下全部都从 `truthid-sdk` 导出。
+
+```typescript
+type Network = "base-sepolia" | "base-mainnet";
+```
+
+#### `AuthChallenge`
+
+```typescript
+interface AuthChallenge {
+  type: "challenge";
+  nonce: string;
+  issuedAt: number;   // Unix timestamp in ms
+  origin: string;
+}
+```
+
+#### `AuthResponse`
+
+```typescript
+interface AuthResponse {
+  approved: boolean;
+  nonce: string;
+  signature: string;          // secp256k1 signature, hex ("0x...")
+  deviceAddress: string;      // Ethereum address of the device key
+  sessionSignature?: string;  // personal_sign over keccak256(nonce) — always sent alongside signature
+}
+```
+
+#### `VerifyAuthParams`
+
+```typescript
+interface VerifyAuthParams {
+  challenge: AuthChallenge;
+  response: AuthResponse;
+  ttlMs?: number; // default: 30_000
+}
+```
+
+#### `VerifyAuthResult`
+
+```typescript
+interface VerifyAuthResult {
+  valid: boolean;
+  identityId?: bigint;
+  deviceAddress?: string;
+  reason?: string;
+}
+```
+
+#### `SessionInfo`
+
+```typescript
+interface SessionInfo {
+  exists: boolean;
+  revoked: boolean;
+  identityId?: bigint;
+  devicePubKey?: string;
+  createdAt?: Date;
+}
+```
+
+#### `DeviceStatus`
+
+```typescript
+interface DeviceStatus {
+  exists: boolean;
+  active: boolean;
+  label?: string;
+  identityId?: bigint;
+  addedAt?: Date;
+}
+```
+
+## 安全说明
+
+### Nonce 失效处理
+
+在调用 `verifyAuthResponse` **之前**从您的存储中删除挑战，而不是之后 — 之后再删除会留下一个竞态条件，让同一个已签名的响应可以在 TTL 窗口内被提交两次。
+
+```typescript
+// Correct order
+pendingChallenges.delete(response.nonce);             // delete first
+const result = await truthid.verifyAuthResponse(...);  // then verify
+```
+
+### TTL
+
+默认值是 30 秒，与移动端应用自身的挑战过期时间一致。调低它没问题；调高到超过 30 秒不会有任何效果，因为手机本来就会拒绝一个更旧的挑战。
+
+### 仅限 HTTPS
+
+手机把已签名的响应直接 `POST` 到您的 `callbackUrl` — 移动端应用拒绝非 `https://` 的 URL，而且您的端点仍然需要一份有效的 TLS 证书才能连接成功。
+
+## 网络
+
+| 网络 | 链 ID | 说明 |
+|---------|----------|--------------|
+| `"base-sepolia"` | 84532 | 测试网 — 用于开发 |
+| `"base-mainnet"` | 8453 | 生产环境 |
+
+```typescript
+// Testnet during development
+const truthid = new TruthIDClient({ network: "base-sepolia" });
+
+// Custom RPC instead of the public endpoint
+const truthid = new TruthIDClient({
+  network: "base-mainnet",
+  rpcUrl: "https://your-private-rpc.example.com",
+});
+```
+
+两个网络的合约地址见[智能合约](/docs/intro#smart-contracts-base-mainnet-chain-8453)。
+
+## 后续步骤
+
+- [快速开始](/docs/quickstart) — 从安装到首次登录的完整走查
+- [完整的 Express.js 示例](https://github.com/masterlxz/truthid/blob/main/sdk/README.md#full-examples)，含会话令牌和受保护路由
+- [Python SDK 参考](/docs/sdk/python)
+- [Ruby SDK 参考](/docs/sdk/ruby)

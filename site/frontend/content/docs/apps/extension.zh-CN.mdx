@@ -1,0 +1,28 @@
+---
+title: 浏览器扩展
+description: "为密码库提供凭据自动填充和 WebAuthn/通行密钥桥接 — 与移动端和桌面端通信，自身从不持有写入权限。"
+---
+
+浏览器扩展（Manifest V3，使用 WXT 构建）把 [TruthID Vault](/docs/concepts/vault) 带进您的浏览器：把已保存的凭据、地址和卡片自动填充进网页表单，并为保存在密码库中的通行密钥提供桥接。它支持 Chrome 系浏览器（包括基于 Chromium 的 Brave）和 Firefox 109+。
+
+## 它做什么 — 以及不持有什么
+
+扩展自身没有任何密码库数据或写入权限。扫描来自移动端应用的二维码会开启一个短期会话（只保存在 `chrome.storage.session` 中 — 从不写入磁盘，浏览器的 service worker 重启就会被清除），而对端设备 — 移动端或桌面端 — 会通过率先响应的传输通道，把密码库中已加密的一个子集推送回来。扩展只做中继和自动填充；它从不自行决定密码库里有什么内容。
+
+它会**同时**尝试联系移动端和桌面端，并行竞速多条通道：
+
+- 到移动端的**局域网**通道，扫描本地网络寻找移动端用来响应其他跨设备请求的同一个本地 HTTP 服务器（见[跨设备与存储](/docs/concepts/cross-device-and-storage#cross-device-transport-lan--dead-drop)）。
+- 到移动端的**离线中转（IPFS/IPNS）**通道，与该页面上描述的同一种尽力而为的后备方案。
+- **桌面端的本地服务器**，如果桌面端恰好在同一台机器上运行 — 不需要二维码或额外加密，因为回环地址已经被隐含地信任了（见[桌面端 → 本地服务器](/docs/apps/desktop#the-local-server)）。
+
+对于通行密钥，扩展只在一次浏览器会话期间持有签名密钥，并直接响应 `navigator.credentials.get()` 调用 — 这就是[TruthID Vault](/docs/concepts/vault#totp-and-passkeys--for-other-services-not-truthid)中描述的密码库通行密钥功能里"虚拟认证器"的那一侧。
+
+## Brave [#brave]
+
+Brave 的反指纹保护会将 `chrome.system.*` API 整个清零，这会破坏扩展通常依赖的自动局域网 IP 发现功能。这是预期之中的情况，会被明确检测到，并且有一个永久性的解决方案，而不是权宜之计：扩展会回退到手动输入 IP，而这条手动路径正是在 Brave 上使用局域网发现的正确、受支持的方式 — 不是一个等待浏览器修复的降级临时状态。
+
+## 后续步骤
+
+- [移动端](/docs/apps/mobile) — 自动填充通常对接的设备
+- [桌面端](/docs/apps/desktop) — 通过本地服务器对接的同机设备
+- [TruthID Vault](/docs/concepts/vault) — 实际被自动填充的内容

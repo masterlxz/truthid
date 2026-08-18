@@ -1,0 +1,82 @@
+---
+title: 智能账户与 Gas
+description: "ERC-4337 智能账户如何运作、一次性建立成本，以及日常 gas 费用。"
+---
+
+每个 TruthID 身份都由一个 ERC-4337 智能账户控制，而不是一个普通的钱包地址。本页解释这样做的原因、建立成本、日常操作成本，以及如何为账户保持资金充足。如果您好奇为什么登录不需要 MetaMask，或者正在决定建立时应该发送多少 ETH，请阅读本页。这在整个协议中所处的位置 — 身份创建、设备配对、登录 — 见 [TruthID 工作原理](/docs/concepts/how-it-works)。
+
+## 工作原理 [#how-it-works]
+
+TruthID 没有中继方，也没有由项目方运营的热钱包 — 每个用户的智能账户自行支付 gas 费。智能账户（`TruthIDAccount.sol`，一份从零开始编写、没有外部依赖的 ERC-4337 实现）识别两级签名者：
+
+- **所有者** — 用于创建身份的钱包（Ledger、MetaMask，或任意 EVM 钱包）。对账户拥有完全访问权限。
+- **设备** — 建立完成后添加的桌面端和移动端应用。设备只能调用 `execute`/`executeBatch`，并且永远不能针对账户自身，也不能针对 `DeviceRegistry`/`IdentityRegistry`/`RecoveryManager` — 这防止了一台被入侵的设备重新给自己授权，或者篡改身份的控制权归属。
+
+这里没有 paymaster。账户直接在官方 [EntryPoint v0.7](https://basescan.org/address/0x0000000071727De22E5E9d8BAf0edAc6f37da032) 合约中存入 ETH，并用这笔余额支付自己的 `UserOperation` — 这个 EntryPoint 是每条 EVM 链上每个 ERC-4337 账户都在使用的同一份合约，并不是 TruthID 自己部署的东西。
+
+账户地址在账户存在之前就已经通过 `CREATE2` 根据所有者地址计算出来 — 每个 SDK 都导出了一个 `computeSmartAccountAddress`/`compute_smart_account_address` 函数（[TypeScript](/docs/sdk/typescript#computesmartaccountaddressledgeraddress-index)、[Python](/docs/sdk/python#compute_smart_account_addressledger_address-index0)、[Ruby](/docs/sdk/ruby#compute_smart_account_addressledger_address-index-0)），如果您需要在链下预测这个地址，无需任何 RPC 调用，也不涉及任何服务器。
+
+## 一次性建立
+
+创建一个身份需要一次签名和三笔交易，全部由所有者钱包支付：
+
+1. **签署同意书** — 一条消息，绑定链 ID、注册表地址、用户名，以及未来的智能账户地址。不消耗 gas。
+2. **创建身份** — `IdentityRegistry.createIdentity(username, smartAccountAddress, v, r, s)`。第 1 步的签名证明所有者确实同意了这个确切的智能账户地址，因此没有人能用一个自己不控制的地址来抢注这个身份。
+3. **部署智能账户** — `TruthIDAccountFactory.createAccount(owner, 0)`，部署在第 2 步中已经承诺的那个地址上。
+4. **注资** — 向新的智能账户地址进行一次普通的 ETH 转账。桌面端应用默认建议 0.001 ETH；这个字段可以编辑，您随时可以之后再发送更多（见下方的[为智能账户注资](#为智能账户注资)）。
+
+在此之后，所有者钱包就只是一把签名密钥 — 它再也不需要 ETH 了。此后的每一次操作（配对一台设备、创建或撤销一个会话）都是一笔离线签名、通过 bundler 提交的 `UserOperation`，全部由智能账户支付。
+
+## 日常成本
+
+建立完成后，就不会再有钱包弹窗或 gas 提示了。桌面端或移动端应用在本地签署一笔 `UserOperation`，并提交给一个 bundler — 目前是 [Pimlico](https://pimlico.io)，bundler 的 URL 可以按用户配置，所以自行搭建的 bundler 也同样可用 — 由它转发给 EntryPoint。智能账户自己的余额承担 gas 费；不会向设备收取任何费用，TruthID 的任何人也不会看到或经手这笔交易。
+
+## 为智能账户注资 [#funding-your-smart-account]
+
+智能账户就是一个普通地址 — 在 Base 上给它发送 ETH，方式和给任何钱包发送 ETH 一样。两个应用都有一个"存入"操作（二维码 + 地址）可用于此：桌面端仪表盘和移动端的钱包标签页。合约没有强制要求最低余额；余额耗尽只会导致下一次操作失败，直到您重新充值为止。
+
+## 地址
+
+`TruthIDAccount` 本身没有固定地址 — 每个所有者都通过 `CREATE2` 获得自己的实例，由工厂按需部署。工厂和 EntryPoint 确实有固定地址 — 以下是最新一次部署后的当前地址；这些地址为什么以前变过、以后还可能再变，见[安全模型 → 审计状态](/docs/security#audit-status)：
+
+### Base 主网（生产环境，链 ID 8453）
+
+| 合约 | 地址 |
+|---|---|
+| `TruthIDAccountFactory` | [`0xc2C86cB7d8694EcA8BaAdD95B14842E8643aB262`](https://basescan.org/address/0xc2C86cB7d8694EcA8BaAdD95B14842E8643aB262) |
+| `EntryPoint`（v0.7） | [`0x0000000071727De22E5E9d8BAf0edAc6f37da032`](https://basescan.org/address/0x0000000071727De22E5E9d8BAf0edAc6f37da032) |
+
+### Base Sepolia（测试网，链 ID 84532）
+
+| 合约 | 地址 |
+|---|---|
+| `TruthIDAccountFactory` | [`0xc4Ca3A79BAb993C4B7cFD312C80c20b2182F8c1e`](https://sepolia.basescan.org/address/0xc4Ca3A79BAb993C4B7cFD312C80c20b2182F8c1e) |
+| `EntryPoint`（v0.7） | [`0x0000000071727De22E5E9d8BAf0edAc6f37da032`](https://sepolia.basescan.org/address/0x0000000071727De22E5E9d8BAf0edAc6f37da032) |
+
+这两份合约完整的函数级参考见[智能合约 → 合约参考](/docs/contracts#contract-reference)。
+
+## 成本 [#cost]
+
+以下是来自项目自身测试套件（`forge test --gas-report`，`TruthIDAccount.t.sol` + `TruthIDAccountFactory.t.sol`，62 个通过的测试）的真实 gas 数据 — 不是估算值。
+
+| 操作 | 最小 gas | 中位 gas | 最大 gas |
+|---|---|---|---|
+| `createAccount`（首次部署） | — | — | 1,774,511 |
+| `createAccount`（已部署过，返回已有地址） | 24,996 | — | — |
+| `execute`（一次 UserOp，日常操作） | 23,135 | 71,519 | 71,544 |
+| `addDevice` | 21,924 | 45,812 | 45,812 |
+| `removeDevice` | 22,148 | 23,854 | 24,573 |
+
+<Callout title="为什么 createAccount 有两个差异很大的数字" type="info">
+这个工厂是幂等的 — 对一个已经部署过账户的所有者再次调用 `createAccount`，只会以约 25k gas 的成本返回已有地址。约 177 万 gas 的那一行才是真正的 `CREATE2` 部署，在建立过程中每个身份只需支付一次。
+</Callout>
+
+**这换算成 ETH 是多少**：以[主网部署](https://basescan.org/address/0x97787D6EE3EfD76962dc7E3Bf143E659D9961962)时观测到的约 0.011 gwei gas 价格计算（与[智能合约 → 每项操作的成本](/docs/contracts#cost-per-operation)全篇使用的费率相同），智能账户部署（约 177 万 gas）大约相当于 0.0000195 ETH，日常的一次 `execute` 调用（约 71.5k gas）大约相当于 0.0000008 ETH。gas 价格会随网络需求波动 — 请查看 [Base 的实时 gas 追踪器](https://basescan.org/gastracker)获取当前费率。
+
+这些数字是纯粹的链上执行成本，使用 Foundry 在本地测量得出。它们不包括 bundler 在 gas 之外为提交您的 `UserOperation` 额外收取的费用 — Pimlico 的免费套餐目前不额外收费，但这是 bundler 层面的细节，不是这份测试套件能测量的内容。
+
+## 后续步骤
+
+- [快速开始](/docs/quickstart) — 为您的后端添加 TruthID 登录
+- [智能合约](/docs/contracts) — 每份合约的地址、ABI 和 gas 成本
+- [安全模型](/docs/security) — 威胁模型，以及 TruthID 能防护什么、不能防护什么

@@ -1,0 +1,57 @@
+---
+title: Modelo de Segurança
+description: "O que o TruthID protege, o que não protege, e o status atual da auditoria."
+---
+
+A segurança do TruthID se apoia em criptografia reforçada por contratos inteligentes e em chaves que nunca saem do dispositivo do usuário — não em confiar em um servidor, porque não existe um no caminho de login. Esta página é um modelo de ameaças honesto: o que o TruthID protege, o que ele explicitamente não protege, e o status atual da auditoria. Leia antes de decidir o quanto você vai depender do TruthID para um determinado caso de uso.
+
+## O que o TruthID protege
+
+| Ameaça | Mecanismo |
+|---|---|
+| Ataques de replay (uma resposta assinada capturada e reutilizada depois) | TTL de desafio de 30 segundos + rastreamento de nonce de uso único, aplicado tanto pelo app mobile quanto por `verifyAuthResponse` em cada SDK |
+| Front-running no registro de um dispositivo (um atacante submete a chave de dispositivo de outra pessoa primeiro) | `DeviceRegistry` usa um esquema commit-reveal — o commitment é vinculado ao `msg.sender`, então só quem fez o commit pode revelar |
+| Tomada do `RecoveryManager` durante a inicialização | `setRecoveryManager` é `onlyOwner` — encontrado e corrigido na [revisão manual de segurança](#audit-status) antes da implantação na mainnet |
+| Phishing durante a aprovação de login (um site falso solicitando um login) | A tela de aprovação no mobile mostra o `origin` de quem está solicitando antes que o usuário possa aprovar — um site falsificado mostra um domínio visivelmente diferente e errado |
+| Interceptação da resposta assinada em trânsito | O app mobile se recusa a usar qualquer `callbackUrl` que não seja `https://` — não há como apontar um QR code para um endpoint em texto puro |
+| Extração da chave do dispositivo | As chaves são geradas no próprio dispositivo e cifradas em repouso pelo armazenamento de credenciais do SO — Android Keystore, iOS Keychain, o gerenciador de credenciais do SO no desktop (macOS Keychain, Windows Credential Manager, Linux Secret Service). Elas nunca saem do dispositivo e nunca são enviadas a nenhum servidor, incluindo os SDKs do TruthID. (Não é a Secure Enclave do iOS especificamente — a Secure Enclave só suporta a curva P-256, e as chaves de dispositivo do TruthID são secp256k1, a mesma curva usada pelo Ethereum. Criptografia por software em repouso ainda é uma proteção real contra, por exemplo, outro app ou um backup não cifrado roubado lendo a chave — só não é isolada por hardware da forma que uma chave em Secure Enclave seria.) |
+| Criação forjada de sessão | `createSession` exige uma assinatura ECDSA da chave do dispositivo mais uma verificação cruzada contra o `DeviceRegistry` — corrigido durante a [revisão manual de segurança](#audit-status), que descobriu que a função era originalmente sem permissão nenhuma |
+| Perda da carteira controladora, **se guardiões foram configurados com antecedência** | Recuperação social M-de-N (qualquer limite até 20 guardiões — não há um padrão imposto pelo contrato; 3-de-5 é uma recomendação comum) com um timelock de 7 dias antes que entre em vigor |
+| Reutilização de um conjunto de guardiões desatualizado contra um novo controlador após a recuperação | `executeRecovery` limpa automaticamente a configuração de guardiões antiga — o novo controlador precisa optar por configurá-la de novo |
+| Gas-griefing via uma lista de guardiões sem limite | `RecoveryManager` limita os guardiões a 20 |
+| Falsificação visual de nome de usuário (homóglifos) | Nomes de usuário são restritos a letras ASCII, dígitos, `-` e `.` |
+
+## O que o TruthID não protege [#what-truthid-does-not-protect-against]
+
+<Callout title="Sem guardiões configurados significa nenhuma recuperação, nunca" type="error">
+`proposeRecovery` reverte com `GuardiansNotConfigured` a menos que o controlador da identidade tenha configurado guardiões explicitamente com antecedência. Não existe nenhum outro caminho de recuperação — perder a carteira controladora sem guardiões configurados significa que a identidade fica **permanentemente** inacessível. Essa é uma escolha deliberada (sem backdoor, sem override administrativo), mas significa que a recuperação é opt-in, não automática.
+</Callout>
+
+- **Um dispositivo comprometido e desbloqueado.** Se um malware ou um atacante tem controle de um celular ou desktop já desbloqueado, ele pode aprovar logins da mesma forma que o usuário legítimo faria. Essa é a mesma limitação de todo esquema de 2FA baseado em dispositivo — o TruthID protege a chave no armazenamento, não o dispositivo enquanto está em uso.
+- **Um endpoint RPC não confiável.** Todo SDK lê o estado de dispositivos e sessões (`isDeviceActive`, hashes de sessão) a partir de uma URL de RPC — uma pública por padrão, ou uma que o integrador configura. Nada no cliente prova criptograficamente que esse RPC está dizendo a verdade; um RPC malicioso ou comprometido poderia reportar falsamente um dispositivo revogado como ativo. Integradores com um fluxo de login de alto valor devem rodar seu próprio node ou escolher um provedor de RPC em que confiem.
+- **Auditoria profissional de terceiros.** Os contratos passaram apenas por uma revisão manual interna (veja [Status da auditoria](#audit-status) abaixo) — nenhuma empresa externa auditou esse código. Trate como software em estágio inicial.
+- **Bugs encontrados após a implantação.** Nenhum contrato do TruthID fica atrás de um proxy de upgrade, por design — um bug não pode ser corrigido a quente no bytecode implantado. O que *pode* mudar é para qual implantação um app aponta: `TruthIDAccount` e `TruthIDAccountFactory` têm ambos uma função `updateRegistries` controlada pelo dono especificamente para que uma smart account existente possa ser redirecionada depois que o projeto migra para um novo conjunto de contratos, o que já aconteceu mais de uma vez conforme bugs como o problema de reentrância acima foram encontrados e corrigidos. Então "imutável" aqui significa nenhum upgrade silencioso, não que os endereços implantados sejam permanentes para sempre — veja [Contratos Inteligentes](/docs/contracts) para os endereços atuais e [Como o TruthID Funciona](/docs/concepts/how-it-works) para como uma migração de fato acontece.
+- **O próprio backend do integrador.** Limitar a taxa de criação de desafios, proteger segredos e o fortalecimento geral do servidor são responsabilidade do integrador — os SDKs do TruthID verificam uma assinatura e uma leitura na chain, nada mais.
+- **Um usuário sendo convencido a aprovar uma solicitação real.** O celular mostra o verdadeiro `origin` de quem está pedindo, mas a decisão de tocar em "Aprovar" ainda é humana. Alguém enganado por um pretexto convincente (ou simplesmente não lendo a tela) ainda pode aprovar um login que não deveria — o mesmo risco residual de todo 2FA baseado em aprovação.
+
+## Escopo: esta página é sobre fazer login no TruthID, não sobre o vault [#scope-this-page-is-about-logging-into-truthid-not-the-vault]
+
+O TruthID Vault (o módulo opcional de gerenciador de senhas nos apps desktop e mobile) pode gerar códigos TOTP e atuar como um autenticador WebAuthn/passkey — mas isso é para fazer login em *outros* serviços cujas credenciais você salvou no vault, não para o próprio login do TruthID. O TruthID em si nunca pede uma senha, um código TOTP ou uma passkey — a posse da chave do dispositivo mais o fluxo de aprovação descrito acima é o mecanismo de login completo. Veja [TruthID Vault](/docs/concepts/vault) para o modelo de ameaças do próprio vault (derivação da chave do vault, criptografia de backup, permissões por dispositivo).
+
+## Status da auditoria [#audit-status]
+
+Os contratos passaram por duas rodadas de revisão manual de segurança (sem ferramentas automatizadas como Slither ou Mythril): controle de acesso, reentrância, front-running, dependência de timestamp, DoS e validação de entrada.
+
+- **Antes do lançamento na mainnet**, uma revisão inicial encontrou 7 problemas, incluindo um bug crítico (`setRecoveryManager` sem proteção — a mesma classe de bug por trás do hack da multisig da Parity em 2017). Todos os 7 foram corrigidos antes da implantação.
+- **Durante o desenvolvimento posterior**, uma revisão de acompanhamento de `contracts/` encontrou um bug crítico de reentrância em `RecoveryManager.executeRecovery`: um atacante que tivesse comprometido o controlador antigo poderia reentrar em `proposeRecovery` enquanto `emergencyWithdraw` estava movendo fundos para fora, e sequestrar a identidade em plena recuperação. Corrigido reordenando `executeRecovery` para Checks-Effects-Interactions — o estado é finalizado antes de qualquer chamada externa ser feita, em vez de depender de um `ReentrancyGuard`. Esse é o mesmo padrão de correção usado no achado original do `setRecoveryManager`.
+
+Revisões como essa acontecem periodicamente ao longo do desenvolvimento, não apenas uma vez antes do lançamento — as próprias diretrizes de contribuição do projeto pedem uma rodada de revisão por área principal (contratos, desktop, mobile, SDKs) antes de qualquer release. Este projeto **não** passou por uma auditoria profissional de terceiros.
+
+Se você encontrar uma vulnerabilidade, por favor reporte de forma privada pela [aba GitHub Security](https://github.com/masterlxz/truthid/security) do repositório, em vez de abrir uma issue pública.
+
+## Próximos passos
+
+- [Como o TruthID Funciona](/docs/concepts/how-it-works) — o passo a passo completo do protocolo que este modelo de ameaças assume
+- [Recuperação Social](/docs/concepts/recovery) — a correção de reentrância mencionada acima, em contexto
+- [Guia rápido](/docs/quickstart) — adicione o login do TruthID ao seu backend
+- [Contratos Inteligentes](/docs/contracts) — endereços, ABIs e custo de gas por operação

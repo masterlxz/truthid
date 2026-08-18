@@ -1,0 +1,36 @@
+---
+title: Mobile
+description: "O dispositivo do dia a dia — pareamento, aprovação de login, o vault, assinatura delegada e autofill."
+---
+
+O app mobile (Flutter, Android e iOS) é o dispositivo que você carrega e usa para os logins do dia a dia. Ele é pareado a uma identidade criada no [Desktop](/docs/apps/desktop) e, a partir daí, é ele que de fato aprova logins, guarda uma cópia do vault, e responde a requisições cross-device de outros dispositivos ou da extensão de navegador.
+
+## Aprovação de login
+
+Este é o trabalho principal do mobile: escanear um QR code, mostrar o `origin` de quem está solicitando e — se você aprovar — assinar a resposta e registrar a sessão on-chain, tudo como descrito em [Como o TruthID Funciona](/docs/concepts/how-it-works#logging-in). O passo de registro da sessão é responsabilidade do próprio mobile (não é algo que o backend do site ou o SDK fazem), submetido como uma `UserOperation` ERC-4337 através da smart account.
+
+## Vault
+
+Acesso completo de leitura/escrita ao [TruthID Vault](/docs/concepts/vault) — credenciais, endereços, cartões, documentos — com o mesmo conjunto de recursos do desktop (gerador de senhas, medidor de força, favoritos, gerenciamento de permissões por dispositivo). Veja aquela página para entender o que de fato é armazenado e como é cifrado; isto é só onde você o gerencia a partir do seu celular.
+
+## Papel cross-device
+
+O mobile costuma ser o *respondente* no transporte LAN/dead-drop descrito em [Cross-Device e Armazenamento](/docs/concepts/cross-device-and-storage#cross-device-transport-lan--dead-drop) — é o dispositivo que outros dispositivos e a extensão de navegador estão tentando alcançar. Ele também trata requisições de assinatura delegada (assinar mensagem, assinar e executar, fixar/publicar) da mesma forma que o desktop: cada requisição recebe sua própria aprovação individual, sempre — não há autorização persistente por app nem cota em nenhum dos lados.
+
+## Recuperação social — somente leitura
+
+O mobile mostra a lista atual de guardiões, o limite, e o status/timelock de qualquer proposta de recuperação ativa, mas não pode configurar guardiões nem agir sobre uma proposta — veja [Recuperação Social](/docs/concepts/recovery#who-can-actually-do-this--desktop-only) para entender por que essa parte é exclusiva do desktop.
+
+## Autofill
+
+Ambas as plataformas têm autofill nativo: Android via `AutofillService`, iOS via uma extensão Credential Provider. Credenciais, endereços e cartões salvos no vault podem preencher automaticamente formulários de outros apps diretamente. Uma exceção deliberada: códigos TOTP são excluídos do que a extensão de navegador pode obter para autofill — eles são gerados e usados localmente apenas no mobile/desktop, nunca entregues à extensão. Veja [TruthID Vault → TOTP e passkeys](/docs/concepts/vault#totp-and-passkeys--for-other-services-not-truthid) para entender por que esse limite existe.
+
+## Backup
+
+O vault pode ser exportado para um arquivo `.truthid-backup` a partir do mobile da mesma forma que a partir do desktop — veja [TruthID Vault → Backup e exportação](/docs/concepts/vault#backup-and-export) para o formato.
+
+## Próximos passos
+
+- [Desktop](/docs/apps/desktop) — configuração de identidade e recuperação social completa
+- [Extensão de Navegador](/docs/apps/extension) — o que conversa com o mobile via LAN/dead-drop
+- [TruthID Vault](/docs/concepts/vault) — o modelo de dados completo

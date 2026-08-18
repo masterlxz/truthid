@@ -1,0 +1,85 @@
+---
+title: 简介
+description: "去中心化身份验证，取代 Google、Apple 或 Microsoft 登录 — 无需密码，无需第三方身份提供商。"
+---
+
+TruthID 是一种去中心化身份验证方式，取代"使用 Google/Apple/Microsoft 登录"。用户通过区块链钱包拥有自己的身份，并用受信任的设备完成身份验证 — 无需密码、无需邮箱、中间也没有第三方身份提供商。
+
+## 为什么
+
+中心化身份提供商会造成账户锁定、数据收集，以及单点故障。TruthID 让用户对自己的身份（一个由自己掌控的钱包）拥有主权，同时为接入方提供一个简单的 SDK，用于对照公共区块链验证登录。
+
+## 前提条件 [#prerequisites]
+
+TruthID 有两类用户 — 登录某个网站的人，以及把 TruthID 接入网站的开发者。两边需要的东西各不相同。
+
+**要使用 TruthID 登录：**
+- 一个已在链上注册的身份 — 使用任意 EVM 钱包（MetaMask、Rabby、Ledger、Trezor、WalletConnect）创建一次，钱包中需持有少量 ETH，用于支付 [Base](https://base.org) 上的建立 gas 费（通常远低于一美分）。该钱包将成为建立过程中创建的智能账户的所有者，此后就不再需要它了 — 智能账户从此自行支付 gas 费。完整的建立流程和费用请参见[智能账户与 Gas](/docs/smart-account)。
+- 一个已与该身份配对的受信任设备 — 桌面端应用或移动端应用。设备自身的私钥永远不会离开设备；上面那个钱包只在创建身份时用一次，日常登录并不需要它。
+
+**要将 TruthID 集成到您的应用中：**
+- 一个能接收 HTTPS `POST` 请求（已签名的登录响应）的后端。任何语言都可以 — 官方提供 TypeScript、Python 和 Ruby 的 SDK（见下方[集成 TruthID](#集成-truthid)），其他语言也可以直接对照公共合约进行验证。
+- 一种在登录页面上渲染二维码的方式 — SDK 负责构建载荷，您的前端只需要任意一个二维码渲染库。
+- 无需额外准备：不需要数据库、不需要服务器、不需要第三方账户。
+
+## 架构
+
+TruthID 是一组相互独立的组件，它们都读写 Base 主网上同一组六份合约 — 没有中央服务器把它们串在一起。
+
+| 组件 | 技术栈 | 路径 |
+|---|---|---|
+| 智能合约 | Solidity（Foundry） | [`contracts/`](https://github.com/masterlxz/truthid/tree/main/contracts) |
+| 桌面端应用 | Tauri + Rust + React + TypeScript | [`desktop/`](https://github.com/masterlxz/truthid/tree/main/desktop) |
+| 移动端应用 | Flutter | [`mobile/`](https://github.com/masterlxz/truthid/tree/main/mobile) |
+| 浏览器扩展 | WXT（Chrome 系 + Firefox） | [`extension/`](https://github.com/masterlxz/truthid/tree/main/extension) |
+| SDK | TypeScript、Python、Ruby、Dart | [`sdk/`](https://github.com/masterlxz/truthid/tree/main/sdk) |
+| 本站点 | Rails + Next.js/Fumadocs | [`site/`](https://github.com/masterlxz/truthid/tree/main/site) |
+| 集成测试 | viem + tsx，针对本地 Anvil 运行 | [`integration/`](https://github.com/masterlxz/truthid/tree/main/integration) |
+
+登录/配对这条路径本身没有任何由 TruthID 运营的中继、信令服务器或后端 — 每一条链下消息要么装在二维码里传递，要么直接在用户手机和接入方自己的后端之间传输。各部分具体放在哪里，见[代码仓库结构](/docs/structure)。
+
+## 工作原理
+
+- **身份** — 一个绑定到控制钱包的用户名，创建在链上（`IdentityRegistry`）。
+- **受信任设备** — 每台设备（桌面端、手机）在本地生成自己的密钥对；私钥永远不会离开设备。设备通过承诺-揭示方案注册在链上（`DeviceRegistry`），以防止抢跑。
+- **登录** — 网站将已签名的挑战连同一个回调 URL 直接嵌入二维码。用户的手机扫描它、在本地签名，然后把响应直接 `POST` 到该回调地址。接入方的后端使用 TruthID SDK 在链上验证签名和设备状态。
+- **会话** — 链上（`SessionRegistry`）只存储会话数据的 `keccak256` 哈希；哈希所代表的具体内容留在用户设备本地。
+- **恢复** — 身份可以配置 M-of-N 监护人，用于恢复丢失的控制钱包，恢复生效前有 7 天的时间锁（`RecoveryManager`）。
+
+这条路径上没有任何 TruthID 运营的服务器 — 挑战装在二维码里传递，已签名的响应通过 HTTPS 直接从手机发到您自己的后端。完整流程 — 精确的消息格式、智能账户签名者模型、哪些数据公开上链、哪些只保留在本地 — 见 [TruthID 工作原理](/docs/concepts/how-it-works)。
+
+## 集成 TruthID [#integrating-truthid]
+
+使用官方 SDK 之一 — 它们封装了挑战创建、签名验证和链上读取，让您的后端无需直接与区块链通信：
+
+| SDK | 包 |
+|---|---|
+| TypeScript | npm 上的 [`truthid-sdk`](https://www.npmjs.com/package/truthid-sdk) |
+| Python | PyPI 上的 [`truthid-sdk`](https://pypi.org/project/truthid-sdk/) |
+| Ruby | RubyGems 上的 [`truthid-sdk`](https://rubygems.org/gems/truthid-sdk) |
+| Dart | `truthid_sdk` — 尚未发布到 pub.dev，见 [Dart SDK → 安装](/docs/sdk/dart#installation) |
+
+每个 SDK 的完整 API 参考 — 每一个方法、类型和安全说明 — 都在 [SDK 参考](/docs/sdk/typescript)中。框架示例（Express / Flask / Sinatra）在 [`sdk/README.md`](https://github.com/masterlxz/truthid/blob/main/sdk/README.md#full-examples)中。
+
+## 智能合约（Base 主网，链 ID 8453） [#smart-contracts-base-mainnet-chain-8453]
+
+| 合约 | 地址 |
+|---|---|
+| `IdentityRegistry` | [`0x97787D6EE3EfD76962dc7E3Bf143E659D9961962`](https://basescan.org/address/0x97787D6EE3EfD76962dc7E3Bf143E659D9961962) |
+| `DeviceRegistry` | [`0x937702CBABDab0EEBD1A29f0a7A658FeF4582543`](https://basescan.org/address/0x937702CBABDab0EEBD1A29f0a7A658FeF4582543) |
+| `RecoveryManager` | [`0x42Ca394c23aB027e877B9900B384f59E2Af23470`](https://basescan.org/address/0x42Ca394c23aB027e877B9900B384f59E2Af23470) |
+| `SessionRegistry` | [`0x8C65527eDA3ce7754Bf87B34aC4ec8ce74D647e2`](https://basescan.org/address/0x8C65527eDA3ce7754Bf87B34aC4ec8ce74D647e2) |
+| `TruthIDAccountFactory` | [`0xc2C86cB7d8694EcA8BaAdD95B14842E8643aB262`](https://basescan.org/address/0xc2C86cB7d8694EcA8BaAdD95B14842E8643aB262) |
+| `VaultRegistry` | [`0x07449b0c8dAE1252f59A5C0992D1413113a849B4`](https://basescan.org/address/0x07449b0c8dAE1252f59A5C0992D1413113a849B4) |
+
+所有合约都已在 Basescan 上完成验证，且没有升级代理。每个身份的控制方本身就是由上述工厂部署的智能账户（ERC-4337） — 经过一次性建立后就自行支付 gas 费，日常登录从不触碰所有者钱包。测试网地址、ABI、函数参考和真实 gas 成本，见[智能合约](/docs/contracts)。建立流程和智能账户模型，见[智能账户与 Gas](/docs/smart-account)。
+
+## 源代码
+
+TruthID 基于 MIT 许可开源：[github.com/masterlxz/truthid](https://github.com/masterlxz/truthid)。
+
+## 后续步骤
+
+- [为什么选择 TruthID](/docs/concepts/vision) — TruthID 解决的问题，以及它适合谁
+- [TruthID 工作原理](/docs/concepts/how-it-works) — 完整的协议讲解
+- [快速开始](/docs/quickstart) — 为您的后端添加 TruthID 登录

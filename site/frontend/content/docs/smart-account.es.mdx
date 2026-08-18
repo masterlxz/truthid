@@ -1,0 +1,82 @@
+---
+title: Cuenta inteligente y gas
+description: "Cómo funciona la cuenta inteligente ERC-4337, el costo de configuración único, y el gas del día a día."
+---
+
+Cada identidad de TruthID está controlada por una cuenta inteligente ERC-4337, no una dirección de wallet simple. Esta página explica por qué, qué cuesta configurarla, qué cuestan las operaciones del día a día, y cómo mantener la cuenta financiada. Léela si tienes curiosidad de por qué el inicio de sesión no necesita MetaMask, o si estás decidiendo cuánto ETH enviar durante la configuración. Para saber dónde encaja esto en el resto del protocolo — creación de identidad, emparejamiento de dispositivos, inicio de sesión — ver [Cómo funciona TruthID](/docs/concepts/how-it-works).
+
+## Cómo funciona [#how-it-works]
+
+TruthID no tiene relayer ni hot wallet operada por el proyecto — la cuenta inteligente de cada usuario paga su propio gas. La cuenta inteligente (`TruthIDAccount.sol`, una implementación ERC-4337 desde cero sin dependencias externas) reconoce dos niveles de firmante:
+
+- **Propietario** — la wallet usada para crear la identidad (Ledger, MetaMask, o cualquier wallet EVM). Acceso total a la cuenta.
+- **Dispositivos** — las apps de escritorio y móvil, agregadas después de la configuración. Un dispositivo solo puede llamar a `execute`/`executeBatch`, y nunca contra la cuenta misma ni contra `DeviceRegistry`/`IdentityRegistry`/`RecoveryManager` — esto evita que un dispositivo comprometido se reautorice a sí mismo o reescriba quién controla la identidad.
+
+No hay paymaster. La cuenta deposita ETH directamente en el contrato oficial [EntryPoint v0.7](https://basescan.org/address/0x0000000071727De22E5E9d8BAf0edAc6f37da032) y paga sus propias `UserOperation`s desde ese saldo — el mismo EntryPoint que usa cada cuenta ERC-4337 en cada cadena EVM, no algo que TruthID haya desplegado por su cuenta.
+
+La dirección de la cuenta se calcula con `CREATE2` antes de que exista, a partir de la dirección del propietario — cada SDK exporta una función `computeSmartAccountAddress`/`compute_smart_account_address` ([TypeScript](/docs/sdk/typescript#computesmartaccountaddressledgeraddress-index), [Python](/docs/sdk/python#compute_smart_account_addressledger_address-index0), [Ruby](/docs/sdk/ruby#compute_smart_account_addressledger_address-index-0)) si necesitas predecirla off-chain, sin ninguna llamada RPC y sin ningún servidor involucrado.
+
+## Configuración única
+
+Crear una identidad toma una firma y tres transacciones, todas pagadas por la wallet propietaria:
+
+1. **Firmar el consentimiento** — un mensaje que vincula el chain ID, la dirección del registro, el nombre de usuario y la futura dirección de la cuenta inteligente. Sin gas.
+2. **Crear la identidad** — `IdentityRegistry.createIdentity(username, smartAccountAddress, v, r, s)`. La firma del paso 1 prueba que el propietario realmente acordó esta dirección exacta de cuenta inteligente, así que nadie puede hacer front-running de la identidad con una dirección que no controla.
+3. **Desplegar la cuenta inteligente** — `TruthIDAccountFactory.createAccount(owner, 0)`, en la dirección ya comprometida en el paso 2.
+4. **Financiarla** — una transferencia simple de ETH a la nueva dirección de cuenta inteligente. La app de escritorio sugiere 0.001 ETH por defecto; este campo es editable, y siempre puedes enviar más después (ver [Financiando tu cuenta inteligente](#funding-your-smart-account) abajo).
+
+Después de eso, la wallet propietaria es solo una clave de firma — nunca vuelve a necesitar ETH. Cada operación futura (emparejar un dispositivo, crear o revocar una sesión) es una `UserOperation` firmada off-chain y enviada a través de un bundler, pagada enteramente por la cuenta inteligente.
+
+## Costo del día a día
+
+Una vez terminada la configuración, no hay ventana emergente de wallet ni aviso de gas. La app de escritorio o móvil firma una `UserOperation` localmente y la envía a un bundler — [Pimlico](https://pimlico.io) hoy, con la URL del bundler configurable por usuario para que un bundler autoalojado también funcione — que la reenvía al EntryPoint. El propio saldo de la cuenta inteligente cubre el gas; no se cobra nada al dispositivo, y nadie en TruthID ve ni maneja la transacción.
+
+## Financiando tu cuenta inteligente [#funding-your-smart-account]
+
+La cuenta inteligente es una dirección normal — envíale ETH en Base de la misma forma en que se lo enviarías a cualquier wallet. Ambas apps tienen una acción de Depósito (código QR + dirección) para esto: el panel del escritorio y la pestaña Wallet del móvil. No hay un saldo mínimo impuesto por los contratos; quedarse sin saldo solo significa que la siguiente operación falla hasta que la recargues.
+
+## Direcciones
+
+`TruthIDAccount` en sí no tiene una dirección fija — cada propietario obtiene su propia instancia vía `CREATE2`, desplegada bajo demanda por la factory. La factory y el EntryPoint sí tienen direcciones fijas — actuales según el último despliegue; ver [Modelo de seguridad → Estado de auditoría](/docs/security#audit-status) para saber por qué estas direcciones ya han cambiado antes y podrían volver a hacerlo:
+
+### Base Mainnet (producción, chain ID 8453)
+
+| Contrato | Dirección |
+|---|---|
+| `TruthIDAccountFactory` | [`0xc2C86cB7d8694EcA8BaAdD95B14842E8643aB262`](https://basescan.org/address/0xc2C86cB7d8694EcA8BaAdD95B14842E8643aB262) |
+| `EntryPoint` (v0.7) | [`0x0000000071727De22E5E9d8BAf0edAc6f37da032`](https://basescan.org/address/0x0000000071727De22E5E9d8BAf0edAc6f37da032) |
+
+### Base Sepolia (testnet, chain ID 84532)
+
+| Contrato | Dirección |
+|---|---|
+| `TruthIDAccountFactory` | [`0xc4Ca3A79BAb993C4B7cFD312C80c20b2182F8c1e`](https://sepolia.basescan.org/address/0xc4Ca3A79BAb993C4B7cFD312C80c20b2182F8c1e) |
+| `EntryPoint` (v0.7) | [`0x0000000071727De22E5E9d8BAf0edAc6f37da032`](https://sepolia.basescan.org/address/0x0000000071727De22E5E9d8BAf0edAc6f37da032) |
+
+La referencia completa a nivel de función para ambos contratos está en [Contratos inteligentes → Referencia de contratos](/docs/contracts#contract-reference).
+
+## Costo [#cost]
+
+Números de gas reales de la propia suite de pruebas del proyecto (`forge test --gas-report`, `TruthIDAccount.t.sol` + `TruthIDAccountFactory.t.sol`, 62 pruebas exitosas) — no estimaciones.
+
+| Operación | Gas mín. | Gas mediano | Gas máx. |
+|---|---|---|---|
+| `createAccount` (primer despliegue) | — | — | 1,774,511 |
+| `createAccount` (ya desplegada, devuelve la existente) | 24,996 | — | — |
+| `execute` (una UserOp, día a día) | 23,135 | 71,519 | 71,544 |
+| `addDevice` | 21,924 | 45,812 | 45,812 |
+| `removeDevice` | 22,148 | 23,854 | 24,573 |
+
+<Callout title="Por qué createAccount tiene dos números tan distintos" type="info">
+La factory es idempotente — llamar a `createAccount` de nuevo para un propietario que ya tiene una cuenta desplegada simplemente devuelve la dirección existente por ~25k de gas. La fila de ~1.77M de gas es el despliegue `CREATE2` real, pagado una vez por identidad durante la configuración.
+</Callout>
+
+**Lo que eso cuesta en ETH**: al precio de gas de ~0.011 gwei observado durante el [despliegue en mainnet](https://basescan.org/address/0x97787D6EE3EfD76962dc7E3Bf143E659D9961962) (la misma tarifa usada en [Contratos inteligentes → Costo por operación](/docs/contracts#cost-per-operation)), el despliegue de la cuenta inteligente (~1.77M de gas) resulta en aproximadamente 0.0000195 ETH, y una llamada `execute` del día a día (~71.5k de gas) en aproximadamente 0.0000008 ETH. El precio del gas se mueve con la demanda de la red — revisa el [rastreador de gas en vivo de Base](https://basescan.org/gastracker) para la tarifa actual.
+
+Estos números son puro costo de ejecución on-chain, medido localmente con Foundry. No incluyen lo que un bundler cobre además del gas por enviar tu `UserOperation` — el nivel gratuito de Pimlico no agrega nada hoy, pero eso es un detalle a nivel de bundler, no algo que esta suite de pruebas pueda medir.
+
+## Próximos pasos
+
+- [Guía rápida](/docs/quickstart) — agrega el inicio de sesión de TruthID a tu backend
+- [Contratos inteligentes](/docs/contracts) — direcciones, ABIs y costo de gas para cada contrato
+- [Modelo de seguridad](/docs/security) — modelo de amenazas y qué protege y no protege TruthID

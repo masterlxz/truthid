@@ -1,0 +1,28 @@
+---
+title: Extensión de navegador
+description: "Autocompletado de credenciales y un puente WebAuthn/passkey para el Vault — habla con Mobile y Desktop, nunca tiene autoridad de escritura por sí misma."
+---
+
+La extensión de navegador (Manifest V3, construida con WXT) trae [TruthID Vault](/docs/concepts/vault) a tu navegador: autocompletando credenciales, direcciones y tarjetas guardadas en formularios web, y actuando como puente para los passkeys guardados en el Vault. Soporta navegadores de la familia Chrome (incluyendo Brave, ya que está basado en Chromium) y Firefox 109+.
+
+## Qué hace — y qué no tiene
+
+La extensión no tiene datos del Vault ni autoridad de escritura propia. Escanear un código QR desde la app móvil inicia una sesión de vida corta (guardada solo en `chrome.storage.session` — nunca escrita en disco, se limpia si el service worker del navegador se reinicia), y el dispositivo contraparte — móvil o escritorio — envía de vuelta un subconjunto cifrado del Vault por el transporte que responda primero. La extensión retransmite y autocompleta; nunca decide de forma independiente qué hay en el Vault.
+
+Llega tanto a móvil **como** a escritorio, corriendo múltiples canales en paralelo:
+
+- **LAN** hacia el móvil, escaneando la red local en busca del mismo servidor HTTP local que el móvil usa para responder otras solicitudes entre dispositivos (ver [Entre dispositivos y almacenamiento](/docs/concepts/cross-device-and-storage#cross-device-transport-lan--dead-drop)).
+- **Dead-drop (IPFS/IPNS)** hacia el móvil, el mismo respaldo de mejor esfuerzo descrito en esa página.
+- **El servidor local del escritorio**, si el escritorio resulta estar corriendo en la misma máquina — no se necesita QR ni cifrado extra, ya que el loopback ya es implícitamente confiable (ver [Desktop → El servidor local](/docs/apps/desktop#the-local-server)).
+
+Para passkeys específicamente, la extensión guarda la clave de firma solo durante la duración de una sesión de navegador y responde directamente a las llamadas de `navigator.credentials.get()` — este es el lado "autenticador virtual" de la función de passkeys del Vault descrita en [TruthID Vault](/docs/concepts/vault#totp-and-passkeys--for-other-services-not-truthid).
+
+## Brave [#brave]
+
+Las protecciones anti-fingerprinting de Brave anulan por completo la API `chrome.system.*`, lo cual rompe el descubrimiento automático de IP en LAN del que la extensión normalmente depende. Esto es esperado, se detecta explícitamente, y tiene una solución permanente en lugar de un workaround: la extensión recurre a la entrada manual de IP, y ese camino manual es la forma correcta y soportada de usar el descubrimiento LAN en Brave — no un estado temporal degradado esperando una corrección del navegador.
+
+## Próximos pasos
+
+- [Mobile](/docs/apps/mobile) — el dispositivo contraparte habitual para el autocompletado
+- [Desktop](/docs/apps/desktop) — la contraparte en la misma máquina, vía el servidor local
+- [TruthID Vault](/docs/concepts/vault) — qué es lo que realmente se está autocompletando

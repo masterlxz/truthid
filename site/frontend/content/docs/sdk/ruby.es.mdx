@@ -1,0 +1,289 @@
+---
+title: SDK de Ruby
+description: "Referencia completa de la API para truthid-sdk en RubyGems."
+---
+
+Referencia completa de la API para [`truthid-sdk`](https://rubygems.org/gems/truthid-sdk) en RubyGems. ¿Nuevo en TruthID? Empieza con la [Guía rápida](/docs/quickstart) — esta página es la referencia detallada de cada método y tipo una vez que estés integrando de verdad.
+
+## Instalación
+
+```bash
+gem install truthid-sdk
+```
+
+Requiere Ruby 3.0+.
+
+## `TruthID::Client`
+
+```ruby
+require "truthid"
+
+truthid = TruthID::Client.new  # defaults to network: "base-mainnet"
+```
+
+También hay una función factory, si la prefieres:
+
+```ruby
+truthid = TruthID.new_client  # equivalent to TruthID::Client.new
+```
+
+### Constructor
+
+`TruthID::Client.new(network: "base-mainnet", rpc_url: nil)`
+
+| Campo | Tipo | Requerido | Descripción |
+|-------|------|----------|--------------|
+| `network` | `"base-sepolia"` o `"base-mainnet"` | No — por defecto `"base-mainnet"` | De qué red leer los contratos |
+| `rpc_url` | `String` o `nil` | No | Endpoint RPC personalizado. Por defecto usa el RPC público de Base para la red elegida |
+
+Igual que Python, `network` tiene un valor por defecto aquí — solo necesitas pasarlo para sobrescribirlo o para usar la testnet. (El SDK de TypeScript lo requiere explícitamente, sin valor por defecto.)
+
+## Métodos
+
+### `create_challenge(origin)`
+
+Crea un desafío de un solo uso para incrustar en el código QR mostrado al usuario.
+
+**Parámetros**
+
+| Nombre | Tipo | Descripción |
+|------|------|-------------|
+| `origin` | `String` | El dominio de tu sitio, p. ej. `"yoursite.com"` |
+
+**Devuelve** [`AuthChallenge`](#authchallenge)
+
+```ruby
+challenge = truthid.create_challenge("yoursite.com")
+challenge.nonce      #=> "3f2e1a4b-..."
+challenge.issued_at  #=> 1718000000000
+```
+
+<Callout title="Guárdalo, luego elimínalo" type="idea">
+Mantén el desafío del lado del servidor, indexado por `nonce`, hasta que se ejecute `verify_auth_response` — luego elimínalo de inmediato. Ver [Invalidación de nonce](#nonce-invalidation) abajo.
+</Callout>
+
+**Construyendo el código QR** — la app móvil espera exactamente esta forma (`challenge.to_h` ya produce las claves camelCase correctas):
+
+```json
+{
+  "action": "truthid-auth",
+  "challenge": { "type": "challenge", "nonce": "...", "issuedAt": 1718000000000, "origin": "yoursite.com" },
+  "callbackUrl": "https://yoursite.com/auth/verify"
+}
+```
+
+`callbackUrl` **debe** usar `https://` — la app móvil se niega a enviar la respuesta firmada a una URL `http://` simple.
+
+---
+
+### `verify_auth_response(challenge, response, ttl_ms: 30_000)`
+
+Verifica la respuesta firmada recibida del teléfono del usuario. Ejecuta seis verificaciones en secuencia y se detiene en el primer fallo:
+
+1. El usuario aprobó (no rechazó)
+2. El desafío está dentro del TTL (predeterminado: 30 segundos)
+3. El nonce coincide con el desafío original
+4. La firma criptográfica es válida
+5. El dispositivo está registrado y activo en la blockchain
+6. Recupera el ID de identidad vinculado a este dispositivo
+
+**Parámetros**
+
+| Nombre | Tipo | Descripción |
+|------|------|-------------|
+| `challenge` | [`AuthChallenge`](#authchallenge) | El desafío que creaste |
+| `response` | [`AuthResponse`](#authresponse) | La respuesta recibida del teléfono |
+| `ttl_ms:` *(opcional)* | `Integer` | Edad máxima del desafío en ms. Por defecto: `30_000` |
+
+**Devuelve** [`VerifyAuthResult`](#verifyauthresult)
+
+`AuthResponse.from_hash` la construye directamente a partir del cuerpo JSON parseado — a diferencia del SDK de Python, no se necesita mapeo manual de campos:
+
+```ruby
+data = JSON.parse(request.body.read)  # { "approved" => ..., "nonce" => ..., "signature" => ..., "deviceAddress" => ... }
+
+response = TruthID::AuthResponse.from_hash(data)
+result = truthid.verify_auth_response(challenge, response)
+
+if result.valid
+  puts "Authenticated! Identity ID: #{result.identity_id}"
+else
+  puts "Failed: #{result.reason}"
+end
+```
+
+**Motivos de fallo**
+
+| `reason` | Causa |
+|----------|-------|
+| `"User rejected the login request"` | El usuario tocó "Rechazar" en su teléfono |
+| `"Challenge expired"` | Pasaron más de `ttl_ms` ms desde `issued_at` |
+| `"Nonce mismatch"` | El nonce de la respuesta no coincide con el del desafío |
+| `"Invalid signature format"` | La firma está mal formada |
+| `"Signature does not match device address"` | La firma no fue hecha por `device_address` |
+| `"Device is not active or has been revoked"` | El dispositivo fue revocado por el propietario de la identidad |
+
+---
+
+### `verify_session(session_hash)` [#verify_sessionsession_hash]
+
+Verifica si un hash de sesión sigue siendo válido (no revocado). Llama a esto en solicitudes posteriores tras el inicio de sesión para confirmar que la sesión no ha sido revocada desde otro dispositivo.
+
+**Parámetros**
+
+| Nombre | Tipo | Descripción |
+|------|------|-------------|
+| `session_hash` | `String` | Cadena hex `bytes32` (`0x...`) |
+
+**Devuelve** [`SessionInfo`](#sessioninfo)
+
+```ruby
+session = truthid.verify_session(session_hash)
+if session.exists && !session.revoked
+  # still logged in
+end
+```
+
+---
+
+### `check_device_status(device_pub_key)`
+
+Busca el estado actual de un dispositivo en la blockchain.
+
+**Parámetros**
+
+| Nombre | Tipo | Descripción |
+|------|------|-------------|
+| `device_pub_key` | `String` | Dirección Ethereum del dispositivo (`0x...`) |
+
+**Devuelve** [`DeviceStatus`](#devicestatus)
+
+```ruby
+status = truthid.check_device_status(device_pub_key)
+```
+
+---
+
+### `compute_smart_account_address(ledger_address, index: 0)` [#compute_smart_account_addressledger_address-index-0]
+
+Predice la dirección de la cuenta inteligente (controladora) de un usuario vía `CREATE2` — cómputo puro local, sin llamada RPC y sin ningún servidor involucrado. Útil para mostrar una dirección de depósito, o verificar un saldo, antes de que la cuenta se haya usado alguna vez on-chain.
+
+**Parámetros**
+
+| Nombre | Tipo | Descripción |
+|------|------|-------------|
+| `ledger_address` | `String` | La dirección de la wallet de hardware / EOA propietaria |
+| `index:` *(opcional)* | `Integer` | Índice de cuenta, para múltiples cuentas inteligentes por propietario. Por defecto: `0` |
+
+**Devuelve** `String` — la dirección de cuenta inteligente con checksum.
+
+```ruby
+smart_account = truthid.compute_smart_account_address(ledger_address)
+```
+
+También hay disponible una función a nivel de módulo para cuando no necesitas una instancia completa del cliente:
+
+```ruby
+smart_account = TruthID.compute_smart_account_address(ledger_address, network: "base-mainnet")
+```
+
+## Tipos
+
+Todos los siguientes están en el módulo `TruthID`. `AuthChallenge` y `AuthResponse` son clases simples — sus atributos siguen el snake_case normal de Ruby (`issued_at`, `device_address`), y cada una tiene un método de conversión (`to_h` / `from_hash`) en el límite donde se encuentra con el JSON camelCase que la app móvil realmente envía y firma. `VerifyAuthResult`, `SessionInfo` y `DeviceStatus` son `Struct`s, ya que nunca cruzan el cable.
+
+#### `AuthChallenge` [#authchallenge]
+
+```ruby
+class AuthChallenge
+  attr_reader :type, :nonce, :issued_at, :origin
+
+  # to_h => { "type" => ..., "nonce" => ..., "issuedAt" => ..., "origin" => ... }
+end
+```
+
+#### `AuthResponse` [#authresponse]
+
+```ruby
+class AuthResponse
+  attr_reader :approved, :nonce, :signature, :device_address, :session_signature
+
+  # self.from_hash(h) reads h["deviceAddress"] into device_address, etc.
+  # session_signature: personal_sign over keccak256(nonce) — always sent alongside signature
+end
+```
+
+#### `VerifyAuthResult` [#verifyauthresult]
+
+```ruby
+VerifyAuthResult = Struct.new(:valid, :identity_id, :device_address, :reason, keyword_init: true)
+```
+
+#### `SessionInfo` [#sessioninfo]
+
+```ruby
+SessionInfo = Struct.new(:exists, :revoked, :identity_id, :device_pub_key, :created_at, keyword_init: true)
+```
+
+#### `DeviceStatus` [#devicestatus]
+
+```ruby
+DeviceStatus = Struct.new(:exists, :active, :label, :identity_id, :added_at, keyword_init: true)
+```
+
+## Notas de seguridad
+
+### Invalidación de nonce [#nonce-invalidation]
+
+Elimina el desafío de tu almacén **antes** de llamar a `verify_auth_response`, no después — eliminarlo después deja una condición de carrera donde la misma respuesta firmada puede enviarse dos veces dentro de la ventana del TTL.
+
+```ruby
+# Correct order
+pending_challenges.delete(response.nonce)            # delete first
+result = truthid.verify_auth_response(challenge, response)  # then verify
+```
+
+### TTL
+
+El valor predeterminado es 30 segundos, coincidiendo con la propia expiración de desafíos de la app móvil. Reducirlo está bien; aumentarlo por encima de 30 segundos no tiene efecto, ya que el teléfono de todas formas rechazará un desafío más antiguo.
+
+### Solo HTTPS
+
+El teléfono hace `POST` de la respuesta firmada directamente a tu URL de callback — la app móvil rechaza URLs que no sean `https://`, y tu endpoint todavía necesita un certificado TLS válido para que la conexión tenga éxito.
+
+## Redes
+
+| Red | Chain ID | Descripción |
+|---------|----------|--------------|
+| `"base-sepolia"` | 84532 | Testnet — para desarrollo |
+| `"base-mainnet"` | 8453 | Producción (por defecto) |
+
+```ruby
+# Testnet during development
+truthid = TruthID::Client.new(network: "base-sepolia")
+
+# Custom RPC instead of the public endpoint
+truthid = TruthID::Client.new(network: "base-mainnet", rpc_url: "https://your-private-rpc.example.com")
+```
+
+Las direcciones de contratos para ambas redes están en [Contratos inteligentes](/docs/intro#smart-contracts-base-mainnet-chain-8453).
+
+## Visibilidad de la sesión — nada que hacer
+
+Los inicios de sesión completados ya aparecen en las apps móvil/escritorio de TruthID del usuario y pueden revocarse individualmente desde ahí. El teléfono registra la sesión on-chain por sí mismo (mediante una UserOperation) antes de siquiera llamar a tu URL de callback — no hay un paso de registro separado que tengas que llamar.
+
+Si quieres verificar dos veces que una sesión llegó on-chain, deriva su hash del nonce y llama a `verify_session`:
+
+```ruby
+session_hash = "0x" + Eth::Util.keccak256(response.nonce).unpack1("H*")
+session = truthid.verify_session(session_hash)
+if session.exists && !session.revoked
+  # confirmed on-chain
+end
+```
+
+## Próximos pasos
+
+- [Guía rápida](/docs/quickstart) — recorrido completo desde la instalación hasta el primer inicio de sesión
+- [Ejemplo completo de Sinatra](https://github.com/masterlxz/truthid/blob/main/sdk/README.md#full-examples) con tokens de sesión y una ruta protegida
+- [Referencia del SDK de TypeScript](/docs/sdk/typescript)
+- [Referencia del SDK de Python](/docs/sdk/python)

@@ -1,0 +1,170 @@
+---
+title: 智能合约
+description: "TruthID 部署在 Base 上的六份 Solidity 合约的地址、ABI、函数参考和真实 gas 成本。"
+---
+
+TruthID 是 [Base](https://base.org) 上的六份 Solidity 合约 — 没有后端，没有数据库。下面描述的一切都在公链上，可以独立核实；本页面是为想直接读取链上数据、编写自己的 SDK，或单纯想验证实际部署内容的接入方而写的。
+
+全部六份合约都已在 Basescan 上**通过验证**，且没有升级代理 — 一个 bug 无法在已部署的字节码中被热修复。但这不代表已部署的地址是永久不变的：`TruthIDAccount` 和 `TruthIDAccountFactory` 都有一个由所有者控制的 `updateRegistries` 函数，专门用于在迁移到新部署后，把已有的智能账户重新指向新地址 — 随着问题被发现和修复，这种情况已经发生过不止一次（见[安全模型 → 审计状态](/docs/security#audit-status)）。下面的地址是最新一次部署后的当前地址。
+
+## 地址
+
+### Base 主网（生产环境，链 ID 8453）
+
+| 合约 | 地址 |
+|---|---|
+| `IdentityRegistry` | [`0x97787D6EE3EfD76962dc7E3Bf143E659D9961962`](https://basescan.org/address/0x97787D6EE3EfD76962dc7E3Bf143E659D9961962) |
+| `DeviceRegistry` | [`0x937702CBABDab0EEBD1A29f0a7A658FeF4582543`](https://basescan.org/address/0x937702CBABDab0EEBD1A29f0a7A658FeF4582543) |
+| `RecoveryManager` | [`0x42Ca394c23aB027e877B9900B384f59E2Af23470`](https://basescan.org/address/0x42Ca394c23aB027e877B9900B384f59E2Af23470) |
+| `SessionRegistry` | [`0x8C65527eDA3ce7754Bf87B34aC4ec8ce74D647e2`](https://basescan.org/address/0x8C65527eDA3ce7754Bf87B34aC4ec8ce74D647e2) |
+| `TruthIDAccountFactory` | [`0xc2C86cB7d8694EcA8BaAdD95B14842E8643aB262`](https://basescan.org/address/0xc2C86cB7d8694EcA8BaAdD95B14842E8643aB262) |
+| `VaultRegistry` | [`0x07449b0c8dAE1252f59A5C0992D1413113a849B4`](https://basescan.org/address/0x07449b0c8dAE1252f59A5C0992D1413113a849B4) |
+
+### Base Sepolia（测试网，链 ID 84532）
+
+| 合约 | 地址 |
+|---|---|
+| `IdentityRegistry` | [`0xb56DbCB7580c097d3f64808064C2d5609dD6B243`](https://sepolia.basescan.org/address/0xb56DbCB7580c097d3f64808064C2d5609dD6B243) |
+| `DeviceRegistry` | [`0xe40e10627D307B0994f1856584bcc5DC323a4330`](https://sepolia.basescan.org/address/0xe40e10627D307B0994f1856584bcc5DC323a4330) |
+| `RecoveryManager` | [`0x97787D6EE3EfD76962dc7E3Bf143E659D9961962`](https://sepolia.basescan.org/address/0x97787D6EE3EfD76962dc7E3Bf143E659D9961962) |
+| `SessionRegistry` | [`0xc2C86cB7d8694EcA8BaAdD95B14842E8643aB262`](https://sepolia.basescan.org/address/0xc2C86cB7d8694EcA8BaAdD95B14842E8643aB262) |
+| `TruthIDAccountFactory` | [`0xc4Ca3A79BAb993C4B7cFD312C80c20b2182F8c1e`](https://sepolia.basescan.org/address/0xc4Ca3A79BAb993C4B7cFD312C80c20b2182F8c1e) |
+
+开发期间请使用测试网 — 关于如何让客户端指向 Sepolia，见 SDK 参考中的[网络](/docs/sdk/typescript#networks)。`VaultRegistry` 目前没有部署在 Sepolia 上（仅限主网）。`TruthIDAccount` 本身没有在这里列出 — 每个身份都有自己的一个实例，由工厂按需部署；这个地址是如何计算出来的，见[智能账户与 Gas](/docs/smart-account)。
+
+## 获取 ABI
+
+您很可能不需要这个 — [SDK](/docs/sdk/typescript) 已经把每一次合约调用都封装成了普通函数。只有在您需要用一种没有官方 SDK 的语言读取状态，或者想自行审计部署内容时，才需要用到原始 ABI。
+
+- **Basescan** — 由于每份合约都已通过验证，上面每个地址页面都有一个"Contract"标签页，里面有完整的 ABI 和源代码，还有一个一键"Export ABI"按钮。这是最简单的来源，并且始终与实际部署的内容一致。
+- **GitHub 源码** — 权威的 `.sol` 接口文件：[`IdentityRegistry.sol`](https://github.com/masterlxz/truthid/blob/main/contracts/src/IdentityRegistry.sol)、[`DeviceRegistry.sol`](https://github.com/masterlxz/truthid/blob/main/contracts/src/DeviceRegistry.sol)、[`RecoveryManager.sol`](https://github.com/masterlxz/truthid/blob/main/contracts/src/RecoveryManager.sol)、[`SessionRegistry.sol`](https://github.com/masterlxz/truthid/blob/main/contracts/src/SessionRegistry.sol)、[`VaultRegistry.sol`](https://github.com/masterlxz/truthid/blob/main/contracts/src/VaultRegistry.sol)、[`TruthIDAccount.sol`](https://github.com/masterlxz/truthid/blob/main/contracts/src/TruthIDAccount.sol)。
+
+目前没有发布任何包含完整 ABI JSON 的 npm/PyPI/RubyGems 包 — 各 SDK 内部只嵌入了每个函数所需的最小片段。如果要自行生成完整的构建产物：`git clone` 本仓库，然后执行 `cd contracts && forge build`（输出会放在被 gitignore 忽略的 `out/` 目录中）。
+
+## 合约参考 [#contract-reference]
+
+下面简要列出每份合约的作用，以及谁可以调用什么。完整行为（承诺-揭示、监护人阈值、会话哈希处理）见 [TruthID 工作原理](/docs/concepts/how-it-works)和[安全模型](/docs/security) — 这里只是函数清单。
+
+### IdentityRegistry
+
+用户名 ↔ 控制钱包的映射关系。它是其他每份合约的根基 — `DeviceRegistry`、`RecoveryManager` 和 `SessionRegistry` 都通过询问这份合约"谁控制哪个用户名"来解析调用者的身份。
+
+| 函数 | 调用者 | 用途 |
+|---|---|---|
+| `createIdentity(username)` | 任何人（成为控制方） | 铸造一个新身份 |
+| `transferController(username, newController)` | 当前控制方 | 把控制权转移给另一个钱包 |
+| `setRecoveryManager(rm)` | 部署所有者，仅一次 | 接入 `RecoveryManager` 地址 |
+| `recoverController(username, newController)` | 仅限 `RecoveryManager` | 通过社交恢复更改控制方 |
+| `getIdentity(username)` / `getUsernameByController(addr)` / `isUsernameTaken(username)` / `totalIdentities()` | 任何人，免费 | 读取 |
+
+### DeviceRegistry
+
+每个身份下各设备的公钥，通过承诺-揭示方式注册，以防止抢跑。每个身份上限 `MAX_DEVICES = 50` 台设备。
+
+| 函数 | 调用者 | 用途 |
+|---|---|---|
+| `commitDevice(commitment)` | 未来的设备所有者 | 第 1/2 步 — 提交一个隐藏哈希 |
+| `registerDevice(devicePubKey, label, salt, encryptedVaultKey)` | 与提交时相同的调用者 | 第 2/2 步 — 揭示并注册。`encryptedVaultKey` 是可选的（传空字节即可） — 如果设置了它，就是密码库的 AES 密钥，经过 ECIES 加密后指向该设备的公钥，使设备无需再次借助所有者钱包即可解密密码库 |
+| `revokeDevice(devicePubKey)` | 该身份的控制方 | 停用一台设备 |
+| `updateDeviceVaultKey(devicePubKey, newEncryptedVaultKey)` | 该身份的控制方 | 为一台活跃设备轮换存储的加密密码库密钥（用于密码库密钥自身在撤销另一台设备后发生轮换时） |
+| `revokeAllDevices(identityId)` | 仅限 `RecoveryManager` | 一次性停用某身份下的所有设备 — 在社交恢复过程中自动执行，以防止旧控制方的设备继续通过身份验证 |
+| `isDeviceActive(devicePubKey)` / `getDevice(devicePubKey)` / `getDevicesByIdentity(id)` / `getDevicesByIdentityPaginated(id, offset, limit)` / `deviceCount(id)` | 任何人，免费 | 读取 |
+
+### RecoveryManager [#recoverymanager]
+
+M-of-N 监护人恢复机制，有 7 天时间锁（`TIMELOCK` 常量）和 20 位监护人上限（`MAX_GUARDIANS` 常量）。
+
+| 函数 | 调用者 | 用途 |
+|---|---|---|
+| `configureGuardians(username, guardians[], threshold)` | 该身份的控制方 | 设置或替换监护人集合 |
+| `proposeRecovery(username, newController)` | 一位已配置的监护人 | 发起一次恢复 |
+| `approveRecovery(username)` | 一位已配置的监护人 | 对当前活跃的提议投票 |
+| `executeRecovery(username)` | 达到阈值并经过 7 天后，任何人 | 应用新的控制方 |
+| `cancelRecovery(username)` | 当前控制方 | 在时间锁窗口期内中止 |
+| `getGuardianConfig(username)` / `getProposal(username)` / `hasGuardianApproved(username, guardian)` | 任何人，免费 | 读取 |
+
+### SessionRegistry
+
+每个会话只存储一个 `keccak256` 哈希 — 从不存储哈希所代表的数据本身。
+
+| 函数 | 调用者 | 用途 |
+|---|---|---|
+| `createSession(hash, identityId, devicePubKey, r, s, v)` | 任何人都可以提交，但必须附带设备自身对 `hash` 的 ECDSA 签名 | 记录一个会话哈希 |
+| `revokeSession(hash)` | 该会话所属身份的控制方 | 撤销单个会话 |
+| `revokeAllSessions()` | 该身份的控制方 | 一次 O(1) 调用撤销到目前为止的所有会话 |
+| `isSessionRevoked(hash)` / `getSession(hash)` / `getSessionsByIdentity(id)` / `getRevokedBefore(id)` | 任何人，免费 | 读取 |
+
+### TruthIDAccount
+
+控制某个身份的 ERC-4337 智能账户 — 每个所有者一个实例，通过 `TruthIDAccountFactory` 部署。两级签名者、建立流程和费用的完整说明见[智能账户与 Gas](/docs/smart-account)；这里只是函数清单。
+
+| 函数 | 调用者 | 用途 |
+|---|---|---|
+| `validateUserOp(userOp, userOpHash, missingFunds)` | 仅限 `EntryPoint` | 验证一笔 UserOperation 的签名并支付预付款 |
+| `execute(dest, value, data)` / `executeBatch(dest[], value[], data[])` | `EntryPoint`、所有者，或账户自身 | 执行一次或多次调用 — 这是设备级签名者唯一可用的入口 |
+| `addDevice(device)` / `removeDevice(device)` | 所有者（直接调用，或通过 UserOp） | 授权或取消授权一个设备级签名者 |
+| `blockDestinationForDevices(dest)` / `unblockDestinationForDevices(dest)` | 所有者 | 扩大或缩小设备无法通过 `execute` 访问的合约集合 |
+| `emergencyWithdraw(recipient)` | 仅限 `RecoveryManager` | 在社交恢复期间转出该账户的 ETH 余额 |
+| `updateRegistries(deviceRegistry, identityRegistry, recoveryManager)` | 所有者（直接调用，或通过 UserOp） | 迁移后，把账户重新指向三个注册表合约的新部署 — 同时也会重新同步 `blockedForDevices`，使设备级签名者既不能直接调用旧注册表，也不能直接调用新注册表 |
+| `receive()` | 任何人 | 普通 ETH 转账（为账户注资） |
+| `owner()` / `authorizedDevices(addr)` / `blockedForDevices(addr)` | 任何人，免费 | 读取 |
+
+### TruthIDAccountFactory
+
+在确定性的 `CREATE2` 地址上部署 `TruthIDAccount` 实例，每个所有者一个（或者每个所有者 + 索引对应一个，以支持多个账户）。
+
+| 函数 | 调用者 | 用途 |
+|---|---|---|
+| `createAccount(owner, index)` | 任何人 | 如果账户尚不存在则部署它；幂等 — 否则直接返回已有地址 |
+| `getAddress(owner, index)` | 任何人，免费 | 在部署之前预测 `CREATE2` 地址 |
+| `updateRegistries(deviceRegistry, identityRegistry, recoveryManager)` | 部署者/所有者 | 更改*下一次* `createAccount` 调用所部署的账户将指向的注册表 — 不影响已经部署的账户，那些账户各自通过上面的 `TruthIDAccount.updateRegistries` 单独更新自己的指针 |
+
+### VaultRegistry [#vaultregistry]
+
+存储指向用户加密密码库数据块的指针 — 从不存储密码库的内容本身。字段名 `cid` 是历史遗留 — 它曾经始终存放一个 IPFS CID；如今通常存放的是一个 `ar://<transaction-id>` 引用（原因见[跨设备与存储](/docs/concepts/cross-device-and-storage)）。内容完整性通过 `contentHash`（加密数据块的 `keccak256`）来校验。
+
+| 函数 | 调用者 | 用途 |
+|---|---|---|
+| `updateVault(cid, contentHash)` | 该身份的控制方 | 发布一个新的密码库版本 — `cid` 为空或 `contentHash` 为零时会回滚 |
+| `getVault(id)` / `hasVault(id)` / `getVaultHistory(id)` / `getVaultHistoryPaginated(id, offset, limit)` | 任何人，免费 | 读取。对于历史很长的记录，`getVaultHistory` 可能会回滚（`eth_call` 结果的 gas 上限）— 对于更新次数达到 `MAX_HISTORY = 1000`（上限）的身份，请使用分页版本 |
+
+## 每项操作的成本 [#cost-per-operation]
+
+以下是来自项目自身测试套件（`forge test --gas-report`）的真实 gas 数据，不是估算值 — `IdentityRegistry`/`DeviceRegistry`/`RecoveryManager`/`SessionRegistry` 有 140 个通过的测试；`TruthIDAccount`/`TruthIDAccountFactory`（`revokeAllSessions` 以下的行）另有自己的 62 个测试。`VaultRegistry` 的操作不在这张表里 — `updateVault` 是唯一会改变状态的调用，其成本主要取决于您传入的 `cid`/`contentHash` 的大小，而不是固定的合约逻辑。以正常方式调用的读取函数（`view`）— 即直接通过 RPC 的 `eth_call`，每个 SDK 读取它们的方式正是如此 — 是免费的。下面的"免费"标签，只有在另一份合约在交易中途调用它们时才不适用，而目前 TruthID 的任何部分都不会这样做。
+
+| 操作 | 最小 gas | 中位 gas | 最大 gas |
+|---|---|---|---|
+| `createIdentity` | 22,153 | 141,483 | 142,832 |
+| `commitDevice` | 44,211 | 44,211 | 44,211 |
+| `registerDevice` | 23,757 | 195,037 | 218,286 |
+| `revokeDevice` | 24,411 | 40,767 | 40,767 |
+| `configureGuardians` | 37,894 | 340,329 | 1,028,006 |
+| `proposeRecovery` | 22,532 | 162,839 | 162,839 |
+| `approveRecovery` | 39,187 | 71,787 | 88,887 |
+| `executeRecovery` | 39,349 | 126,801 | 126,801 |
+| `cancelRecovery` | 36,929 | 43,951 | 43,951 |
+| `createSession` | 27,061 | 183,605 | 183,605 |
+| `revokeSession` | 24,501 | 43,157 | 45,501 |
+| `revokeAllSessions` | 27,961 | 54,446 | 54,446 |
+| `TruthIDAccountFactory.createAccount`（已部署过的情况） | 24,996 | — | — |
+| `TruthIDAccountFactory.createAccount`（首次部署） | — | — | 1,774,511 |
+| `TruthIDAccount.execute` | 23,135 | 71,519 | 71,544 |
+| `TruthIDAccount.addDevice` | 21,924 | 45,812 | 45,812 |
+| `TruthIDAccount.removeDevice` | 22,148 | 23,854 | 24,573 |
+
+<Callout title="为什么 configureGuardians 的范围这么大" type="info">
+gas 消耗会随 `guardians` 数组的大小而变化。低值对应少数几位监护人的情况；表中的高值来自一个测试用例，测试了 `MAX_GUARDIANS` 上限 20 位监护人的完整场景。典型的 3-of-5 配置远低于表中显示的中位数。
+</Callout>
+
+**这换算成 ETH 是多少**：以[主网部署](https://basescan.org/address/0x97787D6EE3EfD76962dc7E3Bf143E659D9961962)时观测到的约 0.011 gwei gas 价格计算，表中最重的操作（`registerDevice`，约 195k gas）大约相当于 0.0000021 ETH — 只是一美分的很小一部分。`TruthIDAccountFactory.createAccount` 的首次部署一行更重（它是通过 `CREATE2` 部署一整份合约，而不只是一次状态更新）— 该换算见[智能账户与 Gas → 成本](/docs/smart-account#cost)。gas 价格会随网络需求波动 — 在假设这些数字仍然精确成立之前，请查看 [Base 的实时 gas 追踪器](https://basescan.org/gastracker)获取当前费率。
+
+## 审计状态
+
+关于人工审查发现的问题，以及目前尚未被第三方审计覆盖的部分，见[安全模型 → 审计状态](/docs/security#audit-status)。
+
+## 后续步骤
+
+- [TruthID 工作原理](/docs/concepts/how-it-works) — 这些函数背后的协议讲解
+- [智能账户与 Gas](/docs/smart-account) — ERC-4337 账户如何运作、建立流程和资金
+- [安全模型](/docs/security) — 威胁模型，以及 TruthID 能防护什么、不能防护什么
+- [SDK 参考](/docs/sdk/typescript) — 从 TypeScript、Python 或 Ruby 调用这些合约的、带类型定义的文档化方式

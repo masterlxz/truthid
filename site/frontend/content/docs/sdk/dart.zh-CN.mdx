@@ -1,0 +1,474 @@
+---
+title: Dart SDK
+description: "truthid_sdk 的完整 API 参考 — 验证方和跨设备请求方角色。"
+---
+
+`truthid_sdk` 的完整 API 参考。刚接触 TruthID？请先看[快速开始](/docs/quickstart) — 本页是您正式集成时，每一个方法和类型的详细参考。
+
+与 TypeScript/Python/Ruby SDK 不同 — 那三个都只扮演**验证方**角色（网站后端所扮演的角色）— 这个包在一次导入中提供了两个独立的角色：
+
+- **`TruthIDClient`** — 验证方，与其他 3 个 SDK 角色相同。适用于用 Dart 编写的后端。
+- **`TruthIDRequester`** — 一个 Dart 独有的角色：通过移动端应用自身使用的同一套局域网/离线中转传输，向用户的 TruthID 移动端应用请求一次签名、一次交易执行，或一次文件固定。适用于任何想充当跨设备流程发起方的 Flutter 应用（移动端或桌面端）或纯 Dart 后端 — 无论哪种情况都不涉及任何 TruthID 运营的服务器。
+
+纯 Dart 实现 — 不依赖 `package:flutter`。在 Flutter 应用和纯 Dart 后端中都能使用。
+
+## 安装 [#installation]
+
+`truthid_sdk` 尚未发布到 pub.dev — 另外三个 SDK 已经在各自的注册表上线（见[简介 → 集成 TruthID](/docs/intro#integrating-truthid)），但 Dart 目前仍然只能从源代码安装。直接指向这个包，可以来自本地克隆，也可以指向 GitHub 上 `sdk/dart` 子目录的路径：
+
+```yaml
+dependencies:
+  truthid_sdk:
+    git:
+      url: https://github.com/masterlxz/truthid.git
+      path: sdk/dart
+```
+
+或者，如果您本地已经检出了这个仓库：
+
+```yaml
+dependencies:
+  truthid_sdk:
+    path: ../path/to/truthid/sdk/dart
+```
+
+## `TruthIDClient`（验证方）
+
+```dart
+import 'package:truthid_sdk/truthid_sdk.dart';
+
+final truthid = TruthIDClient(network: Network.baseMainnet);
+```
+
+### 构造函数
+
+`TruthIDClient({required Network network, String? rpcUrl})`
+
+| 字段 | 类型 | 是否必需 | 说明 |
+|-------|------|----------|--------------|
+| `network` | `Network.baseSepolia` 或 `Network.baseMainnet` | 是 — 没有默认值 | 从哪个网络读取合约 |
+| `rpcUrl` | `String?` | 否 | 自定义 RPC 端点。默认使用所选网络的公共 Base RPC |
+
+### `createChallenge(origin)`
+
+创建一个一次性挑战，嵌入展示给用户的二维码中。
+
+**返回** [`AuthChallenge`](#authchallenge)
+
+```dart
+final challenge = truthid.createChallenge('yoursite.com');
+```
+
+**构建二维码** — 移动端应用要求这个精确的结构：
+
+```json
+{
+  "action": "truthid-auth",
+  "challenge": { "type": "challenge", "nonce": "...", "issuedAt": 1718000000000, "origin": "yoursite.com" },
+  "callbackUrl": "https://yoursite.com/auth/verify"
+}
+```
+
+`callbackUrl` **必须**使用 `https://` — 移动端应用拒绝把已签名的响应发到明文 `http://` URL。
+
+---
+
+### `verifyAuthResponse(challenge, response, {ttlMs})`
+
+验证从用户手机收到的已签名响应。依次运行六项检查，在第一次失败时停止 — 与其他 3 个 SDK 顺序相同：
+
+1. 用户已批准（未拒绝）
+2. 挑战在 TTL 之内（默认：30 秒）
+3. Nonce 与原始挑战匹配
+4. 密码学签名有效
+5. 设备已在区块链上注册且处于活跃状态
+6. 获取与该设备关联的身份 ID
+
+**返回** [`VerifyAuthResult`](#verifyauthresult)
+
+```dart
+final result = await truthid.verifyAuthResponse(challenge, response);
+if (result.valid) {
+  print('Authenticated! Identity ID: ${result.identityId}');
+} else {
+  print('Failed: ${result.reason}');
+}
+```
+
+**失败原因**
+
+| `reason` | 原因 |
+|----------|-------|
+| `"User rejected the login request"` | 用户在手机上点击了"拒绝" |
+| `"Challenge expired"` | 自 `issuedAt` 起，经过的时间超过了 `ttlMs` 毫秒 |
+| `"Nonce mismatch"` | 响应的 nonce 与挑战的不匹配 |
+| `"Invalid signature format"` | 签名格式不正确 |
+| `"Signature does not match device address"` | 签名不是由 `deviceAddress` 做出的 |
+| `"Device is not active or has been revoked"` | 该设备已被身份所有者撤销 |
+
+---
+
+### `verifySession(hash)`
+
+检查一个会话哈希是否仍然有效（未被撤销）。
+
+**返回** [`SessionInfo`](#sessioninfo)
+
+```dart
+final session = await truthid.verifySession(sessionHash);
+if (session.exists && !session.revoked) {
+  // still logged in
+}
+```
+
+---
+
+### `checkDeviceStatus(devicePubKey)`
+
+在区块链上查询一台设备的当前状态。**返回** [`DeviceStatus`](#devicestatus)。
+
+---
+
+### `computeSmartAccountAddress(ledgerAddress, {index})`
+
+通过 `CREATE2` 预测用户的智能账户（控制方）地址 — 纯本地计算，不需要 RPC 调用，也不涉及服务器。
+
+```dart
+final smartAccount = truthid.computeSmartAccountAddress(ledgerAddress);
+```
+
+当您不需要完整的客户端实例时，也导出了一个独立函数：
+
+```dart
+import 'package:truthid_sdk/truthid_sdk.dart' show computeSmartAccountAddress, Network;
+
+final smartAccount = computeSmartAccountAddress(ledgerAddress, Network.baseMainnet);
+```
+
+## `TruthIDRequester`（跨设备请求方）
+
+```dart
+final requester = TruthIDRequester();
+```
+
+向用户手机请求一次签名、一次交易执行，或一次文件固定 — 您展示一个二维码，用户用 TruthID 移动端应用扫描它，批准或拒绝，答案通过移动端应用自身在其他每一种跨设备流程中使用的同一套传输方式返回（先扫描局域网，再以 IPFS/IPNS 离线中转作为后备）。不涉及中继方、不涉及 TruthID 服务器，也不需要您搭建轮询端点。
+
+每个方法都会**立即**返回一个 [`PendingRequest`](#pendingrequestt) — 二维码载荷可以马上渲染；`result` 是一个 `Future`，会在手机应答或请求过期时完成。
+
+<Callout title="仅限跨设备，共 4 种流程" type="info">
+深层链接（deep-link）传输（同一设备，不需要二维码）不在覆盖范围内 — 这需要您的应用注册自己的 URI scheme，具有平台特定性，超出了一个纯 Dart 包能自动完成的范围。见[尚未支持的功能](#尚未支持的功能)。
+</Callout>
+
+### `signMessage({appName, purpose, timeout})`
+
+请求手机对一条任意的短消息签名 — 实际被签名的字符串永远是 `'TruthID Message Signing: $appName:$purpose'`，由移动端应用自己重新构建；您永远不会自己选择原始字节。
+
+| 名称 | 类型 | 是否必需 | 说明 |
+|------|------|----------|--------------|
+| `appName` | `String` | 是 | 展示给用户，出现在批准界面上 |
+| `purpose` | `String` | 是 | 1-64 个字符，`[A-Za-z0-9_.-]+` — 展示给用户，是被签名消息的一部分 |
+| `timeout` | `Duration` | 否 — 默认 3 分钟 | 二维码保持有效的时长 |
+
+**返回** `PendingRequest<`[`SignMessageResult`](#signmessageresult)`>`
+
+```dart
+final pending = requester.signMessage(appName: 'My App', purpose: 'login');
+showQrCode(pending.qrPayload); // your own QR widget, e.g. qr_flutter
+
+final result = await pending.result;
+if (result.delivered && result.data!.status == 'signed') {
+  print('Signature: ${result.data!.signature}');
+}
+```
+
+---
+
+### `signRequest({appName, dest, callData, functionSignature, value, timeout})`
+
+请求手机**代表用户的智能账户**执行一次任意合约调用 — 手机自己构建、签名并提交这笔 `UserOperation`（由智能账户自行支付 gas）。当您需要的不只是一个单纯签名时使用这个方法：代币转账、合约交互，任何 `execute()` 能触及的操作。
+
+| 名称 | 类型 | 是否必需 | 说明 |
+|------|------|----------|--------------|
+| `appName` | `String` | 是 | 展示给用户 |
+| `dest` | `String` | 是 | 目标合约地址（`0x...`） |
+| `callData` | `String` | 是 | 经过 ABI 编码的调用数据（`0x...`） |
+| `functionSignature` | `String` | 是 | 例如 `"transfer(address,uint256)"` — 展示给用户以供核实 |
+| `value` | `String` | 否 — 默认 `"0"` | 要发送的 wei 数量，十进制字符串形式 |
+| `timeout` | `Duration` | 否 — 默认 3 分钟 | |
+
+**返回** `PendingRequest<`[`SignRequestResult`](#signrequestresult)`>`
+
+```dart
+final pending = requester.signRequest(
+  appName: 'My App',
+  dest: tokenAddress,
+  callData: encodedTransferCall,
+  functionSignature: 'transfer(address,uint256)',
+);
+final result = await pending.result;
+if (result.delivered && result.data!.status == 'executed') {
+  print('Transaction hash: ${result.data!.transactionHash}');
+}
+```
+
+<Callout title="这个可能比另外两个耗时更久" type="idea">
+手机在这里不只是签名 — 它还会通过 bundler 提交这笔 UserOperation，并等待回执后才应答。请预计用户批准后还要多等待长达一分钟。
+</Callout>
+
+---
+
+### `pin({appName, content, timeout})`
+
+请求手机把任意字节发布到 Arweave，费用由该身份自己本地的 Arweave 钱包支付 — 这里没有"已配置的提供商"这种概念，永远是发起请求身份自己的钱包。底层分两个阶段，全部为您处理好：加密后的 `content` 先通过局域网推送给手机（这个阶段没有离线中转 — 手机只有在扫描了二维码之后才开始监听，所以这一步会在后台不断重试推送，直到成功或请求过期为止）；一旦手机拿到内容，通常的结果竞速（局域网 + 离线中转）就会送达固定结果。
+
+| 名称 | 类型 | 是否必需 | 说明 |
+|------|------|----------|--------------|
+| `appName` | `String` | 是 | 展示给用户 |
+| `content` | `Uint8List` | 是 | 要固定的字节内容 |
+| `timeout` | `Duration` | 否 — 默认 3 分钟 | |
+
+**返回** `PendingRequest<`[`PinResult`](#pinresult)`>`
+
+```dart
+final pending = requester.pin(appName: 'My App', content: fileBytes);
+final result = await pending.result;
+if (result.delivered && result.data!.status == 'pinned') {
+  print('Content pointer: ${result.data!.cid}');
+}
+```
+
+### `vaultEdit({appName, site, url, username, password, notes, passkey, pinningEndpointUrl, timeout})`
+
+为用户设备提出一个新的密码库凭据（一个密码、一个通行密钥，或两者都有），供其审核，并在批准后持久化并发布上链 — 这是 TruthID 浏览器扩展在看到一个注册表单或一次新的 `navigator.credentials.create()` 时所做的事情，在请求方这一侧的对应实现。用于密码管理器风格的集成：您的应用捕获或生成了一个凭据，希望用户的密码库记住它。
+
+在结构上与另外三种流程不同：完全**没有响应阶段** — 批准完全在设备端进行，属于带外流程。[`VaultEditPendingRequest.delivered`](#vaulteditpendingrequest) 只报告加密后的提案是否在 `timeout` 之前送达了某台设备 — 它不说明设备后续是批准还是拒绝了它。
+
+加密后的提案通过局域网推送（在某台设备接受它或 `timeout` 到期之前不断重试，与 `pin` 的内容推送方式相同），如果提供了 `pinningEndpointUrl`，还会并行发布到一个 [Kubo](https://docs.ipfs.tech/install/ipfs-desktop/) 节点，用于跨网络传递 — 这是尽力而为的，一个缺失或不可达的端点永远不会导致局域网推送失败。
+
+| 名称 | 类型 | 是否必需 | 说明 |
+|------|------|----------|--------------|
+| `appName` | `String` | 是 | 展示给用户，出现在批准界面上 |
+| `site` | `String` | 是 | 该凭据所属的主机名/网站 |
+| `url` | `String` | 否 — 默认 `''` | 完整的来源 URL |
+| `username` | `String` | 是 | |
+| `password` | `String` | 否 — 默认 `''` | `password`/`passkey` 至少需要提供一个 |
+| `notes` | `String` | 否 — 默认 `''` | |
+| `passkey` | [`VaultEditPasskey?`](#vaulteditpasskey) | 否 | `password`/`passkey` 至少需要提供一个 |
+| `pinningEndpointUrl` | `String?` | 否 | 一个 Kubo 节点的基础 URL（例如 `http://127.0.0.1:5001`）— 启用跨网络的离线中转通道。不提供的话，投递就只走局域网 |
+| `timeout` | `Duration` | 否 — 默认 3 分钟 | |
+
+**返回** [`VaultEditPendingRequest`](#vaulteditpendingrequest)
+
+```dart
+final pending = requester.vaultEdit(
+  appName: 'My App',
+  site: 'example.com',
+  url: 'https://example.com',
+  username: 'alice',
+  password: generatedPassword,
+);
+showQrCode(pending.qrPayload);
+
+final delivered = await pending.delivered;
+if (delivered) {
+  print('Proposal handed off — waiting on the user to approve on their Device');
+}
+```
+
+### 尚未支持的功能 [#whats-not-covered-yet]
+
+- **深层链接（同设备）传输** — 需要宿主应用注册自己的 URI scheme，具有平台特定性，超出了一个纯 Dart 包能自动完成的范围。
+
+## 类型
+
+### 验证方类型
+
+以下全部从 `package:truthid_sdk/truthid_sdk.dart` 导出。
+
+#### `Network`
+
+```dart
+enum Network { baseSepolia, baseMainnet }
+```
+
+#### `AuthChallenge` [#authchallenge]
+
+```dart
+class AuthChallenge {
+  final String type;      // always "challenge"
+  final String nonce;
+  final int issuedAt;      // Unix timestamp in ms
+  final String origin;
+}
+```
+
+#### `AuthResponse`
+
+```dart
+class AuthResponse {
+  final bool approved;
+  final String nonce;
+  final String signature;          // secp256k1 signature, hex ("0x...")
+  final String deviceAddress;      // Ethereum address of the device key
+  final String? sessionSignature;  // personal_sign over keccak256(nonce) — always sent alongside signature
+}
+```
+
+#### `VerifyAuthResult` [#verifyauthresult]
+
+```dart
+class VerifyAuthResult {
+  final bool valid;
+  final BigInt? identityId;
+  final String? deviceAddress;
+  final String? reason;
+}
+```
+
+#### `SessionInfo` [#sessioninfo]
+
+```dart
+class SessionInfo {
+  final bool exists;
+  final bool revoked;
+  final BigInt? identityId;
+  final String? devicePubKey;
+  final DateTime? createdAt;
+}
+```
+
+#### `DeviceStatus` [#devicestatus]
+
+```dart
+class DeviceStatus {
+  final bool exists;
+  final bool active;
+  final String? label;
+  final BigInt? identityId;
+  final DateTime? addedAt;
+}
+```
+
+### 请求方类型
+
+#### `PendingRequest<T>` [#pendingrequestt]
+
+```dart
+class PendingRequest<T> {
+  final String qrPayload;                    // JSON, ready to render as a QR code
+  final String sessionId;
+  final DateTime expiresAt;
+  final Future<TransportResult<T>> result;
+}
+```
+
+#### `TransportResult<T>`
+
+```dart
+class TransportResult<T> {
+  final bool delivered; // false = expired with no answer
+  final T? data;        // present only when delivered is true
+}
+```
+
+#### `SignMessageResult` [#signmessageresult]
+
+```dart
+class SignMessageResult {
+  final String status; // 'signed' | 'rejected'
+  final String? message;
+  final String? signature;
+}
+```
+
+#### `SignRequestResult` [#signrequestresult]
+
+```dart
+class SignRequestResult {
+  final String status; // 'executed' | 'failed' | 'rejected'
+  final String? userOpHash;
+  final String? transactionHash;
+  final String? error;
+}
+```
+
+#### `PinResult` [#pinresult]
+
+```dart
+class PinResult {
+  final String status; // 'pinned' | 'failed' | 'rejected'
+  final String? cid; // "ar://<tx_id>" — an Arweave pointer, not an IPFS CID
+  final String? contentHash;
+  final List<String>? providersOk;
+  final List<String>? providersFailed;
+  final String? error;
+}
+```
+
+#### `VaultEditPasskey` [#vaulteditpasskey]
+
+```dart
+class VaultEditPasskey {
+  final String rpId;
+  final String credentialIdB64;
+  final String userHandleB64;
+  final String privateKeyHex;
+  final int signCount;
+  final int createdAt;
+}
+```
+
+#### `VaultEditPendingRequest` [#vaulteditpendingrequest]
+
+```dart
+class VaultEditPendingRequest {
+  final String qrPayload;   // JSON, ready to render as a QR code
+  final String sessionId;
+  final DateTime expiresAt;
+  final Future<bool> delivered; // no response phase — see vaultEdit() above
+}
+```
+
+## 安全说明
+
+### Nonce 失效处理
+
+在调用 `verifyAuthResponse` **之前**从您的存储中删除挑战，而不是之后 — 之后再删除会留下一个竞态条件，让同一个已签名的响应可以在 TTL 窗口内被提交两次。
+
+### TTL
+
+默认值是 30 秒，与移动端应用自身的挑战过期时间一致。
+
+### 仅限 HTTPS
+
+手机把已签名的响应直接 `POST` 到您的 `callbackUrl` — 移动端应用拒绝非 `https://` 的 URL，而且您的端点仍然需要一份有效的 TLS 证书才能连接成功。
+
+## 网络
+
+| 网络 | 链 ID | 说明 |
+|---------|----------|--------------|
+| `Network.baseSepolia` | 84532 | 测试网 — 用于开发 |
+| `Network.baseMainnet` | 8453 | 生产环境 |
+
+两个网络的合约地址见[智能合约](/docs/intro#smart-contracts-base-mainnet-chain-8453)。
+
+## 会话可见性 — 无需额外操作
+
+已完成的登录（通过 `TruthIDClient.verifyAuthResponse`，或通过 `TruthIDRequester.signRequest`）会自动出现在用户的 TruthID 移动端/桌面端应用中，并可以从那里单独撤销 — 手机会自行把会话注册到链上。如果您想再次确认某个会话确实上链，可以从 nonce 推导出它的哈希，并调用 `verifySession`：
+
+```dart
+import 'package:web3dart/crypto.dart' show keccak256;
+import 'dart:convert';
+
+final sessionHash = '0x' + keccak256(Uint8List.fromList(utf8.encode(nonce)))
+    .map((b) => b.toRadixString(16).padLeft(2, '0'))
+    .join();
+final session = await truthid.verifySession(sessionHash);
+```
+
+## 后续步骤
+
+- [快速开始](/docs/quickstart) — 从安装到首次登录的完整走查
+- [TypeScript SDK 参考](/docs/sdk/typescript)
+- [Python SDK 参考](/docs/sdk/python)
+- [Ruby SDK 参考](/docs/sdk/ruby)

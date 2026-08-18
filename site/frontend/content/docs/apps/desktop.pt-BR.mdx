@@ -1,0 +1,29 @@
+---
+title: Desktop
+description: "O app controlador principal — criação de identidade, Ledger, gerenciamento de dispositivos e recuperação social completa."
+---
+
+O app desktop (Tauri + Rust + React) é onde uma identidade é de fato configurada e administrada. Se o mobile é o dispositivo que você carrega e usa para aprovar logins no dia a dia, o desktop é onde você vai para qualquer coisa que precise de uma carteira de hardware ou controle total sobre a própria identidade.
+
+## Para que serve
+
+- **Criação de identidade** — o fluxo de configuração de quatro passos descrito em [Smart Account e Gas](/docs/smart-account): assinar o consentimento, criar a identidade, implantar a smart account, financiá-la.
+- **Gerenciamento de dispositivos** — parear novos dispositivos (veja [Como o TruthID Funciona → Pareamento de dispositivo](/docs/concepts/how-it-works#device-pairing)), visualizar e revogar os existentes.
+- **Recuperação social, por completo** — configurar guardiões, propor, aprovar, executar e cancelar uma recuperação exigem todos uma carteira conectada falando diretamente com o `RecoveryManager`. Isso só acontece no desktop — veja [Recuperação Social → Quem pode de fato fazer isso](/docs/concepts/recovery#who-can-actually-do-this--desktop-only) para entender por que o mobile não consegue fazer essa parte.
+- **Gerenciamento do vault** — a interface completa de leitura/escrita do [TruthID Vault](/docs/concepts/vault): adicionar/editar entradas, configurar permissões por dispositivo, publicar atualizações, exportar arquivos `.truthid-backup`.
+
+## Suporte a Ledger
+
+O desktop conversa com uma carteira de hardware Ledger via USB real, não uma API de navegador — WebHID/WebUSB não estão disponíveis na WebView Linux do Tauri, então o backend em Rust implementa o transporte HID da Ledger diretamente (`hidapi`, filtrando pelo vendor ID USB da Ledger `0x2c97`, implementando manualmente o enquadramento de pacotes e o protocolo APDU). Uma Ledger atua como o assinante de nível `owner` descrito em [Smart Account e Gas](/docs/smart-account#how-it-works) — acesso total à smart account, usado para a configuração e para qualquer coisa sensível (configuração de guardiões, revogação de dispositivo) que você prefira não confiar a um dispositivo conectado (hot).
+
+## O servidor local [#the-local-server]
+
+O desktop roda um pequeno servidor HTTP em `localhost`, escutando em uma das portas `47950`–`47954`. É com isso que a [extensão de navegador](/docs/apps/extension) e integradores terceiros conversam para os fluxos de assinatura delegada descritos em [Cross-Device e Armazenamento](/docs/concepts/cross-device-and-storage#delegated-signing-including-third-party-apps) — assinar mensagem, assinar e executar, e fixar/publicar — quando o desktop está rodando na mesma máquina. Por ser somente loopback, ele é implicitamente confiável no mesmo nível em que esses fluxos já são confiados; não há uma camada de autenticação separada por cima; cada requisição ainda exibe sua própria tela de aprovação.
+
+O desktop não tem código próprio de autofill ou de injeção em páginas web — isso é inteiramente trabalho da extensão de navegador. O papel do desktop no autofill é puramente responder às requisições loopback da extensão quando ambos estão rodando localmente.
+
+## Próximos passos
+
+- [Mobile](/docs/apps/mobile) — o dispositivo de pareamento/login do dia a dia
+- [Extensão de Navegador](/docs/apps/extension) — o que de fato conversa com o servidor local do desktop
+- [Recuperação Social](/docs/concepts/recovery) — os fluxos de guardiões que só rodam no desktop

@@ -1,0 +1,22 @@
+{
+  "metadata": {
+    "title": "TruthID",
+    "description": "TruthID — 自我主权身份"
+  },
+  "layout": {
+    "navTitle": "TruthID"
+  },
+  "home": {
+    "heading": "TruthID",
+    "subtitle": "登录以继续。仅支持 OAuth 登录 — 无需设置密码。",
+    "signInError": "无法登录（{error}）。请重试。",
+    "signInWithGoogle": "使用 Google 登录"
+  },
+  "dashboard": {
+    "loading": "加载中…",
+    "notSignedIn": "您尚未登录。",
+    "back": "返回",
+    "hello": "你好，{name}",
+    "signOut": "退出登录"
+  }
+}

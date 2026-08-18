@@ -1,0 +1,22 @@
+{
+  "metadata": {
+    "title": "TruthID",
+    "description": "TruthID — identidade auto-soberana"
+  },
+  "layout": {
+    "navTitle": "TruthID"
+  },
+  "home": {
+    "heading": "TruthID",
+    "subtitle": "Faça login para continuar. O login é somente via OAuth — sem senha própria.",
+    "signInError": "Não foi possível fazer login ({error}). Tente novamente.",
+    "signInWithGoogle": "Entrar com o Google"
+  },
+  "dashboard": {
+    "loading": "Carregando…",
+    "notSignedIn": "Você não está logado.",
+    "back": "Voltar",
+    "hello": "Olá, {name}",
+    "signOut": "Sair"
+  }
+}

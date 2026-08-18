@@ -1,0 +1,324 @@
+---
+title: SDK TypeScript
+description: "Referência completa da API para truthid-sdk no npm."
+---
+
+Referência completa da API para [`truthid-sdk`](https://www.npmjs.com/package/truthid-sdk) no npm. Novo no TruthID? Comece pelo [Guia rápido](/docs/quickstart) — esta página é a referência detalhada de cada método e tipo, para quando você estiver integrando de verdade.
+
+## Instalação
+
+```bash
+npm install truthid-sdk
+```
+
+Requer Node.js 16+.
+
+## `TruthIDClient`
+
+```typescript
+import { TruthIDClient } from "truthid-sdk";
+
+const truthid = new TruthIDClient({ network: "base-mainnet" });
+```
+
+### Construtor
+
+`new TruthIDClient(config: TruthIDClientConfig)`
+
+| Campo | Tipo | Obrigatório | Descrição |
+|-------|------|----------|--------------|
+| `network` | `"base-sepolia" \| "base-mainnet"` | Sim — sem padrão | De qual rede ler os contratos |
+| `rpcUrl` | `string` | Não | Endpoint de RPC customizado. Usa por padrão o RPC público da Base para a rede escolhida |
+
+Diferente dos SDKs Python e Ruby, `network` não tem padrão aqui — você precisa passá-lo explicitamente toda vez que construir um cliente.
+
+## Métodos
+
+### `createChallenge(origin)`
+
+Cria um desafio de uso único para incorporar no QR code mostrado ao usuário.
+
+**Parâmetros**
+
+| Nome | Tipo | Descrição |
+|------|------|-------------|
+| `origin` | `string` | O domínio do seu site, ex.: `"yoursite.com"` |
+
+**Retorna** [`AuthChallenge`](#authchallenge)
+
+```typescript
+const challenge = truthid.createChallenge("yoursite.com");
+// {
+//   type: "challenge",
+//   nonce: "3f2e1a4b-...",
+//   issuedAt: 1718000000000,
+//   origin: "yoursite.com"
+// }
+```
+
+<Callout title="Armazene, depois apague" type="idea">
+Mantenha o desafio no servidor, indexado por `nonce`, até `verifyAuthResponse` rodar — depois apague-o imediatamente. Veja [Invalidação de nonce](#nonce-invalidation) abaixo.
+</Callout>
+
+**Construindo o QR code** — o app mobile espera exatamente este formato:
+
+```json
+{
+  "action": "truthid-auth",
+  "challenge": { "type": "challenge", "nonce": "...", "issuedAt": 1718000000000, "origin": "yoursite.com" },
+  "callbackUrl": "https://yoursite.com/auth/verify"
+}
+```
+
+`callbackUrl` **precisa** usar `https://` — o app mobile se recusa a enviar a resposta assinada para uma URL `http://` simples.
+
+---
+
+### `verifyAuthResponse(params)`
+
+Verifica a resposta assinada recebida do celular do usuário. Executa seis verificações em sequência e para na primeira falha:
+
+1. O usuário aprovou (não rejeitou)
+2. O desafio está dentro do TTL (padrão: 30 segundos)
+3. O nonce corresponde ao desafio original
+4. A assinatura criptográfica é válida
+5. O dispositivo está registrado e ativo na blockchain
+6. Recupera o ID da identidade vinculada a esse dispositivo
+
+**Parâmetros** ([`VerifyAuthParams`](#verifyauthparams))
+
+| Nome | Tipo | Descrição |
+|------|------|-------------|
+| `challenge` | [`AuthChallenge`](#authchallenge) | O desafio que você criou |
+| `response` | [`AuthResponse`](#authresponse) | A resposta recebida do celular |
+| `ttlMs` *(opcional)* | `number` | Idade máxima do desafio em ms. Padrão: `30_000` |
+
+**Retorna** [`VerifyAuthResult`](#verifyauthresult)
+
+```typescript
+const result = await truthid.verifyAuthResponse({ challenge, response });
+
+if (result.valid) {
+  console.log("Authenticated! Identity ID:", result.identityId);
+} else {
+  console.log("Failed:", result.reason);
+}
+```
+
+**Motivos de falha**
+
+| `reason` | Causa |
+|----------|-------|
+| `"User rejected the login request"` | Usuário tocou em "Rejeitar" no celular |
+| `"Challenge expired"` | Mais de `ttlMs` ms se passaram desde `issuedAt` |
+| `"Nonce mismatch"` | O nonce da resposta não corresponde ao do desafio |
+| `"Invalid signature format"` | A assinatura está malformada |
+| `"Signature does not match device address"` | A assinatura não foi feita por `deviceAddress` |
+| `"Device is not active or has been revoked"` | O dispositivo foi revogado pelo dono da identidade |
+
+---
+
+### `verifySession(sessionHash)`
+
+Verifica se um hash de sessão ainda é válido (não revogado). Chame isso nas requisições subsequentes após o login para confirmar que a sessão não foi revogada de outro dispositivo.
+
+**Parâmetros**
+
+| Nome | Tipo | Descrição |
+|------|------|-------------|
+| `sessionHash` | `string` | String hex `bytes32` (`0x...`) |
+
+**Retorna** [`SessionInfo`](#sessioninfo)
+
+```typescript
+const session = await truthid.verifySession(sessionHash);
+if (session.exists && !session.revoked) {
+  // ainda logado
+}
+```
+
+---
+
+### `checkDeviceStatus(devicePubKey)`
+
+Consulta o status atual de um dispositivo na blockchain.
+
+**Parâmetros**
+
+| Nome | Tipo | Descrição |
+|------|------|-------------|
+| `devicePubKey` | `string` | Endereço Ethereum do dispositivo (`0x...`) |
+
+**Retorna** [`DeviceStatus`](#devicestatus)
+
+```typescript
+const status = await truthid.checkDeviceStatus(devicePubKey);
+```
+
+---
+
+### Visibilidade da sessão — nada a fazer
+
+Logins concluídos já aparecem nos apps mobile/desktop do TruthID do usuário e podem ser revogados individualmente por lá. O celular registra a sessão on-chain por conta própria (via uma UserOperation) antes mesmo de chamar seu `callbackUrl` — não há etapa de registro separada para você chamar.
+
+Se quiser confirmar que uma sessão chegou on-chain, derive seu hash a partir do nonce e chame [`verifySession`](#verifysessionsessionhash):
+
+```typescript
+import { keccak256, toBytes } from "viem";
+
+const sessionHash = keccak256(toBytes(response.nonce));
+const session = await truthid.verifySession(sessionHash);
+if (session.exists && !session.revoked) {
+  // confirmado on-chain
+}
+```
+
+---
+
+### `computeSmartAccountAddress(ledgerAddress, index?)`
+
+Prevê o endereço de smart account (controladora) de um usuário via `CREATE2` — cálculo puramente local, sem chamada de RPC e sem servidor envolvido. Útil para mostrar um endereço de depósito, ou verificar um saldo, antes que a conta jamais tenha sido usada on-chain.
+
+**Parâmetros**
+
+| Nome | Tipo | Descrição |
+|------|------|-------------|
+| `ledgerAddress` | `` `0x${string}` `` | O endereço da carteira de hardware / EOA dona |
+| `index` *(opcional)* | `bigint` | Índice da conta, para múltiplas smart accounts por dono. Padrão: `0n` |
+
+**Retorna** `` `0x${string}` `` — o endereço checksummed da smart account.
+
+```typescript
+const smartAccount = truthid.computeSmartAccountAddress(ledgerAddress);
+```
+
+Uma função independente também é exportada para quando você não precisa de uma instância completa de cliente:
+
+```typescript
+import { computeSmartAccountAddress } from "truthid-sdk";
+
+const smartAccount = computeSmartAccountAddress(ledgerAddress, "base-mainnet");
+```
+
+## Tipos
+
+Todos os tipos a seguir são exportados de `truthid-sdk`.
+
+```typescript
+type Network = "base-sepolia" | "base-mainnet";
+```
+
+#### `AuthChallenge`
+
+```typescript
+interface AuthChallenge {
+  type: "challenge";
+  nonce: string;
+  issuedAt: number;   // timestamp Unix em ms
+  origin: string;
+}
+```
+
+#### `AuthResponse`
+
+```typescript
+interface AuthResponse {
+  approved: boolean;
+  nonce: string;
+  signature: string;          // assinatura secp256k1, em hex ("0x...")
+  deviceAddress: string;      // endereço Ethereum da chave do dispositivo
+  sessionSignature?: string;  // personal_sign sobre keccak256(nonce) — sempre enviado junto com signature
+}
+```
+
+#### `VerifyAuthParams`
+
+```typescript
+interface VerifyAuthParams {
+  challenge: AuthChallenge;
+  response: AuthResponse;
+  ttlMs?: number; // padrão: 30_000
+}
+```
+
+#### `VerifyAuthResult`
+
+```typescript
+interface VerifyAuthResult {
+  valid: boolean;
+  identityId?: bigint;
+  deviceAddress?: string;
+  reason?: string;
+}
+```
+
+#### `SessionInfo`
+
+```typescript
+interface SessionInfo {
+  exists: boolean;
+  revoked: boolean;
+  identityId?: bigint;
+  devicePubKey?: string;
+  createdAt?: Date;
+}
+```
+
+#### `DeviceStatus`
+
+```typescript
+interface DeviceStatus {
+  exists: boolean;
+  active: boolean;
+  label?: string;
+  identityId?: bigint;
+  addedAt?: Date;
+}
+```
+
+## Notas de segurança
+
+### Invalidação de nonce
+
+Apague o desafio do seu armazenamento **antes** de chamar `verifyAuthResponse`, não depois — apagar depois deixa uma condição de corrida em que a mesma resposta assinada pode ser submetida duas vezes dentro da janela do TTL.
+
+```typescript
+// Ordem correta
+pendingChallenges.delete(response.nonce);             // apague primeiro
+const result = await truthid.verifyAuthResponse(...);  // depois verifique
+```
+
+### TTL
+
+O padrão é 30 segundos, correspondendo à própria expiração de desafio do app mobile. Diminuí-lo é aceitável; aumentá-lo além de 30 segundos não tem efeito, já que o celular já se recusará a aceitar um desafio mais antigo.
+
+### Somente HTTPS
+
+O celular faz um `POST` da resposta assinada diretamente para o seu `callbackUrl` — o app mobile recusa URLs que não sejam `https://`, e seu endpoint ainda precisa de um certificado TLS válido para a conexão ter sucesso.
+
+## Redes
+
+| Rede | Chain ID | Descrição |
+|---------|----------|--------------|
+| `"base-sepolia"` | 84532 | Testnet — para desenvolvimento |
+| `"base-mainnet"` | 8453 | Produção |
+
+```typescript
+// Testnet durante o desenvolvimento
+const truthid = new TruthIDClient({ network: "base-sepolia" });
+
+// RPC customizado em vez do endpoint público
+const truthid = new TruthIDClient({
+  network: "base-mainnet",
+  rpcUrl: "https://your-private-rpc.example.com",
+});
+```
+
+Os endereços dos contratos para ambas as redes estão em [Contratos inteligentes](/docs/intro#smart-contracts-base-mainnet-chain-8453).
+
+## Próximos passos
+
+- [Guia rápido](/docs/quickstart) — passo a passo completo, da instalação ao primeiro login
+- [Exemplo completo com Express.js](https://github.com/masterlxz/truthid/blob/main/sdk/README.md#full-examples) com tokens de sessão e uma rota protegida
+- [Referência do SDK Python](/docs/sdk/python)
+- [Referência do SDK Ruby](/docs/sdk/ruby)

@@ -1,0 +1,210 @@
+---
+title: Guia rápido
+description: "Adicione o Login com TruthID ao seu backend: crie um desafio, mostre um QR code e verifique a resposta assinada."
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs';
+
+Adicione o "Login com TruthID" ao seu backend: crie um desafio, mostre-o como um QR code e verifique a resposta assinada que volta do celular do usuário. Confira os [pré-requisitos](/docs/intro#prerequisites) primeiro — você vai precisar de um backend capaz de receber um `POST` HTTPS.
+
+## 1. Instale o SDK
+
+<Tabs items={['TypeScript', 'Python', 'Ruby']}>
+<Tab value="TypeScript">
+
+```bash
+npm install truthid-sdk
+```
+
+</Tab>
+<Tab value="Python">
+
+```bash
+pip install truthid-sdk
+```
+
+</Tab>
+<Tab value="Ruby">
+
+```bash
+gem install truthid-sdk
+```
+
+</Tab>
+</Tabs>
+
+## 2. Crie um desafio
+
+Um desafio é o que é incorporado no QR code na sua página de login. É de uso único e expira em 30 segundos — crie-o sob demanda, bem antes de renderizar o QR code.
+
+<Tabs items={['TypeScript', 'Python', 'Ruby']}>
+<Tab value="TypeScript">
+
+```typescript
+import { TruthIDClient } from "truthid-sdk";
+
+const truthid = new TruthIDClient({ network: "base-mainnet" });
+const pendingChallenges = new Map(); // qualquer armazenamento com TTL funciona
+
+app.get("/auth/challenge", (req, res) => {
+  const challenge = truthid.createChallenge(req.hostname);
+  pendingChallenges.set(challenge.nonce, challenge);
+
+  res.json({
+    action: "truthid-auth",
+    challenge,
+    callbackUrl: `https://${req.hostname}/auth/verify`,
+  });
+});
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+from truthid import TruthIDClient
+
+truthid = TruthIDClient()  # usa "base-mainnet" por padrão
+pending_challenges = {}  # qualquer armazenamento com TTL funciona
+
+@app.get("/auth/challenge")
+def get_challenge():
+    challenge = truthid.create_challenge(request.host)
+    pending_challenges[challenge.nonce] = challenge
+
+    return jsonify({
+        "action": "truthid-auth",
+        "challenge": {"type": challenge.type, "nonce": challenge.nonce,
+                       "issuedAt": challenge.issuedAt, "origin": challenge.origin},
+        "callbackUrl": f"https://{request.host}/auth/verify",
+    })
+```
+
+</Tab>
+<Tab value="Ruby">
+
+```ruby
+truthid = TruthID::Client.new  # usa network: "base-mainnet" por padrão
+pending_challenges = {}        # qualquer armazenamento com TTL funciona
+
+get "/auth/challenge" do
+  content_type :json
+  challenge = truthid.create_challenge(request.host)
+  pending_challenges[challenge.nonce] = challenge
+  {
+    action: "truthid-auth",
+    challenge: challenge.to_h,
+    callbackUrl: "https://#{request.host}/auth/verify"
+  }.to_json
+end
+```
+
+</Tab>
+</Tabs>
+
+## 3. Renderize o QR code
+
+Seu frontend transforma essa resposta JSON em um QR code — qualquer biblioteca de renderização de QR code funciona, no servidor ou no cliente. O app mobile do TruthID espera exatamente este formato:
+
+```json
+{
+  "action": "truthid-auth",
+  "challenge": { "type": "challenge", "nonce": "...", "issuedAt": 1718000000000, "origin": "yoursite.com" },
+  "callbackUrl": "https://yoursite.com/auth/verify"
+}
+```
+
+`callbackUrl` precisa ser `https://` — o app mobile se recusa a enviar a resposta assinada para qualquer outro lugar.
+
+## 4. Verifique a resposta
+
+Quando o usuário aprova no celular, ele faz um `POST` diretamente para `callbackUrl` — sem servidor no meio. `verifyAuthResponse` verifica a assinatura e lê o status do dispositivo na blockchain.
+
+<Tabs items={['TypeScript', 'Python', 'Ruby']}>
+<Tab value="TypeScript">
+
+```typescript
+app.post("/auth/verify", async (req, res) => {
+  const response = req.body;
+  const challenge = pendingChallenges.get(response.nonce);
+  if (!challenge) return res.status(400).json({ error: "Challenge not found or already used" });
+  pendingChallenges.delete(response.nonce); // evita replay
+
+  const result = await truthid.verifyAuthResponse({ challenge, response });
+  if (!result.valid) return res.status(401).json({ error: result.reason });
+
+  res.json({ identityId: result.identityId!.toString() });
+});
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+@app.post("/auth/verify")
+def verify():
+    data = request.json
+    challenge = pending_challenges.pop(data.get("nonce", ""), None)
+    if not challenge:
+        return jsonify({"error": "Challenge not found or already used"}), 400  # evita replay
+
+    response = AuthResponse(
+        approved=data["approved"],
+        nonce=data["nonce"],
+        signature=data["signature"],
+        deviceAddress=data["deviceAddress"],
+    )
+    result = truthid.verify_auth_response(challenge, response)
+    if not result.valid:
+        return jsonify({"error": result.reason}), 401
+
+    return jsonify({"identityId": result.identity_id})
+```
+
+</Tab>
+<Tab value="Ruby">
+
+```ruby
+post "/auth/verify" do
+  content_type :json
+  data = JSON.parse(request.body.read)
+  challenge = pending_challenges.delete(data["nonce"]) # evita replay
+  halt 400, { error: "Challenge not found or already used" }.to_json unless challenge
+
+  response = TruthID::AuthResponse.from_hash(data)
+  result = truthid.verify_auth_response(challenge, response)
+  halt 401, { error: result.reason }.to_json unless result.valid
+
+  { identityId: result.identity_id }.to_json
+end
+```
+
+</Tab>
+</Tabs>
+
+Essa é toda a integração de backend. Exemplos completos e executáveis (Express, Flask, Sinatra) com tokens de sessão e uma rota protegida estão na [referência do SDK](https://github.com/masterlxz/truthid/blob/main/sdk/README.md#full-examples).
+
+<Callout title="Visibilidade da sessão — nada a fazer" type="info">
+Logins concluídos já aparecem nos apps mobile/desktop do TruthID do usuário e podem ser revogados individualmente por lá. O celular registra a sessão on-chain por conta própria (via uma UserOperation) antes mesmo de chamar seu endpoint `/auth/verify` — não há relayer para financiar nem uma etapa de registro separada. Veja a referência do SDK ([TypeScript](/docs/sdk/typescript#verifysessionsessionhash), [Python](/docs/sdk/python#verify_sessionsession_hash), [Ruby](/docs/sdk/ruby#verify_sessionsession_hash)) se quiser confirmar que uma sessão chegou on-chain usando `verifySession`.
+</Callout>
+
+## 5. Teste com um dispositivo real
+
+Para de fato escanear um QR code e aprovar um login, você precisa de:
+
+- Uma **identidade TruthID** — criada uma única vez com qualquer carteira EVM na Base.
+- Um **dispositivo confiável** pareado a essa identidade — o app desktop ou o app mobile.
+
+Ainda não há downloads pré-compilados — os dois apps atualmente só são construídos a partir do código-fonte. Veja [Building from source](https://github.com/masterlxz/truthid#building-from-source) no README principal.
+
+Duas coisas que costumam pegar as pessoas de surpresa na primeira tentativa:
+- `callbackUrl` precisa ser alcançável a partir da internet via HTTPS — `localhost` não funciona. Use um túnel (ex.: `ngrok http 3000`) durante o desenvolvimento.
+- O desafio expira em 30 segundos, então gere-o bem antes de mostrar o QR code, não com antecedência.
+
+## Próximos passos
+
+- Referência completa da API: [Referência de SDK](/docs/sdk/typescript) (TypeScript, [Python](/docs/sdk/python), [Ruby](/docs/sdk/ruby))
+- [Como o TruthID Funciona](/docs/concepts/how-it-works) — o protocolo completo por trás do que você acabou de chamar
+- [Desktop](/docs/apps/desktop) / [Mobile](/docs/apps/mobile) — o que o "dispositivo real" do passo 5 realmente é
+- Endereços dos contratos inteligentes: [Contratos inteligentes](/docs/intro#smart-contracts-base-mainnet-chain-8453) na introdução
+- [Modelo de segurança](/docs/security) — o que o TruthID protege, e o que não protege

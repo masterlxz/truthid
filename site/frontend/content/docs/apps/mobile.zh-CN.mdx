@@ -1,0 +1,36 @@
+---
+title: 移动端
+description: "日常使用的设备 — 配对、登录批准、密码库、委托签名和自动填充。"
+---
+
+移动端应用（Flutter，Android 和 iOS）是您随身携带、用于日常登录的设备。它与在[桌面端](/docs/apps/desktop)创建的身份配对，此后就是实际批准登录、持有密码库副本，并响应来自其他设备或浏览器扩展的跨设备请求的那一方。
+
+## 登录批准
+
+这是移动端的核心工作：扫描二维码、显示发起请求的 `origin`，并且 — 如果您批准 — 对响应签名并把会话注册到链上，全部如 [TruthID 工作原理](/docs/concepts/how-it-works#logging-in)中所描述的那样。会话注册这一步是移动端自己的责任（不是网站后端或 SDK 做的事），它以一笔 ERC-4337 `UserOperation` 的形式通过智能账户提交。
+
+## 密码库
+
+对 [TruthID Vault](/docs/concepts/vault) 拥有完整的读写权限 — 凭据、地址、卡片、文档 — 功能集与桌面端相同（密码生成器、强度指示器、收藏、按设备的权限管理）。实际存储了什么、如何加密，见该页面；这里只是您从手机上管理它的地方。
+
+## 跨设备角色
+
+在[跨设备与存储](/docs/concepts/cross-device-and-storage#cross-device-transport-lan--dead-drop)中描述的局域网/离线中转传输里，移动端通常扮演*响应方* — 它是其他设备和浏览器扩展试图联系的对象。它处理委托签名请求（签名消息、签名并执行、固定/发布）的方式与桌面端相同：每一个请求都会单独获得批准，每次都是如此 — 无论哪一端都没有持久的按应用授权或配额。
+
+## 社交恢复 — 只读
+
+移动端会显示当前的监护人列表、阈值，以及任何活跃恢复提议的状态/时间锁，但无法配置监护人或对提议采取行动 — 原因见[社交恢复 → 谁能真正做这件事](/docs/concepts/recovery#who-can-actually-do-this--desktop-only)。
+
+## 自动填充
+
+两个平台都有原生自动填充：Android 通过 `AutofillService`，iOS 通过 Credential Provider 扩展。密码库中已保存的凭据、地址和卡片可以直接填充进其他应用的表单。有一个刻意设置的例外：TOTP 验证码被排除在浏览器扩展可以拉取用于自动填充的内容之外 — 它们只在移动端/桌面端本地生成和使用，从不交给扩展。这条边界为什么存在，见 [TruthID Vault → TOTP 和通行密钥](/docs/concepts/vault#totp-and-passkeys--for-other-services-not-truthid)。
+
+## 备份
+
+密码库可以从移动端导出为 `.truthid-backup` 文件，方式与桌面端相同 — 格式见 [TruthID Vault → 备份与导出](/docs/concepts/vault#backup-and-export)。
+
+## 后续步骤
+
+- [桌面端](/docs/apps/desktop) — 身份建立和完整的社交恢复
+- [浏览器扩展](/docs/apps/extension) — 通过局域网/离线中转与移动端通信的对象
+- [TruthID Vault](/docs/concepts/vault) — 完整的数据模型

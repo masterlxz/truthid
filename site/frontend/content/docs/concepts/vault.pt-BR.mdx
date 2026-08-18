@@ -1,0 +1,39 @@
+---
+title: TruthID Vault
+description: "O que o vault armazena, como é cifrado, e como funciona o gerenciamento de 2FA/passkey para outros serviços."
+---
+
+O TruthID Vault é um gerenciador opcional de credenciais e dados pessoais, integrado aos apps desktop e mobile. Ele não faz parte do próprio login do TruthID — veja [Modelo de Segurança → Escopo](/docs/security#scope-this-page-is-about-logging-into-truthid-not-the-vault) para essa distinção. Esta página define o que é o vault; [Desktop](/docs/apps/desktop), [Mobile](/docs/apps/mobile) e [Extensão de Navegador](/docs/apps/extension) descrevem cada um as ações do vault do próprio app e apontam de volta para cá em vez de redefinir tudo isso.
+
+## O que ele armazena
+
+Uma entrada do vault é um de quatro tipos:
+
+- **Credenciais** — site, URL, nome de usuário, senha, notas, e opcionalmente um segredo TOTP e/ou uma passkey (veja abaixo).
+- **Endereços** — nome, rua, número, cidade, estado, CEP, país, telefone — os campos que o autofill precisa para formulários de envio/cobrança.
+- **Cartões de crédito** — nome do titular, número, validade, CVV, banco emissor, bandeira. Número do cartão e CVV recebem criptografia em nível de campo dentro da entrada (uma segunda camada além da criptografia de todo o vault abaixo), e o autofill os expõe com persistência mínima em tela e sem registro em log.
+- **Documentos** — arquivos arbitrários de até 50MB, publicados separadamente do resto do vault (para que um documento grande não inche cada sincronização das suas senhas).
+
+Toda entrada pode carregar "perfis" no estilo tags para agrupamento, uma marca de favorito, e timestamps. Os dispositivos têm permissões individuais de leitura/escrita sobre o vault — um dispositivo pode receber acesso somente leitura, útil para um dispositivo em que você confia para preencher automaticamente, mas não quer que possa sobrescrever entradas.
+
+## Criptografia e onde o conteúdo fica
+
+O vault inteiro é um único blob cifrado com AES-256-GCM. Sua chave não fica armazenada em lugar nenhum — ela é derivada sob demanda a partir de uma assinatura sobre uma mensagem fixa (`personal_sign` com sua carteira controladora, passada por HKDF), então a mesma carteira sempre deriva a mesma chave do vault em qualquer dispositivo, sem nenhuma etapa de compartilhamento de chave necessária no pareamento. (Um dispositivo também *pode* receber a chave pré-empacotada no momento do pareamento, via o campo `encryptedVaultKey` descrito em [Como o TruthID Funciona → Pareamento de dispositivo](/docs/concepts/how-it-works#device-pairing) — esse é um caminho de conveniência, não a única forma de obtê-la.)
+
+O blob cifrado em si é publicado no Arweave, com apenas um ponteiro (e um hash de integridade) registrado on-chain no `VaultRegistry` — veja [Cross-Device e Armazenamento](/docs/concepts/cross-device-and-storage) para saber exatamente como a publicação e a busca funcionam, e uma ressalva conhecida sobre vaults mais antigos.
+
+## TOTP e passkeys — para *outros* serviços, não o TruthID [#totp-and-passkeys--for-other-services-not-truthid]
+
+O vault inclui um gerador TOTP padrão (RFC 6238 — HMAC-SHA1, passo de 30 segundos, 6 dígitos) e um autenticador virtual WebAuthn/passkey, para que possa guardar e usar o método de 2FA ou a passkey que um site *terceiro* emitiu para você — da mesma forma que um gerenciador de senhas guarda uma senha salva. Segredos TOTP permanecem locais ao dispositivo por design e são deliberadamente excluídos do que a extensão de navegador pode preencher automaticamente; o autenticador de passkey assina asserções WebAuthn localmente, então a chave privada de uma passkey também nunca sai do dispositivo.
+
+Para deixar explícito o limite que isso implica: o TruthID em si nunca pede um código TOTP ou uma passkey para fazer login — a posse da chave do dispositivo mais a tela de aprovação (veja [Como o TruthID Funciona → Fazendo login](/docs/concepts/how-it-works#logging-in)) é o mecanismo completo. Esses recursos permitem que o vault gerencie o 2FA *das suas outras contas*, eles não são um segundo fator para o TruthID.
+
+## Backup e exportação [#backup-and-export]
+
+Ambos os apps podem exportar o vault para um arquivo `.truthid-backup` independente, sem depender de nenhuma carteira ou dispositivo: bytes mágicos `TIDVLTB1`, um salt aleatório, uma chave PBKDF2-HMAC-SHA256 (600.000 iterações — o mínimo atual recomendado pela OWASP) derivada de uma senha que você escolhe no momento da exportação, depois AES-256-GCM sobre o conteúdo. Como a chave de criptografia vem dessa senha em vez da sua carteira, restaurar um backup não exige repareamento de dispositivo nem acesso à carteira — útil para armazenamento a frio, ou para mover um vault para uma configuração totalmente nova. A exportação está disponível até mesmo em um dispositivo somente leitura, já que só precisa ler o que esse dispositivo já consegue ver.
+
+## Próximos passos
+
+- [Como o TruthID Funciona](/docs/concepts/how-it-works) — o próprio login do TruthID, do qual o vault é separado
+- [Cross-Device e Armazenamento](/docs/concepts/cross-device-and-storage) — como o vault vai de um dispositivo para outro, e como é armazenado permanentemente
+- [Desktop](/docs/apps/desktop) / [Mobile](/docs/apps/mobile) — a interface do vault de cada app

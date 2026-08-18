@@ -1,0 +1,30 @@
+---
+title: Estructura del repositorio
+description: "Dónde vive todo en el monorepo de TruthID, y qué es producto principal versus herramientas internas."
+---
+
+TruthID es un solo monorepo. Esta página mapea el nivel superior para cualquiera que esté explorando el código fuente o decidiendo dónde buscar algo.
+
+| Ruta | Qué hay ahí |
+|---|---|
+| [`contracts/`](https://github.com/masterlxz/truthid/tree/main/contracts) | Los seis contratos Solidity (Foundry) — ver [Contratos inteligentes](/docs/contracts). La fuente de verdad de la que lee cada otra pieza. |
+| [`desktop/`](https://github.com/masterlxz/truthid/tree/main/desktop) | La app de escritorio (Tauri + Rust + React) — ver [Desktop](/docs/apps/desktop). |
+| [`mobile/`](https://github.com/masterlxz/truthid/tree/main/mobile) | La app móvil (Flutter) — ver [Mobile](/docs/apps/mobile). |
+| [`extension/`](https://github.com/masterlxz/truthid/tree/main/extension) | La extensión de navegador (WXT) — ver [Extensión de navegador](/docs/apps/extension). |
+| [`sdk/`](https://github.com/masterlxz/truthid/tree/main/sdk) | Los cuatro SDKs de integración (TypeScript, Python, Ruby, Dart) — ver [Referencia de SDK](/docs/sdk/typescript). Lo que realmente instalan los desarrolladores externos. |
+| [`site/`](https://github.com/masterlxz/truthid/tree/main/site) | Este sitio de documentación y el sitio de cuenta/facturación del proyecto — `site/backend` (Rails) y `site/frontend` (Next.js/Fumadocs, donde `content/docs/` es lo que estás leyendo ahora). |
+| [`integration/`](https://github.com/masterlxz/truthid/tree/main/integration) | Pruebas de extremo a extremo (TypeScript + viem, contra una cadena Anvil local) que ejercitan los flujos de identidad → dispositivo → inicio de sesión → recuperación en toda la pila. Herramientas internas de prueba, no algo que instales. |
+
+## Sobre el directorio legado `docs/`
+
+La raíz del repositorio todavía contiene también un directorio `docs/` — un sitio Docusaurus más antiguo que esta documentación (Fumadocs, bajo `site/frontend/content/docs/`) ha reemplazado por completo. Ya no se compila ni se despliega; el despliegue de GitHub Pages ahora se construye exclusivamente desde `site/frontend`. El directorio se deja en el repositorio deliberadamente, para eliminarse una vez que ya no tenga ningún uso restante — no porque la migración esté incompleta.
+
+## Licencia
+
+TruthID es de código abierto bajo la [Licencia MIT](https://github.com/masterlxz/truthid/blob/main/LICENSE).
+
+## Próximos pasos
+
+- [Por qué TruthID](/docs/concepts/vision) — los objetivos y principios del proyecto
+- [Introducción](/docs/intro) — resumen de arquitectura y requisitos previos
+- [Referencia de SDK](/docs/sdk/typescript) — empieza a integrar

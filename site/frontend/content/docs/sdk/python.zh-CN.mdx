@@ -1,0 +1,310 @@
+---
+title: Python SDK
+description: "PyPI 上 truthid-sdk 的完整 API 参考。"
+---
+
+PyPI 上 [`truthid-sdk`](https://pypi.org/project/truthid-sdk/) 的完整 API 参考。刚接触 TruthID？请先看[快速开始](/docs/quickstart) — 本页是您正式集成时，每一个方法和类型的详细参考。
+
+## 安装
+
+```bash
+pip install truthid-sdk
+```
+
+需要 Python 3.10+。
+
+## `TruthIDClient`
+
+```python
+from truthid import TruthIDClient
+
+truthid = TruthIDClient()  # defaults to network="base-mainnet"
+```
+
+### 构造函数
+
+`TruthIDClient(network: str = "base-mainnet", rpc_url: Optional[str] = None)`
+
+| 字段 | 类型 | 是否必需 | 说明 |
+|-------|------|----------|--------------|
+| `network` | `"base-sepolia"` 或 `"base-mainnet"` | 否 — 默认为 `"base-mainnet"` | 从哪个网络读取合约 |
+| `rpc_url` | `Optional[str]` | 否 | 自定义 RPC 端点。默认使用所选网络的公共 Base RPC |
+
+与 TypeScript SDK 不同，这里的 `network` 有默认值 — 只有需要覆盖它或使用测试网时才需要传入。
+
+## 方法
+
+### `create_challenge(origin)`
+
+创建一个一次性挑战，嵌入展示给用户的二维码中。
+
+**参数**
+
+| 名称 | 类型 | 说明 |
+|------|------|-------------|
+| `origin` | `str` | 您站点的域名，例如 `"yoursite.com"` |
+
+**返回** [`AuthChallenge`](#authchallenge)
+
+```python
+challenge = truthid.create_challenge("yoursite.com")
+# AuthChallenge(type="challenge", nonce="3f2e1a4b-...", issuedAt=1718000000000, origin="yoursite.com")
+```
+
+<Callout title="先存储，再删除" type="idea">
+把挑战保存在服务端，以 `nonce` 为键，直到 `verify_auth_response` 运行为止 — 然后立即删除它。见下方的 [Nonce 失效处理](#nonce-失效处理)。
+</Callout>
+
+**构建二维码** — 移动端应用要求这个精确的结构：
+
+```json
+{
+  "action": "truthid-auth",
+  "challenge": { "type": "challenge", "nonce": "...", "issuedAt": 1718000000000, "origin": "yoursite.com" },
+  "callbackUrl": "https://yoursite.com/auth/verify"
+}
+```
+
+`callbackUrl` **必须**使用 `https://` — 移动端应用拒绝把已签名的响应发到明文 `http://` URL。
+
+---
+
+### `verify_auth_response(challenge, response, ttl_ms=30_000)`
+
+验证从用户手机收到的已签名响应。依次运行六项检查，在第一次失败时停止：
+
+1. 用户已批准（未拒绝）
+2. 挑战在 TTL 之内（默认：30 秒）
+3. Nonce 与原始挑战匹配
+4. 密码学签名有效
+5. 设备已在区块链上注册且处于活跃状态
+6. 获取与该设备关联的身份 ID
+
+**参数**
+
+| 名称 | 类型 | 说明 |
+|------|------|-------------|
+| `challenge` | [`AuthChallenge`](#authchallenge) | 您创建的挑战 |
+| `response` | [`AuthResponse`](#authresponse) | 从手机收到的响应 |
+| `ttl_ms`（可选） | `int` | 挑战的最大存活时间（毫秒）。默认：`30_000` |
+
+**返回** [`VerifyAuthResult`](#verifyauthresult)
+
+`AuthResponse` 没有 `from_dict` 辅助方法 — 需要从解析后的 JSON 请求体中逐字段构建。它的字段是驼峰命名（camelCase，与线上格式一致），不是蛇形命名（snake_case）：
+
+```python
+from truthid import AuthResponse
+
+data = request.json  # { "approved": ..., "nonce": ..., "signature": ..., "deviceAddress": ... }
+
+response = AuthResponse(
+    approved=data["approved"],
+    nonce=data["nonce"],
+    signature=data["signature"],
+    deviceAddress=data["deviceAddress"],
+)
+
+result = truthid.verify_auth_response(challenge, response)
+
+if result.valid:
+    print(f"Authenticated! Identity ID: {result.identity_id}")
+else:
+    print(f"Failed: {result.reason}")
+```
+
+**失败原因**
+
+| `reason` | 原因 |
+|----------|-------|
+| `"User rejected the login request"` | 用户在手机上点击了"拒绝" |
+| `"Challenge expired"` | 自 `issuedAt` 起，经过的时间超过了 `ttl_ms` 毫秒 |
+| `"Nonce mismatch"` | 响应的 nonce 与挑战的不匹配 |
+| `"Invalid signature format"` | 签名格式不正确 |
+| `"Signature does not match device address"` | 签名不是由 `deviceAddress` 做出的 |
+| `"Device is not active or has been revoked"` | 该设备已被身份所有者撤销 |
+
+---
+
+### `verify_session(session_hash)` [#verify_sessionsession_hash]
+
+检查一个会话哈希是否仍然有效（未被撤销）。在登录后的后续请求中调用它，以确认会话没有从另一台设备被撤销。
+
+**参数**
+
+| 名称 | 类型 | 说明 |
+|------|------|-------------|
+| `session_hash` | `str` | `bytes32` 十六进制字符串（`0x...`） |
+
+**返回** [`SessionInfo`](#sessioninfo)
+
+```python
+session = truthid.verify_session(session_hash)
+if session.exists and not session.revoked:
+    pass  # still logged in
+```
+
+---
+
+### `check_device_status(device_pub_key)`
+
+在区块链上查询一台设备的当前状态。
+
+**参数**
+
+| 名称 | 类型 | 说明 |
+|------|------|-------------|
+| `device_pub_key` | `str` | 该设备的以太坊地址（`0x...`） |
+
+**返回** [`DeviceStatus`](#devicestatus)
+
+```python
+status = truthid.check_device_status(device_pub_key)
+```
+
+---
+
+### `compute_smart_account_address(ledger_address, index=0)` [#compute_smart_account_addressledger_address-index0]
+
+通过 `CREATE2` 预测用户的智能账户（控制方）地址 — 纯本地计算，不需要 RPC 调用，也不涉及服务器。适用于在账户从未上链使用过之前，展示一个存款地址或查询余额。
+
+**参数**
+
+| 名称 | 类型 | 说明 |
+|------|------|-------------|
+| `ledger_address` | `str` | 拥有该账户的硬件钱包/EOA 地址 |
+| `index`（可选） | `int` | 账户索引，用于每个所有者拥有多个智能账户的情况。默认：`0` |
+
+**返回** `str` — 带校验和的智能账户地址。
+
+```python
+smart_account = truthid.compute_smart_account_address(ledger_address)
+```
+
+当您不需要完整的客户端实例时，也导出了一个独立函数：
+
+```python
+from truthid import compute_smart_account_address
+
+smart_account = compute_smart_account_address(ledger_address, network="base-mainnet")
+```
+
+## 类型
+
+以下全部都从 `truthid` 导出。`AuthChallenge` 和 `AuthResponse` 使用**驼峰命名**字段，因为它们直接映射移动端应用发送和签名的 JSON 结构 — 其他每个类型都遵循正常的 Python 蛇形命名，因为它们从不跨越网络边界。
+
+#### `AuthChallenge` [#authchallenge]
+
+```python
+@dataclass
+class AuthChallenge:
+    type: str
+    nonce: str
+    issuedAt: int  # Unix timestamp in ms
+    origin: str
+```
+
+#### `AuthResponse` [#authresponse]
+
+```python
+@dataclass
+class AuthResponse:
+    approved: bool
+    nonce: str
+    signature: str                          # secp256k1 signature, hex ("0x...")
+    deviceAddress: str                      # Ethereum address of the device key
+    sessionSignature: Optional[str] = None  # personal_sign over keccak256(nonce) — always sent alongside signature
+```
+
+#### `VerifyAuthResult` [#verifyauthresult]
+
+```python
+@dataclass
+class VerifyAuthResult:
+    valid: bool
+    identity_id: Optional[int] = None
+    device_address: Optional[str] = None
+    reason: Optional[str] = None
+```
+
+#### `SessionInfo` [#sessioninfo]
+
+```python
+@dataclass
+class SessionInfo:
+    exists: bool
+    revoked: bool
+    identity_id: Optional[int] = None
+    device_pub_key: Optional[str] = None
+    created_at: Optional[datetime] = None
+```
+
+#### `DeviceStatus` [#devicestatus]
+
+```python
+@dataclass
+class DeviceStatus:
+    exists: bool
+    active: bool
+    label: Optional[str] = None
+    identity_id: Optional[int] = None
+    added_at: Optional[datetime] = None
+```
+
+## 安全说明
+
+### Nonce 失效处理 [#nonce-invalidation]
+
+在调用 `verify_auth_response` **之前**从您的存储中删除挑战，而不是之后 — 之后再删除会留下一个竞态条件，让同一个已签名的响应可以在 TTL 窗口内被提交两次。
+
+```python
+# Correct order
+del pending_challenges[response.nonce]          # delete first
+result = truthid.verify_auth_response(...)       # then verify
+```
+
+### TTL
+
+默认值是 30 秒，与移动端应用自身的挑战过期时间一致。调低它没问题；调高到超过 30 秒不会有任何效果，因为手机本来就会拒绝一个更旧的挑战。
+
+### 仅限 HTTPS
+
+手机把已签名的响应直接 `POST` 到您的回调 URL — 移动端应用拒绝非 `https://` 的 URL，而且您的端点仍然需要一份有效的 TLS 证书才能连接成功。
+
+## 网络
+
+| 网络 | 链 ID | 说明 |
+|---------|----------|--------------|
+| `"base-sepolia"` | 84532 | 测试网 — 用于开发 |
+| `"base-mainnet"` | 8453 | 生产环境（默认） |
+
+```python
+# Testnet during development
+truthid = TruthIDClient(network="base-sepolia")
+
+# Custom RPC instead of the public endpoint
+truthid = TruthIDClient(network="base-mainnet", rpc_url="https://your-private-rpc.example.com")
+```
+
+两个网络的合约地址见[智能合约](/docs/intro#smart-contracts-base-mainnet-chain-8453)。
+
+## 会话可见性 — 无需额外操作
+
+已完成的登录会自动出现在用户的 TruthID 移动端/桌面端应用中，并可以从那里单独撤销。手机会在调用您的回调 URL 之前，自行在链上注册会话（通过一笔 UserOperation）— 没有需要您额外调用的单独注册步骤。
+
+如果您想再次确认某个会话确实上链，可以从 nonce 推导出它的哈希，并调用 `verify_session`：
+
+```python
+from web3 import Web3
+
+session_hash = "0x" + Web3.keccak(text=response.nonce).hex()
+session = truthid.verify_session(session_hash)
+if session.exists and not session.revoked:
+    pass  # confirmed on-chain
+```
+
+## 后续步骤
+
+- [快速开始](/docs/quickstart) — 从安装到首次登录的完整走查
+- [完整的 Flask 示例](https://github.com/masterlxz/truthid/blob/main/sdk/README.md#full-examples)，含会话令牌和受保护路由
+- [TypeScript SDK 参考](/docs/sdk/typescript)
+- [Ruby SDK 参考](/docs/sdk/ruby)

@@ -1,0 +1,29 @@
+---
+title: Desktop
+description: "La app controladora principal — creación de identidad, Ledger, gestión de dispositivos y recuperación social completa."
+---
+
+La app de escritorio (Tauri + Rust + React) es donde realmente se configura y administra una identidad. Si el móvil es el dispositivo que llevas contigo y con el que apruebas inicios de sesión día a día, el escritorio es a donde vas para cualquier cosa que necesite una wallet de hardware o control total sobre la identidad misma.
+
+## Para qué sirve
+
+- **Creación de identidad** — el flujo de configuración de cuatro pasos descrito en [Cuenta inteligente y gas](/docs/smart-account): firmar el consentimiento, crear la identidad, desplegar la cuenta inteligente, financiarla.
+- **Gestión de dispositivos** — emparejar dispositivos nuevos (ver [Cómo funciona TruthID → Emparejamiento de dispositivos](/docs/concepts/how-it-works#device-pairing)), ver y revocar los existentes.
+- **Recuperación social, completa** — configurar guardianes, proponer, aprobar, ejecutar y cancelar una recuperación requieren todos una wallet conectada hablando directamente con `RecoveryManager`. Esto solo ocurre en el escritorio — ver [Recuperación social → Quién puede hacer esto realmente](/docs/concepts/recovery#who-can-actually-do-this--desktop-only) para saber por qué el móvil no puede hacer esta parte.
+- **Gestión del vault** — la interfaz completa de lectura/escritura para [TruthID Vault](/docs/concepts/vault): agregar/editar entradas, configurar permisos por dispositivo, publicar actualizaciones, exportar archivos `.truthid-backup`.
+
+## Soporte de Ledger
+
+El escritorio habla con una wallet de hardware Ledger por USB real, no por una API del navegador — WebHID/WebUSB no están disponibles en el WebView de Linux de Tauri, así que el backend de Rust implementa directamente el transporte HID de Ledger (`hidapi`, filtrando por el vendor ID USB de Ledger `0x2c97`, armando a mano el framing de paquetes y el protocolo APDU). Un Ledger actúa como el firmante de nivel `owner` descrito en [Cuenta inteligente y gas](/docs/smart-account#how-it-works) — acceso total a la cuenta inteligente, usado para la configuración y para cualquier cosa sensible (configuración de guardianes, revocación de dispositivos) que prefieras no confiarle a un dispositivo conectado.
+
+## El servidor local [#the-local-server]
+
+El escritorio corre un pequeño servidor HTTP en `localhost`, escuchando en uno de los puertos `47950`–`47954`. Esto es con lo que habla la [extensión de navegador](/docs/apps/extension) y los integradores externos para los flujos de firma delegada descritos en [Entre dispositivos y almacenamiento](/docs/concepts/cross-device-and-storage#delegated-signing-including-third-party-apps) — firmar mensaje, firmar y ejecutar, y pin/publicar — cuando el escritorio resulta estar corriendo en la misma máquina. Al ser solo loopback, ya se confía implícitamente en él al mismo nivel que en esos flujos; no hay una capa de autenticación separada encima; cada solicitud sigue mostrando su propia pantalla de aprobación.
+
+El escritorio no tiene código propio de autocompletado ni de inyección en páginas web — eso es enteramente trabajo de la extensión de navegador. El rol del escritorio en el autocompletado es únicamente responder a las solicitudes loopback de la extensión cuando ambos están corriendo localmente.
+
+## Próximos pasos
+
+- [Mobile](/docs/apps/mobile) — el dispositivo de emparejamiento/inicio de sesión del día a día
+- [Extensión de navegador](/docs/apps/extension) — lo que realmente habla con el servidor local del escritorio
+- [Recuperación social](/docs/concepts/recovery) — los flujos de guardianes que solo el escritorio puede ejecutar

@@ -1,0 +1,78 @@
+---
+title: Como o TruthID Funciona
+description: "O passo a passo completo do protocolo: identidade, pareamento de dispositivo, login, sessões — formatos exatos de mensagens e o que é on-chain versus local."
+---
+
+Esta é a explicação canônica do protocolo do TruthID, de ponta a ponta. [Introdução](/docs/intro) e [Modelo de Segurança](/docs/security) apontam para cá em vez de repeti-la. Se você só quer integrar o TruthID a um backend, não precisa desta página — vá para [Guia rápido](/docs/quickstart). Leia esta se quiser entender exatamente o que acontece, ou se está implementando um cliente TruthID você mesmo.
+
+## Criação de identidade
+
+Uma identidade é um nome de usuário vinculado a um endereço controlador, registrado no `IdentityRegistry`. Criar uma é uma única chamada — `createIdentity(username, controller, v, r, s)` — mas o `(v, r, s)` não é decoração opcional: é uma assinatura do próprio endereço `controller`, provando que ele de fato concordou em se vincular a esse nome de usuário. Sem essa verificação, qualquer um poderia chamar `createIdentity` com o endereço de outra pessoa como `controller` e tomar posse dele — incluindo o endereço para o qual uma smart account está *prestes a* ser implantada, já que endereços `CREATE2` são previsíveis antes da implantação. A assinatura de consentimento fecha essa brecha: ou a EOA controladora assinou diretamente, ou, para uma smart account que ainda não existe on-chain, seu futuro dono assinou uma mensagem provando que controla a chave que será dona dela.
+
+Nomes de usuário são restritos a letras minúsculas, dígitos, `-` e `.`, 1–64 bytes — suficiente para descartar falsificação visual por homóglifos, sem a intenção de serem expressivos.
+
+Na prática, "criar uma identidade" é o fluxo de configuração de quatro passos descrito em [Smart Account e Gas](/docs/smart-account): assinar o consentimento, criar a identidade, implantar a smart account no endereço já comprometido, financiá-la. Todos os passos on-chain são pagos pela carteira dona uma única vez; depois disso, a smart account se sustenta sozinha.
+
+## Pareamento de dispositivo [#device-pairing]
+
+Um dispositivo — o app desktop, o app mobile — é um par de chaves gerado localmente, cuja chave privada nunca sai desse dispositivo. Registrá-lo no `DeviceRegistry` é um **commit-reveal** de dois passos, não uma única chamada, especificamente para evitar front-running:
+
+1. **Commit** — `commitDevice(commitment)`, onde `commitment = keccak256(devicePubKey ‖ salt ‖ msg.sender)`. Isso publica um hash que ainda não revela nada sobre a chave real do dispositivo.
+2. **Reveal** — em um bloco *posterior*, `registerDevice(devicePubKey, label, salt, encryptedVaultKey)` revela a pré-imagem. Só o endereço que fez o commit original pode revelá-lo — então alguém observando o mempool por uma transação `registerDevice` pendente não consegue copiar a chave do dispositivo dali e registrá-la para a própria identidade primeiro, que é exatamente o ataque que o esquema de dois passos existe para prevenir.
+
+`encryptedVaultKey` é opcional — bytes vazios se o [vault](/docs/concepts/vault) ainda não estiver em uso. Quando presente, é a chave de decifração do vault, cifrada via ECIES especificamente para a chave pública deste dispositivo, para que um dispositivo recém-pareado consiga decifrar o vault sem que a carteira dona precise se envolver de novo.
+
+Uma identidade pode registrar até 50 dispositivos. Um dispositivo que foi revogado pode ser registrado novamente depois (as pessoas revogam por engano, ou querem reativar um celular antigo) — mas apenas pela mesma identidade que já era dona dele; um endereço de dispositivo que já pertenceu à identidade A nunca pode se tornar um dispositivo da identidade B, mesmo depois de revogado.
+
+## Fazendo login [#logging-in]
+
+Esta é a parte sem nenhum servidor no meio do caminho. Um site que quer que alguém faça login:
+
+1. Monta um `AuthChallenge` e o incorpora em um QR code, junto com a URL para a qual quer que a resposta assinada seja enviada via `POST`:
+   ```json
+   { "type": "challenge", "nonce": "<uuid>", "issuedAt": 1234567890123, "origin": "https://example.com" }
+   ```
+2. O celular do usuário escaneia o QR, mostra a ele o `origin` para que possa ver exatamente quem está pedindo e — se ele aprovar — assina `JSON.stringify(challenge)` localmente com a chave do dispositivo (`personal_sign`) e faz um `POST` de um `AuthResponse` diretamente para o `callbackUrl` do QR code, apenas via HTTPS:
+   ```json
+   {
+     "approved": true,
+     "nonce": "<same uuid>",
+     "signature": "0x...",
+     "deviceAddress": "0x...",
+     "sessionSignature": "0x..."
+   }
+   ```
+3. O backend do site — usando um SDK do TruthID, nunca falando com a chain diretamente na mão — verifica, em ordem: (a) `approved` é verdadeiro; (b) o desafio não expirou (TTL padrão de 30 segundos); (c) o `nonce` da resposta corresponde ao do desafio; (d) recuperar o assinante a partir de `signature` sobre o JSON do desafio resulta exatamente em `deviceAddress`; (e) `DeviceRegistry.isDeviceActive(deviceAddress)` é verdadeiro on-chain, ou seja, o dispositivo não foi revogado desde que foi pareado; (f) lê `getDevice(deviceAddress)` para descobrir a qual identidade esse dispositivo pertence.
+
+Nada nessa troca toca em um servidor operado pelo TruthID — o desafio vive dentro do QR code, e a resposta assinada vai diretamente do celular para o próprio backend do integrador.
+
+## Sessões
+
+Uma vez que um login é aprovado, o app mobile — não o backend do site, e não o SDK — registra separadamente uma sessão on-chain, submetendo uma `UserOperation` ERC-4337 através da própria smart account. Isso é um design deliberado: versões anteriores do SDK TypeScript tinham um método `registerSession`, mas ele foi removido assim que o registro de sessão passou a ser algo que o app mobile faz por conta própria.
+
+O que de fato é armazenado é mínimo: `SessionRegistry.createSession` recebe um `hash` (apenas `keccak256(nonce)` — separado por domínio com o chain ID e o próprio endereço do `SessionRegistry`, para que um hash de sessão de uma implantação não possa ser reproduzido contra outra), o `identityId`, a chave pública do dispositivo, e uma assinatura ECDSA desse dispositivo sobre o hash separado por domínio. O contrato verifica a assinatura e que o dispositivo assinante de fato pertence a essa identidade e não está revogado — nada sobre *para que* a sessão era (qual site, que horas) é jamais escrito on-chain; só o hash. O texto puro que esse hash representa fica no armazenamento local do app.
+
+Revogar é simétrico e barato: `revokeSession(hash)` para uma sessão, ou `revokeAllSessions()` — uma única chamada O(1) que revoga tudo até o momento atual escrevendo um único timestamp, em vez de iterar sobre cada sessão.
+
+## O assinante por trás de tudo isso
+
+Toda escrita on-chain acima — criar uma identidade, registrar um dispositivo, criar ou revogar uma sessão — é na verdade executada por uma smart account ERC-4337, não uma EOA comum. Ela reconhece duas camadas de assinante (a carteira dona usada na configuração, e dispositivos adicionados depois, com dispositivos restritos de jamais modificar quem controla a conta) e paga o próprio gas sem nenhum relayer ou paymaster envolvido. Esse modelo, mais o fluxo completo de configuração/financiamento, tem sua própria página: [Smart Account e Gas](/docs/smart-account).
+
+## O que é on-chain versus o que fica local
+
+| Público, on-chain, permanente | Apenas local, nunca on-chain |
+|---|---|
+| Mapeamento nome de usuário ↔ controlador | Chaves privadas dos dispositivos |
+| Chaves públicas de dispositivos, rótulos, status de revogação | O desafio bruto (`nonce`/`origin`/`issuedAt`) que um hash de sessão representa |
+| **Hashes** de sessão (`keccak256(nonce)`, separados por domínio) | Conteúdo do vault (cifrado, separadamente — veja [TruthID Vault](/docs/concepts/vault)) |
+| Endereços de guardiões, limite, propostas de recuperação | Qualquer coisa sobre em qual site você fez login, ou quando |
+| CID/ponteiro do vault (não o conteúdo) | A chave de decifração do vault |
+
+Se sua carteira controladora for perdida em algum momento, nada do acima se torna irrecuperável por si só — é para isso que a recuperação social existe.
+
+## Próximos passos
+
+- [Recuperação Social](/docs/concepts/recovery) — recuperando uma carteira controladora perdida
+- [Smart Account e Gas](/docs/smart-account) — o modelo de assinante em duas camadas e o gas
+- [Modelo de Segurança](/docs/security) — o que esse protocolo protege, e o que não protege
+- [Contratos Inteligentes](/docs/contracts) — cada função referenciada acima, com endereços e custos de gas

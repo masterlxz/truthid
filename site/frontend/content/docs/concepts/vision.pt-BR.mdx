@@ -1,0 +1,45 @@
+---
+title: Por que o TruthID
+description: "O problema que o TruthID resolve, para quem é, e os princípios que ele não vai abrir mão."
+---
+
+## O problema
+
+Praticamente todo login na internet passa por um de um punhado de provedores de identidade centralizados — "Login com Google", "Login com Apple", "Login com Microsoft". Essa conveniência vem com custos reais: um bloqueio de conta pode te cortar de todo serviço vinculado a ela, o provedor vê todo site em que você faz login, você depende da boa vontade e da disponibilidade contínuas de uma empresa, e uma violação de dados ou mudança de política naquela única empresa vira problema de todo mundo de uma vez.
+
+O TruthID substitui isso por algo que você possui de verdade: uma identidade apoiada em blockchain, controlada por dispositivos que você tem em mãos, verificada contra uma chain pública em vez dos servidores de uma empresa.
+
+## O que o TruthID é — e o que não é
+
+O TruthID é autenticação descentralizada. Os usuários são donos da própria identidade através de uma identidade raiz apoiada em carteira e se autenticam usando dispositivos confiáveis em vez de senhas. Ele prioriza, nesta ordem do que não vai trocar:
+
+- **Soberania do usuário** — sua identidade não é alugada de ninguém. Ela continua funcionando mesmo se o TruthID como projeto deixar de existir (veja [Princípio: nunca cobrar pelo que já é seu](#never-charge-for-whats-already-yours) abaixo).
+- **Privacidade** — nenhuma parte central vê sua atividade de login entre sites; não há parte nenhuma no caminho do login para vê-la.
+- **Confiança no dispositivo** — uma assinatura de um dispositivo que você tem em mãos substitui uma senha que você precisa lembrar e um servidor precisa guardar.
+- **Arquitetura open source** — todo contrato, app e SDK é auditável, não uma caixa-preta que pedem para você confiar.
+- **Blockchain como fonte da verdade** — o estado de identidade e dispositivos vive em uma chain pública, não em um banco de dados que só uma empresa pode ler ou escrever.
+
+Deliberadamente, ele **não é** um marketplace de NFTs nem um produto de carteira cripto — essas são meios que o TruthID usa (uma identidade apoiada em carteira, um registro on-chain), não o que está construindo. O foco principal é autenticação e gerenciamento de identidade. Um módulo opcional, o TruthID Vault (um gerenciador de senhas/credenciais, coberto em [TruthID Vault](/docs/concepts/vault)), foi adicionado depois, em cima desse núcleo — é um extra, não o ponto central.
+
+## Para quem é
+
+Dois tipos diferentes de pessoas leem esta documentação por dois motivos diferentes:
+
+- **Pessoas que fazem login em um site** querem soberania sobre o próprio login — uma forma de se autenticar que não seja mais uma conta que uma empresa pode bloquear, e que não entregue a terceiros um registro de tudo onde elas fazem login.
+- **Desenvolvedores integrando o TruthID** querem autenticação sem senha sem precisar rodar sua própria infraestrutura de identidade — nenhum banco de dados de usuários para proteger, nenhum fluxo de redefinição de senha para construir, nenhuma violação do *seu* banco de dados expondo as credenciais de ninguém, porque você nunca guardou nenhuma.
+
+Se você é o primeiro tipo de leitor, [Como o TruthID Funciona](/docs/concepts/how-it-works) é a melhor próxima página. Se você é o segundo, vá direto para [Guia rápido](/docs/quickstart).
+
+## Nunca cobrar pelo que já é seu [#never-charge-for-whats-already-yours]
+
+O TruthID tem um plano ainda não implementado, ainda não ativo, para um nível pago opcional (serviços de conveniência, como patrocínio de gas para pessoas que não querem gerenciar uma carteira por conta própria) — ele não é descrito nesta documentação porque ainda não existe como produto. Mas o princípio por trás dele vale a pena declarar agora, porque é o que torna o núcleo gratuito e auto-soberano confiável:
+
+> Nunca cobrar por algo que já pertence ao usuário. Identidade, dispositivos, o vault, a smart account — tudo isso roda localmente e on-chain, e continua funcionando mesmo que o TruthID como empresa ou serviço deixe de existir. Nada que é gratuito hoje se torna pago depois. Qualquer monetização futura só pode se aplicar a serviços adicionais que custam dinheiro real e contínuo ao projeto para continuar rodando — nunca ao produto principal em si.
+
+Este é um compromisso sobre o que o TruthID *não* vai se tornar, não a descrição de um produto que você pode contratar hoje.
+
+## Próximos passos
+
+- [Como o TruthID Funciona](/docs/concepts/how-it-works) — o protocolo, de ponta a ponta
+- [Introdução](/docs/intro) — visão geral da arquitetura e pré-requisitos
+- [Modelo de Segurança](/docs/security) — o que o TruthID protege, e o que não protege

@@ -1,0 +1,30 @@
+---
+title: 代码仓库结构
+description: "TruthID monorepo 中每个部分的位置，以及哪些是核心产品、哪些是内部工具。"
+---
+
+TruthID 是一个 monorepo。本页面为浏览源代码或想知道该去哪里找东西的人梳理了顶层目录结构。
+
+| 路径 | 内容 |
+|---|---|
+| [`contracts/`](https://github.com/masterlxz/truthid/tree/main/contracts) | 六份 Solidity 合约（Foundry）— 见[智能合约](/docs/contracts)。这是其他每个部分都读取的真相来源。 |
+| [`desktop/`](https://github.com/masterlxz/truthid/tree/main/desktop) | 桌面端应用（Tauri + Rust + React）— 见[桌面端](/docs/apps/desktop)。 |
+| [`mobile/`](https://github.com/masterlxz/truthid/tree/main/mobile) | 移动端应用（Flutter）— 见[移动端](/docs/apps/mobile)。 |
+| [`extension/`](https://github.com/masterlxz/truthid/tree/main/extension) | 浏览器扩展（WXT）— 见[浏览器扩展](/docs/apps/extension)。 |
+| [`sdk/`](https://github.com/masterlxz/truthid/tree/main/sdk) | 四个集成 SDK（TypeScript、Python、Ruby、Dart）— 见 [SDK 参考](/docs/sdk/typescript)。第三方开发者实际安装的就是这些。 |
+| [`site/`](https://github.com/masterlxz/truthid/tree/main/site) | 本文档站点以及项目的账户/账单站点 — `site/backend`（Rails）和 `site/frontend`（Next.js/Fumadocs，也就是您现在正在阅读的 `content/docs/` 所在之处）。 |
+| [`integration/`](https://github.com/masterlxz/truthid/tree/main/integration) | 端到端测试（TypeScript + viem，针对本地 Anvil 链运行），贯穿整个技术栈验证身份 → 设备 → 登录 → 恢复流程。属于内部测试工具，不是您需要安装的东西。 |
+
+## 关于遗留的 `docs/` 目录
+
+仓库根目录下还保留着一个 `docs/` 目录 — 一个较旧的 Docusaurus 站点，已被本文档（Fumadocs，位于 `site/frontend/content/docs/` 下）完全取代。它已不再被构建或部署；GitHub Pages 部署现在完全只从 `site/frontend` 构建。这个目录被刻意保留在仓库中，等到彻底没有用处后再移除 — 并不是因为迁移尚未完成。
+
+## 许可证
+
+TruthID 基于 [MIT 许可证](https://github.com/masterlxz/truthid/blob/main/LICENSE)开源。
+
+## 后续步骤
+
+- [为什么选择 TruthID](/docs/concepts/vision) — 项目的目标和原则
+- [简介](/docs/intro) — 架构概览和前提条件
+- [SDK 参考](/docs/sdk/typescript) — 开始集成

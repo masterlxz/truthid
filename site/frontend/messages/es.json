@@ -1,0 +1,22 @@
+{
+  "metadata": {
+    "title": "TruthID",
+    "description": "TruthID — identidad autosoberana"
+  },
+  "layout": {
+    "navTitle": "TruthID"
+  },
+  "home": {
+    "heading": "TruthID",
+    "subtitle": "Inicia sesión para continuar. El inicio de sesión es solo mediante OAuth — sin contraseña propia.",
+    "signInError": "No se pudo iniciar sesión ({error}). Intenta de nuevo.",
+    "signInWithGoogle": "Iniciar sesión con Google"
+  },
+  "dashboard": {
+    "loading": "Cargando…",
+    "notSignedIn": "No has iniciado sesión.",
+    "back": "Volver",
+    "hello": "Hola, {name}",
+    "signOut": "Cerrar sesión"
+  }
+}

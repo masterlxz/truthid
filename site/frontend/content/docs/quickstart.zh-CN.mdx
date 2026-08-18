@@ -1,0 +1,210 @@
+---
+title: 快速开始
+description: "为您的后端添加“使用 TruthID 登录”：创建挑战、展示二维码，并验证已签名的响应。"
+---
+
+import { Tabs, Tab } from 'fumadocs-ui/components/tabs';
+
+为您的后端添加"使用 TruthID 登录"：创建一个挑战、把它渲染成二维码，然后验证用户手机返回的已签名响应。请先阅读[前提条件](/docs/intro#prerequisites) — 您需要一个能接收 HTTPS `POST` 请求的后端。
+
+## 1. 安装 SDK
+
+<Tabs items={['TypeScript', 'Python', 'Ruby']}>
+<Tab value="TypeScript">
+
+```bash
+npm install truthid-sdk
+```
+
+</Tab>
+<Tab value="Python">
+
+```bash
+pip install truthid-sdk
+```
+
+</Tab>
+<Tab value="Ruby">
+
+```bash
+gem install truthid-sdk
+```
+
+</Tab>
+</Tabs>
+
+## 2. 创建挑战
+
+挑战是要嵌入登录页面二维码中的内容。它是一次性的，30 秒后过期 — 请在渲染二维码前按需创建，而不要提前创建。
+
+<Tabs items={['TypeScript', 'Python', 'Ruby']}>
+<Tab value="TypeScript">
+
+```typescript
+import { TruthIDClient } from "truthid-sdk";
+
+const truthid = new TruthIDClient({ network: "base-mainnet" });
+const pendingChallenges = new Map(); // any store with a TTL works
+
+app.get("/auth/challenge", (req, res) => {
+  const challenge = truthid.createChallenge(req.hostname);
+  pendingChallenges.set(challenge.nonce, challenge);
+
+  res.json({
+    action: "truthid-auth",
+    challenge,
+    callbackUrl: `https://${req.hostname}/auth/verify`,
+  });
+});
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+from truthid import TruthIDClient
+
+truthid = TruthIDClient()  # defaults to network="base-mainnet"
+pending_challenges = {}  # any store with a TTL works
+
+@app.get("/auth/challenge")
+def get_challenge():
+    challenge = truthid.create_challenge(request.host)
+    pending_challenges[challenge.nonce] = challenge
+
+    return jsonify({
+        "action": "truthid-auth",
+        "challenge": {"type": challenge.type, "nonce": challenge.nonce,
+                       "issuedAt": challenge.issuedAt, "origin": challenge.origin},
+        "callbackUrl": f"https://{request.host}/auth/verify",
+    })
+```
+
+</Tab>
+<Tab value="Ruby">
+
+```ruby
+truthid = TruthID::Client.new  # defaults to network: "base-mainnet"
+pending_challenges = {}        # any store with a TTL works
+
+get "/auth/challenge" do
+  content_type :json
+  challenge = truthid.create_challenge(request.host)
+  pending_challenges[challenge.nonce] = challenge
+  {
+    action: "truthid-auth",
+    challenge: challenge.to_h,
+    callbackUrl: "https://#{request.host}/auth/verify"
+  }.to_json
+end
+```
+
+</Tab>
+</Tabs>
+
+## 3. 渲染二维码
+
+您的前端把这段 JSON 响应转换成二维码 — 任何二维码渲染库都可以，服务端渲染或客户端渲染皆可。TruthID 移动端应用要求这个精确的结构：
+
+```json
+{
+  "action": "truthid-auth",
+  "challenge": { "type": "challenge", "nonce": "...", "issuedAt": 1718000000000, "origin": "yoursite.com" },
+  "callbackUrl": "https://yoursite.com/auth/verify"
+}
+```
+
+`callbackUrl` 必须是 `https://` — 移动端应用拒绝把已签名的响应发到任何其他地方。
+
+## 4. 验证响应
+
+当用户在手机上批准后，它会直接 `POST` 到 `callbackUrl` — 中间没有服务器。`verifyAuthResponse` 会检查签名，并从区块链读取设备的状态。
+
+<Tabs items={['TypeScript', 'Python', 'Ruby']}>
+<Tab value="TypeScript">
+
+```typescript
+app.post("/auth/verify", async (req, res) => {
+  const response = req.body;
+  const challenge = pendingChallenges.get(response.nonce);
+  if (!challenge) return res.status(400).json({ error: "Challenge not found or already used" });
+  pendingChallenges.delete(response.nonce); // prevents replay
+
+  const result = await truthid.verifyAuthResponse({ challenge, response });
+  if (!result.valid) return res.status(401).json({ error: result.reason });
+
+  res.json({ identityId: result.identityId!.toString() });
+});
+```
+
+</Tab>
+<Tab value="Python">
+
+```python
+@app.post("/auth/verify")
+def verify():
+    data = request.json
+    challenge = pending_challenges.pop(data.get("nonce", ""), None)
+    if not challenge:
+        return jsonify({"error": "Challenge not found or already used"}), 400  # prevents replay
+
+    response = AuthResponse(
+        approved=data["approved"],
+        nonce=data["nonce"],
+        signature=data["signature"],
+        deviceAddress=data["deviceAddress"],
+    )
+    result = truthid.verify_auth_response(challenge, response)
+    if not result.valid:
+        return jsonify({"error": result.reason}), 401
+
+    return jsonify({"identityId": result.identity_id})
+```
+
+</Tab>
+<Tab value="Ruby">
+
+```ruby
+post "/auth/verify" do
+  content_type :json
+  data = JSON.parse(request.body.read)
+  challenge = pending_challenges.delete(data["nonce"]) # prevents replay
+  halt 400, { error: "Challenge not found or already used" }.to_json unless challenge
+
+  response = TruthID::AuthResponse.from_hash(data)
+  result = truthid.verify_auth_response(challenge, response)
+  halt 401, { error: result.reason }.to_json unless result.valid
+
+  { identityId: result.identity_id }.to_json
+end
+```
+
+</Tab>
+</Tabs>
+
+后端集成到这里就全部完成了。带会话令牌和受保护路由的完整可运行示例（Express、Flask、Sinatra）在 [SDK 参考](https://github.com/masterlxz/truthid/blob/main/sdk/README.md#full-examples)中。
+
+<Callout title="会话可见性 — 无需额外操作" type="info">
+已完成的登录会自动出现在用户的 TruthID 移动端/桌面端应用中，并可以从那里单独撤销。手机会在调用您的 `/auth/verify` 端点之前，自行在链上注册会话（通过一笔 UserOperation） — 没有中继方需要出资，也没有单独的注册步骤。如果您想再次确认某个会话确实上链，可以查看 SDK 参考中的 `verifySession`（[TypeScript](/docs/sdk/typescript#verifysessionsessionhash)、[Python](/docs/sdk/python#verify_sessionsession_hash)、[Ruby](/docs/sdk/ruby#verify_sessionsession_hash)）。
+</Callout>
+
+## 5. 用真实设备测试
+
+要真正扫描二维码并批准一次登录，您需要：
+
+- 一个 **TruthID 身份** — 使用任意 EVM 钱包在 Base 上创建一次。
+- 一个与该身份配对的**受信任设备** — 桌面端应用或移动端应用。
+
+目前还没有预编译的下载包 — 两个应用目前都需要从源代码构建。请参见主 README 中的[从源代码构建](https://github.com/masterlxz/truthid#building-from-source)。
+
+初次尝试时有两处容易踩坑：
+- `callbackUrl` 必须能从公网通过 HTTPS 访问 — `localhost` 是不行的。开发期间请使用隧道工具（例如 `ngrok http 3000`）。
+- 挑战会在 30 秒后过期，所以要在展示二维码之前才生成它，而不是提前生成。
+
+## 后续步骤
+
+- 完整 API 参考：[SDK 参考](/docs/sdk/typescript)（TypeScript、[Python](/docs/sdk/python)、[Ruby](/docs/sdk/ruby)）
+- [TruthID 工作原理](/docs/concepts/how-it-works) — 您刚才调用的功能背后的完整协议
+- [桌面端](/docs/apps/desktop) / [移动端](/docs/apps/mobile) — 第 5 步中的"真实设备"到底是什么
+- 智能合约地址：简介中的[智能合约](/docs/intro#smart-contracts-base-mainnet-chain-8453)
+- [安全模型](/docs/security) — TruthID 能防护什么，不能防护什么

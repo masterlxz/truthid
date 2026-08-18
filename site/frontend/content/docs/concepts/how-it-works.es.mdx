@@ -1,0 +1,78 @@
+---
+title: Cómo funciona TruthID
+description: "El recorrido completo del protocolo: identidad, emparejamiento de dispositivos, inicio de sesión, sesiones — formatos exactos de mensajes y qué es on-chain versus local."
+---
+
+Esta es la explicación canónica del protocolo de TruthID, de principio a fin. Tanto [Introducción](/docs/intro) como [Modelo de seguridad](/docs/security) enlazan aquí en lugar de repetirla. Si solo quieres integrar TruthID en un backend, no necesitas esta página — ve a [Guía rápida](/docs/quickstart) en su lugar. Lee esta si quieres entender exactamente qué pasa, o si estás implementando un cliente de TruthID tú mismo.
+
+## Creación de identidad
+
+Una identidad es un nombre de usuario vinculado a una dirección controladora, registrado en `IdentityRegistry`. Crear una es una sola llamada — `createIdentity(username, controller, v, r, s)` — pero el `(v, r, s)` no es una decoración opcional: es una firma de la propia dirección `controller`, que prueba que realmente acordó vincularse a este nombre de usuario. Sin esa verificación, cualquiera podría llamar a `createIdentity` con la dirección de otra persona como `controller` y apropiársela por adelantado — incluyendo la dirección a la que una cuenta inteligente está *por* desplegarse, ya que las direcciones `CREATE2` son predecibles antes del despliegue. La firma de consentimiento cierra eso: o la EOA controladora firmó directamente, o, para una cuenta inteligente que todavía no existe on-chain, su futuro propietario firmó un mensaje probando que controla la clave que será su propietaria.
+
+Los nombres de usuario están restringidos a letras minúsculas, dígitos, `-` y `.`, de 1 a 64 bytes — suficiente para descartar la suplantación visual mediante homoglifos, no pensado para ser expresivo.
+
+En la práctica, "crear una identidad" es el flujo de configuración de cuatro pasos descrito en [Cuenta inteligente y gas](/docs/smart-account): firmar el consentimiento, crear la identidad, desplegar la cuenta inteligente en la dirección recién comprometida, financiarla. Todos los pasos on-chain los paga la wallet propietaria una vez; después de eso, la cuenta inteligente se paga a sí misma.
+
+## Emparejamiento de dispositivos [#device-pairing]
+
+Un dispositivo — la app de escritorio, la app móvil — es un par de claves generado localmente, cuya clave privada nunca sale de ese dispositivo. Registrarlo en `DeviceRegistry` es un commit-reveal de dos pasos, no una sola llamada, específicamente para evitar el front-running:
+
+1. **Comprometer (commit)** — `commitDevice(commitment)`, donde `commitment = keccak256(devicePubKey ‖ salt ‖ msg.sender)`. Esto publica un hash que todavía no revela nada sobre la clave real del dispositivo.
+2. **Revelar (reveal)** — en un bloque *posterior*, `registerDevice(devicePubKey, label, salt, encryptedVaultKey)` revela la pre-imagen. Solo la dirección que hizo el compromiso original puede revelarlo — así que alguien vigilando el mempool en busca de una transacción `registerDevice` pendiente no puede copiar la clave del dispositivo de ahí y registrarla en su propia identidad primero, que es exactamente el ataque que existe para prevenir el esquema de dos pasos.
+
+`encryptedVaultKey` es opcional — bytes vacíos si el [Vault](/docs/concepts/vault) todavía no está en uso. Cuando está presente, es la clave de descifrado del Vault, cifrada con ECIES específicamente a la clave pública de este dispositivo, para que un dispositivo recién emparejado pueda descifrar el Vault sin que la wallet propietaria vuelva a estar involucrada.
+
+Una identidad puede registrar hasta 50 dispositivos. Un dispositivo que ha sido revocado puede volver a registrarse después (la gente revoca por error, o quiere reactivar un teléfono viejo) — pero solo por la misma identidad que lo poseía antes; una dirección de dispositivo que alguna vez perteneció a la identidad A nunca puede convertirse en dispositivo de la identidad B, incluso después de la revocación.
+
+## Iniciar sesión [#logging-in]
+
+Esta es la parte sin ningún servidor en el medio en absoluto. Un sitio web que quiere que alguien inicie sesión:
+
+1. Construye un `AuthChallenge` y lo incrusta en un código QR, junto a la URL a la que quiere que se haga `POST` de la respuesta firmada:
+   ```json
+   { "type": "challenge", "nonce": "<uuid>", "issuedAt": 1234567890123, "origin": "https://example.com" }
+   ```
+2. El teléfono del usuario escanea el QR, le muestra el `origin` para que pueda ver exactamente quién está preguntando, y — si aprueba — firma `JSON.stringify(challenge)` localmente con la clave del dispositivo (`personal_sign`) y hace `POST` de un `AuthResponse` directamente al `callbackUrl` del código QR, solo por HTTPS:
+   ```json
+   {
+     "approved": true,
+     "nonce": "<same uuid>",
+     "signature": "0x...",
+     "deviceAddress": "0x...",
+     "sessionSignature": "0x..."
+   }
+   ```
+3. El backend del sitio web — usando un SDK de TruthID, nunca hablando con la cadena directamente a mano — verifica, en orden: (a) `approved` es verdadero; (b) el desafío no ha expirado (TTL predeterminado de 30 segundos); (c) el `nonce` de la respuesta coincide con el del desafío; (d) recuperar al firmante desde `signature` sobre el JSON del desafío da exactamente `deviceAddress`; (e) `DeviceRegistry.isDeviceActive(deviceAddress)` es verdadero on-chain, es decir, el dispositivo no ha sido revocado desde que se emparejó; (f) lee `getDevice(deviceAddress)` para saber a qué identidad pertenece este dispositivo.
+
+Nada en este intercambio toca un servidor operado por TruthID — el desafío vive dentro del código QR, y la respuesta firmada va directamente del teléfono al propio backend del integrador.
+
+## Sesiones
+
+Una vez que se aprueba un inicio de sesión, la app móvil — no el backend del sitio web, ni el SDK — registra la sesión on-chain por separado, enviando una `UserOperation` ERC-4337 a través de su propia cuenta inteligente. Este es un diseño deliberado: versiones anteriores del SDK de TypeScript tenían un método `registerSession`, pero se eliminó una vez que el registro de sesiones pasó a ser algo que la app móvil hace por sí misma.
+
+Lo que realmente se almacena es mínimo: `SessionRegistry.createSession` toma un `hash` (solo `keccak256(nonce)` — separado por dominio con el chain ID y la propia dirección de `SessionRegistry`, así que un hash de sesión de un despliegue no puede repetirse contra otro), el `identityId`, la clave pública del dispositivo, y una firma ECDSA de ese dispositivo sobre el hash separado por dominio. El contrato verifica la firma y que el dispositivo firmante realmente pertenece a esa identidad y no está revocado — nada sobre *para qué* fue la sesión (qué sitio, a qué hora) se escribe jamás on-chain; solo el hash. El texto plano que representa ese hash se queda en el almacenamiento local de la app.
+
+Revocar es simétrico y barato: `revokeSession(hash)` para una sesión, o `revokeAllSessions()` — una sola llamada O(1) que revoca todo hasta el momento actual escribiendo una marca de tiempo, en lugar de iterar cada sesión.
+
+## El firmante detrás de todo esto
+
+Cada escritura on-chain de arriba — crear una identidad, registrar un dispositivo, crear o revocar una sesión — en realidad la ejecuta una cuenta inteligente ERC-4337, no una EOA simple. Reconoce dos niveles de firmante (la wallet propietaria usada en la configuración, y los dispositivos agregados después, con los dispositivos restringidos de modificar jamás quién controla la cuenta) y paga su propio gas sin relayer ni paymaster involucrado. Ese modelo, más el flujo completo de configuración/financiamiento, tiene su propia página: [Cuenta inteligente y gas](/docs/smart-account).
+
+## Qué es on-chain versus qué se queda local
+
+| Público, on-chain, permanente | Solo local, nunca on-chain |
+|---|---|
+| Mapeo nombre de usuario ↔ controlador | Claves privadas de dispositivos |
+| Claves públicas de dispositivos, etiquetas, estado de revocación | El desafío en bruto (`nonce`/`origin`/`issuedAt`) que representa un hash de sesión |
+| **Hashes** de sesión (`keccak256(nonce)`, separados por dominio) | Contenido del Vault (cifrado, por separado — ver [TruthID Vault](/docs/concepts/vault)) |
+| Direcciones de guardianes, umbral, propuestas de recuperación | Cualquier cosa sobre a qué sitio iniciaste sesión, o cuándo |
+| CID/puntero del Vault (no el contenido) | La clave de descifrado del Vault |
+
+Si tu wallet controladora se pierde alguna vez, nada de lo anterior se vuelve irrecuperable por sí mismo — para eso existe la recuperación social.
+
+## Próximos pasos
+
+- [Recuperación social](/docs/concepts/recovery) — recuperar una wallet controladora perdida
+- [Cuenta inteligente y gas](/docs/smart-account) — el modelo de firmante de dos niveles y el gas
+- [Modelo de seguridad](/docs/security) — contra qué protege este protocolo, y contra qué no
+- [Contratos inteligentes](/docs/contracts) — cada función referenciada arriba, con direcciones y costos de gas

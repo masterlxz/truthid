@@ -1,0 +1,29 @@
+---
+title: 桌面端
+description: "主要的控制方应用 — 身份创建、Ledger、设备管理，以及完整的社交恢复。"
+---
+
+桌面端应用（Tauri + Rust + React）是实际建立和管理身份的地方。如果说移动端是您日常随身携带、用来批准登录的设备，那么桌面端就是您在需要硬件钱包，或需要对身份本身进行完全控制时该去的地方。
+
+## 用途
+
+- **身份创建** — [智能账户与 Gas](/docs/smart-account)中描述的四步建立流程：签署同意书、创建身份、部署智能账户、为其注资。
+- **设备管理** — 配对新设备（见 [TruthID 工作原理 → 设备配对](/docs/concepts/how-it-works#device-pairing)）、查看和撤销已有设备。
+- **完整的社交恢复** — 配置监护人、发起、批准、执行和取消恢复，都需要一个已连接的钱包直接与 `RecoveryManager` 交互。这只能在桌面端进行 — 移动端为什么做不到这部分，见[社交恢复 → 谁能真正做这件事](/docs/concepts/recovery#who-can-actually-do-this--desktop-only)。
+- **密码库管理** — [TruthID Vault](/docs/concepts/vault) 完整的读写界面：新增/编辑条目、配置按设备的权限、发布更新、导出 `.truthid-backup` 文件。
+
+## Ledger 支持
+
+桌面端通过真实的 USB 与 Ledger 硬件钱包通信，而不是通过浏览器 API — 因为 WebHID/WebUSB 在 Tauri 的 Linux WebView 中不可用，所以 Rust 后端直接实现了 Ledger 的 HID 传输（`hidapi`，按 Ledger 的 USB 厂商 ID `0x2c97` 过滤，手工实现数据包封装和 APDU 协议）。Ledger 扮演[智能账户与 Gas](/docs/smart-account#how-it-works)中描述的 `owner` 级签名者 — 对智能账户拥有完全访问权限，用于建立以及任何敏感操作（监护人配置、设备撤销），这些您不太愿意交给一台热设备来处理。
+
+## 本地服务器 [#the-local-server]
+
+桌面端在 `localhost` 上运行一个小型 HTTP 服务器，监听 `47950`–`47954` 中的某个端口。这就是[浏览器扩展](/docs/apps/extension)和第三方接入方在[跨设备与存储](/docs/concepts/cross-device-and-storage#delegated-signing-including-third-party-apps)中描述的委托签名流程中所对接的对象 — 签名消息、签名并执行，以及固定/发布 — 前提是桌面端恰好在同一台机器上运行。由于它只监听回环地址，它已经隐含地获得了与那些流程本身同等级别的信任；上面没有额外的独立认证层；每一个请求仍然会弹出自己的批准界面。
+
+桌面端自身没有任何自动填充或网页注入代码 — 这完全是浏览器扩展的工作。桌面端在自动填充中的角色，仅仅是在两者都在本地运行时，响应扩展发来的回环请求。
+
+## 后续步骤
+
+- [移动端](/docs/apps/mobile) — 日常配对/登录设备
+- [浏览器扩展](/docs/apps/extension) — 实际与桌面端本地服务器通信的对象
+- [社交恢复](/docs/concepts/recovery) — 只能在桌面端运行的监护人流程

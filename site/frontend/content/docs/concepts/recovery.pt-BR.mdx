@@ -1,0 +1,37 @@
+---
+title: Recuperação Social
+description: "Como guardiões M-de-N recuperam uma carteira controladora perdida, e a divisão real de interface entre Desktop e Mobile."
+---
+
+Perder a carteira que controla sua identidade não precisa significar perder a identidade — **se** você configurou guardiões com antecedência. A recuperação social é totalmente opt-in: não há um conjunto padrão de guardiões, e `proposeRecovery` simplesmente reverte se nenhum foi configurado. Esta página cobre a mecânica; veja [Modelo de Segurança](/docs/security#what-truthid-does-not-protect-against) para a versão direta desse trade-off.
+
+## O modelo de guardiões
+
+Um guardião é apenas um endereço — a carteira de um amigo, outro dispositivo seu, ou qualquer pessoa em quem você confie para ajudar a recuperar o acesso sem conseguir, sozinha, assumir o controle da sua identidade. `configureGuardians(username, guardians[], threshold)` define uma política M-de-N: qualquer número de guardiões até um limite de 20, e qualquer limiar que você escolher (uma recomendação comum é 3-de-5, mas nada on-chain impõe esse número específico). Só o controlador atual pode definir ou alterar a lista de guardiões, e ela não pode ser alterada enquanto uma recuperação já está em andamento.
+
+## O ciclo de vida da recuperação
+
+1. **Propor** — qualquer guardião configurado chama `proposeRecovery(username, newController)`, nomeando a carteira que deve assumir o controle.
+2. **Aprovar** — cada guardião pode chamar `approveRecovery(username)` uma vez. A proposta precisa de pelo menos `threshold` aprovações antes de poder avançar.
+3. **Esperar o timelock** — mesmo depois que o limiar é atingido, `executeRecovery` não terá sucesso até 7 dias após a proposta ter sido feita. Essa janela existe para que o controlador real — se ainda tiver acesso e isso estiver acontecendo sem seu conhecimento — tenha tempo de perceber e cancelar.
+4. **Cancelar, se necessário** — o controlador *atual* pode chamar `cancelRecovery(username)` a qualquer momento durante o timelock, sem precisar de nenhum guardião envolvido. Essa é a verificação contra uma maioria de guardiões coordenada, mas errada (ou maliciosa).
+5. **Executar** — uma vez que o limiar e o timelock estão ambos satisfeitos, qualquer um pode chamar `executeRecovery(username)` (não precisa ser um guardião) para de fato aplicar a mudança.
+
+`executeRecovery` faz quatro coisas, deliberadamente nesta ordem — mudanças de estado primeiro, chamadas externas por último (o mesmo padrão Checks-Effects-Interactions usado em outras partes dos contratos depois que um bug de reentrância foi encontrado aqui durante uma revisão de segurança posterior; veja [Modelo de Segurança → Status da auditoria](/docs/security#audit-status)):
+
+1. Marca a proposta como executada e limpa toda a configuração de guardiões, antes de qualquer outra coisa — então, se o controlador antigo comprometido tentar reentrar e iniciar um novo `proposeRecovery` no meio da execução, ele falha imediatamente (`GuardiansNotConfigured`) em vez de deixar uma segunda proposta viva.
+2. Se o controlador antigo era uma smart account (não uma carteira comum), tenta `emergencyWithdraw` nela para migrar seu saldo de ETH para o novo controlador. Isso é um `try`/`catch` — uma falha aqui (digamos, o controlador antigo não é uma `TruthIDAccount` de verdade, ou o novo controlador rejeita a transferência) não bloqueia a conclusão da recuperação; apenas emite um evento para que os fundos presos fiquem visíveis on-chain.
+3. Chama `DeviceRegistry.revokeAllDevices` para que todo dispositivo que o controlador antigo tinha autorizado pare de funcionar imediatamente — caso contrário, eles continuariam conseguindo criar sessões e se autenticar depois que a identidade deveria ter mudado de mãos.
+4. Atualiza o `IdentityRegistry` para apontar o nome de usuário para o novo controlador.
+
+O novo controlador começa com **nenhum guardião configurado** — o conjunto antigo é apagado, não carregado adiante, para que a recuperação não entregue silenciosamente o mesmo grupo de pessoas com poder de recuperação sobre o novo controlador, sem ser solicitado de novo.
+
+## Quem pode de fato fazer isso — só no Desktop [#who-can-actually-do-this--desktop-only]
+
+Configurar guardiões, propor, aprovar, executar e cancelar exigem todos uma carteira conectada falando diretamente com o `RecoveryManager` — essa é a tela de [Gerenciamento de Guardiões](/docs/apps/desktop) do app desktop, e apenas o app desktop. A tela de guardiões do app mobile é **somente leitura** — ela mostra a lista atual de guardiões, o limiar, e o status/contagem regressiva do timelock de qualquer proposta ativa, mas toda ação que de fato muda algo on-chain precisa acontecer no desktop com uma carteira (Ledger ou WalletConnect) conectada. Se você depende de recuperação social, garanta que quem a configura — e quem pode precisar agir como guardião — tenha acesso ao app desktop quando for necessário.
+
+## Próximos passos
+
+- [Como o TruthID Funciona](/docs/concepts/how-it-works) — o restante do protocolo de identidade/dispositivo/login
+- [Modelo de Segurança](/docs/security) — o que a recuperação protege e não protege
+- [Contratos Inteligentes → RecoveryManager](/docs/contracts#recoverymanager) — todas as funções, custos de gas

@@ -1,0 +1,170 @@
+---
+title: Contratos inteligentes
+description: "Direcciones, ABIs, referencia de funciones y costos de gas reales para los seis contratos Solidity de TruthID en Base."
+---
+
+TruthID son seis contratos Solidity en [Base](https://base.org) — sin backend, sin base de datos. Todo lo descrito abajo está en la cadena pública y puede verificarse de forma independiente; esta página existe para integradores que quieren leer datos on-chain directamente, escribir su propio SDK, o simplemente verificar qué está realmente desplegado.
+
+Los seis contratos están **verificados** en Basescan y no tienen proxy de actualización — un bug no puede parchearse en caliente en el bytecode desplegado. Sin embargo, eso no es lo mismo que decir que las direcciones desplegadas sean permanentes: tanto `TruthIDAccount` como `TruthIDAccountFactory` tienen una función `updateRegistries` controlada por el propietario específicamente para que las cuentas inteligentes existentes puedan redirigirse después de una migración a un nuevo despliegue, lo cual ha pasado más de una vez a medida que se encontraron y corrigieron problemas (ver [Modelo de seguridad → Estado de auditoría](/docs/security#audit-status)). Las direcciones de abajo son las actuales según el último despliegue.
+
+## Direcciones
+
+### Base Mainnet (producción, chain ID 8453)
+
+| Contrato | Dirección |
+|---|---|
+| `IdentityRegistry` | [`0x97787D6EE3EfD76962dc7E3Bf143E659D9961962`](https://basescan.org/address/0x97787D6EE3EfD76962dc7E3Bf143E659D9961962) |
+| `DeviceRegistry` | [`0x937702CBABDab0EEBD1A29f0a7A658FeF4582543`](https://basescan.org/address/0x937702CBABDab0EEBD1A29f0a7A658FeF4582543) |
+| `RecoveryManager` | [`0x42Ca394c23aB027e877B9900B384f59E2Af23470`](https://basescan.org/address/0x42Ca394c23aB027e877B9900B384f59E2Af23470) |
+| `SessionRegistry` | [`0x8C65527eDA3ce7754Bf87B34aC4ec8ce74D647e2`](https://basescan.org/address/0x8C65527eDA3ce7754Bf87B34aC4ec8ce74D647e2) |
+| `TruthIDAccountFactory` | [`0xc2C86cB7d8694EcA8BaAdD95B14842E8643aB262`](https://basescan.org/address/0xc2C86cB7d8694EcA8BaAdD95B14842E8643aB262) |
+| `VaultRegistry` | [`0x07449b0c8dAE1252f59A5C0992D1413113a849B4`](https://basescan.org/address/0x07449b0c8dAE1252f59A5C0992D1413113a849B4) |
+
+### Base Sepolia (testnet, chain ID 84532)
+
+| Contrato | Dirección |
+|---|---|
+| `IdentityRegistry` | [`0xb56DbCB7580c097d3f64808064C2d5609dD6B243`](https://sepolia.basescan.org/address/0xb56DbCB7580c097d3f64808064C2d5609dD6B243) |
+| `DeviceRegistry` | [`0xe40e10627D307B0994f1856584bcc5DC323a4330`](https://sepolia.basescan.org/address/0xe40e10627D307B0994f1856584bcc5DC323a4330) |
+| `RecoveryManager` | [`0x97787D6EE3EfD76962dc7E3Bf143E659D9961962`](https://sepolia.basescan.org/address/0x97787D6EE3EfD76962dc7E3Bf143E659D9961962) |
+| `SessionRegistry` | [`0xc2C86cB7d8694EcA8BaAdD95B14842E8643aB262`](https://sepolia.basescan.org/address/0xc2C86cB7d8694EcA8BaAdD95B14842E8643aB262) |
+| `TruthIDAccountFactory` | [`0xc4Ca3A79BAb993C4B7cFD312C80c20b2182F8c1e`](https://sepolia.basescan.org/address/0xc4Ca3A79BAb993C4B7cFD312C80c20b2182F8c1e) |
+
+Usa la testnet mientras desarrollas — ver [Redes](/docs/sdk/typescript#networks) en la referencia del SDK para saber cómo apuntar un cliente a Sepolia. `VaultRegistry` no está desplegado en Sepolia hoy (solo en Mainnet). `TruthIDAccount` en sí no está listada aquí — cada identidad obtiene su propia instancia, desplegada bajo demanda por la factory; ver [Cuenta inteligente y gas](/docs/smart-account) para saber cómo se calcula esa dirección.
+
+## Obteniendo el ABI
+
+Probablemente no necesites esto — los [SDKs](/docs/sdk/typescript) ya envuelven cada llamada a los contratos detrás de funciones simples. Recurre al ABI en bruto solo si estás leyendo el estado desde un lenguaje sin un SDK oficial, o auditando el despliegue tú mismo.
+
+- **Basescan** — dado que cada contrato está verificado, la página de cada dirección de arriba tiene una pestaña "Contract" con el ABI completo y el código fuente, además de un botón de un clic "Export ABI". Esta es la fuente más fácil y siempre coincide con lo que realmente está desplegado.
+- **Código fuente en GitHub** — las interfaces `.sol` canónicas: [`IdentityRegistry.sol`](https://github.com/masterlxz/truthid/blob/main/contracts/src/IdentityRegistry.sol), [`DeviceRegistry.sol`](https://github.com/masterlxz/truthid/blob/main/contracts/src/DeviceRegistry.sol), [`RecoveryManager.sol`](https://github.com/masterlxz/truthid/blob/main/contracts/src/RecoveryManager.sol), [`SessionRegistry.sol`](https://github.com/masterlxz/truthid/blob/main/contracts/src/SessionRegistry.sol), [`VaultRegistry.sol`](https://github.com/masterlxz/truthid/blob/main/contracts/src/VaultRegistry.sol), [`TruthIDAccount.sol`](https://github.com/masterlxz/truthid/blob/main/contracts/src/TruthIDAccount.sol).
+
+No hay un paquete publicado en npm/PyPI/RubyGems que contenga el ABI completo en JSON — los SDKs solo incrustan internamente el fragmento mínimo que cada función necesita. Para generar el artefacto completo tú mismo: haz `git clone` del repositorio, y luego `cd contracts && forge build` (el resultado queda en el directorio `out/`, ignorado por git).
+
+## Referencia de contratos [#contract-reference]
+
+Un mapa rápido de qué hace cada contrato y quién puede llamar a qué. El comportamiento completo (commit-reveal, umbrales de guardianes, hashing de sesiones) se cubre en [Cómo funciona TruthID](/docs/concepts/how-it-works) y [Modelo de seguridad](/docs/security) — esto es solo la lista de funciones.
+
+### IdentityRegistry
+
+Mapeo nombre de usuario ↔ wallet controladora. La raíz de cada otro contrato — `DeviceRegistry`, `RecoveryManager` y `SessionRegistry` resuelven todos la identidad de quien llama preguntándole a este contrato quién controla qué nombre de usuario.
+
+| Función | Quién llama | Propósito |
+|---|---|---|
+| `createIdentity(username)` | cualquiera (se convierte en controlador) | Acuñar una nueva identidad |
+| `transferController(username, newController)` | controlador actual | Mover el control a otra wallet |
+| `setRecoveryManager(rm)` | propietario del despliegue, una vez | Conectar la dirección de `RecoveryManager` |
+| `recoverController(username, newController)` | solo `RecoveryManager` | Cambiar el controlador mediante recuperación social |
+| `getIdentity(username)` / `getUsernameByController(addr)` / `isUsernameTaken(username)` / `totalIdentities()` | cualquiera, gratis | Lecturas |
+
+### DeviceRegistry
+
+Claves públicas de dispositivos por identidad, registradas mediante commit-reveal para evitar el front-running. Tope de `MAX_DEVICES = 50` por identidad.
+
+| Función | Quién llama | Propósito |
+|---|---|---|
+| `commitDevice(commitment)` | el futuro propietario del dispositivo | Paso 1/2 — comprometer un hash oculto |
+| `registerDevice(devicePubKey, label, salt, encryptedVaultKey)` | el mismo que hizo el commit | Paso 2/2 — revelar y registrar. `encryptedVaultKey` es opcional (pasar bytes vacíos) — cuando se define, es la clave AES del Vault, cifrada con ECIES a la clave pública de este dispositivo, para que el dispositivo pueda descifrar el Vault sin necesitar la wallet propietaria de nuevo |
+| `revokeDevice(devicePubKey)` | el controlador de la identidad | Desactivar un dispositivo |
+| `updateDeviceVaultKey(devicePubKey, newEncryptedVaultKey)` | el controlador de la identidad | Rotar la clave cifrada del Vault almacenada para un dispositivo activo (se usa cuando la clave del Vault en sí rota tras revocar otro dispositivo) |
+| `revokeAllDevices(identityId)` | solo `RecoveryManager` | Desactivar todos los dispositivos de una identidad a la vez — se ejecuta automáticamente durante la recuperación social para que los dispositivos del controlador anterior no puedan seguir autenticándose |
+| `isDeviceActive(devicePubKey)` / `getDevice(devicePubKey)` / `getDevicesByIdentity(id)` / `getDevicesByIdentityPaginated(id, offset, limit)` / `deviceCount(id)` | cualquiera, gratis | Lecturas |
+
+### RecoveryManager [#recoverymanager]
+
+Recuperación de guardianes M-de-N con un plazo de espera de 7 días (constante `TIMELOCK`) y un tope de 20 guardianes (constante `MAX_GUARDIANS`).
+
+| Función | Quién llama | Propósito |
+|---|---|---|
+| `configureGuardians(username, guardians[], threshold)` | el controlador de la identidad | Definir o reemplazar el conjunto de guardianes |
+| `proposeRecovery(username, newController)` | un guardián configurado | Iniciar una recuperación |
+| `approveRecovery(username)` | un guardián configurado | Votar sobre la propuesta activa |
+| `executeRecovery(username)` | cualquiera, tras el umbral + 7 días | Aplicar el nuevo controlador |
+| `cancelRecovery(username)` | el controlador actual | Abortar durante la ventana del plazo de espera |
+| `getGuardianConfig(username)` / `getProposal(username)` / `hasGuardianApproved(username, guardian)` | cualquiera, gratis | Lecturas |
+
+### SessionRegistry
+
+Almacena solo un hash `keccak256` por sesión — nunca los datos que representa.
+
+| Función | Quién llama | Propósito |
+|---|---|---|
+| `createSession(hash, identityId, devicePubKey, r, s, v)` | cualquiera puede enviarlo, pero requiere la propia firma ECDSA del dispositivo sobre `hash` | Registrar un hash de sesión |
+| `revokeSession(hash)` | el controlador de la identidad de la sesión | Revocar una sesión |
+| `revokeAllSessions()` | el controlador de la identidad | Revocar todas las sesiones hasta ahora, en una sola llamada O(1) |
+| `isSessionRevoked(hash)` / `getSession(hash)` / `getSessionsByIdentity(id)` / `getRevokedBefore(id)` | cualquiera, gratis | Lecturas |
+
+### TruthIDAccount
+
+La cuenta inteligente ERC-4337 que controla una identidad — una instancia por propietario, desplegada mediante `TruthIDAccountFactory`. La explicación completa de los dos niveles de firmante, el flujo de configuración y el costo está en [Cuenta inteligente y gas](/docs/smart-account); esto es solo la lista de funciones.
+
+| Función | Quién llama | Propósito |
+|---|---|---|
+| `validateUserOp(userOp, userOpHash, missingFunds)` | solo `EntryPoint` | Verificar la firma de una UserOperation y pagar el prefondo |
+| `execute(dest, value, data)` / `executeBatch(dest[], value[], data[])` | `EntryPoint`, el propietario, o la cuenta misma | Realizar una o más llamadas — el único punto de entrada disponible para los firmantes de nivel dispositivo |
+| `addDevice(device)` / `removeDevice(device)` | propietario (directamente o mediante una UserOp) | Autorizar o desautorizar un firmante de nivel dispositivo |
+| `blockDestinationForDevices(dest)` / `unblockDestinationForDevices(dest)` | propietario | Extender o reducir el conjunto de contratos que los dispositivos no pueden apuntar mediante `execute` |
+| `emergencyWithdraw(recipient)` | solo `RecoveryManager` | Mover el saldo de ETH de la cuenta durante la recuperación social |
+| `updateRegistries(deviceRegistry, identityRegistry, recoveryManager)` | propietario (directamente o mediante una UserOp) | Reapuntar la cuenta a un nuevo despliegue de los tres registros tras una migración — también resincroniza `blockedForDevices` para que los firmantes de nivel dispositivo no puedan llamar directamente ni al registro viejo ni al nuevo |
+| `receive()` | cualquiera | Transferencias de ETH normales (financiando la cuenta) |
+| `owner()` / `authorizedDevices(addr)` / `blockedForDevices(addr)` | cualquiera, gratis | Lecturas |
+
+### TruthIDAccountFactory
+
+Despliega instancias de `TruthIDAccount` en direcciones `CREATE2` determinísticas, una por propietario (o por propietario + índice, para múltiples cuentas).
+
+| Función | Quién llama | Propósito |
+|---|---|---|
+| `createAccount(owner, index)` | cualquiera | Desplegar la cuenta si todavía no existe; idempotente — devuelve la dirección existente en caso contrario |
+| `getAddress(owner, index)` | cualquiera, gratis | Predecir la dirección `CREATE2` antes del despliegue |
+| `updateRegistries(deviceRegistry, identityRegistry, recoveryManager)` | desplegador/propietario | Cambia a qué apuntan las cuentas que despliegue la *siguiente* llamada a `createAccount` — no afecta a las cuentas ya desplegadas, que actualizan sus propios punteros individualmente mediante `TruthIDAccount.updateRegistries` de arriba |
+
+### VaultRegistry [#vaultregistry]
+
+Almacena un puntero al blob cifrado del Vault del usuario — nunca el contenido del Vault. El nombre del campo `cid` es un remanente de cuando siempre contenía un CID de IPFS; hoy típicamente contiene en su lugar una referencia `ar://<transaction-id>` (ver [Entre dispositivos y almacenamiento](/docs/concepts/cross-device-and-storage) para saber por qué). La integridad del contenido se verifica contra `contentHash`, un `keccak256` del blob cifrado.
+
+| Función | Quién llama | Propósito |
+|---|---|---|
+| `updateVault(cid, contentHash)` | el controlador de la identidad | Publicar una nueva versión del Vault — revierte con un `cid` vacío o un `contentHash` cero |
+| `getVault(id)` / `hasVault(id)` / `getVaultHistory(id)` / `getVaultHistoryPaginated(id, offset, limit)` | cualquiera, gratis | Lecturas. `getVaultHistory` puede revertir para historiales muy largos (tope de gas en los resultados de `eth_call`) — usa la versión paginada para identidades con `MAX_HISTORY = 1000` (el tope) de actualizaciones |
+
+## Costo por operación [#cost-per-operation]
+
+Números de gas reales de la propia suite de pruebas del proyecto (`forge test --gas-report`), no estimaciones — `IdentityRegistry`/`DeviceRegistry`/`RecoveryManager`/`SessionRegistry` tienen 140 pruebas exitosas; `TruthIDAccount`/`TruthIDAccountFactory` (filas debajo de `revokeAllSessions`) tienen sus propias 62. Las operaciones de `VaultRegistry` no están en esta tabla — `updateVault` es la única llamada que cambia el estado, y su costo está dominado por el tamaño de `cid`/`contentHash` que pases en lugar de la lógica fija del contrato. Las funciones de lectura (`view`) son gratis cuando se llaman de la forma normal — directamente vía un `eth_call` de RPC, exactamente como cada SDK las lee. La etiqueta "gratis" de abajo solo deja de aplicar si otro contrato las llama en medio de una transacción, algo que ninguna parte de TruthID hace hoy.
+
+| Operación | Gas mín. | Gas mediano | Gas máx. |
+|---|---|---|---|
+| `createIdentity` | 22,153 | 141,483 | 142,832 |
+| `commitDevice` | 44,211 | 44,211 | 44,211 |
+| `registerDevice` | 23,757 | 195,037 | 218,286 |
+| `revokeDevice` | 24,411 | 40,767 | 40,767 |
+| `configureGuardians` | 37,894 | 340,329 | 1,028,006 |
+| `proposeRecovery` | 22,532 | 162,839 | 162,839 |
+| `approveRecovery` | 39,187 | 71,787 | 88,887 |
+| `executeRecovery` | 39,349 | 126,801 | 126,801 |
+| `cancelRecovery` | 36,929 | 43,951 | 43,951 |
+| `createSession` | 27,061 | 183,605 | 183,605 |
+| `revokeSession` | 24,501 | 43,157 | 45,501 |
+| `revokeAllSessions` | 27,961 | 54,446 | 54,446 |
+| `TruthIDAccountFactory.createAccount` (ya desplegada) | 24,996 | — | — |
+| `TruthIDAccountFactory.createAccount` (primer despliegue) | — | — | 1,774,511 |
+| `TruthIDAccount.execute` | 23,135 | 71,519 | 71,544 |
+| `TruthIDAccount.addDevice` | 21,924 | 45,812 | 45,812 |
+| `TruthIDAccount.removeDevice` | 22,148 | 23,854 | 24,573 |
+
+<Callout title="Por qué configureGuardians tiene un rango tan amplio" type="info">
+El gas escala con el tamaño del arreglo `guardians`. El extremo bajo es un par de guardianes; el extremo alto en esta tabla viene de una prueba que ejercita el tope completo de `MAX_GUARDIANS` de 20. Una configuración típica de 3-de-5 queda muy por debajo de la mediana mostrada aquí.
+</Callout>
+
+**Lo que eso cuesta en ETH**: al precio de gas de ~0.011 gwei observado durante el [despliegue en mainnet](https://basescan.org/address/0x97787D6EE3EfD76962dc7E3Bf143E659D9961962), la operación más pesada de esta tabla (`registerDevice`, ~195k gas) resulta en aproximadamente 0.0000021 ETH — una pequeña fracción de un centavo. La fila del primer despliegue de `TruthIDAccountFactory.createAccount` es todavía más pesada (despliega un contrato entero mediante `CREATE2`, no solo una actualización de estado) — ver [Cuenta inteligente y gas → Costo](/docs/smart-account#cost) para esa conversión. El precio del gas se mueve con la demanda de la red; revisa el [rastreador de gas en vivo de Base](https://basescan.org/gastracker) para la tarifa actual antes de asumir que estos números se mantienen exactos.
+
+## Estado de auditoría
+
+Ver [Modelo de seguridad → Estado de auditoría](/docs/security#audit-status) para los hallazgos de la revisión manual y qué no está todavía cubierto por una auditoría de terceros.
+
+## Próximos pasos
+
+- [Cómo funciona TruthID](/docs/concepts/how-it-works) — el recorrido del protocolo detrás de estas funciones
+- [Cuenta inteligente y gas](/docs/smart-account) — cómo funciona la cuenta ERC-4337, el flujo de configuración y el financiamiento
+- [Modelo de seguridad](/docs/security) — modelo de amenazas y qué protege y no protege TruthID
+- [Referencia de SDK](/docs/sdk/typescript) — la forma tipada y documentada de llamar a estos contratos desde TypeScript, Python o Ruby

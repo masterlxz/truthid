@@ -1,0 +1,474 @@
+---
+title: SDK de Dart
+description: "Referencia completa de la API para truthid_sdk — roles de verificador y de solicitante entre dispositivos."
+---
+
+Referencia completa de la API para `truthid_sdk`. ¿Nuevo en TruthID? Empieza con la [Guía rápida](/docs/quickstart) — esta página es la referencia detallada de cada método y tipo una vez que estés integrando de verdad.
+
+A diferencia de los SDKs de TypeScript/Python/Ruby — que son todos **solo verificadores** (el rol que juega el backend de un sitio web) — este paquete tiene dos roles independientes en un solo import:
+
+- **`TruthIDClient`** — el verificador, el mismo rol que los otros 3 SDKs. Para un backend escrito en Dart.
+- **`TruthIDRequester`** — un rol exclusivo de Dart: solicitar una firma, la ejecución de una transacción, o el pin de un archivo desde la app móvil de TruthID del usuario, sobre el mismo transporte LAN/dead-drop que la propia app móvil usa. Para cualquier app Flutter (móvil o escritorio), o un backend Dart simple, que quiera ser el lado solicitante de un flujo entre dispositivos — sin ningún servidor operado por TruthID involucrado, en ningún caso.
+
+Dart puro — sin dependencia de `package:flutter`. Funciona tanto en apps Flutter como en backends Dart simples.
+
+## Instalación [#installation]
+
+`truthid_sdk` todavía no está publicado en pub.dev — los otros tres SDKs están disponibles en sus respectivos registros (ver [Introducción → Integrando TruthID](/docs/intro#integrating-truthid)), pero Dart todavía es solo instalación desde el código fuente. Apunta directamente al paquete, ya sea desde un clon local o desde GitHub con una ruta al subdirectorio `sdk/dart`:
+
+```yaml
+dependencies:
+  truthid_sdk:
+    git:
+      url: https://github.com/masterlxz/truthid.git
+      path: sdk/dart
+```
+
+O, si ya tienes el repositorio clonado localmente:
+
+```yaml
+dependencies:
+  truthid_sdk:
+    path: ../path/to/truthid/sdk/dart
+```
+
+## `TruthIDClient` (verificador)
+
+```dart
+import 'package:truthid_sdk/truthid_sdk.dart';
+
+final truthid = TruthIDClient(network: Network.baseMainnet);
+```
+
+### Constructor
+
+`TruthIDClient({required Network network, String? rpcUrl})`
+
+| Campo | Tipo | Requerido | Descripción |
+|-------|------|----------|--------------|
+| `network` | `Network.baseSepolia` o `Network.baseMainnet` | Sí — sin valor por defecto | De qué red leer los contratos |
+| `rpcUrl` | `String?` | No | Endpoint RPC personalizado. Por defecto usa el RPC público de Base para la red elegida |
+
+### `createChallenge(origin)`
+
+Crea un desafío de un solo uso para incrustar en el código QR mostrado al usuario.
+
+**Devuelve** [`AuthChallenge`](#authchallenge)
+
+```dart
+final challenge = truthid.createChallenge('yoursite.com');
+```
+
+**Construyendo el código QR** — la app móvil espera exactamente esta forma:
+
+```json
+{
+  "action": "truthid-auth",
+  "challenge": { "type": "challenge", "nonce": "...", "issuedAt": 1718000000000, "origin": "yoursite.com" },
+  "callbackUrl": "https://yoursite.com/auth/verify"
+}
+```
+
+`callbackUrl` **debe** usar `https://` — la app móvil se niega a enviar la respuesta firmada a una URL `http://` simple.
+
+---
+
+### `verifyAuthResponse(challenge, response, {ttlMs})`
+
+Verifica la respuesta firmada recibida del teléfono del usuario. Ejecuta seis verificaciones en secuencia y se detiene en el primer fallo — mismo orden que los otros 3 SDKs:
+
+1. El usuario aprobó (no rechazó)
+2. El desafío está dentro del TTL (predeterminado: 30 segundos)
+3. El nonce coincide con el desafío original
+4. La firma criptográfica es válida
+5. El dispositivo está registrado y activo en la blockchain
+6. Recupera el ID de identidad vinculado a este dispositivo
+
+**Devuelve** [`VerifyAuthResult`](#verifyauthresult)
+
+```dart
+final result = await truthid.verifyAuthResponse(challenge, response);
+if (result.valid) {
+  print('Authenticated! Identity ID: ${result.identityId}');
+} else {
+  print('Failed: ${result.reason}');
+}
+```
+
+**Motivos de fallo**
+
+| `reason` | Causa |
+|----------|-------|
+| `"User rejected the login request"` | El usuario tocó "Rechazar" en su teléfono |
+| `"Challenge expired"` | Pasaron más de `ttlMs` ms desde `issuedAt` |
+| `"Nonce mismatch"` | El nonce de la respuesta no coincide con el del desafío |
+| `"Invalid signature format"` | La firma está mal formada |
+| `"Signature does not match device address"` | La firma no fue hecha por `deviceAddress` |
+| `"Device is not active or has been revoked"` | El dispositivo fue revocado por el propietario de la identidad |
+
+---
+
+### `verifySession(hash)`
+
+Verifica si un hash de sesión sigue siendo válido (no revocado).
+
+**Devuelve** [`SessionInfo`](#sessioninfo)
+
+```dart
+final session = await truthid.verifySession(sessionHash);
+if (session.exists && !session.revoked) {
+  // still logged in
+}
+```
+
+---
+
+### `checkDeviceStatus(devicePubKey)`
+
+Busca el estado actual de un dispositivo en la blockchain. **Devuelve** [`DeviceStatus`](#devicestatus).
+
+---
+
+### `computeSmartAccountAddress(ledgerAddress, {index})`
+
+Predice la dirección de la cuenta inteligente (controladora) de un usuario vía `CREATE2` — cómputo puro local, sin llamada RPC y sin ningún servidor involucrado.
+
+```dart
+final smartAccount = truthid.computeSmartAccountAddress(ledgerAddress);
+```
+
+También se exporta una función independiente para cuando no necesitas una instancia completa del cliente:
+
+```dart
+import 'package:truthid_sdk/truthid_sdk.dart' show computeSmartAccountAddress, Network;
+
+final smartAccount = computeSmartAccountAddress(ledgerAddress, Network.baseMainnet);
+```
+
+## `TruthIDRequester` (solicitante entre dispositivos)
+
+```dart
+final requester = TruthIDRequester();
+```
+
+Solicita una firma, la ejecución de una transacción, o el pin de un archivo desde el teléfono del usuario — muestras un código QR, el usuario lo escanea con la app móvil de TruthID, aprueba o rechaza, y la respuesta vuelve por el mismo transporte que la propia app móvil usa para cada otro flujo entre dispositivos (primero un barrido de red local, un dead-drop IPFS/IPNS como respaldo). Sin relayer, sin servidor de TruthID, sin endpoint de sondeo que tengas que alojar.
+
+Cada método devuelve una [`PendingRequest`](#pendingrequestt) **de inmediato** — el payload del QR está listo para renderizarse enseguida; `result` es un `Future` que se resuelve cuando el teléfono responde o la solicitud expira.
+
+<Callout title="Solo entre dispositivos, 4 flujos" type="info">
+El transporte por deep-link (mismo dispositivo, sin QR) está fuera de alcance — requeriría que tu app registre su propio esquema de URI, algo específico de la plataforma y fuera de lo que un paquete Dart puro puede automatizar. Ver [Qué no está cubierto todavía](#whats-not-covered-yet).
+</Callout>
+
+### `signMessage({appName, purpose, timeout})`
+
+Le pide al teléfono que firme un mensaje corto arbitrario — la cadena real firmada siempre es `'TruthID Message Signing: $appName:$purpose'`, reconstruida por la propia app móvil; nunca eliges los bytes en bruto.
+
+| Nombre | Tipo | Requerido | Descripción |
+|------|------|----------|--------------|
+| `appName` | `String` | Sí | Se muestra al usuario en la pantalla de aprobación |
+| `purpose` | `String` | Sí | 1-64 caracteres, `[A-Za-z0-9_.-]+` — se muestra al usuario, parte del mensaje firmado |
+| `timeout` | `Duration` | No — 3 minutos por defecto | Cuánto tiempo permanece válido el QR |
+
+**Devuelve** `PendingRequest<`[`SignMessageResult`](#signmessageresult)`>`
+
+```dart
+final pending = requester.signMessage(appName: 'My App', purpose: 'login');
+showQrCode(pending.qrPayload); // your own QR widget, e.g. qr_flutter
+
+final result = await pending.result;
+if (result.delivered && result.data!.status == 'signed') {
+  print('Signature: ${result.data!.signature}');
+}
+```
+
+---
+
+### `signRequest({appName, dest, callData, functionSignature, value, timeout})`
+
+Le pide al teléfono que ejecute una llamada arbitraria a un contrato **desde la cuenta inteligente del usuario** — el teléfono construye, firma y envía la `UserOperation` él mismo (la cuenta inteligente paga su propio gas). Úsalo para cualquier cosa más allá de una firma simple: transferencias de tokens, interacciones con contratos, cualquier cosa que `execute()` pueda alcanzar.
+
+| Nombre | Tipo | Requerido | Descripción |
+|------|------|----------|--------------|
+| `appName` | `String` | Sí | Se muestra al usuario |
+| `dest` | `String` | Sí | Dirección del contrato destino (`0x...`) |
+| `callData` | `String` | Sí | Datos de llamada codificados en ABI (`0x...`) |
+| `functionSignature` | `String` | Sí | p. ej. `"transfer(address,uint256)"` — se muestra al usuario para verificación |
+| `value` | `String` | No — `"0"` por defecto | Wei a enviar, como cadena decimal |
+| `timeout` | `Duration` | No — 3 minutos por defecto | |
+
+**Devuelve** `PendingRequest<`[`SignRequestResult`](#signrequestresult)`>`
+
+```dart
+final pending = requester.signRequest(
+  appName: 'My App',
+  dest: tokenAddress,
+  callData: encodedTransferCall,
+  functionSignature: 'transfer(address,uint256)',
+);
+final result = await pending.result;
+if (result.delivered && result.data!.status == 'executed') {
+  print('Transaction hash: ${result.data!.transactionHash}');
+}
+```
+
+<Callout title="Esto puede tardar más que los otros dos" type="idea">
+El teléfono no solo firma aquí — envía la UserOperation a través de un bundler y espera el recibo antes de responder. Presupuesta hasta un minuto de espera extra después de que el usuario aprueba.
+</Callout>
+
+---
+
+### `pin({appName, content, timeout})`
+
+Le pide al teléfono que publique bytes arbitrarios en Arweave, pagados por la propia wallet local de Arweave de la identidad — no hay concepto de "proveedores configurados" aquí, siempre es la wallet de la identidad solicitante. Dos fases por debajo, ambas manejadas por ti: el `content` cifrado se envía primero al teléfono por LAN (no hay dead-drop para esta fase — el teléfono solo empieza a escuchar cuando escanea el QR, así que esto sigue reintentando el envío en segundo plano hasta que llega o la solicitud expira); una vez que el teléfono lo tiene, la carrera habitual de resultados (LAN + dead-drop) entrega el resultado del pin.
+
+| Nombre | Tipo | Requerido | Descripción |
+|------|------|----------|--------------|
+| `appName` | `String` | Sí | Se muestra al usuario |
+| `content` | `Uint8List` | Sí | Los bytes a fijar |
+| `timeout` | `Duration` | No — 3 minutos por defecto | |
+
+**Devuelve** `PendingRequest<`[`PinResult`](#pinresult)`>`
+
+```dart
+final pending = requester.pin(appName: 'My App', content: fileBytes);
+final result = await pending.result;
+if (result.delivered && result.data!.status == 'pinned') {
+  print('Content pointer: ${result.data!.cid}');
+}
+```
+
+### `vaultEdit({appName, site, url, username, password, notes, passkey, pinningEndpointUrl, timeout})`
+
+Propone una nueva credencial de Vault (una contraseña, un passkey, o ambos) para que el Device del usuario la revise y, si se aprueba, la persista y publique on-chain — la contraparte del lado solicitante de lo que hace la extensión de navegador de TruthID cuando ve un formulario de registro o un nuevo `navigator.credentials.create()`. Úsalo para integraciones estilo gestor de contraseñas: tu app capturó o generó una credencial y quiere que el Vault del usuario la recuerde.
+
+Estructuralmente distinto de los otros tres flujos: no hay **ninguna fase de respuesta** en absoluto — la aprobación ocurre enteramente en el Device, fuera de banda. [`VaultEditPendingRequest.delivered`](#vaulteditpendingrequest) solo reporta si la propuesta cifrada llegó a un Device antes de `timeout` — no dice nada sobre si el Device luego aprobó o rechazó.
+
+La propuesta cifrada se envía por LAN (se reintenta hasta que algún Device la acepta o pasa `timeout`, de la misma forma en que funciona el envío de contenido de `pin`) y, si se da `pinningEndpointUrl`, se publica en paralelo a un nodo [Kubo](https://docs.ipfs.tech/install/ipfs-desktop/) para la entrega entre redes — de mejor esfuerzo, un endpoint faltante o inalcanzable nunca hace fallar el envío por LAN.
+
+| Nombre | Tipo | Requerido | Descripción |
+|------|------|----------|--------------|
+| `appName` | `String` | Sí | Se muestra al usuario en la pantalla de aprobación |
+| `site` | `String` | Sí | Hostname/sitio al que pertenece la credencial |
+| `url` | `String` | No — `''` por defecto | URL de origen completa |
+| `username` | `String` | Sí | |
+| `password` | `String` | No — `''` por defecto | Se requiere al menos uno de `password`/`passkey` |
+| `notes` | `String` | No — `''` por defecto | |
+| `passkey` | [`VaultEditPasskey?`](#vaulteditpasskey) | No | Se requiere al menos uno de `password`/`passkey` |
+| `pinningEndpointUrl` | `String?` | No | La URL base de un nodo Kubo (p. ej. `http://127.0.0.1:5001`) — habilita el tramo de dead-drop entre redes. Sin ella, la entrega es solo por LAN |
+| `timeout` | `Duration` | No — 3 minutos por defecto | |
+
+**Devuelve** [`VaultEditPendingRequest`](#vaulteditpendingrequest)
+
+```dart
+final pending = requester.vaultEdit(
+  appName: 'My App',
+  site: 'example.com',
+  url: 'https://example.com',
+  username: 'alice',
+  password: generatedPassword,
+);
+showQrCode(pending.qrPayload);
+
+final delivered = await pending.delivered;
+if (delivered) {
+  print('Proposal handed off — waiting on the user to approve on their Device');
+}
+```
+
+### Qué no está cubierto todavía [#whats-not-covered-yet]
+
+- **Transporte por deep-link (mismo dispositivo)** — requiere que la app anfitriona registre su propio esquema de URI, algo específico de la plataforma y fuera de lo que un paquete Dart puro puede automatizar.
+
+## Tipos
+
+### Tipos de verificador
+
+Todos exportados desde `package:truthid_sdk/truthid_sdk.dart`.
+
+#### `Network`
+
+```dart
+enum Network { baseSepolia, baseMainnet }
+```
+
+#### `AuthChallenge` [#authchallenge]
+
+```dart
+class AuthChallenge {
+  final String type;      // always "challenge"
+  final String nonce;
+  final int issuedAt;      // Unix timestamp in ms
+  final String origin;
+}
+```
+
+#### `AuthResponse`
+
+```dart
+class AuthResponse {
+  final bool approved;
+  final String nonce;
+  final String signature;          // secp256k1 signature, hex ("0x...")
+  final String deviceAddress;      // Ethereum address of the device key
+  final String? sessionSignature;  // personal_sign over keccak256(nonce) — always sent alongside signature
+}
+```
+
+#### `VerifyAuthResult` [#verifyauthresult]
+
+```dart
+class VerifyAuthResult {
+  final bool valid;
+  final BigInt? identityId;
+  final String? deviceAddress;
+  final String? reason;
+}
+```
+
+#### `SessionInfo` [#sessioninfo]
+
+```dart
+class SessionInfo {
+  final bool exists;
+  final bool revoked;
+  final BigInt? identityId;
+  final String? devicePubKey;
+  final DateTime? createdAt;
+}
+```
+
+#### `DeviceStatus` [#devicestatus]
+
+```dart
+class DeviceStatus {
+  final bool exists;
+  final bool active;
+  final String? label;
+  final BigInt? identityId;
+  final DateTime? addedAt;
+}
+```
+
+### Tipos de solicitante
+
+#### `PendingRequest<T>` [#pendingrequestt]
+
+```dart
+class PendingRequest<T> {
+  final String qrPayload;                    // JSON, ready to render as a QR code
+  final String sessionId;
+  final DateTime expiresAt;
+  final Future<TransportResult<T>> result;
+}
+```
+
+#### `TransportResult<T>`
+
+```dart
+class TransportResult<T> {
+  final bool delivered; // false = expired with no answer
+  final T? data;        // present only when delivered is true
+}
+```
+
+#### `SignMessageResult` [#signmessageresult]
+
+```dart
+class SignMessageResult {
+  final String status; // 'signed' | 'rejected'
+  final String? message;
+  final String? signature;
+}
+```
+
+#### `SignRequestResult` [#signrequestresult]
+
+```dart
+class SignRequestResult {
+  final String status; // 'executed' | 'failed' | 'rejected'
+  final String? userOpHash;
+  final String? transactionHash;
+  final String? error;
+}
+```
+
+#### `PinResult` [#pinresult]
+
+```dart
+class PinResult {
+  final String status; // 'pinned' | 'failed' | 'rejected'
+  final String? cid; // "ar://<tx_id>" — an Arweave pointer, not an IPFS CID
+  final String? contentHash;
+  final List<String>? providersOk;
+  final List<String>? providersFailed;
+  final String? error;
+}
+```
+
+#### `VaultEditPasskey` [#vaulteditpasskey]
+
+```dart
+class VaultEditPasskey {
+  final String rpId;
+  final String credentialIdB64;
+  final String userHandleB64;
+  final String privateKeyHex;
+  final int signCount;
+  final int createdAt;
+}
+```
+
+#### `VaultEditPendingRequest` [#vaulteditpendingrequest]
+
+```dart
+class VaultEditPendingRequest {
+  final String qrPayload;   // JSON, ready to render as a QR code
+  final String sessionId;
+  final DateTime expiresAt;
+  final Future<bool> delivered; // no response phase — see vaultEdit() above
+}
+```
+
+## Notas de seguridad
+
+### Invalidación de nonce
+
+Elimina el desafío de tu almacén **antes** de llamar a `verifyAuthResponse`, no después — eliminarlo después deja una condición de carrera donde la misma respuesta firmada puede enviarse dos veces dentro de la ventana del TTL.
+
+### TTL
+
+El valor predeterminado es 30 segundos, coincidiendo con la propia expiración de desafíos de la app móvil.
+
+### Solo HTTPS
+
+El teléfono hace `POST` de la respuesta firmada directamente a tu `callbackUrl` — la app móvil rechaza URLs que no sean `https://`, y tu endpoint todavía necesita un certificado TLS válido para que la conexión tenga éxito.
+
+## Redes
+
+| Red | Chain ID | Descripción |
+|---------|----------|--------------|
+| `Network.baseSepolia` | 84532 | Testnet — para desarrollo |
+| `Network.baseMainnet` | 8453 | Producción |
+
+Las direcciones de contratos para ambas redes están en [Contratos inteligentes](/docs/intro#smart-contracts-base-mainnet-chain-8453).
+
+## Visibilidad de la sesión — nada que hacer
+
+Los inicios de sesión completados (vía `TruthIDClient.verifyAuthResponse`, o vía `TruthIDRequester.signRequest`) ya aparecen en las apps móvil/escritorio de TruthID del usuario y pueden revocarse individualmente desde ahí — el teléfono registra las sesiones on-chain por sí mismo. Si quieres verificar dos veces que una sesión llegó on-chain, deriva su hash del nonce y llama a `verifySession`:
+
+```dart
+import 'package:web3dart/crypto.dart' show keccak256;
+import 'dart:convert';
+
+final sessionHash = '0x' + keccak256(Uint8List.fromList(utf8.encode(nonce)))
+    .map((b) => b.toRadixString(16).padLeft(2, '0'))
+    .join();
+final session = await truthid.verifySession(sessionHash);
+```
+
+## Próximos pasos
+
+- [Guía rápida](/docs/quickstart) — recorrido completo desde la instalación hasta el primer inicio de sesión
+- [Referencia del SDK de TypeScript](/docs/sdk/typescript)
+- [Referencia del SDK de Python](/docs/sdk/python)
+- [Referencia del SDK de Ruby](/docs/sdk/ruby)
