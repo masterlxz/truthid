@@ -196,6 +196,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
     // O device precisa estar pareado com uma identidade — sem isso não há
     // smart account nem identityId pra registrar a sessão.
     if (_identityId == null || _username == null) {
+      if (!mounted) return;
       _setError(context.l10n.approvalScreenErrorNotPaired);
       return;
     }
@@ -211,10 +212,12 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
     try {
       identity = await _blockchainService.getIdentityByUsername(_username!);
     } catch (_) {
+      if (!mounted) return;
       _setError(context.l10n.approvalScreenErrorIdentityLookupFailed);
       return;
     }
     if (identity == null) {
+      if (!mounted) return;
       _setError(context.l10n.approvalScreenErrorIdentityLookupFailed);
       return;
     }
@@ -250,6 +253,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
         sessionSignatureHex: sessionSignature,
       );
     } catch (_) {
+      if (!mounted) return;
       _setError(context.l10n.approvalScreenErrorSessionCreationFailed);
       return;
     }
@@ -268,6 +272,7 @@ class _ApprovalScreenState extends State<ApprovalScreen> {
             sessionSignature, // personal_sign(keccak256(nonce)) — já registrado on-chain
       });
     } catch (_) {
+      if (!mounted) return;
       _setError(context.l10n.approvalScreenErrorPostResponseFailed);
       return;
     }

@@ -217,6 +217,7 @@ class _SessionsScreenState extends State<SessionsScreen> {
       await _load();
     } catch (_) {
       if (mounted) setState(() => _revokingHash = null);
+      if (!mounted) return;
       _showSnackBar(
         context.l10n.sessionsScreenRevokeFailedError,
       );
