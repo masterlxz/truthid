@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n_extensions.dart';
 import '../services/cross_device_delivery_channel.dart';
 import '../services/ecies_service.dart';
 import '../services/ipfs_pin_client.dart';
@@ -120,37 +121,36 @@ class _AutofillAddressApprovalScreenState
   _Status? _validatePayload() {
     final v = widget.payload['v'];
     if (v != 1) {
-      _errorMsg = 'Invalid QR: unsupported schema version.';
+      _errorMsg = context.l10n.autofillAddressApprovalScreenErrorInvalidVersion;
       return _Status.error;
     }
 
     final sessionId = widget.payload['sessionId'] as String?;
     if (sessionId == null || sessionId.isEmpty) {
-      _errorMsg = 'Invalid QR: missing sessionId.';
+      _errorMsg = context.l10n.autofillAddressApprovalScreenErrorMissingSessionId;
       return _Status.error;
     }
 
     final ephemeralPubKey = widget.payload['ephemeralPubKey'] as String?;
     if (ephemeralPubKey == null || ephemeralPubKey.isEmpty) {
-      _errorMsg = 'Invalid QR: missing ephemeralPubKey.';
+      _errorMsg = context.l10n.autofillAddressApprovalScreenErrorMissingPubKey;
       return _Status.error;
     }
 
     final expiresAtMs = widget.payload['expiresAt'];
     if (expiresAtMs is! int) {
-      _errorMsg = 'Invalid QR: missing expiresAt.';
+      _errorMsg = context.l10n.autofillAddressApprovalScreenErrorMissingExpiresAt;
       return _Status.error;
     }
     final expiresAt = DateTime.fromMillisecondsSinceEpoch(expiresAtMs);
     if (expiresAt.isBefore(DateTime.now())) {
-      _errorMsg = 'This QR code has expired — go back to the site and try '
-          'again.';
+      _errorMsg = context.l10n.autofillAddressApprovalScreenErrorExpiredQr;
       return _Status.error;
     }
 
     final appName = (widget.payload['appName'] as String?)?.trim() ?? '';
     if (appName.isEmpty) {
-      _errorMsg = 'Invalid QR: missing appName.';
+      _errorMsg = context.l10n.autofillAddressApprovalScreenErrorMissingAppName;
       return _Status.error;
     }
 
@@ -222,8 +222,7 @@ class _AutofillAddressApprovalScreenState
       if (expiresAt.isBefore(DateTime.now())) {
         setState(() {
           _status = _Status.error;
-          _errorMsg = 'Session expired before responding — go back to the '
-              'site and try again.';
+          _errorMsg = context.l10n.autofillAddressApprovalScreenErrorSessionExpired;
         });
         return;
       }
@@ -247,7 +246,7 @@ class _AutofillAddressApprovalScreenState
       if (!mounted) return;
       setState(() {
         _status = _Status.error;
-        _errorMsg = 'Failed to respond to the site: $e';
+        _errorMsg = context.l10n.autofillAddressApprovalScreenErrorRespondFailed('$e');
       });
     }
   }
@@ -255,7 +254,7 @@ class _AutofillAddressApprovalScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Autofill request')),
+      appBar: AppBar(title: Text(context.l10n.autofillAddressApprovalScreenTitle)),
       body: switch (_status) {
         _Status.loadingAddresses =>
           const Center(child: CircularProgressIndicator()),
@@ -279,15 +278,15 @@ class _AutofillAddressApprovalScreenState
             const Icon(Icons.home_outlined, size: 64, color: AppColors.accent),
             const SizedBox(height: 16),
             Text(
-              '$_appName wants to fill in an address',
+              context.l10n.autofillAddressApprovalScreenPickerHeading(_appName ?? ''),
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Choose which saved address to use:',
+            Text(
+              context.l10n.autofillAddressApprovalScreenPickerPrompt,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             const SizedBox(height: 16),
             ..._addresses.map((entry) => Card(
@@ -303,7 +302,7 @@ class _AutofillAddressApprovalScreenState
             OutlinedButton.icon(
               onPressed: _reject,
               icon: const Icon(Icons.cancel_outlined),
-              label: const Text('Deny request'),
+              label: Text(context.l10n.autofillAddressApprovalScreenDenyButton),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.danger,
                 side: const BorderSide(color: AppColors.danger),
@@ -327,36 +326,48 @@ class _AutofillAddressApprovalScreenState
             const Icon(Icons.home_outlined, size: 64, color: AppColors.accent),
             const SizedBox(height: 16),
             Text(
-              '$_appName wants to fill a form with this address',
+              context.l10n.autofillAddressApprovalScreenConfirmHeading(_appName ?? ''),
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 16),
-            InfoRow(label: 'Label', value: address.label),
+            InfoRow(label: context.l10n.autofillAddressApprovalScreenFieldLabel, value: address.label),
             const SizedBox(height: 8),
-            InfoRow(label: 'Name', value: address.fullName),
-            const SizedBox(height: 8),
-            InfoRow(label: 'Street', value: '${address.street}, ${address.number}'),
-            if (address.complement != null && address.complement!.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              InfoRow(label: 'Complement', value: address.complement!),
-            ],
-            const SizedBox(height: 8),
-            InfoRow(label: 'Neighborhood', value: address.neighborhood),
+            InfoRow(label: context.l10n.autofillAddressApprovalScreenFieldName, value: address.fullName),
             const SizedBox(height: 8),
             InfoRow(
-              label: 'City/State',
+              label: context.l10n.autofillAddressApprovalScreenFieldStreet,
+              value: '${address.street}, ${address.number}',
+            ),
+            if (address.complement != null && address.complement!.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              InfoRow(
+                label: context.l10n.autofillAddressApprovalScreenFieldComplement,
+                value: address.complement!,
+              ),
+            ],
+            const SizedBox(height: 8),
+            InfoRow(
+              label: context.l10n.autofillAddressApprovalScreenFieldNeighborhood,
+              value: address.neighborhood,
+            ),
+            const SizedBox(height: 8),
+            InfoRow(
+              label: context.l10n.autofillAddressApprovalScreenFieldCityState,
               value: '${address.city}/${address.state}',
             ),
             const SizedBox(height: 8),
-            InfoRow(label: 'ZIP code', value: address.zipCode),
+            InfoRow(label: context.l10n.autofillAddressApprovalScreenFieldZipCode, value: address.zipCode),
             const SizedBox(height: 8),
-            InfoRow(label: 'Country', value: address.country),
+            InfoRow(label: context.l10n.autofillAddressApprovalScreenFieldCountry, value: address.country),
             const SizedBox(height: 32),
             ElevatedButton.icon(
               onPressed: _approve,
               icon: const Icon(Icons.check_circle_outline),
-              label: const Text('Approve', style: TextStyle(fontSize: 18)),
+              label: Text(
+                context.l10n.autofillAddressApprovalScreenApproveButton,
+                style: const TextStyle(fontSize: 18),
+              ),
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.success,
                 foregroundColor: AppColors.background,
@@ -367,7 +378,10 @@ class _AutofillAddressApprovalScreenState
             OutlinedButton.icon(
               onPressed: _reject,
               icon: const Icon(Icons.cancel_outlined),
-              label: const Text('Reject', style: TextStyle(fontSize: 18)),
+              label: Text(
+                context.l10n.autofillAddressApprovalScreenRejectButton,
+                style: const TextStyle(fontSize: 18),
+              ),
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.danger,
                 side: const BorderSide(color: AppColors.danger),
@@ -378,7 +392,7 @@ class _AutofillAddressApprovalScreenState
               const SizedBox(height: 12),
               TextButton(
                 onPressed: _backToPicker,
-                child: const Text('Choose a different address'),
+                child: Text(context.l10n.autofillAddressApprovalScreenChooseDifferentButton),
               ),
             ],
           ],
@@ -397,25 +411,23 @@ class _AutofillAddressApprovalScreenState
             const SizedBox(height: 48),
             const Center(child: CircularProgressIndicator()),
             const SizedBox(height: 24),
-            const Text(
-              'Waiting for the site to connect...',
+            Text(
+              context.l10n.autofillAddressApprovalScreenWaitingTitle,
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Make sure your phone and computer are on the same Wi-Fi '
-              'network.',
+            Text(
+              context.l10n.autofillAddressApprovalScreenWaitingSubtitle,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             if (_localIps.isNotEmpty) ...[
               const SizedBox(height: 24),
-              const Text(
-                'If the site can\'t find your phone automatically, enter '
-                'this IP address manually:',
+              Text(
+                context.l10n.autofillAddressApprovalScreenManualIpPrompt,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textMuted),
+                style: const TextStyle(color: AppColors.textMuted),
               ),
               const SizedBox(height: 8),
               ..._localIps.map(
@@ -448,35 +460,35 @@ class _AutofillAddressApprovalScreenState
             const Icon(Icons.check_circle_outline,
                 size: 72, color: AppColors.accent),
             const SizedBox(height: 16),
-            const Text(
-              'Sent',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Text(
+              context.l10n.autofillAddressApprovalScreenSentTitle,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'The site received your response.',
+            Text(
+              context.l10n.autofillAddressApprovalScreenSentSubtitle,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             if (_deadDropIpnsName != null) ...[
               const SizedBox(height: 8),
-              const Text(
-                'Dead-drop backup published (IPFS/IPNS).',
+              Text(
+                context.l10n.autofillAddressApprovalScreenDeadDropPublished,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
               ),
             ] else if (_deadDropError != null) ...[
               const SizedBox(height: 8),
-              const Text(
-                'Dead-drop backup unavailable this time.',
+              Text(
+                context.l10n.autofillAddressApprovalScreenDeadDropUnavailable,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: AppColors.textMuted, fontSize: 12),
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 12),
               ),
             ],
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Done'),
+              child: Text(context.l10n.autofillAddressApprovalScreenDoneButton),
             ),
           ],
         ),
@@ -493,22 +505,20 @@ class _AutofillAddressApprovalScreenState
           children: [
             const Icon(Icons.wifi_off, size: 72, color: AppColors.textMuted),
             const SizedBox(height: 16),
-            const Text(
-              'Nothing arrived',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Text(
+              context.l10n.autofillAddressApprovalScreenTimeoutTitle,
+              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'The site never connected before this request expired. Make '
-              'sure both devices are on the same Wi-Fi network and try '
-              'again.',
+            Text(
+              context.l10n.autofillAddressApprovalScreenTimeoutSubtitle,
               textAlign: TextAlign.center,
-              style: TextStyle(color: AppColors.textMuted),
+              style: const TextStyle(color: AppColors.textMuted),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Back'),
+              child: Text(context.l10n.autofillAddressApprovalScreenBackButton),
             ),
           ],
         ),
@@ -526,14 +536,14 @@ class _AutofillAddressApprovalScreenState
             const Icon(Icons.error_outline, size: 72, color: AppColors.danger),
             const SizedBox(height: 16),
             Text(
-              _errorMsg ?? 'Something went wrong.',
+              _errorMsg ?? context.l10n.autofillAddressApprovalScreenGenericError,
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Back'),
+              child: Text(context.l10n.autofillAddressApprovalScreenBackButton),
             ),
           ],
         ),
