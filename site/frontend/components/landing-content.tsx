@@ -21,7 +21,10 @@ import {
 // roots without depending on NextIntlClientProvider/middleware context.
 export async function LandingContent({ locale }: { locale: string }) {
   const t = await getTranslations({ locale, namespace: "download" });
-  const docsHref = locale === "en" ? "/docs" : `/${locale}/docs`;
+  // Bare "/docs" (no slug) 404s — the fumadocs source has no page mapped to
+  // an empty slug, only explicit ones like intro/quickstart/etc.
+  const docsHref =
+    locale === "en" ? "/docs/intro" : `/${locale}/docs/intro`;
 
   return (
     <main className="relative flex flex-1 flex-col items-center overflow-hidden">
