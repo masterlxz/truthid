@@ -49,6 +49,12 @@ export function LocaleAwareRootProvider({
   children: ReactNode;
 }) {
   const pathname = usePathname() ?? "/";
+  // usePathname() is already basePath-stripped (Next's own convention) —
+  // window.location.href needs it added back, or this 404s under the
+  // GitHub Pages export (basePath "/truthid"). See next.config.ts for why
+  // this specific env var (not a plain NEXT_BASE_PATH read) is available
+  // on the client.
+  const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
   return (
     <RootProvider
@@ -56,10 +62,9 @@ export function LocaleAwareRootProvider({
       i18n={{
         ...i18nProvider(translations, locale),
         onLocaleChange: (newLocale) => {
-          window.location.href = withLocalePrefix(
-            stripLocalePrefix(pathname),
-            newLocale,
-          );
+          window.location.href =
+            basePath +
+            withLocalePrefix(stripLocalePrefix(pathname), newLocale);
         },
       }}
     >

@@ -20,6 +20,13 @@ const nextConfig: NextConfig = {
         images: { unoptimized: true },
       }
     : {}),
+  // Exposes NEXT_BASE_PATH (build-time only, not a NEXT_PUBLIC_ var) to the
+  // client bundle too — locale-aware-root-provider.tsx needs it to build a
+  // correct window.location.href for locale switches (a real navigation,
+  // not router.push — see that file for why).
+  env: {
+    NEXT_PUBLIC_BASE_PATH: basePath ?? "",
+  },
 };
 
 export default withNextIntl(withMDX(nextConfig));
