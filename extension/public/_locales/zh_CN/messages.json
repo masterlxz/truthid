@@ -60,6 +60,10 @@
     "message": "$COUNT$ 项待处理更改 — 点击查看",
     "placeholders": { "count": { "content": "$1" } }
   },
+  "updateBannerText": {
+    "message": "TruthID $VERSION$ 已发布 — 点击查看更新方法",
+    "placeholders": { "version": { "content": "$1" } }
+  },
   "pendingStatusLookingForDesktop": { "message": "正在这台电脑上查找 TruthID Desktop..." },
   "savedStatus": { "message": "已保存。" },
   "pendingStatusRejectedOnDesktop": { "message": "已在 Desktop 上拒绝。" },

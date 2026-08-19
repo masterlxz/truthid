@@ -60,6 +60,10 @@
     "message": "$COUNT$ pending changes — tap to review",
     "placeholders": { "count": { "content": "$1" } }
   },
+  "updateBannerText": {
+    "message": "TruthID $VERSION$ is available — tap for update instructions",
+    "placeholders": { "version": { "content": "$1" } }
+  },
   "pendingStatusLookingForDesktop": { "message": "Looking for TruthID Desktop on this computer..." },
   "savedStatus": { "message": "Saved." },
   "pendingStatusRejectedOnDesktop": { "message": "Rejected on the Desktop." },

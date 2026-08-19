@@ -1,6 +1,6 @@
 {
   "name": "truthid-vault-extension",
-  "version": "0.1.0",
+  "version": "2.0.0",
   "private": true,
   "description": "TruthID Vault — browser extension (Phase 13.9: LAN transport + IPFS/IPNS dead-drop)",
   "type": "module",

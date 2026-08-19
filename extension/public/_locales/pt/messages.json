@@ -60,6 +60,10 @@
     "message": "$COUNT$ alterações pendentes — toque para revisar",
     "placeholders": { "count": { "content": "$1" } }
   },
+  "updateBannerText": {
+    "message": "TruthID $VERSION$ disponível — toque para ver como atualizar",
+    "placeholders": { "version": { "content": "$1" } }
+  },
   "pendingStatusLookingForDesktop": { "message": "Procurando o TruthID Desktop neste computador..." },
   "savedStatus": { "message": "Salvo." },
   "pendingStatusRejectedOnDesktop": { "message": "Rejeitado no Desktop." },

@@ -19,7 +19,12 @@ import 'services/deep_link_router.dart';
 import 'services/deep_link_service.dart';
 import 'theme.dart';
 
-const _kAppVersion = '1.0.0';
+// TODO(v2.1+): fonte duplicada de propósito temporário — devia ler de
+// pubspec.yaml via package_info_plus (mesma ideia do __APP_VERSION__ do
+// Desktop, injetado do package.json), mas o ambiente desta sessão não tem
+// Flutter instalado pra adicionar/verificar uma dependência nova com
+// segurança. Manter sincronizado com `version:` em pubspec.yaml até lá.
+const _kAppVersion = '2.0.0';
 const _kDonateAddress = '0xB54fe9909D76d98e87a9fD76bDB5C69fABe10265';
 const _kReleasesUrl =
     'https://api.github.com/repos/masterlxz/truthid/releases/latest';

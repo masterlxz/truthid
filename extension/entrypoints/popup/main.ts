@@ -38,10 +38,15 @@ import {
 import { sendToDesktop } from '../../src/vaultEdit/desktopDelivery';
 import { startMobileDelivery, type MobileDeliverySession } from '../../src/vaultEdit/mobileDelivery';
 import { loadPinningProviderConfig, savePinningProviderConfig } from '../../src/vaultEdit/pinningProviderConfig';
+import { checkForUpdate } from '../../src/updateCheck';
 
 const SESSION_EXPIRY_ALARM = 'truthid-vault-session-expiry';
 const START_DEAD_DROP_POLL_MESSAGE = 'truthid-start-dead-drop-poll';
 const DEAD_DROP_RESOLVED_MESSAGE = 'truthid-dead-drop-resolved';
+// Points at the manual-install section, not the .zip directly — there's no
+// real auto-update for a "Load unpacked" extension (see src/updateCheck.ts),
+// so the banner needs the reinstall steps, not just a file.
+const UPDATE_INSTRUCTIONS_URL = 'https://masterlxz.github.io/truthid/#extension';
 const HOST_PERMISSION: chrome.permissions.Permissions = {
   origins: ['http://*/*'],
 };
@@ -116,6 +121,9 @@ let formReturnsToDetail = false;
 let selectedEntry: VaultEntry | null = null;
 
 const els = {
+  updateBanner: document.getElementById('update-banner') as HTMLElement,
+  updateBannerText: document.getElementById('update-banner-text') as HTMLElement,
+
   pendingBanner: document.getElementById('pending-banner') as HTMLElement,
   pendingBannerText: document.getElementById('pending-banner-text') as HTMLElement,
 
@@ -259,6 +267,7 @@ els.settingsButton.addEventListener('click', () => showView('settings'));
 els.settingsBackButton.addEventListener('click', goBack);
 els.pendingBackButton.addEventListener('click', goBack);
 els.pendingBanner.addEventListener('click', () => showView('pending'));
+els.updateBanner.addEventListener('click', () => browser.tabs.create({ url: UPDATE_INSTRUCTIONS_URL }));
 
 // Ponto comum pra "cheguei num blob cifrado, decifra e mostra" — o LAN
 // entrega um JSON `{blob: base64}` (ver `handleBlob` abaixo), o dead-drop
@@ -304,7 +313,16 @@ async function ensureHostPermission(): Promise<boolean> {
   return chrome.permissions.request(HOST_PERMISSION);
 }
 
+async function checkAndShowUpdateBanner(): Promise<void> {
+  const newVersion = await checkForUpdate(browser.runtime.getManifest().version);
+  if (!newVersion) return;
+  els.updateBannerText.textContent = browser.i18n.getMessage('updateBannerText', [newVersion]);
+  els.updateBanner.hidden = false;
+}
+
 async function init(): Promise<void> {
+  void checkAndShowUpdateBanner();
+
   const stored = await loadSession();
 
   if (stored && !isExpired(stored) && stored.status === 'received' && stored.entries) {
