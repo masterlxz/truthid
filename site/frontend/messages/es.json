@@ -6,11 +6,33 @@
   "layout": {
     "navTitle": "TruthID"
   },
-  "home": {
+  "signin": {
     "heading": "TruthID",
     "subtitle": "Inicia sesión para continuar. El inicio de sesión es solo mediante OAuth — sin contraseña propia.",
     "signInError": "No se pudo iniciar sesión ({error}). Intenta de nuevo.",
     "signInWithGoogle": "Iniciar sesión con Google"
+  },
+  "download": {
+    "heading": "TruthID",
+    "subtitle": "Identidad autosoberana que realmente controlas. Descarga la app de escritorio y la extensión de navegador abajo — sin cuenta, sin contraseña, sin empresa de por medio.",
+    "desktopCta": "Descargar para escritorio",
+    "extensionCta": "Obtener la extensión",
+    "desktopHeading": "App de escritorio",
+    "desktopSubtitle": "App nativa para Linux, Windows y macOS. Se empareja con la app móvil y guarda la clave de tu dispositivo.",
+    "linuxLabel": "Linux",
+    "windowsLabel": "Windows",
+    "macosLabel": "macOS",
+    "macosNote": "Por ahora, solo Apple Silicon.",
+    "androidLabel": "Android",
+    "androidNote": "APK — instala manualmente o desde una tienda de apps compatible.",
+    "extensionHeading": "Extensión de navegador",
+    "extensionSubtitle": "Autocompletado y acceso al vault para Chrome y Brave. Todavía no está en la Chrome Web Store, así que se instala manualmente — toma menos de un minuto.",
+    "extensionDownload": "Descargar extensión (.zip)",
+    "extensionStep1": "Descarga el .zip de arriba y descomprímelo.",
+    "extensionStep2": "Abre chrome://extensions (o brave://extensions).",
+    "extensionStep3": "Activa el «Modo desarrollador», arriba a la derecha.",
+    "extensionStep4": "Haz clic en «Cargar descomprimida» y selecciona la carpeta descomprimida.",
+    "docsCta": "Leer la documentación"
   },
   "dashboard": {
     "loading": "Cargando…",

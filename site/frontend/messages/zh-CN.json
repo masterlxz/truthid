@@ -6,11 +6,33 @@
   "layout": {
     "navTitle": "TruthID"
   },
-  "home": {
+  "signin": {
     "heading": "TruthID",
     "subtitle": "登录以继续。仅支持 OAuth 登录 — 无需设置密码。",
     "signInError": "无法登录（{error}）。请重试。",
     "signInWithGoogle": "使用 Google 登录"
+  },
+  "download": {
+    "heading": "TruthID",
+    "subtitle": "真正由你掌控的自我主权身份。下载下方的桌面应用和浏览器扩展 — 无需账号、无需密码、没有公司居中把关。",
+    "desktopCta": "下载桌面版",
+    "extensionCta": "获取浏览器扩展",
+    "desktopHeading": "桌面应用",
+    "desktopSubtitle": "适用于 Linux、Windows 和 macOS 的原生应用。可与手机应用配对，并保存你的设备密钥。",
+    "linuxLabel": "Linux",
+    "windowsLabel": "Windows",
+    "macosLabel": "macOS",
+    "macosNote": "目前仅支持 Apple Silicon。",
+    "androidLabel": "Android",
+    "androidNote": "APK — 手动安装，或通过兼容的应用商店安装。",
+    "extensionHeading": "浏览器扩展",
+    "extensionSubtitle": "为 Chrome 和 Brave 提供自动填充和密码库访问。尚未上架 Chrome 网上应用店，因此需要手动安装 — 不到一分钟即可完成。",
+    "extensionDownload": "下载扩展（.zip）",
+    "extensionStep1": "下载上方的 .zip 文件并解压。",
+    "extensionStep2": "打开 chrome://extensions（或 brave://extensions）。",
+    "extensionStep3": "打开右上角的“开发者模式”。",
+    "extensionStep4": "点击“加载已解压的扩展程序”，选择解压后的文件夹。",
+    "docsCta": "查看文档"
   },
   "dashboard": {
     "loading": "加载中…",

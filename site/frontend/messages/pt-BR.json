@@ -6,11 +6,33 @@
   "layout": {
     "navTitle": "TruthID"
   },
-  "home": {
+  "signin": {
     "heading": "TruthID",
     "subtitle": "Faça login para continuar. O login é somente via OAuth — sem senha própria.",
     "signInError": "Não foi possível fazer login ({error}). Tente novamente.",
     "signInWithGoogle": "Entrar com o Google"
+  },
+  "download": {
+    "heading": "TruthID",
+    "subtitle": "Identidade auto-soberana que você realmente controla. Baixe o app desktop e a extensão de navegador abaixo — sem conta, sem senha, sem empresa no meio.",
+    "desktopCta": "Baixar para desktop",
+    "extensionCta": "Baixar a extensão",
+    "desktopHeading": "App desktop",
+    "desktopSubtitle": "App nativo pra Linux, Windows e macOS. Pareia com o app mobile e guarda a chave do seu device.",
+    "linuxLabel": "Linux",
+    "windowsLabel": "Windows",
+    "macosLabel": "macOS",
+    "macosNote": "Só Apple Silicon por enquanto.",
+    "androidLabel": "Android",
+    "androidNote": "APK — instale manualmente ou via uma loja de apps compatível.",
+    "extensionHeading": "Extensão de navegador",
+    "extensionSubtitle": "Autofill e acesso ao vault pro Chrome e Brave. Ainda não está na Chrome Web Store, então a instalação é manual — leva menos de um minuto.",
+    "extensionDownload": "Baixar extensão (.zip)",
+    "extensionStep1": "Baixe o .zip acima e descompacte.",
+    "extensionStep2": "Abra chrome://extensions (ou brave://extensions).",
+    "extensionStep3": "Ative o “Modo desenvolvedor”, no canto superior direito.",
+    "extensionStep4": "Clique em “Carregar sem compactação” e selecione a pasta descompactada.",
+    "docsCta": "Ler a documentação"
   },
   "dashboard": {
     "loading": "Carregando…",

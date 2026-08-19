@@ -1,10 +1,12 @@
 name: Deploy Docs
 
-# Builda e publica a doc (Fumadocs, dentro de site/frontend) no GitHub Pages a
-# cada push na main que toque site/frontend/. Só a doc vai pro ar aqui — a
-# landing page e o /dashboard (login/OAuth) são removidos antes do build,
-# porque essa é uma exportação estática sem o backend Rails por trás
-# (ver project/ROADMAP.md, Sessão 200).
+# Builda e publica a doc (Fumadocs, dentro de site/frontend) e a landing
+# pública (instaladores) no GitHub Pages a cada push na main que toque
+# site/frontend/. A landing (app/page.tsx + app/[locale]/page.tsx) é
+# estática, sem dependência do backend Rails, então vai pro ar; só o login
+# OAuth (/signin) e o /dashboard são removidos antes do build, porque essa é
+# uma exportação estática sem o backend Rails por trás (ver
+# project/ROADMAP.md, Sessão 200; project/PENDING.md P57).
 on:
   push:
     branches: [main]
@@ -41,19 +43,15 @@ jobs:
         working-directory: site/frontend
         run: npm ci
 
-      - name: Remove routes that need the Rails backend (landing page, dashboard)
+      - name: Remove routes that need the Rails backend (signin, dashboard)
         working-directory: site/frontend
-        run: rm -f "app/[locale]/page.tsx" && rm -rf "app/[locale]/dashboard"
+        run: rm -rf "app/[locale]/signin" "app/[locale]/dashboard"
 
       - name: Build static export
         working-directory: site/frontend
         env:
           NEXT_BASE_PATH: /truthid
         run: npm run build
-
-      - name: Promote docs intro to site root
-        working-directory: site/frontend/out
-        run: cp docs/intro.html index.html
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

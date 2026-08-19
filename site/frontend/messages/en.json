@@ -6,11 +6,33 @@
   "layout": {
     "navTitle": "TruthID"
   },
-  "home": {
+  "signin": {
     "heading": "TruthID",
     "subtitle": "Sign in to continue. Login is OAuth-only — no password of your own.",
     "signInError": "Could not sign in ({error}). Please try again.",
     "signInWithGoogle": "Sign in with Google"
+  },
+  "download": {
+    "heading": "TruthID",
+    "subtitle": "Self-sovereign identity you actually hold. Get the desktop app and the browser extension below — no account, no password, no company in the middle.",
+    "desktopCta": "Download for desktop",
+    "extensionCta": "Get the browser extension",
+    "desktopHeading": "Desktop app",
+    "desktopSubtitle": "Native app for Linux, Windows, and macOS. Pairs with the mobile app and holds your device key.",
+    "linuxLabel": "Linux",
+    "windowsLabel": "Windows",
+    "macosLabel": "macOS",
+    "macosNote": "Apple Silicon only for now.",
+    "androidLabel": "Android",
+    "androidNote": "APK — install manually, or via a compatible app store.",
+    "extensionHeading": "Browser extension",
+    "extensionSubtitle": "Autofill and vault access for Chrome and Brave. Not on the Chrome Web Store yet, so it installs manually — takes under a minute.",
+    "extensionDownload": "Download extension (.zip)",
+    "extensionStep1": "Download the .zip above and unzip it.",
+    "extensionStep2": "Open chrome://extensions (or brave://extensions).",
+    "extensionStep3": "Turn on “Developer mode”, top right.",
+    "extensionStep4": "Click “Load unpacked” and select the unzipped folder.",
+    "docsCta": "Read the docs"
   },
   "dashboard": {
     "loading": "Loading…",

@@ -75,3 +75,38 @@ jobs:
           releaseDraft: true
           includeDebug: false
 
+  # Job separado (não faz parte da matrix acima) — a extensão builda uma vez
+  # só, sem depender de SO nem do toolchain Rust/Tauri. O .zip vira asset do
+  # mesmo release da tag, pro landing page (site/frontend) linkar (P57).
+  build-extension:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: extension/package-lock.json
+
+      - name: npm install
+        working-directory: extension
+        run: npm ci
+
+      - name: Build extension zip
+        working-directory: extension
+        run: npx wxt zip
+
+      - name: Upload extension zip to release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: extension/.output/*.zip
+          name: TruthID ${{ github.ref_name }}
+          draft: true
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

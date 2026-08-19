@@ -46,7 +46,7 @@ export default function DashboardPage() {
 
   async function handleLogout() {
     await fetch(`${apiUrl}/logout`, { method: "DELETE", credentials: "include" });
-    router.push("/");
+    router.push("/signin");
   }
 
   if (status === "loading") {
@@ -66,7 +66,7 @@ export default function DashboardPage() {
         <SiteHeader />
         <main className="flex flex-1 flex-col items-center justify-center gap-4">
           <p>{t("notSignedIn")}</p>
-          <Link href="/" className="text-sm underline">
+          <Link href="/signin" className="text-sm underline">
             {t("back")}
           </Link>
         </main>
