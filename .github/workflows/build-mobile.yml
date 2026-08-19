@@ -26,6 +26,17 @@ jobs:
         working-directory: mobile
         run: flutter pub get
 
+      # lib/config/secrets.dart é gitignorado de propósito (guardaria a API
+      # key do Pimlico do dono do projeto, nunca deve ir pro repo/CI) — sem
+      # isso o build falha em tempo de compilação (import inexistente).
+      # secrets.example.dart já é o fallback documentado (Débito #27,
+      # ARCHITECTURE.md): pimlicoApiKey vazio é o comportamento correto pra
+      # build de distribuição — usuário final configura a própria chave via
+      # SettingsScreen em runtime, não precisa de nada embutido no build.
+      - name: Config placeholder (secrets.dart)
+        working-directory: mobile
+        run: cp lib/config/secrets.example.dart lib/config/secrets.dart
+
       # Decodifica a keystore salva como Secret e configura as variáveis
       # de assinatura. Se os Secrets não existirem, o build usa a chave
       # de debug do Flutter (APK funciona mas não aceita atualizações over-the-air).
