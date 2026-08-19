@@ -1,6 +1,6 @@
 "use client";
 
-import { useRouter, usePathname } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { RootProvider } from "fumadocs-ui/provider/next";
 import { i18nProvider } from "fumadocs-ui/i18n";
 import type { ReactNode } from "react";
@@ -31,6 +31,16 @@ function withLocalePrefix(pathname: string, locale: string): string {
 // NextIntlClientProvider, so next-intl's useLocale()-dependent navigation
 // hooks would throw there). The prefix logic below is deliberately kept in
 // sync with i18n/routing.ts's localePrefix: "as-needed" behavior by hand.
+//
+// Switching locale always crosses into a *different* root layout (this repo
+// has 3: app/, app/docs/, app/[locale]/ — see app/docs/layout.tsx) — a
+// full-document reload, not a soft client transition. Confirmed by testing
+// live: a router.push() across root layouts here does swap the page, but
+// next-themes' dark/light class gets silently dropped on the new tree —
+// resolvedTheme still reads the right value from localStorage, but nothing
+// re-applies it to <html> outside of next-themes' anti-flash inline script,
+// which only runs on a genuine page load. window.location.href forces that
+// real load, so the persisted theme survives a locale switch.
 export function LocaleAwareRootProvider({
   locale,
   children,
@@ -38,7 +48,6 @@ export function LocaleAwareRootProvider({
   locale: string;
   children: ReactNode;
 }) {
-  const router = useRouter();
   const pathname = usePathname() ?? "/";
 
   return (
@@ -47,7 +56,10 @@ export function LocaleAwareRootProvider({
       i18n={{
         ...i18nProvider(translations, locale),
         onLocaleChange: (newLocale) => {
-          router.push(withLocalePrefix(stripLocalePrefix(pathname), newLocale));
+          window.location.href = withLocalePrefix(
+            stripLocalePrefix(pathname),
+            newLocale,
+          );
         },
       }}
     >

@@ -5,6 +5,7 @@ import {
   LanguageSelect,
   LanguageSelectText,
 } from "fumadocs-ui/layouts/shared/slots/language-select";
+import { ThemeSwitch } from "fumadocs-ui/layouts/shared/slots/theme-switch";
 import { Logo } from "@/components/logo";
 
 // Header for the landing page (/ and /pt-BR, /es, /zh-CN). Deliberately
@@ -26,9 +27,12 @@ export function LandingHeader({ locale }: { locale: string }) {
         <Logo className="size-5 text-fd-primary" />
         TruthID
       </Link>
-      <LanguageSelect>
-        <LanguageSelectText />
-      </LanguageSelect>
+      <div className="flex items-center gap-2">
+        <ThemeSwitch />
+        <LanguageSelect>
+          <LanguageSelectText />
+        </LanguageSelect>
+      </div>
     </header>
   );
 }
