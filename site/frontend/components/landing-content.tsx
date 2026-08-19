@@ -24,7 +24,32 @@ export async function LandingContent({ locale }: { locale: string }) {
   const docsHref = locale === "en" ? "/docs" : `/${locale}/docs`;
 
   return (
-    <main className="flex flex-1 flex-col items-center">
+    <main className="relative flex flex-1 flex-col items-center overflow-hidden">
+      {/* Decorative background across the whole page — a faint dot grid plus
+          a few large blurred color blobs at different scroll depths. Without
+          this, wide viewports read as a narrow content column floating in a
+          lot of empty margin. */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 -z-20 opacity-[0.6] [background-image:radial-gradient(var(--color-fd-border)_1px,transparent_1px)] [background-size:28px_28px]"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-32 top-[2%] -z-10 size-[760px] rounded-full bg-fd-primary/20 blur-3xl"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -left-40 top-[28%] -z-10 size-[640px] rounded-full bg-fd-accent blur-3xl"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -right-32 top-[58%] -z-10 size-[680px] rounded-full bg-fd-primary/15 blur-3xl"
+      />
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute -left-40 top-[88%] -z-10 size-[600px] rounded-full bg-fd-accent blur-3xl"
+      />
+
       {/* Hero */}
       <section className="relative w-full overflow-hidden">
         <div
@@ -63,7 +88,7 @@ export async function LandingContent({ locale }: { locale: string }) {
 
       {/* Why TruthID */}
       <section className="w-full border-t border-fd-border bg-fd-card/40 px-8 py-16">
-        <div className="mx-auto max-w-5xl">
+        <div className="mx-auto max-w-6xl">
           <h2 className="text-center text-2xl font-semibold">
             {t("featuresHeading")}
           </h2>
@@ -89,7 +114,7 @@ export async function LandingContent({ locale }: { locale: string }) {
 
       {/* Desktop app */}
       <section id="desktop" className="w-full scroll-mt-8 px-8 py-16">
-        <div className="mx-auto max-w-5xl">
+        <div className="mx-auto max-w-6xl">
           <SectionHeading
             icon={<MonitorIcon className="size-5" />}
             heading={t("desktopHeading")}
@@ -137,7 +162,7 @@ export async function LandingContent({ locale }: { locale: string }) {
         id="extension"
         className="w-full scroll-mt-8 border-t border-fd-border bg-fd-card/40 px-8 py-16"
       >
-        <div className="mx-auto max-w-3xl">
+        <div className="mx-auto max-w-4xl">
           <SectionHeading
             icon={<PuzzleIcon className="size-5" />}
             heading={t("extensionHeading")}
