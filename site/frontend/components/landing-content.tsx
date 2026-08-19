@@ -1,6 +1,15 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { getTranslations } from "next-intl/server";
 import { Logo } from "@/components/logo";
+import {
+  DownloadIcon,
+  KeyShieldIcon,
+  LockIcon,
+  MonitorIcon,
+  PuzzleIcon,
+  ScanIcon,
+} from "@/components/icons";
 import {
   desktopDownloads,
   extensionDownloadUrl,
@@ -16,110 +25,143 @@ export async function LandingContent({ locale }: { locale: string }) {
 
   return (
     <main className="flex flex-1 flex-col items-center">
-      <section className="flex w-full max-w-2xl flex-col items-center gap-6 px-8 py-20 text-center">
-        <Logo className="size-10 text-fd-primary" />
-        <h1 className="text-4xl font-semibold">{t("heading")}</h1>
-        <p className="max-w-md text-base text-fd-muted-foreground">
-          {t("subtitle")}
-        </p>
-        <div className="flex flex-wrap items-center justify-center gap-3">
-          <a
-            href="#desktop"
-            className="rounded-full bg-fd-primary px-6 py-3 text-sm font-medium text-fd-primary-foreground transition hover:opacity-90"
-          >
-            {t("desktopCta")}
-          </a>
-          <a
-            href="#extension"
-            className="rounded-full border border-fd-border px-6 py-3 text-sm font-medium transition hover:bg-fd-accent"
-          >
-            {t("extensionCta")}
-          </a>
-        </div>
-      </section>
-
-      <section
-        id="desktop"
-        className="w-full max-w-3xl scroll-mt-8 border-t border-fd-border px-8 py-16"
-      >
-        <h2 className="text-2xl font-semibold">{t("desktopHeading")}</h2>
-        <p className="mt-2 max-w-xl text-sm text-fd-muted-foreground">
-          {t("desktopSubtitle")}
-        </p>
-
-        <div className="mt-8 grid gap-4 sm:grid-cols-3">
-          <div className="rounded-xl border border-fd-border bg-fd-card p-5">
-            <h3 className="text-sm font-medium">{t("linuxLabel")}</h3>
-            <div className="mt-3 flex flex-col gap-2">
-              <DownloadLink href={desktopDownloads.linux.deb} label=".deb" />
-              <DownloadLink
-                href={desktopDownloads.linux.appImage}
-                label=".AppImage"
-              />
-              <DownloadLink href={desktopDownloads.linux.rpm} label=".rpm" />
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-fd-border bg-fd-card p-5">
-            <h3 className="text-sm font-medium">{t("windowsLabel")}</h3>
-            <div className="mt-3 flex flex-col gap-2">
-              <DownloadLink
-                href={desktopDownloads.windows.exe}
-                label=".exe"
-              />
-              <DownloadLink
-                href={desktopDownloads.windows.msi}
-                label=".msi"
-              />
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-fd-border bg-fd-card p-5">
-            <h3 className="text-sm font-medium">{t("macosLabel")}</h3>
-            <div className="mt-3 flex flex-col gap-2">
-              <DownloadLink href={desktopDownloads.macos.dmg} label=".dmg" />
-            </div>
-            <p className="mt-3 text-xs text-fd-muted-foreground">
-              {t("macosNote")}
-            </p>
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-xl border border-fd-border bg-fd-card p-5 sm:max-w-xs">
-          <h3 className="text-sm font-medium">{t("androidLabel")}</h3>
-          <div className="mt-3 flex flex-col gap-2">
-            <DownloadLink href={desktopDownloads.android.apk} label=".apk" />
-          </div>
-          <p className="mt-3 text-xs text-fd-muted-foreground">
-            {t("androidNote")}
+      {/* Hero */}
+      <section className="relative w-full overflow-hidden">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-[560px] bg-[radial-gradient(60%_60%_at_50%_0%,var(--color-fd-accent)_0%,transparent_70%)]"
+        />
+        <div className="mx-auto flex max-w-2xl flex-col items-center gap-6 px-8 pb-20 pt-24 text-center">
+          <Logo className="size-10 text-fd-primary" />
+          <p className="text-sm font-medium uppercase tracking-wide text-fd-primary">
+            {t("eyebrow")}
           </p>
+          <h1 className="text-4xl font-semibold text-balance sm:text-5xl">
+            {t("headline")}
+          </h1>
+          <p className="max-w-lg text-base text-fd-muted-foreground">
+            {t("subtitle")}
+          </p>
+          <div className="mt-2 flex flex-wrap items-center justify-center gap-3">
+            <a
+              href="#desktop"
+              className="inline-flex items-center gap-2 rounded-full bg-fd-primary px-6 py-3 text-sm font-medium text-fd-primary-foreground transition hover:opacity-90"
+            >
+              <MonitorIcon className="size-4" />
+              {t("desktopCta")}
+            </a>
+            <a
+              href="#extension"
+              className="inline-flex items-center gap-2 rounded-full border border-fd-border px-6 py-3 text-sm font-medium transition hover:bg-fd-accent"
+            >
+              <PuzzleIcon className="size-4" />
+              {t("extensionCta")}
+            </a>
+          </div>
         </div>
       </section>
 
+      {/* Why TruthID */}
+      <section className="w-full border-t border-fd-border bg-fd-card/40 px-8 py-16">
+        <div className="mx-auto max-w-5xl">
+          <h2 className="text-center text-2xl font-semibold">
+            {t("featuresHeading")}
+          </h2>
+          <div className="mt-10 grid gap-6 sm:grid-cols-3">
+            <FeatureCard
+              icon={<KeyShieldIcon className="size-5" />}
+              title={t("feature1Title")}
+              body={t("feature1Body")}
+            />
+            <FeatureCard
+              icon={<LockIcon className="size-5" />}
+              title={t("feature2Title")}
+              body={t("feature2Body")}
+            />
+            <FeatureCard
+              icon={<ScanIcon className="size-5" />}
+              title={t("feature3Title")}
+              body={t("feature3Body")}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Desktop app */}
+      <section id="desktop" className="w-full scroll-mt-8 px-8 py-16">
+        <div className="mx-auto max-w-5xl">
+          <SectionHeading
+            icon={<MonitorIcon className="size-5" />}
+            heading={t("desktopHeading")}
+            subtitle={t("desktopSubtitle")}
+          />
+
+          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <OsCard
+              label={t("linuxLabel")}
+              primaryHref={desktopDownloads.linux.deb}
+              primaryLabel={t("linuxPrimaryCta")}
+              otherFormatsLabel={t("otherFormats")}
+              otherFormats={[
+                { href: desktopDownloads.linux.appImage, label: ".AppImage" },
+                { href: desktopDownloads.linux.rpm, label: ".rpm" },
+              ]}
+            />
+            <OsCard
+              label={t("windowsLabel")}
+              primaryHref={desktopDownloads.windows.exe}
+              primaryLabel={t("windowsPrimaryCta")}
+              otherFormatsLabel={t("otherFormats")}
+              otherFormats={[
+                { href: desktopDownloads.windows.msi, label: ".msi" },
+              ]}
+            />
+            <OsCard
+              label={t("macosLabel")}
+              primaryHref={desktopDownloads.macos.dmg}
+              primaryLabel={t("macosPrimaryCta")}
+              note={t("macosNote")}
+            />
+            <OsCard
+              label={t("androidLabel")}
+              primaryHref={desktopDownloads.android.apk}
+              primaryLabel={t("androidPrimaryCta")}
+              note={t("androidNote")}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* Browser extension */}
       <section
         id="extension"
-        className="w-full max-w-3xl scroll-mt-8 border-t border-fd-border px-8 py-16"
+        className="w-full scroll-mt-8 border-t border-fd-border bg-fd-card/40 px-8 py-16"
       >
-        <h2 className="text-2xl font-semibold">{t("extensionHeading")}</h2>
-        <p className="mt-2 max-w-xl text-sm text-fd-muted-foreground">
-          {t("extensionSubtitle")}
-        </p>
+        <div className="mx-auto max-w-3xl">
+          <SectionHeading
+            icon={<PuzzleIcon className="size-5" />}
+            heading={t("extensionHeading")}
+            subtitle={t("extensionSubtitle")}
+          />
 
-        <DownloadLink
-          href={extensionDownloadUrl}
-          label={t("extensionDownload")}
-          className="mt-6 inline-flex rounded-full bg-fd-primary px-6 py-3 text-sm font-medium text-fd-primary-foreground no-underline transition hover:opacity-90"
-        />
+          <a
+            href={extensionDownloadUrl}
+            className="mt-6 inline-flex items-center gap-2 rounded-full bg-fd-primary px-6 py-3 text-sm font-medium text-fd-primary-foreground transition hover:opacity-90"
+          >
+            <DownloadIcon className="size-4" />
+            {t("extensionDownload")}
+          </a>
 
-        <ol className="mt-8 flex max-w-lg flex-col gap-3 text-left text-sm">
-          <Step n={1} text={t("extensionStep1")} />
-          <Step n={2} text={t("extensionStep2")} />
-          <Step n={3} text={t("extensionStep3")} />
-          <Step n={4} text={t("extensionStep4")} />
-        </ol>
+          <ol className="mt-8 flex max-w-lg flex-col gap-3 text-left text-sm">
+            <Step n={1} text={t("extensionStep1")} />
+            <Step n={2} text={t("extensionStep2")} />
+            <Step n={3} text={t("extensionStep3")} />
+            <Step n={4} text={t("extensionStep4")} />
+          </ol>
+        </div>
       </section>
 
-      <footer className="w-full max-w-3xl border-t border-fd-border px-8 py-10 text-center">
+      <footer className="w-full border-t border-fd-border px-8 py-10 text-center">
         <Link href={docsHref} className="text-sm text-fd-primary underline">
           {t("docsCta")}
         </Link>
@@ -128,25 +170,86 @@ export async function LandingContent({ locale }: { locale: string }) {
   );
 }
 
-function DownloadLink({
-  href,
-  label,
-  className,
+function SectionHeading({
+  icon,
+  heading,
+  subtitle,
 }: {
-  href: string;
-  label: string;
-  className?: string;
+  icon: ReactNode;
+  heading: string;
+  subtitle: string;
 }) {
   return (
-    <a
-      href={href}
-      className={
-        className ??
-        "text-sm text-fd-primary underline underline-offset-2 hover:opacity-80"
-      }
-    >
-      {label}
-    </a>
+    <div className="flex flex-col items-start gap-3">
+      <span className="flex size-10 items-center justify-center rounded-full bg-fd-accent text-fd-accent-foreground">
+        {icon}
+      </span>
+      <h2 className="text-2xl font-semibold">{heading}</h2>
+      <p className="max-w-xl text-sm text-fd-muted-foreground">{subtitle}</p>
+    </div>
+  );
+}
+
+function FeatureCard({
+  icon,
+  title,
+  body,
+}: {
+  icon: ReactNode;
+  title: string;
+  body: string;
+}) {
+  return (
+    <div className="rounded-xl border border-fd-border bg-fd-card p-6">
+      <span className="flex size-9 items-center justify-center rounded-full bg-fd-accent text-fd-accent-foreground">
+        {icon}
+      </span>
+      <h3 className="mt-4 text-base font-medium">{title}</h3>
+      <p className="mt-2 text-sm text-fd-muted-foreground">{body}</p>
+    </div>
+  );
+}
+
+function OsCard({
+  label,
+  primaryHref,
+  primaryLabel,
+  otherFormatsLabel,
+  otherFormats,
+  note,
+}: {
+  label: string;
+  primaryHref: string;
+  primaryLabel: string;
+  otherFormatsLabel?: string;
+  otherFormats?: { href: string; label: string }[];
+  note?: string;
+}) {
+  return (
+    <div className="flex flex-col rounded-xl border border-fd-border bg-fd-card p-5">
+      <h3 className="text-sm font-medium text-fd-muted-foreground">{label}</h3>
+      <a
+        href={primaryHref}
+        className="mt-3 inline-flex items-center justify-center gap-2 rounded-full border border-fd-border px-4 py-2.5 text-sm font-medium transition hover:bg-fd-accent"
+      >
+        <DownloadIcon className="size-4" />
+        {primaryLabel}
+      </a>
+      {otherFormats && otherFormats.length > 0 && (
+        <p className="mt-3 text-xs text-fd-muted-foreground">
+          {otherFormatsLabel}{" "}
+          {otherFormats.map((f, i) => (
+            <span key={f.href}>
+              {i > 0 && " · "}
+              <a href={f.href} className="underline underline-offset-2 hover:opacity-80">
+                {f.label}
+              </a>
+            </span>
+          ))}
+        </p>
+      )}
+      {note && <p className="mt-3 text-xs text-fd-muted-foreground">{note}</p>}
+    </div>
   );
 }
 
