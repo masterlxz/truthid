@@ -1,10 +1,8 @@
-import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:flutter/material.dart';
 
 import '../services/bundler_config_service.dart';
 import '../theme.dart';
 import '../l10n/l10n_extensions.dart';
-import 'deeplink_self_test_screen.dart';
 import 'guardian_status_screen.dart';
 import 'security_screen.dart';
 
@@ -191,25 +189,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       MaterialPageRoute(builder: (_) => const SecurityScreen()),
                     ),
                   ),
-                  if (kDebugMode) ...[
-                    const SizedBox(height: 8),
-                    const Divider(),
-                    const SizedBox(height: 8),
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: const Icon(Icons.link, color: AppColors.textMuted),
-                      title: const Text('Deep Link Self-Test'),
-                      subtitle: const Text(
-                        'Debug only — fires a truthid:// link at this app',
-                        style: TextStyle(fontSize: 12),
-                      ),
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const DeepLinkSelfTestScreen(),
-                        ),
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
