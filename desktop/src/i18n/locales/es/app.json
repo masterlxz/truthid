@@ -5,6 +5,7 @@
     "disconnectWallet": "Desconectar wallet",
     "connectWallet": "Conectar wallet",
     "donate": "Donar a TruthID",
+    "language": "Idioma",
     "logout": "Cerrar sesión",
     "logoutTitle": "Cerrar sesión y olvidar esta identidad"
   },

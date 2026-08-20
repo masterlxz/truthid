@@ -39,6 +39,8 @@ import { sendToDesktop } from '../../src/vaultEdit/desktopDelivery';
 import { startMobileDelivery, type MobileDeliverySession } from '../../src/vaultEdit/mobileDelivery';
 import { loadPinningProviderConfig, savePinningProviderConfig } from '../../src/vaultEdit/pinningProviderConfig';
 import { checkForUpdate } from '../../src/updateCheck';
+import { detectDefaultLanguage, getCurrentLanguageCode, setLanguage, t } from '../../src/i18n';
+import { loadLanguagePreference, saveLanguagePreference } from '../../src/i18n/languagePreference';
 
 const SESSION_EXPIRY_ALARM = 'truthid-vault-session-expiry';
 const START_DEAD_DROP_POLL_MESSAGE = 'truthid-start-dead-drop-poll';
@@ -51,27 +53,30 @@ const HOST_PERMISSION: chrome.permissions.Permissions = {
   origins: ['http://*/*'],
 };
 
-// Chave dos data-i18n* no HTML é lida em runtime (string genérica, não um
-// literal conhecido em tempo de compilação) — só aqui, na ponte HTML↔chrome.i18n,
-// que o tipo estrito de `getMessage` precisa ser contornado.
-type I18nMessageKey = Parameters<typeof browser.i18n.getMessage>[0];
-function getMessageByKey(key: string): string {
-  return browser.i18n.getMessage(key as I18nMessageKey);
-}
+// `chrome.i18n` nativo não permite forçar um idioma diferente do
+// navegador (sem "changeLanguage" equivalente) — por isso o popup usa o
+// dicionário próprio de `src/i18n` (bundlado, síncrono) em vez do
+// `browser.i18n.getMessage` nativo. `chrome.i18n`/`_locales` continuam
+// existindo só pro nome/descrição da extensão na loja, fora deste arquivo.
+// Resolve o idioma ativo antes de qualquer render: idioma do navegador
+// primeiro (síncrono, sem flash), depois checa se há uma preferência
+// manual salva — só quem já abriu o seletor paga o custo do `await` a
+// mais, quem nunca mexeu não percebe diferença nenhuma.
+setLanguage(detectDefaultLanguage());
 
-// Traduz o markup estático do popup.html via chrome.i18n — só os atributos
-// `data-i18n*` marcados no HTML, não o texto montado dinamicamente aqui
-// (esse já chama `browser.i18n.getMessage` direto nos handlers abaixo).
+// Traduz o markup estático do popup.html — só os atributos `data-i18n*`
+// marcados no HTML. Texto montado dinamicamente (status, listas, formulário)
+// chama `t()` direto nos handlers/módulos de UI.
 function localizePopup(): void {
-  document.title = browser.i18n.getMessage('popupTitle');
+  document.title = t('popupTitle');
   for (const el of document.querySelectorAll<HTMLElement>('[data-i18n]')) {
-    el.textContent = getMessageByKey(el.dataset.i18n!);
+    el.textContent = t(el.dataset.i18n!);
   }
   for (const el of document.querySelectorAll<HTMLInputElement>('[data-i18n-placeholder]')) {
-    el.placeholder = getMessageByKey(el.dataset.i18nPlaceholder!);
+    el.placeholder = t(el.dataset.i18nPlaceholder!);
   }
   for (const el of document.querySelectorAll<HTMLElement>('[data-i18n-aria-label]')) {
-    const message = getMessageByKey(el.dataset.i18nAriaLabel!);
+    const message = t(el.dataset.i18nAriaLabel!);
     el.setAttribute('aria-label', message);
     el.title = message;
   }
@@ -162,6 +167,7 @@ const els = {
 
   settingsView: document.getElementById('settings-view') as HTMLElement,
   settingsBackButton: document.getElementById('settings-back') as HTMLButtonElement,
+  languageSelect: document.getElementById('language-select') as HTMLSelectElement,
   kuboEndpointInput: document.getElementById('kubo-endpoint') as HTMLInputElement,
   kuboEndpointSaveButton: document.getElementById('kubo-endpoint-save') as HTMLButtonElement,
   kuboEndpointStatus: document.getElementById('kubo-endpoint-status') as HTMLElement,
@@ -195,13 +201,46 @@ els.pendingBackButton.innerHTML = icons.back;
 els.settingsBackButton.innerHTML = icons.back;
 els.searchIcon.innerHTML = icons.search;
 
+// Reflete o idioma resolvido em `setLanguage(detectDefaultLanguage())`
+// (topo do arquivo) na seleção do `<select>` assim que ele existe.
+els.languageSelect.value = getCurrentLanguageCode();
+
+function applyLanguageChange(code: string): void {
+  setLanguage(code);
+  els.languageSelect.value = getCurrentLanguageCode();
+  localizePopup();
+  // Views dinâmicas já renderizadas antes da troca (lista do vault, faixa
+  // de pendências) não são recriadas por `localizePopup()` — só os
+  // atributos `data-i18n*` do markup estático. `entry-detail`/`entry-form`
+  // não precisam do mesmo tratamento: não dá pra abrir Settings com uma
+  // delas na tela (views são mutuamente exclusivas, ver `viewSections`).
+  renderCurrentVaultList();
+  void refreshPendingEdits();
+}
+
+els.languageSelect.addEventListener('change', () => {
+  const code = els.languageSelect.value;
+  applyLanguageChange(code);
+  void saveLanguagePreference(code);
+});
+
+// Preferência manual salva (se houver) sobrepõe a auto-detecção do
+// navegador feita no topo do arquivo — só quem já trocou de idioma no
+// seletor alguma vez paga o `await` extra aqui.
+void (async () => {
+  const stored = await loadLanguagePreference();
+  if (stored && stored !== getCurrentLanguageCode()) {
+    applyLanguageChange(stored);
+  }
+})();
+
 let currentState: SessionState | null = null;
 
 async function showQr(state: SessionState): Promise<void> {
   showView('pairing');
   els.statusText.textContent = isNetworkDiscoverySupported()
-    ? browser.i18n.getMessage('statusFindHintSupported')
-    : browser.i18n.getMessage('statusFindHintUnsupported');
+    ? t('statusFindHintSupported')
+    : t('statusFindHintUnsupported');
 
   const payload = toQrPayload(
     state.sessionId,
@@ -316,7 +355,7 @@ async function ensureHostPermission(): Promise<boolean> {
 async function checkAndShowUpdateBanner(): Promise<void> {
   const newVersion = await checkForUpdate(browser.runtime.getManifest().version);
   if (!newVersion) return;
-  els.updateBannerText.textContent = browser.i18n.getMessage('updateBannerText', [newVersion]);
+  els.updateBannerText.textContent = t('updateBannerText', [newVersion]);
   els.updateBanner.hidden = false;
 }
 
@@ -344,7 +383,7 @@ async function init(): Promise<void> {
 els.findButton.addEventListener('click', async () => {
   if (!currentState) return;
   if (isExpired(currentState)) {
-    els.statusText.textContent = browser.i18n.getMessage('statusSessionExpired');
+    els.statusText.textContent = t('statusSessionExpired');
     return;
   }
 
@@ -357,7 +396,7 @@ els.findButton.addEventListener('click', async () => {
   // once..." sem nenhum caminho real de concessão nesses browsers.
   const granted = await ensureHostPermission();
   if (!granted) {
-    els.statusText.textContent = browser.i18n.getMessage('statusPermissionDeniedManualIp');
+    els.statusText.textContent = t('statusPermissionDeniedManualIp');
     return;
   }
 
@@ -367,11 +406,11 @@ els.findButton.addEventListener('click', async () => {
   // `sweepLan` já devolveria `null` de qualquer forma, mas pular direto pra
   // mensagem certa evita prometer uma busca que nunca ia rodar de verdade.
   if (!isNetworkDiscoverySupported()) {
-    els.statusText.textContent = browser.i18n.getMessage('statusDiscoveryUnsupported');
+    els.statusText.textContent = t('statusDiscoveryUnsupported');
     return;
   }
 
-  els.statusText.textContent = browser.i18n.getMessage('statusLookingForPhone');
+  els.statusText.textContent = t('statusLookingForPhone');
 
   const blob = await sweepLan(currentState.sessionId);
   if (blob) {
@@ -381,20 +420,20 @@ els.findButton.addEventListener('click', async () => {
 
   if (currentState.status === 'received') return; // dead-drop já resolveu em background enquanto o sweep rodava
 
-  els.statusText.textContent = browser.i18n.getMessage('statusCouldNotFindPhone');
+  els.statusText.textContent = t('statusCouldNotFindPhone');
 });
 
 els.manualConnectButton.addEventListener('click', async () => {
   if (!currentState) return;
   if (isExpired(currentState)) {
-    els.statusText.textContent = browser.i18n.getMessage('statusSessionExpired');
+    els.statusText.textContent = t('statusSessionExpired');
     return;
   }
 
   const ip = els.manualIpInput.value.trim();
   if (!ip) return;
 
-  els.statusText.textContent = browser.i18n.getMessage('statusTryingIp', [ip]);
+  els.statusText.textContent = t('statusTryingIp', [ip]);
   for (const port of CANDIDATE_PORTS) {
     const blob = await fetchSessionBlob(ip, port, currentState.sessionId);
     if (blob) {
@@ -402,7 +441,7 @@ els.manualConnectButton.addEventListener('click', async () => {
       return;
     }
   }
-  els.statusText.textContent = browser.i18n.getMessage('statusCouldNotReachPhone');
+  els.statusText.textContent = t('statusCouldNotReachPhone');
 });
 
 async function startNewSession(): Promise<void> {
@@ -428,14 +467,14 @@ els.newSessionButton2.addEventListener('click', () => void startNewSession());
 
 async function refreshPendingEdits(): Promise<void> {
   const pending = await listPendingEdits();
-  els.pendingEditsBadge.textContent = browser.i18n.getMessage('pendingCountBadge', [
+  els.pendingEditsBadge.textContent = t('pendingCountBadge', [
     String(pending.length),
   ]);
   els.pendingBanner.hidden = pending.length === 0;
   els.pendingBannerText.textContent =
     pending.length === 1
-      ? browser.i18n.getMessage('pendingBannerTextSingular')
-      : browser.i18n.getMessage('pendingBannerTextPlural', [String(pending.length)]);
+      ? t('pendingBannerTextSingular')
+      : t('pendingBannerTextPlural', [String(pending.length)]);
   if (pending.length === 0) {
     els.pendingEditQrWrapper.hidden = true;
     els.pendingEditsStatus.textContent = '';
@@ -467,7 +506,7 @@ els.sendToDesktopButton.addEventListener('click', async () => {
   const pending = await listPendingEdits();
   if (pending.length === 0) return;
 
-  els.pendingEditsStatus.textContent = browser.i18n.getMessage('pendingStatusLookingForDesktop');
+  els.pendingEditsStatus.textContent = t('pendingStatusLookingForDesktop');
   els.sendToDesktopButton.disabled = true;
   els.sendToPhoneButton.disabled = true;
   let removed = false;
@@ -475,18 +514,18 @@ els.sendToDesktopButton.addEventListener('click', async () => {
     const result = await sendToDesktop(pending);
     if (result.status === 'approved') {
       await removePendingEdits(pending.map((p) => p.id));
-      els.pendingEditsStatus.textContent = browser.i18n.getMessage('savedStatus');
+      els.pendingEditsStatus.textContent = t('savedStatus');
       removed = true;
     } else if (result.status === 'rejected') {
       await removePendingEdits(pending.map((p) => p.id));
-      els.pendingEditsStatus.textContent = browser.i18n.getMessage('pendingStatusRejectedOnDesktop');
+      els.pendingEditsStatus.textContent = t('pendingStatusRejectedOnDesktop');
       removed = true;
     } else if (result.status === 'not-found') {
-      els.pendingEditsStatus.textContent = browser.i18n.getMessage('pendingStatusNotFoundDesktop');
+      els.pendingEditsStatus.textContent = t('pendingStatusNotFoundDesktop');
     } else {
       els.pendingEditsStatus.textContent = result.error
-        ? browser.i18n.getMessage('pendingStatusFailedWithError', [result.status, result.error])
-        : browser.i18n.getMessage('pendingStatusFailed', [result.status]);
+        ? t('pendingStatusFailedWithError', [result.status, result.error])
+        : t('pendingStatusFailed', [result.status]);
     }
     // Achado real (Sessão 135, agora por leva inteira depois do P29): se
     // essa MESMA leva também tinha um QR de celular pendente (usuário
@@ -542,7 +581,7 @@ async function attemptMobileDelivery(
       // marca como enviada assim que o PUT chega, mesmo espírito best-effort
       // já aceito em outros lugares do projeto (dead-drop, por exemplo).
       await removePendingEdits(proposals.map((p) => p.id));
-      els.pendingEditsStatus.textContent = browser.i18n.getMessage('pendingStatusSentToPhone');
+      els.pendingEditsStatus.textContent = t('pendingStatusSentToPhone');
       els.pendingEditQrWrapper.hidden = true;
       activeMobileDelivery = null;
       delivered = true;
@@ -552,7 +591,7 @@ async function attemptMobileDelivery(
       // primeira tentativa, não por TTL vencido. `activeMobileDelivery`
       // continua de pé pro botão de retry tentar de novo com a MESMA sessão,
       // depois que o celular já escaneou e está com o servidor no ar.
-      els.pendingEditsStatus.textContent = browser.i18n.getMessage(
+      els.pendingEditsStatus.textContent = t(
         'pendingStatusCouldNotReachPhoneRetry',
       );
     }
@@ -583,7 +622,7 @@ els.sendToPhoneButton.addEventListener('click', async () => {
 
   const granted = await ensureHostPermission();
   if (!granted) {
-    els.pendingEditsStatus.textContent = browser.i18n.getMessage('permissionDenied');
+    els.pendingEditsStatus.textContent = t('permissionDenied');
     els.sendToDesktopButton.disabled = false;
     els.sendToPhoneButton.disabled = false;
     return;
@@ -600,11 +639,11 @@ els.sendToPhoneButton.addEventListener('click', async () => {
     activeMobileDelivery = { session, proposals: pending };
     els.pendingEditQrWrapper.hidden = false;
     await renderQrToCanvas(els.pendingEditQrCanvas, JSON.stringify(session.qrPayload));
-    els.pendingEditsStatus.textContent = browser.i18n.getMessage('pendingStatusScanWithPhone');
+    els.pendingEditsStatus.textContent = t('pendingStatusScanWithPhone');
   } catch (e) {
     activeMobileDelivery = null;
     els.pendingEditQrWrapper.hidden = true;
-    els.pendingEditsStatus.textContent = browser.i18n.getMessage('failedToGenerateQr', [String(e)]);
+    els.pendingEditsStatus.textContent = t('failedToGenerateQr', [String(e)]);
     els.sendToDesktopButton.disabled = false;
     els.sendToPhoneButton.disabled = false;
     return;
@@ -641,7 +680,7 @@ async function loadKuboEndpointIntoForm(): Promise<void> {
 
 els.kuboEndpointSaveButton.addEventListener('click', async () => {
   await savePinningProviderConfig(els.kuboEndpointInput.value);
-  els.kuboEndpointStatus.textContent = browser.i18n.getMessage('savedStatus');
+  els.kuboEndpointStatus.textContent = t('savedStatus');
 });
 
 void loadKuboEndpointIntoForm();

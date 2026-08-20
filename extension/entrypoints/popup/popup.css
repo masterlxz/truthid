@@ -86,6 +86,7 @@ h1 img {
 
 input,
 textarea,
+select,
 button {
   border-radius: 8px;
   border: 1px solid var(--color-border);
@@ -127,6 +128,7 @@ button:disabled {
 
 input:focus,
 textarea:focus,
+select:focus,
 button:focus-visible {
   outline: 2px solid var(--color-accent);
   outline-offset: 1px;

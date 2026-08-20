@@ -24,6 +24,7 @@
   "pendingEditRetryButton": { "message": "Escaneei — tentar enviar de novo" },
   "sendButton": { "message": "Enviar" },
   "settingsTitle": { "message": "Configurações" },
+  "languageLabel": { "message": "Idioma" },
   "kuboEndpointLabel": {
     "message": "Endpoint Kubo (permite que \"Enviar para o celular\" alcance um celular em outra rede)"
   },

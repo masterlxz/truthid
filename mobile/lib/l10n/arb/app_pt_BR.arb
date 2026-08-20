@@ -2826,5 +2826,13 @@
   "settingsScreenSecuritySubtitle": "Bloqueio do app via biometria ou PIN do dispositivo",
   "@settingsScreenSecuritySubtitle": {
     "description": "Subtitle of the list tile linking to the security screen"
+  },
+  "settingsScreenLanguageTitle": "Idioma",
+  "@settingsScreenLanguageTitle": {
+    "description": "Title of the list tile that opens the language picker"
+  },
+  "settingsScreenLanguageSheetTitle": "Escolher idioma",
+  "@settingsScreenLanguageSheetTitle": {
+    "description": "Header of the bottom sheet listing the available languages"
   }
 }

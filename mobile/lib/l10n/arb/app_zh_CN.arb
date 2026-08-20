@@ -2826,5 +2826,13 @@
   "settingsScreenSecuritySubtitle": "通过设备生物识别或 PIN 锁定应用",
   "@settingsScreenSecuritySubtitle": {
     "description": "Subtitle of the list tile linking to the security screen"
+  },
+  "settingsScreenLanguageTitle": "语言",
+  "@settingsScreenLanguageTitle": {
+    "description": "Title of the list tile that opens the language picker"
+  },
+  "settingsScreenLanguageSheetTitle": "选择语言",
+  "@settingsScreenLanguageSheetTitle": {
+    "description": "Header of the bottom sheet listing the available languages"
   }
 }

@@ -1,4 +1,4 @@
-import { browser } from 'wxt/browser';
+import { t } from '../i18n';
 
 import type { VaultEntry } from '../session/sessionState';
 import { generatePassword } from '../util/passwordGenerator';
@@ -32,7 +32,7 @@ export function renderEntryForm(
   header.className = 'detail-header';
   const title = document.createElement('h2');
   title.className = 'detail-title';
-  title.textContent = browser.i18n.getMessage(
+  title.textContent = t(
     isEditing ? 'entryFormEditTitle' : 'entryFormNewTitle',
   );
   header.appendChild(title);
@@ -41,22 +41,22 @@ export function renderEntryForm(
   const form = document.createElement('form');
   form.className = 'card entry-form';
 
-  const site = textField('site-input', browser.i18n.getMessage('fieldSite'), options.entry?.site ?? '');
+  const site = textField('site-input', t('fieldSite'), options.entry?.site ?? '');
   const url = textField(
     'url-input',
-    browser.i18n.getMessage('fieldUrl'),
+    t('fieldUrl'),
     options.entry?.url ?? '',
-    browser.i18n.getMessage('urlPlaceholder'),
+    t('urlPlaceholder'),
   );
   const username = textField(
     'username-input',
-    browser.i18n.getMessage('fieldUsername'),
+    t('fieldUsername'),
     options.entry?.username ?? '',
   );
   const { field: passwordField, input: passwordInput } = passwordFieldWithGenerate(
     options.entry?.password ?? '',
   );
-  const notes = textAreaField('notes-input', browser.i18n.getMessage('fieldNotes'), options.entry?.notes ?? '');
+  const notes = textAreaField('notes-input', t('fieldNotes'), options.entry?.notes ?? '');
 
   form.appendChild(site.field);
   form.appendChild(url.field);
@@ -68,13 +68,13 @@ export function renderEntryForm(
   actions.className = 'actions-row';
   const submit = document.createElement('button');
   submit.type = 'submit';
-  submit.textContent = browser.i18n.getMessage(
+  submit.textContent = t(
     isEditing ? 'entryFormSaveChanges' : 'entryFormAddPassword',
   );
   const cancel = document.createElement('button');
   cancel.type = 'button';
   cancel.className = 'secondary-action-button';
-  cancel.textContent = browser.i18n.getMessage('cancelButton');
+  cancel.textContent = t('cancelButton');
   cancel.addEventListener('click', options.onCancel);
   actions.appendChild(submit);
   actions.appendChild(cancel);
@@ -153,7 +153,7 @@ function passwordFieldWithGenerate(value: string): {
   field.className = 'field';
   const label = document.createElement('label');
   label.htmlFor = 'password-input';
-  label.textContent = browser.i18n.getMessage('fieldPassword');
+  label.textContent = t('fieldPassword');
   field.appendChild(label);
 
   const row = document.createElement('div');
@@ -166,7 +166,7 @@ function passwordFieldWithGenerate(value: string): {
 
   const generate = document.createElement('button');
   generate.type = 'button';
-  generate.textContent = browser.i18n.getMessage('generateButton');
+  generate.textContent = t('generateButton');
   generate.addEventListener('click', () => {
     input.value = generatePassword(GENERATOR_DEFAULTS);
   });

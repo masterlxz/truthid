@@ -1,4 +1,4 @@
-import { browser } from 'wxt/browser';
+import { t } from '../i18n';
 
 import type { VaultEntry } from '../session/sessionState';
 import { iconButton } from './icons';
@@ -51,7 +51,7 @@ export function renderVaultList(
   if (entries.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'muted';
-    empty.textContent = browser.i18n.getMessage('noEntriesInProfile');
+    empty.textContent = t('noEntriesInProfile');
     container.appendChild(empty);
     return;
   }
@@ -59,7 +59,7 @@ export function renderVaultList(
   if (filtered.length === 0) {
     const empty = document.createElement('p');
     empty.className = 'muted';
-    empty.textContent = browser.i18n.getMessage('noEntriesMatchSearch');
+    empty.textContent = t('noEntriesMatchSearch');
     container.appendChild(empty);
     return;
   }
@@ -94,7 +94,7 @@ function renderRow(entry: VaultEntry, onSelect: (entry: VaultEntry) => void): HT
   }
   row.appendChild(text);
 
-  const copy = iconButton('copy', { label: browser.i18n.getMessage('copyPasswordAriaLabel') });
+  const copy = iconButton('copy', { label: t('copyPasswordAriaLabel') });
   const copyIconHtml = copy.innerHTML;
   copy.addEventListener('click', async (event) => {
     event.stopPropagation();

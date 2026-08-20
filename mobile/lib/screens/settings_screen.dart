@@ -1,10 +1,30 @@
 import 'package:flutter/material.dart';
 
 import '../services/bundler_config_service.dart';
+import '../services/locale_service.dart';
 import '../theme.dart';
 import '../l10n/l10n_extensions.dart';
 import 'guardian_status_screen.dart';
 import 'security_screen.dart';
+
+// Nomes dos idiomas nunca são traduzidos — cada um aparece sempre no
+// próprio idioma, mesma convenção do seletor do Desktop.
+const _kLanguageNames = <String, String>{
+  'en': 'English',
+  'pt_BR': 'Português (Brasil)',
+  'es': 'Español',
+  'zh_CN': '中文',
+};
+
+// `locale` vem sempre de `Localizations.localeOf(context)` — o locale já
+// resolvido de fato (nunca `null`, mesmo quando o usuário não escolheu
+// nada manualmente e o app está seguindo o idioma do sistema).
+String _languageDisplayName(Locale locale) {
+  final key = locale.countryCode == null
+      ? locale.languageCode
+      : '${locale.languageCode}_${locale.countryCode}';
+  return _kLanguageNames[key] ?? _kLanguageNames['en']!;
+}
 
 // Tela de configuracao do bundler (Pimlico ou custom). Permite ao usuario
 // informar sua propria API key + rede, em vez de usar a chave do dev
@@ -65,6 +85,58 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _apiKeyCtrl.dispose();
     _networkCtrl.dispose();
     super.dispose();
+  }
+
+  void _showLanguageSheet(BuildContext context) {
+    final current = Localizations.localeOf(context);
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const SizedBox(height: 12),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: AppColors.border,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Text(
+                context.l10n.settingsScreenLanguageSheetTitle,
+                style: const TextStyle(
+                  fontFamily: 'SpaceGrotesk',
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+            for (final locale in LocaleService.supportedLocales)
+              ListTile(
+                title: Text(_languageDisplayName(locale)),
+                trailing: locale.languageCode == current.languageCode &&
+                        locale.countryCode == current.countryCode
+                    ? const Icon(Icons.check, color: AppColors.accent)
+                    : null,
+                onTap: () {
+                  LocaleService().setLocale(locale);
+                  Navigator.of(sheetContext).pop();
+                },
+              ),
+            const SizedBox(height: 12),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -188,6 +260,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onTap: () => Navigator.of(context).push(
                       MaterialPageRoute(builder: (_) => const SecurityScreen()),
                     ),
+                  ),
+                  const SizedBox(height: 8),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.language, color: AppColors.textMuted),
+                    title: Text(context.l10n.settingsScreenLanguageTitle),
+                    subtitle: Text(
+                      _languageDisplayName(Localizations.localeOf(context)),
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    onTap: () => _showLanguageSheet(context),
                   ),
                 ],
               ),

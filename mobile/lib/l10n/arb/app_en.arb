@@ -2826,5 +2826,13 @@
   "settingsScreenSecuritySubtitle": "App lock via your device biometrics or PIN",
   "@settingsScreenSecuritySubtitle": {
     "description": "Subtitle of the list tile linking to the security screen"
+  },
+  "settingsScreenLanguageTitle": "Language",
+  "@settingsScreenLanguageTitle": {
+    "description": "Title of the list tile that opens the language picker"
+  },
+  "settingsScreenLanguageSheetTitle": "Choose language",
+  "@settingsScreenLanguageSheetTitle": {
+    "description": "Header of the bottom sheet listing the available languages"
   }
 }

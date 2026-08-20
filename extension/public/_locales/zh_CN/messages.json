@@ -24,6 +24,7 @@
   "pendingEditRetryButton": { "message": "已扫描 — 重新尝试发送" },
   "sendButton": { "message": "发送" },
   "settingsTitle": { "message": "设置" },
+  "languageLabel": { "message": "语言" },
   "kuboEndpointLabel": {
     "message": "Kubo 节点地址（让\"发送到手机\"可以连接到不同网络中的手机）"
   },

@@ -24,6 +24,7 @@
   "pendingEditRetryButton": { "message": "I scanned it — try sending again" },
   "sendButton": { "message": "Send" },
   "settingsTitle": { "message": "Settings" },
+  "languageLabel": { "message": "Language" },
   "kuboEndpointLabel": {
     "message": "Kubo endpoint (lets \"Send to phone\" reach a phone on a different network)"
   },

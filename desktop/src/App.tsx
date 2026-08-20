@@ -10,6 +10,7 @@ import { ManageDevices } from "./components/ManageDevices";
 import { ActiveSessions } from "./components/ActiveSessions";
 import { QuickLogin } from "./components/QuickLogin";
 import { DonateModal } from "./components/DonateModal";
+import { LanguageSelector } from "./components/LanguageSelector";
 import { VaultManagement } from "./components/VaultManagement";
 import { SmartAccountDashboard } from "./components/SmartAccountDashboard";
 import { IdentityProvider } from "./contexts/IdentityContext";
@@ -210,6 +211,7 @@ function App() {
             >
               ♥
             </button>
+            <LanguageSelector />
             <button
               className="topbar-btn topbar-btn-danger"
               onClick={handleLogout}

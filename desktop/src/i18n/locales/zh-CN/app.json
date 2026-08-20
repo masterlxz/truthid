@@ -5,6 +5,7 @@
     "disconnectWallet": "断开钱包连接",
     "connectWallet": "连接钱包",
     "donate": "捐赠给 TruthID",
+    "language": "语言",
     "logout": "退出登录",
     "logoutTitle": "退出登录并忘记此身份"
   },

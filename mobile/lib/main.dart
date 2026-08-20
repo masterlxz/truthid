@@ -17,6 +17,7 @@ import 'services/app_lock_service.dart';
 import 'services/autofill_bridge_service.dart';
 import 'services/deep_link_router.dart';
 import 'services/deep_link_service.dart';
+import 'services/locale_service.dart';
 import 'theme.dart';
 
 // TODO(v2.1+): fonte duplicada de propósito temporário — devia ler de
@@ -34,7 +35,9 @@ const _kReleasesUrl =
 // conseguir empurrar uma rota mesmo sem um `BuildContext` de widget à mão.
 final navigatorKey = GlobalKey<NavigatorState>();
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await LocaleService().loadSavedLocale();
   runApp(const TruthIDApp());
 }
 
@@ -43,18 +46,19 @@ class TruthIDApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      navigatorKey: navigatorKey,
-      title: 'TruthID',
-      theme: appTheme,
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: const [
-        Locale('en'),
-        Locale('pt', 'BR'),
-        Locale('es'),
-        Locale('zh', 'CN'),
-      ],
-      home: const AppLockGate(),
+    return ValueListenableBuilder<Locale?>(
+      valueListenable: LocaleService.localeNotifier,
+      builder: (context, locale, _) {
+        return MaterialApp(
+          navigatorKey: navigatorKey,
+          title: 'TruthID',
+          theme: appTheme,
+          locale: locale,
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: LocaleService.supportedLocales,
+          home: const AppLockGate(),
+        );
+      },
     );
   }
 }
