@@ -1956,3 +1956,161 @@ reescrito no padrão de `sign_message.rs`.**
 - Possivelmente: dark mode
 
 **Estado atual**: toda a UI é funcional mas usa Material Design padrão (indigo genérico, sem personalidade). Nenhuma tela tem polish de produto final.
+
+---
+
+### Importar vault do Bitwarden — brainstorm (registrado 2026-08-20, Sessão 214)
+
+**Contexto**: pedido explícito do dono do projeto pra registrar a ideia agora, sem implementar —
+"isso tudo vai ser pro futuro". Nenhum `/plan` rodado, nenhum código tocado.
+
+**Problema que resolve**: gente que já usa Bitwarden (ou outro password manager) hoje não tem
+caminho de migração pro Vault do TruthID além de recadastrar tudo na mão — barreira real de adoção.
+
+**O que precisa ser investigado antes de desenhar**: o Bitwarden exporta em JSON (formato nativo,
+inclui pastas/campos customizados/TOTP seed se o usuário tiver Premium) ou CSV (mais simples, perde
+estrutura). Formato de exportação **cifrada** (`.json` protegido por senha, "encrypted export") vs
+**sem cifra** (texto plano) é a primeira decisão real — o export sem cifra é o caminho mais simples
+de implementar mas obriga o usuário a lidar com um arquivo de texto plano com todas as senhas no
+meio do processo, o que pode valer a pena documentar como risco explícito (apagar o arquivo depois,
+etc.) em vez de tentar evitar.
+
+**Mapeamento de campos, primeira leitura (a confirmar contra o schema real do export)**: um item de
+login do Bitwarden tem nome/username/senha/URIs/notas/campos customizados/TOTP seed — dá pra mapear
+quase 1:1 pra uma entrada do Vault (`credential_type: password`, já existe). TOTP seed do Bitwarden
+mapearia direto pro TOTP já implementado no TruthID (ver [[project-2fa-totp]] — geração local RFC
+6238, já existe o `secret` cifrado no Vault). Passkeys do Bitwarden (se existirem no export) não têm
+equivalente óbvio de migração — uma passkey é ligada à chave privada gerada no dispositivo/serviço
+original, não é "portável" por natureza (mesma limitação que qualquer migrador de passkey entre
+password managers enfrentaria, não é problema específico do TruthID).
+
+**Onde rodaria**: import é uma operação de escrita no Vault — teria que passar pelo mesmo princípio
+já estabelecido pro resto do projeto ("qualquer alteração no Vault iniciada fora do Device raiz
+precisa de aprovação", ver seção "Decisões de arquitetura já discutidas pra extensão de navegador"
+acima). Um import de N itens de uma vez é essencialmente o mesmo desenho do "Sync em lote (batch
+sync)" já implementado (seção 2.1 acima) — parsear o export, montar N propostas de entrada, revisar
+antes de publicar (1 publish só no fim, não N). Provavelmente uma tela nova no Desktop (upload do
+arquivo de export local) — não faz sentido no Mobile (arquivo de export normalmente é gerado no
+navegador/desktop do Bitwarden) nem na extensão (sem autoridade de escrita).
+
+**Em aberto, nada decidido**:
+- JSON cifrado vs. sem cifra como formato de entrada suportado (ou os dois).
+- Se vale generalizar pra um formato de import "genérico" (CSV, que outros password managers tipo
+  1Password/LastPass também exportam) em vez de acoplar especificamente ao schema do Bitwarden —
+  mais reuso, mais trabalho de mapeamento por formato.
+- O que fazer com duplicatas (mesmo domínio/username já existente no Vault) — sobrescrever, pular,
+  perguntar por item?
+- Import parcial com erro no meio (um item malformado no meio de 200) — aborta tudo ou importa o
+  resto e reporta o que falhou?
+
+**Nada implementado — fica pra quando o dono do projeto quiser rodar um `/plan` de verdade.**
+
+---
+
+### Instaladores nativos (Linux/Mac/Windows) + empacotamento pra gerenciadores de pacote — `/plan` travado (Sessão 215, 2026-08-20; brainstorm original Sessão 214)
+
+**Contexto**: registrado como brainstorm solto na Sessão 214; `/plan` completo rodado na Sessão
+215 a pedido do dono do projeto ("quero dar uma planejada", explicitamente sem implementar ainda).
+Objetivo: sair do "baixe o instalador do GitHub Releases" (já existe desde P57) pra distribuição
+via gerenciador de pacote nativo de cada SO. Escopo confirmado via `AskUserQuestion`: cobrir todos
+os 5 alvos nesta rodada de design (não só AUR); "apk" citado no pedido original era erro de
+digitação por **apt** (Debian/Ubuntu), não Alpine nem o `.apk` do Android.
+
+**Correção de um achado errado da Sessão 214**: `tauri.conf.json` já usa `bundle.targets: "all"` —
+o CI (`tauri-action@v0`) **já produz `.deb`, `.rpm` e `.AppImage`** no Linux hoje (confirmado
+contra `site/frontend/lib/releases.ts`, que já linka os 3); a Sessão 214 tinha registrado por
+engano que só `.deb` existia (o comentário do `matrix.artifact` em `build.yml` é vestigial, não
+reflete o que o `tauri-action` de fato gera). Não falta gerar artefato nenhum pra começar o AUR.
+
+**Achado real de código, fora do escopo de empacotamento em si, registrado como P61**:
+`desktop/src-tauri/Cargo.toml` nunca foi atualizado desde o template do Tauri — `version = "0.1.0"`
+(real: `2.0.0`), `name = "tauri-app"`, `description = "A Tauri App"`, `authors = ["you"]`. Isso faz
+`local_signer_server.rs` reportar `desktop_version: "0.1.0"` nos endpoints `/ping`/`/handshake`
+(via `env!("CARGO_PKG_VERSION")`) — um 3º valor de versão dessincronizado, além de
+`package.json`/`tauri.conf.json` (já duas fontes independentes mantidas na mão hoje). Mesma família
+do P59 (Mobile). Não corrigido nesta sessão.
+
+**Princípio comum aos 5 alvos**: nenhum exige mudança de código do app pra começar (Flatpak é
+exceção parcial) — todos consomem os instaladores que o `build.yml` já produz por release. O
+trabalho real é escrever/manter manifests de empacotamento em repositórios próprios ou submetidos
+aos oficiais de cada ecossistema.
+
+**Ordem de prioridade travada nesta sessão** (não implementada, só decidida):
+
+1. **APT (Debian/Ubuntu)** e **2. AUR/pacman (`yay`/`paru`)** — prioridade máxima, pedido explícito
+   do dono do projeto pros dois. **APT**: não é só linkar o `.deb` (já existe) — repositório de
+   verdade pra rodar `apt install truthid` depois de adicionar a fonte uma vez. Caminho escolhido:
+   script próprio com `dpkg-scanpackages`+`apt-ftparchive` (sem serviço terceiro tipo
+   Cloudsmith/PackageCloud — repo pequeno, controle total) gerando
+   `dists/stable/main/binary-amd64/Packages(.gz)`+`Release` assinado, hospedado como estático no
+   mesmo GitHub Pages que já serve `site/frontend` (path tipo `/apt/`, mesmo padrão de
+   `deploy-docs.yml`). Precisa de par de chaves GPG dedicado (privada como secret do GitHub
+   Actions, pública numa URL estável) usando o esquema moderno `signed-by` (não o `apt-key add`
+   descontinuado). **AUR — correção feita nesta sessão (dono do projeto notou a inconsistência)**:
+   o GitHub Actions **não tem runner nativo pra Arch** (a matrix do `build.yml` só cobre
+   `ubuntu-22.04`/`windows-latest`/`macos-latest`) e nunca vai ter via runner hospedado do GitHub —
+   isso não muda. A variante `-bin` original desta seção (extrair o `.deb` já publicado via
+   `bsdtar`, sem recompilar) reempacota um binário linkado contra as libs do **Ubuntu 22.04**
+   (glibc, `webkit2gtk`, `gtk3`, `libayatana-appindicator3`) — versões/SONAMEs podem divergir do
+   Arch (rolling release), risco real de quebra em runtime, não só teórico (comum em pacotes
+   `-bin` de apps Tauri/Electron mal feitos). **Prioridade invertida**: `PKGBUILD` **build-from-
+   source** como principal — `makepkg` roda `cargo build --release`+`npm run build` na própria
+   máquina de quem instala, linkando contra as libs do Arch de verdade, sem risco de ABI
+   cross-distro (mais lento de instalar, compila na hora, mas é o padrão mais confiável do AUR pra
+   apps GUI com bindings nativos como este). `-bin` fica como variante secundária/rápida, só depois
+   do build-from-source validado em hardware Arch real — não o inverso. Pacote:
+   `truthid`/`truthid-bin`. Publicação exige conta própria do dono do projeto no AUR
+   (`ssh://aur@aur.archlinux.org/...`, chave SSH pessoal) — não é algo que o Claude deve mexer sem
+   o dono do projeto presente.
+
+2. **Homebrew (macOS)** e **winget (Windows)** — segunda prioridade, sem fricção de sandboxing.
+   **Homebrew**: tap próprio (`masterlxz/homebrew-truthid`, `Casks/truthid.rb`) em vez de submeter
+   pro `homebrew-cask` oficial — mais rápido de iterar, migra pro oficial depois se o volume
+   justificar. Mantém a limitação já conhecida (só Apple Silicon, achado do P57). **winget**:
+   manifest YAML (installer/locale/version) submetido via PR ao `microsoft/winget-pkgs` (mais
+   "nativo" que Chocolatey — vem instalado por padrão no Windows 10/11), usando o `.msi`. Primeira
+   submissão tem review manual da comunidade; bumps depois são automatizáveis via
+   `wingetcreate update`. **Chocolatey fica como alvo secundário**, sem prioridade nesta rodada.
+
+   **Achado real, pré-requisito pros dois — assinatura de código ausente**: confirmado em
+   `build.yml`, o único secret usado no job do Desktop é `GITHUB_TOKEN` — não existe certificado de
+   assinatura nenhum pra macOS/Windows (diferente do Mobile, que já assina o `.apk` via
+   `KEYSTORE_BASE64`/`KEY_ALIAS`). Sem isso: no **macOS**, o Gatekeeper bloqueia o app instalado via
+   `brew install --cask` ("desenvolvedor não pode ser verificado"), exigindo workaround manual
+   (botão direito → Abrir, ou `xattr -d com.apple.quarantine`) — mina a confiança que o canal
+   Homebrew deveria trazer; resolve com Apple Developer ID (~US$99/ano) + notarização (`notarytool`,
+   já suportado nativamente pelo `tauri-action`, só falta o certificado). No **Windows**, o
+   SmartScreen mostra "O Windows protegeu o computador" no instalador não assinado — o
+   `winget-pkgs` aceita mesmo assim, mas a reputação "Unknown Publisher" persiste até ganhar
+   reputação orgânica; resolve com um certificado de code-signing (EV ou OV, custo variável,
+   compra/decisão do dono do projeto). **Não bloqueia o desenho do apt/AUR** (a assinatura que
+   importa lá é a do repositório/GPG, já coberta acima, não a do binário) — é específico de
+   Homebrew/winget. Decisão de comprar os certificados fica pro dono do projeto, fora do escopo
+   deste `/plan`.
+
+3. **Flatpak** — maior incerteza dos 5, tratar como spike próprio antes de comprometer com
+   Flathub. Fricções reais achadas nesta sessão: Ledger fala HID nativo (`hidapi` crate, vendor ID
+   `0x2c97`, não WebHID/WebUSB) — precisa de acesso a `/dev/hidraw*`, geralmente `--device=all`
+   (permissão ampla, mal vista pelos revisores do Flathub); `~/.truthid/` é usado direto como
+   diretório de config — sob Flatpak isso exigiria `--filesystem=home` (também amplo) sem mudar o
+   código pra `$XDG_DATA_HOME`; keyring via Secret Service normalmente resolve com
+   `--talk-name=org.freedesktop.secrets` (não é bloqueio); `webkit2gtk` é manipulado direto em Rust
+   (hook do sinal `permission-request` pra câmera/QR) — comportamento dentro do WebKitGTK do
+   runtime Flatpak não está confirmado. Recomendação: testar local com `flatpak-builder` (confirmar
+   Ledger/keyring/câmera sandboxed) antes de desenhar um manifest de verdade ou submeter ao
+   Flathub. **Snap** segue fora do escopo, mesma ressalva de sandboxing, sem pedido explícito.
+
+**Ponto secundário em aberto, não bloqueia nada**: os 3 apps já têm checador de update caseiro
+(banner linkando pro GitHub Release, ver P58) — uma vez instalado via `apt`/AUR/Homebrew/winget, o
+gerenciador de pacote passa a ser o caminho natural de update (`apt upgrade`/`pacman -Syu`/
+`brew upgrade`/`winget upgrade`), tornando o banner redundante pra quem instalou por esses canais
+(ainda útil pra quem baixou o instalador cru do GitHub Release direto). Não é uma decisão a tomar
+agora — só registrar que os dois mecanismos vão coexistir.
+
+**Nada implementado nesta sessão — só o desenho acima travado.** Cada alvo (principalmente APT/AUR,
+os dois de maior prioridade) é candidato a retomar com trabalho real quando o dono do projeto
+quiser: criar as chaves GPG/conta AUR (fora do que o Claude deve fazer sozinho), escrever o
+`PKGBUILD`/script do repo APT, e estender `build.yml` com o job de publicação. Homebrew/winget
+adicionalmente dependem da decisão de comprar certificados de assinatura de código antes de valer
+a pena publicar (achado acima) — sem isso, os manifests funcionariam tecnicamente mas entregariam
+uma experiência ruim de primeira instalação.
