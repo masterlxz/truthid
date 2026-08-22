@@ -2089,7 +2089,7 @@ aos oficiais de cada ecossistema.
    deste `/plan`.
 
 3. **Flatpak** — maior incerteza dos 5, tratar como spike próprio antes de comprometer com
-   Flathub. Fricções reais achadas nesta sessão: Ledger fala HID nativo (`hidapi` crate, vendor ID
+   Flathub. Fricções reais achadas na Sessão 215: Ledger fala HID nativo (`hidapi` crate, vendor ID
    `0x2c97`, não WebHID/WebUSB) — precisa de acesso a `/dev/hidraw*`, geralmente `--device=all`
    (permissão ampla, mal vista pelos revisores do Flathub); `~/.truthid/` é usado direto como
    diretório de config — sob Flatpak isso exigiria `--filesystem=home` (também amplo) sem mudar o
@@ -2099,6 +2099,48 @@ aos oficiais de cada ecossistema.
    runtime Flatpak não está confirmado. Recomendação: testar local com `flatpak-builder` (confirmar
    Ledger/keyring/câmera sandboxed) antes de desenhar um manifest de verdade ou submeter ao
    Flathub. **Snap** segue fora do escopo, mesma ressalva de sandboxing, sem pedido explícito.
+
+### Flatpak — spike rodado de verdade com hardware real (Sessão 218, 2026-08-22)
+
+Testado com `flatpak-builder`/`flatpak run` de verdade (não só teoria) — máquina tem webcam real
+(`Integrated_Webcam_HD`, `/dev/video0`) e um `/dev/hidraw0` já presente, então deu pra confirmar os
+4 pontos de fricção da Sessão 215 com evidência concreta, não suposição:
+
+1. **Ledger (hidraw)**: confirmado que `--device=all` é a **única** opção — Flatpak não tem
+   permissão granular pra dispositivo HID arbitrário por vendor ID. Sem nenhuma permissão, `/dev/
+   hidraw0` simplesmente não existe dentro do sandbox; com `--device=all`, aparece normalmente.
+2. **Câmera pro QR**: **mesma flag `--device=all` já resolve os dois de graça** — achado que a
+   Sessão 215 não previa (tratava como 2 fricções separadas). Testado além de só "o device aparece":
+   rodei um pipeline `gst-launch-1.0 v4l2src ! videoconvert ! jpegenc ! filesink` de verdade dentro
+   do sandbox (`GStreamer` é o motor por trás do `getUserMedia` do WebKitGTK no Linux) e capturei um
+   JPEG real de 640×480 da webcam física — confirma que não é só o nó do device visível, o caminho
+   de captura funciona de ponta a ponta dentro do Flatpak.
+3. **`~/.truthid/` vs XDG**: confirmado com um marcador real gravado no host **antes** do teste —
+   `--filesystem=home` enxerga o `~/.truthid` real (broad, como esperado). Mas **achado novo**:
+   `--filesystem=xdg-data/truthid:create` (bem mais estreito, escopado só a essa subpasta) também
+   enxerga um marcador real gravado em `~/.local/share/truthid` — confirma que trocar o código pra
+   usar `$XDG_DATA_HOME/truthid` em vez do `~/.truthid` fixo hoje eliminaria a necessidade da
+   permissão ampla, sem perder nada. Mudança de código pequena (só o path de resolução de config),
+   não implementada ainda — fica pra quando o manifest de verdade for desenhado.
+4. **Keyring**: confirmado — `--talk-name=org.freedesktop.secrets` sozinho já basta (D-Bus ping
+   respondeu certo), sem precisar de nenhuma permissão de filesystem.
+
+**Achado novo que a Sessão 215 não sabia**: este sistema já roda `xdg-desktop-portal` 1.22.1, que
+expõe um portal `org.freedesktop.portal.Usb` (`EnumerateDevices`/`AcquireDevices`) — pensado
+exatamente pra esse tipo de caso (chaves de hardware) sem precisar de `--device=all`. **Não é um
+substituto imediato**: a crate `hidapi` abre `/dev/hidraw*` direto via path, não sabe nada de
+portais nem de receber um file descriptor já aberto — usar o portal de verdade exigiria reescrever
+a camada de comunicação com a Ledger pra aceitar um fd via portal em vez de abrir o path, trabalho
+real de Rust, não só de manifest. Registrado aqui como opção mais estreita pro futuro, não como
+bloqueio da decisão de hoje.
+
+**Veredito**: Flatpak é tecnicamente viável com `--device=all` (mesmo padrão usado por outros apps
+de hardware wallet no Flathub, ex. Electrum/Sparrow) — é uma permissão ampla que reviewers do
+Flathub costumam questionar, mas não é um bloqueio automático de aceitação, só atenção extra na
+review. Próximo passo real (não feito nesta sessão): trocar `~/.truthid` por `$XDG_DATA_HOME/
+truthid` no código, depois desenhar o manifest de verdade (build completo do Tauri via
+`flatpak-builder`, precisa de `cargo-sources.json` pra build offline de Rust + appdata/`.desktop`)
+antes de submeter ao Flathub.
 
 **Ponto secundário em aberto, não bloqueia nada**: os 3 apps já têm checador de update caseiro
 (banner linkando pro GitHub Release, ver P58) — uma vez instalado via `apt`/AUR/Homebrew/winget, o
