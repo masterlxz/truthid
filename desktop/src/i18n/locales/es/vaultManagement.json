@@ -76,8 +76,10 @@
     "backToVault": "← Vault",
     "arweaveWalletTitle": "Wallet de Arweave",
     "backupTitle": "Respaldo",
+    "bitwardenImportButton": "⇩ Importar de Bitwarden",
     "backupButton": "⏏ Respaldo",
-    "providersButton": "⚙ Proveedores"
+    "providersButton": "⚙ Proveedores",
+    "bitwardenImportTitle": "Importar de Bitwarden"
   },
   "status": {
     "checkingOnChain": "Verificando estado on-chain...",

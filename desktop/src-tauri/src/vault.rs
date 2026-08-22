@@ -25,9 +25,12 @@ pub(crate) struct VaultEntry {
     /// Lista de grupos a que esta entrada pertence (ex: ["Trabalho", "Casa"]).
     #[serde(default)]
     pub profiles: Vec<String>,
-    /// Campo legado — só lido na desserialização para migração. Nunca escrito.
+    /// Campo legado — só lido na desserialização para migração. Nunca
+    /// escrito de propósito (por isso `pub(crate)` em vez de privado: outros
+    /// módulos como `bitwarden_import` precisam do literal de struct
+    /// completo, mas continuam sempre passando `String::new()` aqui).
     #[serde(default, skip_serializing)]
-    profile: String,
+    pub(crate) profile: String,
     /// Segredo TOTP (RFC 6238) em base32, se o usuário configurou 2FA pra essa
     /// entrada. Cálculo do código acontece em TS/Dart, não no Rust — este
     /// campo nunca deve ser incluído no payload enviado à extensão de

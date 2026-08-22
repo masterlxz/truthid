@@ -22,6 +22,7 @@ import type {
 } from "../types";
 import { VaultSettings } from "./VaultSettings";
 import { VaultBackup } from "./VaultBackup";
+import { BitwardenImport } from "./BitwardenImport";
 import { useVaultPublish } from "../hooks/useVaultPublish";
 import { TotpCode } from "./TotpCode";
 import { TotpQrScanner } from "./TotpQrScanner";
@@ -888,7 +889,7 @@ export function VaultManagement() {
   }
 
   // ── View ──────────────────────────────────────────────────────────────────
-  const [view, setView] = useState<"entries" | "settings" | "backup">("entries");
+  const [view, setView] = useState<"entries" | "settings" | "backup" | "bitwarden-import">("entries");
 
   // ── Entradas locais ───────────────────────────────────────────────────────
   const [entries, setEntries] = useState<VaultEntry[]>([]);
@@ -1172,6 +1173,24 @@ export function VaultManagement() {
     );
   }
 
+  // ── View: bitwarden-import ───────────────────────────────────────────────
+  if (view === "bitwarden-import") {
+    return (
+      <div>
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1rem" }}>
+          <button
+            onClick={() => setView("entries")}
+            style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)", padding: "0.3em 0.8em" }}
+          >
+            {t("vaultManagement.header.backToVault")}
+          </button>
+          <h2 style={{ margin: 0 }}>{t("vaultManagement.header.bitwardenImportTitle")}</h2>
+        </div>
+        <BitwardenImport onImported={loadAll} />
+      </div>
+    );
+  }
+
   // ── Guard: vault key ─────────────────────────────────────────────────────
   if (vaultKeyReady === null) {
     return <div className="card"><p className="muted">{t("vaultManagement.unlockVault.checking")}</p></div>;
@@ -1214,6 +1233,12 @@ export function VaultManagement() {
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "1rem" }}>
         <h2 style={{ margin: 0 }}>{t("vaultManagement.header.title")}</h2>
         <div style={{ display: "flex", gap: "0.5rem" }}>
+          <button
+            onClick={() => setView("bitwarden-import")}
+            style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)", padding: "0.3em 0.8em", fontSize: "0.85em" }}
+          >
+            {t("vaultManagement.header.bitwardenImportButton")}
+          </button>
           <button
             onClick={() => setView("backup")}
             style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)", padding: "0.3em 0.8em", fontSize: "0.85em" }}

@@ -35,6 +35,14 @@ pbkdf2 = "0.12"
 sha2 = "0.10"
 aes-gcm = "0.10"
 base64 = "0.22"
+# Import de export do Bitwarden (bitwarden_import.rs) — o vault do próprio
+# projeto usa AES-GCM (aes-gcm acima), mas o formato "password protected" do
+# Bitwarden usa AES-256-CBC+HMAC-SHA256 (EncString deles); cbc/aes/hmac
+# cobrem isso, argon2 cobre o kdfType Argon2id (PBKDF2 já tinha pbkdf2 acima).
+cbc = "0.1"
+aes = "0.8"
+hmac = "0.12"
+argon2 = "0.5"
 reqwest = { version = "0.12", features = ["json"] }
 axum = "0.8"
 tower-http = { version = "0.6", features = ["cors"] }

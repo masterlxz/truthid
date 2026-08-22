@@ -14,6 +14,7 @@ mod arweave;
 mod autofill_address;
 mod autofill_creditcard;
 mod backup;
+mod bitwarden_import;
 mod bundler;
 mod config;
 mod ipfs;
@@ -1287,7 +1288,9 @@ pub fn run() {
             arweave::arweave_wallet_balance,
             arweave::arweave_publish,
             arweave::arweave_get_status,
-            arweave::arweave_fetch
+            arweave::arweave_fetch,
+            bitwarden_import::bitwarden_decrypt_export,
+            bitwarden_import::bitwarden_parse_export
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

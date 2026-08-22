@@ -87,6 +87,23 @@ export type VaultEntry = {
   updated_at: number;
 };
 
+/** Um candidato a import (`bitwarden_import.rs::bitwarden_parse_export`) — os
+ * campos de `VaultEntry` (via `#[serde(flatten)]` no Rust) mais o id da
+ * entrada existente que parece ser a mesma, se achou alguma. */
+export type BitwardenImportCandidate = VaultEntry & {
+  possible_duplicate_id: string | null;
+};
+
+export type BitwardenSkippedItem = {
+  name: string;
+  reason: string;
+};
+
+export type BitwardenImportPreview = {
+  candidates: BitwardenImportCandidate[];
+  skipped: BitwardenSkippedItem[];
+};
+
 export type PublishResult = {
   cid: string;
   content_hash: string;

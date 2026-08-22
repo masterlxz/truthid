@@ -1959,51 +1959,46 @@ reescrito no padrão de `sign_message.rs`.**
 
 ---
 
-### Importar vault do Bitwarden — brainstorm (registrado 2026-08-20, Sessão 214)
+### Importar vault do Bitwarden — implementado (Sessão 218, 2026-08-22)
 
-**Contexto**: pedido explícito do dono do projeto pra registrar a ideia agora, sem implementar —
-"isso tudo vai ser pro futuro". Nenhum `/plan` rodado, nenhum código tocado.
+Brainstorm da Sessão 214 virou `/plan` real e foi implementado na mesma sessão. Decisões via
+pergunta direta ao dono do projeto: JSON sem cifra **e** o "password protected" do Bitwarden (CSV
+fica de fora); só os tipos `Login`+`Card`; duplicata decidida por item na tela de revisão; publish
+fica pro botão "Enviar" que já existe (import só grava local).
 
-**Problema que resolve**: gente que já usa Bitwarden (ou outro password manager) hoje não tem
-caminho de migração pro Vault do TruthID além de recadastrar tudo na mão — barreira real de adoção.
+**Achado real, corrige a suposição original**: a suposição de que import passaria pela "aprovação
+de device externo" (parágrafo antigo desta seção) estava errada — Desktop é o próprio controller e
+sempre escreve direto no Vault local sem aprovação (`vault_edit.rs:41-42`, confirmado); só o
+princípio de "N upserts locais + 1 publish no fim" do sync em lote foi reaproveitado, não o fluxo de
+aprovação em si.
 
-**O que precisa ser investigado antes de desenhar**: o Bitwarden exporta em JSON (formato nativo,
-inclui pastas/campos customizados/TOTP seed se o usuário tiver Premium) ou CSV (mais simples, perde
-estrutura). Formato de exportação **cifrada** (`.json` protegido por senha, "encrypted export") vs
-**sem cifra** (texto plano) é a primeira decisão real — o export sem cifra é o caminho mais simples
-de implementar mas obriga o usuário a lidar com um arquivo de texto plano com todas as senhas no
-meio do processo, o que pode valer a pena documentar como risco explícito (apagar o arquivo depois,
-etc.) em vez de tentar evitar.
+**Formato do export "password protected" — implementado replicando o algoritmo real do Bitwarden**
+(lido direto do código-fonte deles, `bitwarden/clients`, não de memória): PBKDF2-HMAC-SHA256 (ou
+Argon2id) deriva uma master key a partir da senha do export + salt; HKDF-Expand-SHA256 (sem etapa de
+Extract — a master key já serve como PRK) "estica" em `encKey`/`macKey` de 32 bytes cada
+(`info="enc"`/`"mac"`); cada `EncString` (`"2.<iv>|<data>|<mac>"`) é validado via HMAC-SHA256 em
+tempo constante antes de decifrar AES-256-CBC+PKCS7. Novo módulo `desktop/src-tauri/src/
+bitwarden_import.rs`: `bitwarden_decrypt_export` (só entra em jogo se o arquivo for cifrado) +
+`bitwarden_parse_export` (mapeia os itens, cifrados ou não, pra `VaultEntry` — `Login`→`credential`,
+`Card`→`creditCard`, resto vai pra `skipped` reportado na tela, não descartado silencioso; pasta do
+Bitwarden vira `profiles`; TOTP normaliza tanto o segredo base32 cru quanto uma URI `otpauth://`
+completa). Novas crates (`cbc`/`aes`/`hmac`/`argon2`, RustCrypto, mesma família de `aes-gcm`/
+`pbkdf2` já usadas no projeto).
 
-**Mapeamento de campos, primeira leitura (a confirmar contra o schema real do export)**: um item de
-login do Bitwarden tem nome/username/senha/URIs/notas/campos customizados/TOTP seed — dá pra mapear
-quase 1:1 pra uma entrada do Vault (`credential_type: password`, já existe). TOTP seed do Bitwarden
-mapearia direto pro TOTP já implementado no TruthID (ver [[project-2fa-totp]] — geração local RFC
-6238, já existe o `secret` cifrado no Vault). Passkeys do Bitwarden (se existirem no export) não têm
-equivalente óbvio de migração — uma passkey é ligada à chave privada gerada no dispositivo/serviço
-original, não é "portável" por natureza (mesma limitação que qualquer migrador de passkey entre
-password managers enfrentaria, não é problema específico do TruthID).
+**Frontend**: `BitwardenImport.tsx`+`useBitwardenImport.ts` seguem o mesmo esqueleto de picker de
+arquivo do `VaultBackup.tsx` (`@tauri-apps/plugin-dialog`+`plugin-fs`). Tela de revisão com 1 linha
+por candidato, duplicata com seletor pular/sobrescrever/importar-como-nova (padrão pular). Confirmar
+só chama `vault_upsert_entry` (mesmo comando que add/edit manual já usa) em loop — sem publish
+automático, fica pro botão que já existe. Integrado em `VaultManagement.tsx` como uma `view` nova
+(`"bitwarden-import"`), mesmo padrão do `"backup"` já existente.
 
-**Onde rodaria**: import é uma operação de escrita no Vault — teria que passar pelo mesmo princípio
-já estabelecido pro resto do projeto ("qualquer alteração no Vault iniciada fora do Device raiz
-precisa de aprovação", ver seção "Decisões de arquitetura já discutidas pra extensão de navegador"
-acima). Um import de N itens de uma vez é essencialmente o mesmo desenho do "Sync em lote (batch
-sync)" já implementado (seção 2.1 acima) — parsear o export, montar N propostas de entrada, revisar
-antes de publicar (1 publish só no fim, não N). Provavelmente uma tela nova no Desktop (upload do
-arquivo de export local) — não faz sentido no Mobile (arquivo de export normalmente é gerado no
-navegador/desktop do Bitwarden) nem na extensão (sem autoridade de escrita).
-
-**Em aberto, nada decidido**:
-- JSON cifrado vs. sem cifra como formato de entrada suportado (ou os dois).
-- Se vale generalizar pra um formato de import "genérico" (CSV, que outros password managers tipo
-  1Password/LastPass também exportam) em vez de acoplar especificamente ao schema do Bitwarden —
-  mais reuso, mais trabalho de mapeamento por formato.
-- O que fazer com duplicatas (mesmo domínio/username já existente no Vault) — sobrescrever, pular,
-  perguntar por item?
-- Import parcial com erro no meio (um item malformado no meio de 200) — aborta tudo ou importa o
-  resto e reporta o que falhou?
-
-**Nada implementado — fica pra quando o dono do projeto quiser rodar um `/plan` de verdade.**
+**Verificado**: `cargo test --lib` 191/191 (7 novos, incluindo um teste de ida-e-volta da decifra
+`EncString` com um fixture construído à mão — o fixture real do próprio Bitwarden, achado no código
+deles, não expõe a senha usada pra criá-lo, só os bytes cifrados), `cargo clippy --lib` limpo (1
+aviso pré-existente, nenhum novo); `npx vitest run` 105/105 (4 novos), `tsc --noEmit` limpo,
+`npm run build` limpo. **Não validado**: um export real do Bitwarden com senha conhecida (a conta
+de teste não existe neste ambiente) e nenhum clique real na UI (mesma lacuna já registrada pro resto
+do Desktop, sem ferramenta de clique confiável neste ambiente) — fica pro dono do projeto.
 
 ---
 
