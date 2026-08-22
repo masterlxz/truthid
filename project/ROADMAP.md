@@ -2114,3 +2114,46 @@ quiser: criar as chaves GPG/conta AUR (fora do que o Claude deve fazer sozinho),
 adicionalmente dependem da decisão de comprar certificados de assinatura de código antes de valer
 a pena publicar (achado acima) — sem isso, os manifests funcionariam tecnicamente mas entregariam
 uma experiência ruim de primeira instalação.
+
+### APT — implementado (Sessão 217, 2026-08-21)
+
+Dono do projeto pediu pra começar pelo APT (adiando Homebrew de propósito por causa do custo do
+certificado — ver P63 em `PENDING.md`). **Decisão via `AskUserQuestion`**: nome do pacote fica
+`truth-id` (o que o `tauri-action` já deriva automaticamente de `productName: "TruthID"` — trocar
+pra `truthid` exigiria mudar `productName` e rebatizaria os instaladores já publicados; achado no
+processo, não estava registrado em lugar nenhum antes).
+
+**Implementado e validado de ponta a ponta**:
+- `scripts/build-apt-repo.sh` — monta `pool/`+`dists/stable/` a partir de um `.deb`
+  (`dpkg-scanpackages`+`apt-ftparchive`), assina `Release` (`InRelease` clearsign +
+  `Release.gpg` destacado, os dois formatos lado a lado) e exporta a chave pública em keyring
+  binário (`truthid-archive-keyring.gpg`, esquema moderno `signed-by`, sem `apt-key add`).
+- Chave GPG dedicada gerada (RSA 4096, sem senha — só pra automação de CI, mesmo padrão de outros
+  repos apt de terceiros; expira em 2028-08-21, **vai precisar de rotação antes disso**), fingerprint
+  `D171 3F06 808A F236 F77A 0D51 8DA0 8793 D3D4 D55A`. Privada cadastrada como secret do GitHub
+  Actions (`APT_GPG_PRIVATE_KEY`/`APT_GPG_KEY_ID`) via `gh secret set`, nunca commitada; apagada do
+  disco local depois de cadastrada.
+- `.github/workflows/deploy-docs.yml` estendido: baixa o `.deb` `amd64` do release mais recente
+  (`gh release download`), roda o script, publica em `site/frontend/out/apt/` — vira parte do mesmo
+  artifact que o `actions/deploy-pages` já publica (não dá pra ter dois artifacts concorrentes nesse
+  modelo, então o repo APT é remontado do zero a cada deploy, não só quando sai release novo). Novo
+  trigger `release: types: [published]` — dispara automaticamente quando o dono do projeto publica o
+  draft do release (o `build.yml` já cria como draft).
+- **Validado localmente com o `.deb` real do `v2.0.0`** (não só teoria): container `ubuntu:22.04`
+  (mesmo SO do runner do CI) com `dpkg-dev`+`apt-utils`+`gnupg2`, rodando o script de ponta a ponta,
+  `gpg --verify` confirmando as duas assinaturas, e o teste mais forte — `apt-get update`+
+  `apt-cache show truth-id`+`apt-get install --dry-run` contra um `sources.list.d` real apontando
+  pro repo montado (`file://`), resolvendo a árvore de dependências (`libwebkit2gtk-4.1-0`,
+  `libgtk-3-0`, etc.) certinho. **Não validado ainda**: uma execução real do workflow no GitHub
+  Actions (só simulado localmente) — próximo release publicado vai ser o primeiro teste de verdade
+  em produção.
+- **Achado colateral, sem ação necessária**: o `.deb` do `v2.0.0` (buildado antes do P61) tem
+  `Maintainer: you`/`Description: A Tauri App` — os mesmos defaults do template do Tauri que o P61
+  já corrigiu no `Cargo.toml` na mesma sessão. O próximo `.deb` buildado a partir da `main` atual já
+  sai com `Maintainer: masterlxz`/`Description: TruthID Desktop`, sem trabalho extra.
+
+**Falta pra fechar o alvo por completo**: (1) instruções de instalação na landing/doc pública —
+decidido não fazer nesta sessão pra não quebrar a paridade de tradução das 4 superfícies (mesma
+disciplina do P49/`check_mdx_parity.py`), fica pra quando o dono do projeto quiser; (2) confirmar
+que o workflow roda de verdade no próximo release publicado (o dry-run local prova o script, não
+prova o YAML do Actions); (3) rotação da chave GPG antes de 2028-08-21.

@@ -1,8 +1,12 @@
 name: Deploy Docs
 
-# Builda e publica a doc (Fumadocs, dentro de site/frontend) e a landing
-# pública (instaladores) no GitHub Pages a cada push na main que toque
-# site/frontend/. A landing (app/page.tsx + app/[locale]/page.tsx) é
+# Builda e publica a doc (Fumadocs, dentro de site/frontend), a landing
+# pública (instaladores) e o repositório APT (project/ROADMAP.md, seção
+# "Instaladores nativos", Sessões 215/217) no GitHub Pages. O
+# actions/deploy-pages substitui o site inteiro a cada deploy (um artifact
+# só) — por isso o repo APT é remontado do zero em toda execução, não só
+# quando um release novo sai, senão um push de doc sem release novo
+# apagaria o /apt/ do ar. A landing (app/page.tsx + app/[locale]/page.tsx) é
 # estática, sem dependência do backend Rails, então vai pro ar; só o login
 # OAuth (/signin) e o /dashboard são removidos antes do build, porque essa é
 # uma exportação estática sem o backend Rails por trás (ver
@@ -12,7 +16,10 @@ on:
     branches: [main]
     paths:
       - 'site/frontend/**'
+      - 'scripts/build-apt-repo.sh'
       - '.github/workflows/deploy-docs.yml'
+  release:
+    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -52,6 +59,30 @@ jobs:
         env:
           NEXT_BASE_PATH: /truthid
         run: npm run build
+
+      - name: Install apt repo tooling
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq dpkg-dev apt-utils gnupg2
+
+      - name: Download latest .deb release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download --repo "${{ github.repository }}" --pattern "*_amd64.deb" --dir /tmp/apt-src --clobber
+
+      - name: Import APT signing key
+        env:
+          GPG_PRIVATE_KEY: ${{ secrets.APT_GPG_PRIVATE_KEY }}
+        run: |
+          export GNUPGHOME=/tmp/apt-gnupg
+          mkdir -p "$GNUPGHOME" && chmod 700 "$GNUPGHOME"
+          echo "$GPG_PRIVATE_KEY" | gpg --batch --import
+
+      - name: Build APT repo
+        env:
+          GNUPGHOME: /tmp/apt-gnupg
+          GPG_KEY_ID: ${{ secrets.APT_GPG_KEY_ID }}
+        run: |
+          DEB_FILE=$(find /tmp/apt-src -name '*_amd64.deb' | head -n1)
+          bash scripts/build-apt-repo.sh "$DEB_FILE" site/frontend/out/apt
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
