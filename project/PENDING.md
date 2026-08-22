@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-08-22 (Sessão 218: P60 fechado — os 4 SDKs publicados de verdade nos registries; achado técnico do P64 — LTO do `makepkg` incompatível com `ld.lld` no build do `hidapi` — isolado e corrigido, validado 2× via `makepkg -f`; P64 segue bloqueado só pelo cadastro pausado no AUR)
+> Última atualização: 2026-08-22 (Sessão 218: P60 fechado — os 4 SDKs publicados de verdade nos registries; achado técnico do P64 corrigido — LTO do `makepkg` incompatível com `ld.lld` no build do `hidapi`, validado 2× via `makepkg -f`, P64 segue bloqueado só pelo cadastro pausado no AUR; P65 novo — PR do winget aberto de verdade, aguardando review)
 
 ---
 
@@ -35,6 +35,12 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 ---
 
 ## Não Resolvidas
+
+### P65 — PR do winget aberto, aguardando review da comunidade (Sessão 218)
+
+| ID | Item | Onde se originou | Prioridade |
+|---|---|---|---|
+| P65 | Manifest (`packaging/winget/masterlxz.TruthID.*.yaml`) escrito e validado contra o schema JSON real v1.28.0 do `microsoft/winget-cli` (`jsonschema`/Python, os 3 arquivos vieram `VALID`). Fork `masterlxz/winget-pkgs` criado, arquivos commitados via GitHub Contents API (repo tem ~820MB, clone completo seria inviável), PR aberto: https://github.com/microsoft/winget-pkgs/pull/422612. **Não bloqueia nada** — só esperando o pipeline automatizado (roda em runner Windows real, pode achar algo que a validação de schema local não pega) e o review manual da comunidade, primeira submissão de um novo pacote sempre passa por isso. `.msi` não é assinado (mesma ressalva já registrada no `ROADMAP.md` — winget aceita, só perde reputação "Unknown Publisher"). | conversa direta, PR real aberto (Sessão 218) | 🟡 Baixa — só acompanhar o PR |
 
 ### P64 — publicação no AUR bloqueada: cadastro de conta novo pausado pelo próprio AUR (Sessão 217); achado técnico do `hidapi`/linker isolado e corrigido (Sessão 218)
 

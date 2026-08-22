@@ -2193,3 +2193,35 @@ passou".
 
 **Segue bloqueado**: cadastro de conta nova no AUR continua pausado pelo próprio AUR (sem prazo) — nada
 a fazer aqui além de esperar. Quando reabrir, o build já está confiável pra publicar de verdade.
+
+### winget — manifest submetido, PR real aberto no microsoft/winget-pkgs (Sessão 218, 2026-08-22)
+
+Terceiro alvo dos 5 do `/plan` da Sessão 215 (depois de apt e AUR). Diferente do Homebrew (P63,
+adiado por decisão de custo), o winget **aceita instaladores não assinados** — só perde reputação
+("Unknown Publisher") até ganhar tração orgânica, não é bloqueio de submissão — então seguiu sem
+esperar a decisão do certificado de code-signing.
+
+**`.msi` já existia**: `build.yml` já gera `TruthID_2.0.0_x64_en-US.msi` no release `v2.0.0` (bundle
+`targets: "all"` do `tauri.conf.json`, mesmo achado da Sessão 214) — não precisou de nenhum código
+novo, só o manifest.
+
+**Manifest escrito à mão** (`packaging/winget/`, 3 arquivos: `masterlxz.TruthID.yaml`/`.installer.yaml`/
+`.locale.en-US.yaml`), `PackageIdentifier` `masterlxz.TruthID` (confirmado livre — não existia no
+repo). Puxado o schema JSON real (v1.28.0, a versão atual do `microsoft/winget-cli`, não a versão
+mais antiga da memória de treino) direto do GitHub e validado com `jsonschema`/Python contra os 3
+arquivos — os 3 vieram `VALID` antes de qualquer submissão. SHA256 do `.msi` calculado a partir do
+asset real do release (`ec05ec2b...`), URL do installer confirmada resolvendo 200.
+
+**Fork + PR reais abertos**: dado o tamanho do `microsoft/winget-pkgs` (~820MB, um clone completo
+seria inviável), o fork (`masterlxz/winget-pkgs`) foi criado via `gh repo fork` e os 3 arquivos
+commitados direto numa branch nova via GitHub Contents API (`gh api .../contents/...`, sem clonar o
+repo inteiro) — jeito mais leve de contribuir num monorepo desse tamanho sem baixar histórico
+gigante. PR aberto: https://github.com/microsoft/winget-pkgs/pull/422612 ("New version:
+masterlxz.TruthID version 2.0.0"), aguardando review da comunidade/pipeline automatizado do
+winget-pkgs (1ª submissão sempre passa por review manual; bumps futuros dá pra automatizar com
+`wingetcreate update`, mas essa ferramenta é Windows-only — não roda neste ambiente Linux).
+
+**Não testado**: instalação de verdade via `winget install masterlxz.TruthID` num Windows real (sem
+acesso a Windows neste ambiente) — só a validação de schema e a resolução da URL foram confirmadas.
+Se o pipeline do winget-pkgs (que roda em runners Windows de verdade) apontar algo, vai aparecer
+como comentário automatizado no PR.
