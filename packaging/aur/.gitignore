@@ -1,0 +1,6 @@
+# Artefatos locais do makepkg — só PKGBUILD e .SRCINFO vão pro repo.
+pkg/
+src/
+*.tar.gz
+*.tar.zst
+*.tar.xz

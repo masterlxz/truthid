@@ -36,6 +36,12 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 
 ## Não Resolvidas
 
+### P64 — publicação no AUR bloqueada: cadastro de conta novo pausado pelo próprio AUR (Sessão 217)
+
+| ID | Item | Onde se originou | Prioridade |
+|---|---|---|---|
+| P64 | `PKGBUILD` (`packaging/aur/PKGBUILD`) escrito, build-from-source (`npm ci`+`tauri build --bundles deb`, reaproveitando o `data.tar` do próprio bundler do Tauri em vez de um `.desktop`/ícone mantido à mão). **Bloqueado por 2 motivos, um externo e um técnico ainda não resolvido**: (1) publicar exige conta no AUR (`aur.archlinux.org/register`), que **está com cadastro temporariamente pausado pelo próprio AUR** ("dealing with a wave of automated account creation", sem prazo definido — pedem explicitamente pra não ficar tentando de novo em loop; **não script/automatizar retry contra essa página**). (2) **Achado real, não totalmente resolvido**: o crate Rust `hidapi` (usado pra falar com a Ledger via HID nativo) falha ao linkar no Arch com o linker padrão do Rust 1.97 (`rust-lld`) — `undefined reference` pros símbolos `hid_*`, mesmo com o backend `linux-static-hidraw` (padrão da crate) corretamente selecionado e o `libhidapi.a` estático contendo os símbolos (confirmado via `nm`). Contornado forçando `RUSTFLAGS="-C link-arg=-fuse-ld=bfd"` no `build()` do PKGBUILD — **funcionou uma vez, de ponta a ponta** (`npm run tauri build -- --bundles deb` limpo, produziu `TruthID_2.0.0_amd64.deb` de verdade), mas **falhou de novo com o mesmo erro numa segunda tentativa idêntica** (mesmo comando, mesmo `RUSTFLAGS`, target dir limpo) — comportamento inconsistente entre execuções aparentemente idênticas, causa raiz exata não isolada (não é cache poluído entre tentativas — confirmado descartando essa hipótese: uma extração 100% fresca via `makepkg -f`, que sempre reextrai `src/` do zero, falhou). Pode ser uma instabilidade real do link de bibliotecas estáticas produzidas pela crate `cc` com o toolchain atual do Arch. **Não bloqueia nada hoje** (P64 já está bloqueado pelo motivo 1), mas precisa de mais investigação antes de confiar no build pra valer quando o AUR reabrir. | conversa direta (Sessão 217), tentativa real de cadastro + múltiplos builds locais de teste | 🟡 Baixa — bloqueado por decisão externa do AUR; achado técnico do `hidapi`/linker fica registrado pra retomar junto |
+
 ### P56 — rotação de DEK ao revogar device nunca funcionou de verdade; corrigida a causa e a ordem insegura (Sessão 206)
 
 | ID | Item | Onde se originou | Prioridade |

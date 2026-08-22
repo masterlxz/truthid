@@ -1,0 +1,23 @@
+pkgbase = truthid
+	pkgdesc = Self-sovereign identity desktop app — your device holds the keys, no server in the middle
+	pkgver = 2.0.0
+	pkgrel = 1
+	url = https://github.com/masterlxz/truthid
+	arch = x86_64
+	license = MIT
+	makedepends = rust
+	makedepends = nodejs
+	makedepends = npm
+	makedepends = patchelf
+	makedepends = pkgconf
+	depends = webkit2gtk-4.1
+	depends = gtk3
+	depends = libayatana-appindicator
+	depends = librsvg
+	depends = dbus
+	depends = libsecret
+	depends = hidapi
+	source = truthid-2.0.0.tar.gz::https://github.com/masterlxz/truthid/archive/refs/tags/v2.0.0.tar.gz
+	sha256sums = 634b31bed8e1536c884f861c088604e4ee5d346348d0428c239d7297747007bc
+
+pkgname = truthid

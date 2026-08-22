@@ -1,0 +1,47 @@
+# Maintainer: masterlxz <fabio.anjos.junior@gmail.com>
+#
+# Build-from-source, not -bin: compiles cargo build+npm run build on the
+# installer's own machine, linking against the Arch system's own libs — no
+# cross-distro ABI risk (project/ROADMAP.md, "Instaladores nativos",
+# Sessão 215: reempacotar o .deb do Ubuntu 22.04 direto carregava risco real
+# de glibc/webkit2gtk/gtk3 divergentes do Arch, rolling release).
+#
+# package() reuses Tauri's own .deb bundler output instead of hand-rolling a
+# .desktop file/icon set that could drift from what's actually shipped —
+# tauri-bundler already produces a correct data.tar (binary + .desktop +
+# icons) as part of `tauri build --bundles deb`; this just unpacks that
+# straight into $pkgdir.
+pkgname=truthid
+pkgver=2.0.0
+pkgrel=1
+pkgdesc="Self-sovereign identity desktop app — your device holds the keys, no server in the middle"
+arch=('x86_64')
+url="https://github.com/masterlxz/truthid"
+license=('MIT')
+depends=('webkit2gtk-4.1' 'gtk3' 'libayatana-appindicator' 'librsvg' 'dbus' 'libsecret' 'hidapi')
+makedepends=('rust' 'nodejs' 'npm' 'patchelf' 'pkgconf')
+source=("$pkgname-$pkgver.tar.gz::https://github.com/masterlxz/truthid/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('634b31bed8e1536c884f861c088604e4ee5d346348d0428c239d7297747007bc')
+
+build() {
+  cd "$srcdir/truthid-$pkgver/desktop"
+  npm ci --legacy-peer-deps
+  # rust-lld (Arch's rustc default linker as of 1.97) fails to resolve
+  # symbols from the hidapi crate's statically-compiled libhidapi.a
+  # (linux-static-hidraw backend, the crate's Linux default) — confirmed
+  # real on a clean Arch build (Sessão 217): undefined hid_* symbols at
+  # link time. ld.bfd links it correctly. Not hit by build.yml's GitHub
+  # Actions Ubuntu runner, whose rustc toolchain doesn't default to lld.
+  export RUSTFLAGS="-C link-arg=-fuse-ld=bfd"
+  npm run tauri build -- --bundles deb
+}
+
+package() {
+  cd "$srcdir/truthid-$pkgver/desktop"
+  local deb
+  deb=$(find src-tauri/target/release/bundle/deb -name '*.deb' -print -quit)
+  local extractdir="$srcdir/deb-extract"
+  mkdir -p "$extractdir"
+  ar x "$deb" --output="$extractdir"
+  tar -xf "$extractdir"/data.tar.* -C "$pkgdir"
+}
