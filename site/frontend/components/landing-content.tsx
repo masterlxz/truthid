@@ -10,7 +10,7 @@ import {
   PuzzleIcon,
   ScanIcon,
 } from "@/components/icons";
-import { AptInstallCard } from "@/components/apt-install-card";
+import { DownloadSelector, type OsEntry } from "@/components/download-selector";
 import { desktopDownloads, extensionDownloadUrl } from "@/lib/releases";
 
 // Shared between app/page.tsx (English, unprefixed root — see
@@ -23,6 +23,95 @@ export async function LandingContent({ locale }: { locale: string }) {
   // an empty slug, only explicit ones like intro/quickstart/etc.
   const docsHref =
     locale === "en" ? "/docs/intro" : `/${locale}/docs/intro`;
+
+  // Each OS lists every way to install it. Today only Linux has more than
+  // one (direct download vs APT) — Windows/macOS/Android get a single
+  // "direct" method until winget/Homebrew/etc. land (project/ROADMAP.md,
+  // "Instaladores nativos"), at which point they just gain another entry
+  // here instead of another card somewhere on the page.
+  const osEntries: OsEntry[] = [
+    {
+      id: "linux",
+      label: t("linuxLabel"),
+      methods: [
+        {
+          id: "direct",
+          label: t("methodDirect"),
+          method: {
+            kind: "direct",
+            primaryHref: desktopDownloads.linux.deb,
+            primaryLabel: t("linuxPrimaryCta"),
+            otherFormatsLabel: t("otherFormats"),
+            otherFormats: [
+              { href: desktopDownloads.linux.appImage, label: ".AppImage" },
+              { href: desktopDownloads.linux.rpm, label: ".rpm" },
+            ],
+          },
+        },
+        {
+          id: "apt",
+          label: t("methodApt"),
+          method: {
+            kind: "apt",
+            subtitle: t("aptSubtitle"),
+            copyLabel: t("aptCopy"),
+            copiedLabel: t("aptCopied"),
+          },
+        },
+      ],
+    },
+    {
+      id: "windows",
+      label: t("windowsLabel"),
+      methods: [
+        {
+          id: "direct",
+          label: t("methodDirect"),
+          method: {
+            kind: "direct",
+            primaryHref: desktopDownloads.windows.exe,
+            primaryLabel: t("windowsPrimaryCta"),
+            otherFormatsLabel: t("otherFormats"),
+            otherFormats: [
+              { href: desktopDownloads.windows.msi, label: ".msi" },
+            ],
+          },
+        },
+      ],
+    },
+    {
+      id: "macos",
+      label: t("macosLabel"),
+      methods: [
+        {
+          id: "direct",
+          label: t("methodDirect"),
+          method: {
+            kind: "direct",
+            primaryHref: desktopDownloads.macos.dmg,
+            primaryLabel: t("macosPrimaryCta"),
+            note: t("macosNote"),
+          },
+        },
+      ],
+    },
+    {
+      id: "android",
+      label: t("androidLabel"),
+      methods: [
+        {
+          id: "direct",
+          label: t("methodDirect"),
+          method: {
+            kind: "direct",
+            primaryHref: desktopDownloads.android.apk,
+            primaryLabel: t("androidPrimaryCta"),
+            note: t("androidNote"),
+          },
+        },
+      ],
+    },
+  ];
 
   return (
     <main className="relative flex flex-1 flex-col items-center overflow-hidden">
@@ -122,47 +211,8 @@ export async function LandingContent({ locale }: { locale: string }) {
             subtitle={t("desktopSubtitle")}
           />
 
-          <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <OsCard
-              label={t("linuxLabel")}
-              primaryHref={desktopDownloads.linux.deb}
-              primaryLabel={t("linuxPrimaryCta")}
-              otherFormatsLabel={t("otherFormats")}
-              otherFormats={[
-                { href: desktopDownloads.linux.appImage, label: ".AppImage" },
-                { href: desktopDownloads.linux.rpm, label: ".rpm" },
-              ]}
-            />
-            <OsCard
-              label={t("windowsLabel")}
-              primaryHref={desktopDownloads.windows.exe}
-              primaryLabel={t("windowsPrimaryCta")}
-              otherFormatsLabel={t("otherFormats")}
-              otherFormats={[
-                { href: desktopDownloads.windows.msi, label: ".msi" },
-              ]}
-            />
-            <OsCard
-              label={t("macosLabel")}
-              primaryHref={desktopDownloads.macos.dmg}
-              primaryLabel={t("macosPrimaryCta")}
-              note={t("macosNote")}
-            />
-            <OsCard
-              label={t("androidLabel")}
-              primaryHref={desktopDownloads.android.apk}
-              primaryLabel={t("androidPrimaryCta")}
-              note={t("androidNote")}
-            />
-          </div>
-
           <div className="mt-8">
-            <AptInstallCard
-              heading={t("aptHeading")}
-              subtitle={t("aptSubtitle")}
-              copyLabel={t("aptCopy")}
-              copiedLabel={t("aptCopied")}
-            />
+            <DownloadSelector os={osEntries} />
           </div>
         </div>
       </section>
@@ -241,49 +291,6 @@ function FeatureCard({
       </span>
       <h3 className="mt-4 text-base font-medium">{title}</h3>
       <p className="mt-2 text-sm text-fd-muted-foreground">{body}</p>
-    </div>
-  );
-}
-
-function OsCard({
-  label,
-  primaryHref,
-  primaryLabel,
-  otherFormatsLabel,
-  otherFormats,
-  note,
-}: {
-  label: string;
-  primaryHref: string;
-  primaryLabel: string;
-  otherFormatsLabel?: string;
-  otherFormats?: { href: string; label: string }[];
-  note?: string;
-}) {
-  return (
-    <div className="flex flex-col rounded-xl border border-fd-border bg-fd-card p-5">
-      <h3 className="text-sm font-medium text-fd-muted-foreground">{label}</h3>
-      <a
-        href={primaryHref}
-        className="mt-3 inline-flex items-center justify-center gap-2 rounded-full border border-fd-border px-4 py-2.5 text-sm font-medium transition hover:bg-fd-accent"
-      >
-        <DownloadIcon className="size-4" />
-        {primaryLabel}
-      </a>
-      {otherFormats && otherFormats.length > 0 && (
-        <p className="mt-3 text-xs text-fd-muted-foreground">
-          {otherFormatsLabel}{" "}
-          {otherFormats.map((f, i) => (
-            <span key={f.href}>
-              {i > 0 && " · "}
-              <a href={f.href} className="underline underline-offset-2 hover:opacity-80">
-                {f.label}
-              </a>
-            </span>
-          ))}
-        </p>
-      )}
-      {note && <p className="mt-3 text-xs text-fd-muted-foreground">{note}</p>}
     </div>
   );
 }
