@@ -8,7 +8,7 @@
 // were named "tauri-app_1.0.0_..." — not because of package.json's `name`
 // field, as originally assumed when this file was written for P57.
 const REPO = "masterlxz/truthid";
-const TAG = "v2.0.0";
+const TAG = "v2.1.0";
 
 function assetUrl(filename: string): string {
   return `https://github.com/${REPO}/releases/download/${TAG}/${filename}`;
@@ -16,26 +16,27 @@ function assetUrl(filename: string): string {
 
 export const desktopDownloads = {
   linux: {
-    deb: assetUrl("TruthID_2.0.0_amd64.deb"),
-    appImage: assetUrl("TruthID_2.0.0_amd64.AppImage"),
-    rpm: assetUrl("TruthID-2.0.0-1.x86_64.rpm"),
+    deb: assetUrl("TruthID_2.1.0_amd64.deb"),
+    appImage: assetUrl("TruthID_2.1.0_amd64.AppImage"),
+    rpm: assetUrl("TruthID-2.1.0-1.x86_64.rpm"),
   },
   windows: {
-    exe: assetUrl("TruthID_2.0.0_x64-setup.exe"),
-    msi: assetUrl("TruthID_2.0.0_x64_en-US.msi"),
+    exe: assetUrl("TruthID_2.1.0_x64-setup.exe"),
+    msi: assetUrl("TruthID_2.1.0_x64_en-US.msi"),
   },
   macos: {
     // Apple Silicon only — the macos-latest CI runner doesn't produce an
     // Intel build.
-    dmg: assetUrl("TruthID_2.0.0_aarch64.dmg"),
+    dmg: assetUrl("TruthID_2.1.0_aarch64.dmg"),
   },
   android: {
     apk: assetUrl("app-release.apk"),
   },
 };
 
-// Extension version is now unified with the other 2 apps (v2.0.0) — see
-// project/PENDING.md, "versão unificada" (Sessão 213).
+// Extension version stayed at 2.0.0 in the v2.1.0 release — this bump only
+// touched the Desktop/Mobile apps (Bitwarden import, language picker), so
+// extension/package.json wasn't rebuilt/republished.
 export const extensionDownloadUrl = assetUrl(
   "truthid-vault-extension-2.0.0-chrome.zip",
 );

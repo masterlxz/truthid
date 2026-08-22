@@ -39,7 +39,8 @@ Centralized identity providers create account lockouts, data collection, and a s
 | Smart contracts | Solidity (Foundry) | [`contracts/`](contracts/) |
 | Desktop app | Tauri + Rust + React + TypeScript | [`desktop/`](desktop/) |
 | Mobile app | Flutter | [`mobile/`](mobile/) |
-| SDKs | TypeScript, Python, Ruby | [`sdk/`](sdk/) |
+| Browser extension (autofill) | TypeScript (WXT) | [`extension/`](extension/) |
+| SDKs | TypeScript, Python, Ruby, Dart | [`sdk/`](sdk/) |
 | E2E integration tests | viem + tsx, against local Anvil | [`integration/`](integration/) |
 | Site (account + future billing) | Ruby on Rails + Next.js + Postgres | [`site/`](site/) |
 
@@ -65,8 +66,13 @@ Use one of the official SDKs — they wrap challenge creation, signature verific
 | TypeScript | [`truthid-sdk`](https://www.npmjs.com/package/truthid-sdk) on npm |
 | Python | [`truthid-sdk`](https://pypi.org/project/truthid-sdk/) on PyPI |
 | Ruby | [`truthid-sdk`](https://rubygems.org/gems/truthid-sdk) on RubyGems |
+| Dart / Flutter | [`truthid_sdk`](https://pub.dev/packages/truthid_sdk) on pub.dev |
 
 Full API reference, quickstart, and framework examples (Express / Flask / Sinatra): [`sdk/README.md`](sdk/README.md).
+
+## Installing
+
+Prebuilt binaries (Desktop for Linux/Windows/macOS, Mobile APK, browser extension) are published on [GitHub Releases](https://github.com/masterlxz/truthid/releases/latest) — the [landing page](https://masterlxz.github.io/truthid/) has a guided picker per OS, including a signed APT repository for Debian/Ubuntu. AUR, Homebrew, winget, and Flatpak packaging are in progress — see [`project/ROADMAP.md`](project/ROADMAP.md).
 
 ## Building from source
 
