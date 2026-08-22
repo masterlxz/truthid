@@ -10,12 +10,8 @@ import {
   PuzzleIcon,
   ScanIcon,
 } from "@/components/icons";
-import {
-  aptKeyringUrl,
-  aptSourceLine,
-  desktopDownloads,
-  extensionDownloadUrl,
-} from "@/lib/releases";
+import { AptInstallCard } from "@/components/apt-install-card";
+import { desktopDownloads, extensionDownloadUrl } from "@/lib/releases";
 
 // Shared between app/page.tsx (English, unprefixed root — see
 // app/layout.tsx for why) and app/[locale]/page.tsx (pt-BR/es/zh-CN).
@@ -136,7 +132,6 @@ export async function LandingContent({ locale }: { locale: string }) {
                 { href: desktopDownloads.linux.appImage, label: ".AppImage" },
                 { href: desktopDownloads.linux.rpm, label: ".rpm" },
               ]}
-              extra={<AptInstallBlock label={t("linuxAptLabel")} />}
             />
             <OsCard
               label={t("windowsLabel")}
@@ -158,6 +153,15 @@ export async function LandingContent({ locale }: { locale: string }) {
               primaryHref={desktopDownloads.android.apk}
               primaryLabel={t("androidPrimaryCta")}
               note={t("androidNote")}
+            />
+          </div>
+
+          <div className="mt-8">
+            <AptInstallCard
+              heading={t("aptHeading")}
+              subtitle={t("aptSubtitle")}
+              copyLabel={t("aptCopy")}
+              copiedLabel={t("aptCopied")}
             />
           </div>
         </div>
@@ -248,7 +252,6 @@ function OsCard({
   otherFormatsLabel,
   otherFormats,
   note,
-  extra,
 }: {
   label: string;
   primaryHref: string;
@@ -256,7 +259,6 @@ function OsCard({
   otherFormatsLabel?: string;
   otherFormats?: { href: string; label: string }[];
   note?: string;
-  extra?: ReactNode;
 }) {
   return (
     <div className="flex flex-col rounded-xl border border-fd-border bg-fd-card p-5">
@@ -282,29 +284,6 @@ function OsCard({
         </p>
       )}
       {note && <p className="mt-3 text-xs text-fd-muted-foreground">{note}</p>}
-      {extra}
-    </div>
-  );
-}
-
-// Commands themselves aren't translated (shell syntax, same everywhere) —
-// only the label above them is, via the `download.linuxAptLabel` key.
-function AptInstallBlock({ label }: { label: string }) {
-  const commands = [
-    `curl -fsSL ${aptKeyringUrl} -o /usr/share/keyrings/truthid-archive-keyring.gpg`,
-    `echo "${aptSourceLine}" | sudo tee /etc/apt/sources.list.d/truthid.list`,
-    "sudo apt update && sudo apt install truth-id",
-  ];
-  return (
-    <div className="mt-4 border-t border-fd-border pt-3">
-      <p className="text-xs text-fd-muted-foreground">{label}</p>
-      <pre className="mt-2 overflow-x-auto rounded-lg bg-fd-secondary p-3 text-[11px] leading-relaxed">
-        <code>
-          {commands.map((line) => (
-            <div key={line}>{line}</div>
-          ))}
-        </code>
-      </pre>
     </div>
   );
 }
