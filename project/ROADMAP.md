@@ -2173,3 +2173,23 @@ em `lib/releases.ts` (`aptKeyringUrl`/`aptSourceLine`) — diferente das URLs de
 `eslint` limpos; export estático (`NEXT_BASE_PATH=/truthid`, removendo `/signin`+`/dashboard` antes,
 mesmo passo do CI) limpo; conteúdo confirmado renderizando de verdade (não fallback) via `grep` no
 HTML exportado nos 4 idiomas (`en`, `pt-BR`, `es`, `zh-CN`).
+
+### AUR — achado técnico do build isolado e corrigido; publicação segue bloqueada por decisão externa do AUR (Sessão 218, 2026-08-22)
+
+`packaging/aur/PKGBUILD` (Sessão 217) usava `RUSTFLAGS="-C link-arg=-fuse-ld=bfd"` pra contornar um erro
+de link (`undefined symbol` em todos os `hid_*` da crate `hidapi`) que só acontecia dentro do `makepkg`,
+não num `cargo build` direto no repo — e que falhava de forma inconsistente mesmo com o workaround
+(funcionou uma vez, falhou numa repetição idêntica). Ver detalhe completo em `PENDING.md` (P64).
+
+**Causa raiz**: `OPTIONS=(...lto...)` do `/etc/makepkg.conf` do Arch injeta `-flto=auto` no `CFLAGS`
+global — a crate `cc` (usada pelo build script do `hidapi` pra compilar o `hid.c` vendorizado) honra essa
+variável de ambiente, fazendo o GCC produzir um objeto LTO no formato GIMPLE que o `ld.lld` (linker
+padrão do rustc no Arch) não sabe processar (LLD só entende bitcode LLVM). `-fuse-ld=bfd` mascarava o
+problema via o plugin de LTO do binutils carregado pelo `collect2` — caminho frágil o bastante pra
+explicar a inconsistência. **Corrigido** trocando o `RUSTFLAGS` por `options=('!lto')` no `PKGBUILD`
+(desliga a injeção de LTO só pra este pacote, na raiz) — validado 2× consecutivas via `makepkg -f`
+limpo, com `nm` confirmando as 20 funções `hid_*` como código real no binário final, não só "build
+passou".
+
+**Segue bloqueado**: cadastro de conta nova no AUR continua pausado pelo próprio AUR (sem prazo) — nada
+a fazer aqui além de esperar. Quando reabrir, o build já está confiável pra publicar de verdade.

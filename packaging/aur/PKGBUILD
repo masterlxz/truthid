@@ -22,17 +22,24 @@ depends=('webkit2gtk-4.1' 'gtk3' 'libayatana-appindicator' 'librsvg' 'dbus' 'lib
 makedepends=('rust' 'nodejs' 'npm' 'patchelf' 'pkgconf')
 source=("$pkgname-$pkgver.tar.gz::https://github.com/masterlxz/truthid/archive/refs/tags/v$pkgver.tar.gz")
 sha256sums=('634b31bed8e1536c884f861c088604e4ee5d346348d0428c239d7297747007bc')
+# Root cause of the undefined hid_* symbols at link time (Sessão 217/218):
+# makepkg's global OPTIONS=(...lto...) appends -flto=auto to CFLAGS, which
+# the hidapi crate's build script (via the `cc` crate, which honors ambient
+# CFLAGS) passes to gcc when compiling the vendored hid.c (linux-static-
+# hidraw backend). That produces a GCC GIMPLE-LTO object — a format ld.lld
+# (Arch's rustc default linker) has no support for at all (LLD only
+# understands LLVM bitcode LTO). Every hid_* symbol comes back undefined.
+# `-fuse-ld=bfd` "worked" only because collect2 loads binutils' own LTO
+# plugin to recompile the IR at link time for bfd/gold — a fragile path
+# that explained the flakiness (identical builds sometimes failing).
+# Disabling LTO for this package removes the incompatible object entirely,
+# so the default linker (lld) links the real machine code directly — no
+# workaround needed. Confirmed via a real `makepkg -f` end-to-end run.
+options=('!lto')
 
 build() {
   cd "$srcdir/truthid-$pkgver/desktop"
   npm ci --legacy-peer-deps
-  # rust-lld (Arch's rustc default linker as of 1.97) fails to resolve
-  # symbols from the hidapi crate's statically-compiled libhidapi.a
-  # (linux-static-hidraw backend, the crate's Linux default) — confirmed
-  # real on a clean Arch build (Sessão 217): undefined hid_* symbols at
-  # link time. ld.bfd links it correctly. Not hit by build.yml's GitHub
-  # Actions Ubuntu runner, whose rustc toolchain doesn't default to lld.
-  export RUSTFLAGS="-C link-arg=-fuse-ld=bfd"
   npm run tauri build -- --bundles deb
 }
 

@@ -17,6 +17,7 @@ pkgbase = truthid
 	depends = dbus
 	depends = libsecret
 	depends = hidapi
+	options = !lto
 	source = truthid-2.0.0.tar.gz::https://github.com/masterlxz/truthid/archive/refs/tags/v2.0.0.tar.gz
 	sha256sums = 634b31bed8e1536c884f861c088604e4ee5d346348d0428c239d7297747007bc
 
