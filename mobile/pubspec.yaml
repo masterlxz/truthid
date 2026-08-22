@@ -44,6 +44,11 @@ dependencies:
   app_links: ^6.0.0
   pointycastle: ^3.9.1
   local_auth: ^2.3.0
+  # Pinado em 9.0.1 (não a última, 10.x) de propósito: 10.x sobe a
+  # dependência de win32 pra ^6.0.1, incompatível com o win32 ^5.9.0 exigido
+  # pelo file_picker 10.3.6 (já pinado acima por outro motivo). 9.0.1 usa
+  # win32 ^5.5.3, satisfaz os dois.
+  package_info_plus: 9.0.1
   # Pinado em 10.3.6 (não ^) de propósito: 8.x/9.x hardcodeiam compileSdk 34
   # no build.gradle do plugin (quebra com flutter_plugin_android_lifecycle,
   # que exige compileSdk 36+); 11.x só aplica o Kotlin Gradle Plugin quando

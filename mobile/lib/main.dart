@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'l10n/generated/app_localizations.dart';
@@ -20,12 +21,6 @@ import 'services/deep_link_service.dart';
 import 'services/locale_service.dart';
 import 'theme.dart';
 
-// TODO(v2.1+): fonte duplicada de propósito temporário — devia ler de
-// pubspec.yaml via package_info_plus (mesma ideia do __APP_VERSION__ do
-// Desktop, injetado do package.json), mas o ambiente desta sessão não tem
-// Flutter instalado pra adicionar/verificar uma dependência nova com
-// segurança. Manter sincronizado com `version:` em pubspec.yaml até lá.
-const _kAppVersion = '2.0.0';
 const _kDonateAddress = '0xB54fe9909D76d98e87a9fD76bDB5C69fABe10265';
 const _kReleasesUrl =
     'https://api.github.com/repos/masterlxz/truthid/releases/latest';
@@ -292,7 +287,8 @@ class _RootScreenState extends State<RootScreen> with WidgetsBindingObserver {
       final data = jsonDecode(body) as Map<String, dynamic>;
       final tag = ((data['tag_name'] as String?) ?? '').replaceFirst('v', '');
       final url = (data['html_url'] as String?) ?? '';
-      if (tag.isNotEmpty && _isNewer(tag, _kAppVersion) && mounted) {
+      final info = await PackageInfo.fromPlatform();
+      if (tag.isNotEmpty && _isNewer(tag, info.version) && mounted) {
         setState(() {
           _updateVersion = tag;
           _updateUrl = url;
