@@ -29,6 +29,7 @@
     "desktopSubtitle": "App nativo pra Linux, Windows e macOS. Pareia com o app mobile e guarda a chave do seu device.",
     "linuxLabel": "Linux",
     "linuxPrimaryCta": "Baixar para Linux",
+    "linuxAptLabel": "Ou instale via APT (Debian/Ubuntu):",
     "windowsLabel": "Windows",
     "windowsPrimaryCta": "Baixar para Windows",
     "macosLabel": "macOS",

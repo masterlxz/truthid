@@ -29,6 +29,7 @@
     "desktopSubtitle": "Native app for Linux, Windows, and macOS. Pairs with the mobile app and holds your device key.",
     "linuxLabel": "Linux",
     "linuxPrimaryCta": "Download for Linux",
+    "linuxAptLabel": "Or install via APT (Debian/Ubuntu):",
     "windowsLabel": "Windows",
     "windowsPrimaryCta": "Download for Windows",
     "macosLabel": "macOS",

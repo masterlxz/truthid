@@ -2152,8 +2152,24 @@ processo, não estava registrado em lugar nenhum antes).
   já corrigiu no `Cargo.toml` na mesma sessão. O próximo `.deb` buildado a partir da `main` atual já
   sai com `Maintainer: masterlxz`/`Description: TruthID Desktop`, sem trabalho extra.
 
-**Falta pra fechar o alvo por completo**: (1) instruções de instalação na landing/doc pública —
-decidido não fazer nesta sessão pra não quebrar a paridade de tradução das 4 superfícies (mesma
-disciplina do P49/`check_mdx_parity.py`), fica pra quando o dono do projeto quiser; (2) confirmar
-que o workflow roda de verdade no próximo release publicado (o dry-run local prova o script, não
-prova o YAML do Actions); (3) rotação da chave GPG antes de 2028-08-21.
+**Falta pra fechar o alvo por completo**: (1) rotação da chave GPG antes de 2028-08-21.
+
+**Push real confirmado em produção, mesma sessão**: o `deploy-docs.yml` dispara em push que toque o
+workflow, então o commit acima já rodou de verdade contra o GitHub Pages público assim que subiu —
+não só o dry-run local. As 5 URLs (`InRelease`, `Release`, `Packages`, `truthid-archive-keyring.gpg`,
+o `.deb` em `pool/`) confirmadas 200 contra `masterlxz.github.io/truthid/apt/`, e o teste mais forte
+repetido contra a URL pública de verdade (não mais `file://`): `apt update`+`apt-cache show truth-id`
+resolvendo certinho num container `ubuntu:22.04` limpo, exatamente o comando que um usuário real
+digitaria.
+
+**Instruções de instalação adicionadas na landing pública, mesma sessão** (dono do projeto pediu
+na sequência): `AptInstallBlock` novo em `landing-content.tsx`, dentro do card Linux da seção
+Desktop — 3 comandos (`curl`+`echo`+`apt install`) num bloco de código, não traduzidos (sintaxe de
+shell é igual em qualquer idioma); só o rótulo acima (`download.linuxAptLabel`) é traduzido, chave
+nova adicionada nos 4 `messages/*.json` (paridade confirmada por script). URLs do repo centralizadas
+em `lib/releases.ts` (`aptKeyringUrl`/`aptSourceLine`) — diferente das URLs de download por asset
+(que travam em `TAG`), essas não mudam entre versões, já que o `deploy-docs.yml` sempre remonta
+`/apt/` a partir do release mais recente. Verificado: `npm run build` dinâmico + `tsc --noEmit` +
+`eslint` limpos; export estático (`NEXT_BASE_PATH=/truthid`, removendo `/signin`+`/dashboard` antes,
+mesmo passo do CI) limpo; conteúdo confirmado renderizando de verdade (não fallback) via `grep` no
+HTML exportado nos 4 idiomas (`en`, `pt-BR`, `es`, `zh-CN`).

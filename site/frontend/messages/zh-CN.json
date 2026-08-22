@@ -29,6 +29,7 @@
     "desktopSubtitle": "适用于 Linux、Windows 和 macOS 的原生应用。可与手机应用配对，并保存你的设备密钥。",
     "linuxLabel": "Linux",
     "linuxPrimaryCta": "下载 Linux 版",
+    "linuxAptLabel": "或通过 APT 安装（Debian/Ubuntu）：",
     "windowsLabel": "Windows",
     "windowsPrimaryCta": "下载 Windows 版",
     "macosLabel": "macOS",

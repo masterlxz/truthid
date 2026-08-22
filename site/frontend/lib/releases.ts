@@ -41,3 +41,12 @@ export const extensionDownloadUrl = assetUrl(
 );
 
 export const releasePageUrl = `https://github.com/${REPO}/releases/tag/${TAG}`;
+
+// APT repository (project/ROADMAP.md, "Instaladores nativos", Sessão 217) —
+// unlike the URLs above, not tied to TAG: deploy-docs.yml remounts /apt/
+// from the latest published release on every deploy, so this path stays
+// stable across versions.
+export const aptKeyringUrl =
+  "https://masterlxz.github.io/truthid/apt/truthid-archive-keyring.gpg";
+export const aptSourceLine =
+  "deb [signed-by=/usr/share/keyrings/truthid-archive-keyring.gpg] https://masterlxz.github.io/truthid/apt stable main";
