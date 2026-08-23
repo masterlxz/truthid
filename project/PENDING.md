@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-08-23 (Sessão 220: P66 FECHADO — os 4 SDKs republicados; P67 implementado e testado — dashboard único ETH↔Arweave no Desktop+Mobile, falta só validação manual (P69); P68 segue registrado, sem `/plan`)
+> Última atualização: 2026-08-23 (Sessão 220: P66 FECHADO; P67 implementado e testado, falta validação manual (P69); P65 — achado real de validação do winget corrigido (`ManifestVersion` inválido), falta só a CLA do dono do projeto)
 
 ---
 
@@ -36,11 +36,11 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 
 ## Não Resolvidas
 
-### P65 — PR do winget aberto, aguardando review da comunidade (Sessão 218)
+### P65 — PR do winget aberto; achado real de validação corrigido, falta só a CLA (Sessão 220)
 
 | ID | Item | Onde se originou | Prioridade |
 |---|---|---|---|
-| P65 | Manifest (`packaging/winget/masterlxz.TruthID.*.yaml`) escrito e validado contra o schema JSON real v1.28.0 do `microsoft/winget-cli` (`jsonschema`/Python, os 3 arquivos vieram `VALID`). Fork `masterlxz/winget-pkgs` criado, arquivos commitados via GitHub Contents API (repo tem ~820MB, clone completo seria inviável), PR aberto: https://github.com/microsoft/winget-pkgs/pull/422612. **Não bloqueia nada** — só esperando o pipeline automatizado (roda em runner Windows real, pode achar algo que a validação de schema local não pega) e o review manual da comunidade, primeira submissão de um novo pacote sempre passa por isso. `.msi` não é assinado (mesma ressalva já registrada no `ROADMAP.md` — winget aceita, só perde reputação "Unknown Publisher"). | conversa direta, PR real aberto (Sessão 218) | 🟡 Baixa — só acompanhar o PR |
+| P65 | Manifest (`packaging/winget/masterlxz.TruthID.*.yaml`) escrito e validado contra o schema JSON v1.28.0 do `microsoft/winget-cli` na Sessão 218 (`jsonschema`/Python, os 3 arquivos vieram `VALID`). Fork `masterlxz/winget-pkgs` criado, arquivos commitados via GitHub Contents API (repo tem ~820MB, clone completo seria inviável), PR aberto: https://github.com/microsoft/winget-pkgs/pull/422612. **Achado real ao checar o pipeline de verdade (Sessão 220)**: o campo `ManifestVersion: 1.28.0` dentro dos 3 arquivos confundia a versão do *winget-cli* (a ferramenta) com a versão do *schema do manifesto* (campo interno, escala própria e bem menor) — o validador real do backend do winget-pkgs rejeitou com `SchemaVersionInvalid: The manifest version '1.28.0' is not supported. Supported versions: 1.0.0, 1.1.0, 1.2.0, 1.4.0, 1.5.0, 1.6.0, 1.9.0, 1.10.0, 1.12.0` (check "02. Manifest Validation", `fail`). A validação de schema da Sessão 218 nunca pegou isso porque validava a *estrutura* dos campos contra o schema certo, não o valor específico do campo `ManifestVersion` contra a lista de versões que o backend aceita — são checagens diferentes. **Corrigido**: `ManifestVersion` trocado pra `1.12.0` (a mais recente aceita) nos 3 arquivos + `$schema` dos comentários `yaml-language-server` atualizado pra bater; revalidado contra o schema JSON real da 1.12.0 baixado ao vivo (`jsonschema`, os 3 `VALID`); commitado no branch do fork (`masterlxz-truthid-2.0.0`) via GitHub Contents API, mesmo mecanismo da Sessão 218. **Reprocessamento confirmado**: "02. Manifest Validation" voltou `success` no novo commit; os checks seguintes (03-10) ficaram `queued`, esperando a CLA. **Pendência real que fica, só o dono do projeto resolve**: bot `microsoft-github-policy-service` pede a assinatura do CLA (Contributor License Agreement) — comentar no PR `@microsoft-github-policy-service agree` (ou `agree company="..."`). Sem isso o pipeline não avança pros checks seguintes (instalação real, verificação de catálogo etc.), mesmo com o manifesto agora válido. | conversa direta, achado real + fix Sessão 220 | 🟡 Baixa — só falta a CLA do dono do projeto |
 
 ### P64 — publicação no AUR bloqueada: cadastro de conta novo pausado pelo próprio AUR (Sessão 217); achado técnico do `hidapi`/linker isolado e corrigido (Sessão 218)
 
