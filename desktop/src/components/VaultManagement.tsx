@@ -20,7 +20,6 @@ import type {
   CreditCardData,
   CardNetwork,
 } from "../types";
-import { VaultSettings } from "./VaultSettings";
 import { VaultBackup } from "./VaultBackup";
 import { BitwardenImport } from "./BitwardenImport";
 import { useVaultPublish } from "../hooks/useVaultPublish";
@@ -889,7 +888,7 @@ export function VaultManagement() {
   }
 
   // ── View ──────────────────────────────────────────────────────────────────
-  const [view, setView] = useState<"entries" | "settings" | "backup" | "bitwarden-import">("entries");
+  const [view, setView] = useState<"entries" | "backup" | "bitwarden-import">("entries");
 
   // ── Entradas locais ───────────────────────────────────────────────────────
   const [entries, setEntries] = useState<VaultEntry[]>([]);
@@ -1137,24 +1136,6 @@ export function VaultManagement() {
     [sortedEntries, filter],
   );
 
-  // ── View: settings ────────────────────────────────────────────────────────
-  if (view === "settings") {
-    return (
-      <div>
-        <div style={{ display: "flex", alignItems: "center", gap: "1rem", marginBottom: "1rem" }}>
-          <button
-            onClick={() => setView("entries")}
-            style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)", padding: "0.3em 0.8em" }}
-          >
-            {t("vaultManagement.header.backToVault")}
-          </button>
-          <h2 style={{ margin: 0 }}>{t("vaultManagement.header.arweaveWalletTitle")}</h2>
-        </div>
-        <VaultSettings />
-      </div>
-    );
-  }
-
   // ── View: backup ─────────────────────────────────────────────────────────
   if (view === "backup") {
     return (
@@ -1244,12 +1225,6 @@ export function VaultManagement() {
             style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)", padding: "0.3em 0.8em", fontSize: "0.85em" }}
           >
             {t("vaultManagement.header.backupButton")}
-          </button>
-          <button
-            onClick={() => setView("settings")}
-            style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)", padding: "0.3em 0.8em", fontSize: "0.85em" }}
-          >
-            {t("vaultManagement.header.providersButton")}
           </button>
         </div>
       </div>

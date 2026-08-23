@@ -117,7 +117,108 @@ void main() {
       final fetched = await fetchData('http://127.0.0.1:${server.port}', 'tx-id-123');
       expect(fetched, expected);
     });
+  });
 
+  group('getWalletTransactions', () {
+    Future<HttpServer> startMockGraphqlServer(Map<String, dynamic> body, {int statusCode = 200}) async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((request) async {
+        expect(request.uri.path, '/graphql');
+        request.response.statusCode = statusCode;
+        request.response.write(jsonEncode(body));
+        await request.response.close();
+      });
+      return server;
+    }
+
+    test('parseia edges completos com tags e block', () async {
+      final server = await startMockGraphqlServer({
+        'data': {
+          'transactions': {
+            'edges': [
+              {
+                'node': {
+                  'id': 'tx1',
+                  'tags': [
+                    {'name': 'App-Name', 'value': 'TruthID'},
+                    {'name': 'Content-Type', 'value': 'application/octet-stream'},
+                  ],
+                  'block': {'height': 100, 'timestamp': 1700000000},
+                  'fee': {'ar': '0.0001'},
+                  'quantity': {'ar': '0'},
+                  'recipient': '',
+                },
+              },
+            ],
+          },
+        },
+      });
+      addTearDown(server.close);
+
+      final txs = await getWalletTransactions('http://127.0.0.1:${server.port}', 'addr');
+      expect(txs, hasLength(1));
+      expect(txs[0].id, 'tx1');
+      expect(txs[0].blockHeight, 100);
+      expect(txs[0].blockTimestamp, 1700000000);
+      expect(txs[0].appName, 'TruthID');
+      expect(txs[0].contentType, 'application/octet-stream');
+      // recipient vazio ("") vira null — data-only tx não tem destinatário.
+      expect(txs[0].recipient, isNull);
+    });
+
+    test('block null vira campos null, não erro (tx pendente)', () async {
+      final server = await startMockGraphqlServer({
+        'data': {
+          'transactions': {
+            'edges': [
+              {
+                'node': {
+                  'id': 'tx-pending',
+                  'tags': <Map<String, dynamic>>[],
+                  'block': null,
+                  'fee': {'ar': '0.0002'},
+                  'quantity': {'ar': '1.5'},
+                  'recipient': '0xRecipient',
+                },
+              },
+            ],
+          },
+        },
+      });
+      addTearDown(server.close);
+
+      final txs = await getWalletTransactions('http://127.0.0.1:${server.port}', 'addr');
+      expect(txs, hasLength(1));
+      expect(txs[0].blockHeight, isNull);
+      expect(txs[0].blockTimestamp, isNull);
+      expect(txs[0].quantityAr, '1.5');
+      expect(txs[0].recipient, '0xRecipient');
+    });
+
+    test('edges vazio devolve lista vazia', () async {
+      final server = await startMockGraphqlServer({
+        'data': {
+          'transactions': {'edges': <Map<String, dynamic>>[]},
+        },
+      });
+      addTearDown(server.close);
+
+      final txs = await getWalletTransactions('http://127.0.0.1:${server.port}', 'addr');
+      expect(txs, isEmpty);
+    });
+
+    test('status não-2xx lança exceção', () async {
+      final server = await startMockGraphqlServer({}, statusCode: 500);
+      addTearDown(server.close);
+
+      expect(
+        () => getWalletTransactions('http://127.0.0.1:${server.port}', 'addr'),
+        throwsA(isA<Exception>()),
+      );
+    });
+  });
+
+  group('arweave_client — tx status/submit', () {
     test('getTxStatus confirmado quando 200 com corpo JSON', () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       server.listen((request) async {

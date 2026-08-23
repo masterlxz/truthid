@@ -10,7 +10,7 @@ import { respondToRequest } from "../services/respondToRequest";
  * (decisão do dono do projeto: aprovação por chamada, mesmo padrão do
  * SignMessageModal, sem autorização persistida por app). Aprovar publica o
  * conteúdo no Arweave usando a wallet local já configurada no TruthID (ver
- * VaultSettings) — a chave privada da wallet nunca sai do Rust.
+ * ArweaveDashboard) — a chave privada da wallet nunca sai do Rust.
  */
 export function PinApprovalModal() {
   const { t } = useTranslation();

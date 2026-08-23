@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-08-23 (Sessão 220: P66 FECHADO — os 4 SDKs republicados de verdade com o bytecode corrigido; P67/P68 novos — dashboard Arweave↔ETH alternável e fluxo 100% mobile, só registrados, sem `/plan`)
+> Última atualização: 2026-08-23 (Sessão 220: P66 FECHADO — os 4 SDKs republicados; P67 implementado e testado — dashboard único ETH↔Arweave no Desktop+Mobile, falta só validação manual (P69); P68 segue registrado, sem `/plan`)
 
 ---
 
@@ -58,6 +58,7 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 
 | ID | Item | Onde se originou | Prioridade |
 |---|---|---|---|
+| P69 | **Validação manual real — dashboard único ETH↔Arweave (P67, Sessão 220)** — implementado e testado (Rust/vitest/`flutter test` todos verdes), mas nunca clicado de verdade: abrir o Desktop nativo, alternar o toggle na aba Dashboard, confirmar saldo+histórico da wallet Arweave real do ambiente (que já tem `arweave_wallet.json`/histórico de publish do vault) aparecendo na lista; mesmo roteiro no Mobile (toggle na aba Wallet). | conversa direta, P67 implementado Sessão 220 | 🟡 Baixa |
 | P3 | **Validação E2E real — extensão (13.9)** — fluxo completo: extensão carregada unpacked + celular real na mesma Wi-Fi, scan → perfil → envio → confirmação das entradas na popup. LAN e dead-drop. | `PHASE.md` (Fase 13.9, pendências finais) | 🟠 Média |
 | P6 | **Revalidar decifra da vault key de pareamento (ECIES)** em hardware real — corrigido na Sessão 92 (SHA-256 do shared secret) + 99 (Mac.empty no Dart), mas nunca confirmado ao vivo no celular. | `PHASE.md` (Fase 13.9, pendências finais) | 🟠 Média |
 | P7 | **Diálogo de Local Network Privacy do iOS** — mitigação aplicada (timing), não validada em device real. | `PHASE.md` (Fase 13.9, pendências finais) | 🟡 Baixa |
@@ -103,12 +104,17 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 | P22 | **Detecção de vazamento de senha** — k-anonymity (HIBP-like). | `ROADMAP.md` (Expansão) | 💡 Ideia |
 | P23 | **Modo panic/duress** — PIN secundário mostrando vault vazio. | `ROADMAP.md` (Expansão) | 💡 Ideia |
 | P24 | **Suporte a hardware wallets alternativas** — Trezor, YubiKey/FIDO2. Reafirmada pelo dono do projeto na Sessão 220, junto com P67/P68. | `ROADMAP.md` (Expansão) | 💡 Ideia |
-| P67 | **Dashboard Arweave↔ETH alternável, com saldo e histórico de transações** — hoje `ArweaveWalletSection` (Desktop)/`arweave_wallet_screen.dart` (Mobile) só mostram endereço+saldo da wallet Arweave (sub-tela de configuração pra financiar publish do vault), sem histórico de transações e sem relação com a visão da conta ETH (`SmartAccountDashboard.tsx`/`wallet_screen.dart`). Ideia: um dashboard único com toggle entre as 2 visões, cada uma com saldo **e** transações. Ver `ROADMAP.md` (Sessão 220) pra detalhe das perguntas em aberto (fundir com dashboard existente vs. tela nova; fonte do histórico de transações Arweave). | `ROADMAP.md` (Sessão 220) | 💡 Ideia |
 | P68 | **Fluxo 100% mobile (sem depender do Desktop)** — permitir criar identidade/parear device/publicar vault/gerenciar guardiões inteiramente pelo celular, usando uma wallet nativa do próprio celular (WalletConnect ou chave local) ou conectando a Ledger física ao celular (USB-C OTG ou BLE, só Nano X). Hoje o Mobile não tem nenhum código de wallet/hardware wallet — seria peça nova, não portagem do `ledger.rs` (usa `hidapi`, não roda em Android/iOS do mesmo jeito). Ver `ROADMAP.md` (Sessão 220) pra detalhe. | `ROADMAP.md` (Sessão 220) | 💡 Ideia |
 
 ---
 
 ## Resolvidas
+
+### P67 — Dashboard único com toggle ETH↔Arweave (Desktop + Mobile), implementado e testado (Sessão 220)
+
+| ID | Item | Resolvida em |
+|---|---|---|
+| ~~P67~~ | ~~`ArweaveWalletSection` (Desktop, dentro de `VaultSettings.tsx`/view "settings" da aba Vault)/`arweave_wallet_screen.dart` (Mobile, atrás de um ícone na `VaultScreen`) só mostravam endereço+saldo da wallet Arweave, sem histórico de transações e desconectadas da visão ETH (`SmartAccountDashboard.tsx`/`WalletScreen`).~~ **Implementado nas 2 plataformas, `/plan` completo rodado antes**: Rust ganhou `arweave_wallet_transactions` (`desktop/src-tauri/src/arweave/mod.rs`) — `POST /graphql` contra `{ARWEAVE_DEFAULT_NODE}/graphql` (mesmo host já usado, sem config nova), consulta `transactions(owners: [$owner], first: $first)`, v1 sem paginação (25 itens mais recentes). Desktop: `DashboardScreen.tsx` novo (toggle `.tabs` reaproveitado, içando `@{username}`) alterna entre `SmartAccountDashboard` (inalterado) e `ArweaveDashboard.tsx` novo (funde a gestão de wallet portada de `ArweaveWalletSection` + histórico novo); `VaultSettings.tsx` deletado, botão/view "settings" removidos de `VaultManagement.tsx`, i18n migrado (`vaultSettings.json`→`arweaveDashboard.json` + `dashboardScreen.json` novo, chaves órfãs removidas de `vaultManagement.json`). Mobile: `wallet_screen.dart` ganhou o mesmo toggle (`SegmentedButton`, sem precedente no projeto até aqui) incorporando o conteúdo de `arweave_wallet_screen.dart` (deletado) sem `Scaffold`/`AppBar` próprio (a tela já não tinha), histórico via `getWalletTransactions` novo em `arweave_client.dart` (mirror exato do Rust); ícone removido de `vault_screen.dart`; ARBs dos 6 idiomas (`en`/`es`/`pt`/`pt_BR`/`zh`/`zh_CN`) migrados (`arweaveWalletScreen*`→`walletScreenArweave*` + chaves de histórico/toggle novas), `flutter gen-l10n` rodado. **Testes verdes nos 2 lados**: Rust `cargo test --lib arweave::` 53/53 (4 novos, mock via `axum` — parsing completo, `block: null` de tx pendente, `edges` vazio, não-2xx), Desktop `vitest` 113/113 (8 novos: `ArweaveDashboard.test.tsx`, `DashboardScreen.test.tsx`) + `tsc --noEmit` limpo, Mobile suíte completa 593/593 (`flutter test` via o container Docker `mobile-flutter`, incluindo 4 novos em `arweave_client_test.dart` e 4 novos em `wallet_screen_test.dart`) + `flutter analyze` sem issues novos. **Não validado**: clique real na UI (Desktop nativo/celular físico) — só automatizado; histórico real de uma wallet Arweave com tráfego de verdade nunca foi visto na tela (testado só contra mocks). | conversa direta + `/plan`, implementado Sessão 220 |
 
 ### P66 — os 4 SDKs republicados com o creation code corrigido (Sessão 220)
 

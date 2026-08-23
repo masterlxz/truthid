@@ -12,7 +12,7 @@ import { QuickLogin } from "./components/QuickLogin";
 import { DonateModal } from "./components/DonateModal";
 import { LanguageSelector } from "./components/LanguageSelector";
 import { VaultManagement } from "./components/VaultManagement";
-import { SmartAccountDashboard } from "./components/SmartAccountDashboard";
+import { DashboardScreen } from "./components/DashboardScreen";
 import { IdentityProvider } from "./contexts/IdentityContext";
 import { WalletModalContext } from "./contexts/WalletModalContext";
 import { useStoredUsername } from "./hooks/useStoredUsername";
@@ -297,7 +297,7 @@ function App() {
                 </button>
               </nav>
 
-              {activeTab === "dashboard" && <SmartAccountDashboard />}
+              {activeTab === "dashboard" && <DashboardScreen />}
               {activeTab === "devices" && <ManageDevices />}
               {activeTab === "sessions" && <ActiveSessions />}
               {activeTab === "vault" && <VaultManagement />}

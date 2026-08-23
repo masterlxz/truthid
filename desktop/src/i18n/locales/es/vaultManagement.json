@@ -74,11 +74,9 @@
   "header": {
     "title": "Vault",
     "backToVault": "← Vault",
-    "arweaveWalletTitle": "Wallet de Arweave",
     "backupTitle": "Respaldo",
     "bitwardenImportButton": "⇩ Importar de Bitwarden",
     "backupButton": "⏏ Respaldo",
-    "providersButton": "⚙ Proveedores",
     "bitwardenImportTitle": "Importar de Bitwarden"
   },
   "status": {

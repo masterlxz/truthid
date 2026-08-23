@@ -9,5 +9,17 @@
     "balance": "Balance: {{balance}} AR",
     "balanceUnavailable": "Balance unavailable right now",
     "noBalanceWarning": "No balance yet — buy AR on an exchange and send it to the address above before clicking \"Send\"."
+  },
+  "history": {
+    "title": "Transaction history",
+    "refresh": "Refresh",
+    "loading": "Loading history...",
+    "failedToLoad": "Failed to load history: {{error}}",
+    "retry": "Retry",
+    "empty": "No transactions yet",
+    "pending": "Pending",
+    "fee": "Fee: {{fee}} AR",
+    "quantity": "{{quantity}} AR",
+    "dataTx": "Data published"
   }
 }

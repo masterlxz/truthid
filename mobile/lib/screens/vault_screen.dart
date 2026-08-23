@@ -18,7 +18,6 @@ import '../l10n/l10n_extensions.dart';
 import '../theme.dart';
 import '../widgets/address_summary.dart';
 import '../widgets/card_summary.dart';
-import 'arweave_wallet_screen.dart';
 import 'pinning_providers_screen.dart';
 import 'vault_backup_screen.dart';
 import 'vault_device_permissions_screen.dart';
@@ -415,15 +414,6 @@ class _VaultScreenState extends State<VaultScreen> {
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => const PinningProvidersScreen(),
-                    ),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.account_balance_wallet_outlined),
-                  tooltip: context.l10n.vaultScreenArweaveWalletTooltip,
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const ArweaveWalletScreen(),
                     ),
                   ),
                 ),

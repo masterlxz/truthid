@@ -9,5 +9,17 @@
     "balance": "Saldo: {{balance}} AR",
     "balanceUnavailable": "Saldo indisponível no momento",
     "noBalanceWarning": "Ainda sem saldo — compre AR em uma exchange e envie para o endereço acima antes de clicar em \"Enviar\"."
+  },
+  "history": {
+    "title": "Histórico de transações",
+    "refresh": "Atualizar",
+    "loading": "Carregando histórico...",
+    "failedToLoad": "Falha ao carregar histórico: {{error}}",
+    "retry": "Tentar de novo",
+    "empty": "Nenhuma transação ainda",
+    "pending": "Pendente",
+    "fee": "Taxa: {{fee}} AR",
+    "quantity": "{{quantity}} AR",
+    "dataTx": "Dado publicado"
   }
 }

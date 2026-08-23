@@ -7,6 +7,8 @@ import 'package:web3dart/web3dart.dart' show EthereumAddress;
 import 'package:truthid_mobile/models/smart_account_activity.dart';
 import 'package:truthid_mobile/screens/wallet_screen.dart';
 import 'package:truthid_mobile/services/activity_cache_service.dart';
+import 'package:truthid_mobile/services/arweave_client.dart' show ArweaveTxSummary;
+import 'package:truthid_mobile/services/arweave_wallet_service.dart';
 import 'package:truthid_mobile/services/blockchain_service.dart';
 import 'package:truthid_mobile/services/bundler_config_service.dart';
 import 'package:truthid_mobile/services/device_key_service.dart';
@@ -31,6 +33,8 @@ class MockSmartAccountActivityScanner extends Mock
 
 class MockActivityCacheService extends Mock implements ActivityCacheService {}
 
+class MockArweaveWalletService extends Mock implements ArweaveWalletService {}
+
 void main() {
   late MockBlockchainService mockBlockchain;
   late MockLocalStorageService mockStorage;
@@ -39,6 +43,7 @@ void main() {
   late MockSessionCreator mockSessionCreator;
   late MockSmartAccountActivityScanner mockActivityScanner;
   late MockActivityCacheService mockActivityCacheService;
+  late MockArweaveWalletService mockArweaveWalletService;
 
   final smartAccountAddress = EthereumAddress.fromHex(
       '0xabababababababababababababababababababab');
@@ -57,6 +62,11 @@ void main() {
     mockSessionCreator = MockSessionCreator();
     mockActivityScanner = MockSmartAccountActivityScanner();
     mockActivityCacheService = MockActivityCacheService();
+    mockArweaveWalletService = MockArweaveWalletService();
+    // Default: sem wallet Arweave configurada — não afeta a visão ETH
+    // (padrão dos testes existentes), só evita que o eager-load da visão
+    // Arweave (P67) precise ser mockado em todo teste que não olha pra ela.
+    when(() => mockArweaveWalletService.exists()).thenAnswer((_) async => false);
 
     when(() => mockKeyService.getDeviceAddress())
         .thenAnswer((_) async => deviceAddress);
@@ -95,7 +105,10 @@ void main() {
         )).thenAnswer((_) async => []);
   });
 
-  Widget buildScreen() {
+  Widget buildScreen({
+    Future<String> Function(String, String)? fetchArweaveBalance,
+    Future<List<ArweaveTxSummary>> Function(String, String, {int first})? fetchArweaveTransactions,
+  }) {
     return wrapForTest(
       Scaffold(
         body: WalletScreen(
@@ -106,6 +119,9 @@ void main() {
           sessionCreator: mockSessionCreator,
           activityScanner: mockActivityScanner,
           activityCacheService: mockActivityCacheService,
+          arweaveWalletService: mockArweaveWalletService,
+          fetchArweaveBalance: fetchArweaveBalance ?? (_, __) async => '0',
+          fetchArweaveTransactions: fetchArweaveTransactions ?? (_, __, {first = 25}) async => [],
         ),
       ),
     );
@@ -295,5 +311,87 @@ void main() {
           toBlock: any(named: 'toBlock'),
           onChunkScanned: any(named: 'onChunkScanned'),
         )).called(2);
+  });
+
+  group('toggle ETH ↔ Arweave (P67)', () {
+    testWidgets('mostra a visão ETH por padrão e alterna pra Arweave', (tester) async {
+      await tester.pumpWidget(buildScreen());
+      await tester.pumpAndSettle();
+
+      expect(find.text('0.1230 ETH'), findsOneWidget);
+      expect(find.text('Generate Arweave wallet'), findsNothing);
+
+      await tester.tap(find.text('Arweave'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('0.1230 ETH'), findsNothing);
+      expect(find.text('Generate Arweave wallet'), findsOneWidget);
+
+      await tester.tap(find.text('Ethereum'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('0.1230 ETH'), findsOneWidget);
+    });
+
+    testWidgets('sem wallet Arweave mostra o botão de gerar', (tester) async {
+      when(() => mockArweaveWalletService.exists()).thenAnswer((_) async => false);
+
+      await tester.pumpWidget(buildScreen());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Arweave'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Generate Arweave wallet'), findsOneWidget);
+    });
+
+    testWidgets('com wallet Arweave mostra saldo e histórico', (tester) async {
+      when(() => mockArweaveWalletService.exists()).thenAnswer((_) async => true);
+      when(() => mockArweaveWalletService.address())
+          .thenAnswer((_) async => 'arweave-address-1');
+
+      await tester.pumpWidget(buildScreen(
+        fetchArweaveBalance: (_, __) async => (2 * 1e12).toStringAsFixed(0),
+        fetchArweaveTransactions: (_, __, {first = 25}) async => [
+          const ArweaveTxSummary(
+            id: 'tx1234567890',
+            blockHeight: 100,
+            blockTimestamp: 1700000000,
+            feeAr: '0.0001',
+            quantityAr: '0',
+            appName: 'TruthID',
+            contentType: 'application/octet-stream',
+          ),
+        ],
+      ));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Arweave'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Balance: 2.000000 AR'), findsOneWidget);
+      expect(find.text('application/octet-stream'), findsOneWidget);
+    });
+
+    testWidgets('falha ao carregar histórico mostra erro sem quebrar o saldo',
+        (tester) async {
+      when(() => mockArweaveWalletService.exists()).thenAnswer((_) async => true);
+      when(() => mockArweaveWalletService.address())
+          .thenAnswer((_) async => 'arweave-address-1');
+
+      await tester.pumpWidget(buildScreen(
+        fetchArweaveBalance: (_, __) async => (1 * 1e12).toStringAsFixed(0),
+        fetchArweaveTransactions: (_, __, {first = 25}) async =>
+            throw Exception('POST /graphql retornou 500'),
+      ));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Arweave'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Balance: 1.000000 AR'), findsOneWidget);
+      expect(
+        find.textContaining('Failed to load history'),
+        findsOneWidget,
+      );
+      expect(find.widgetWithText(TextButton, 'Retry'), findsOneWidget);
+    });
   });
 }

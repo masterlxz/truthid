@@ -1286,6 +1286,7 @@ pub fn run() {
             arweave::arweave_wallet_exists,
             arweave::arweave_wallet_address,
             arweave::arweave_wallet_balance,
+            arweave::arweave_wallet_transactions,
             arweave::arweave_publish,
             arweave::arweave_get_status,
             arweave::arweave_fetch,

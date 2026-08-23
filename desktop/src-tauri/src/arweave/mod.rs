@@ -15,7 +15,7 @@ mod transaction;
 mod wallet;
 
 use rsa::BigUint;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use transaction::ArweaveTransaction;
 use wallet::ArweaveJwk;
 
@@ -26,6 +26,89 @@ pub struct TxStatus {
     pub confirmed: bool,
     pub block_height: Option<u64>,
     pub number_of_confirmations: Option<u64>,
+}
+
+/// Resumo de uma transação da wallet, devolvido por `arweave_wallet_transactions`
+/// (histórico — Etapa do dashboard único, P67). `block_height`/`block_timestamp`
+/// ficam `None` pra tx ainda não minerada (o GraphQL devolve `block: null`).
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct ArweaveTxSummary {
+    pub id: String,
+    pub block_height: Option<u64>,
+    pub block_timestamp: Option<u64>,
+    pub fee_ar: String,
+    pub quantity_ar: String,
+    pub recipient: Option<String>,
+    pub app_name: Option<String>,
+    pub content_type: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct GraphQlEnvelope {
+    data: Option<GraphQlData>,
+}
+
+#[derive(Deserialize)]
+struct GraphQlData {
+    transactions: GraphQlTransactions,
+}
+
+#[derive(Deserialize)]
+struct GraphQlTransactions {
+    edges: Vec<GraphQlEdge>,
+}
+
+#[derive(Deserialize)]
+struct GraphQlEdge {
+    node: GraphQlNode,
+}
+
+#[derive(Deserialize)]
+struct GraphQlNode {
+    id: String,
+    tags: Vec<GraphQlTag>,
+    block: Option<GraphQlBlock>,
+    fee: GraphQlAmount,
+    quantity: GraphQlAmount,
+    recipient: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct GraphQlTag {
+    name: String,
+    value: String,
+}
+
+#[derive(Deserialize)]
+struct GraphQlBlock {
+    height: Option<u64>,
+    timestamp: Option<u64>,
+}
+
+#[derive(Deserialize)]
+struct GraphQlAmount {
+    ar: String,
+}
+
+impl From<GraphQlNode> for ArweaveTxSummary {
+    fn from(node: GraphQlNode) -> Self {
+        let find_tag = |name: &str| {
+            node.tags
+                .iter()
+                .find(|t| t.name == name)
+                .map(|t| t.value.clone())
+        };
+        ArweaveTxSummary {
+            app_name: find_tag("App-Name"),
+            content_type: find_tag("Content-Type"),
+            id: node.id,
+            block_height: node.block.as_ref().and_then(|b| b.height),
+            block_timestamp: node.block.as_ref().and_then(|b| b.timestamp),
+            fee_ar: node.fee.ar,
+            quantity_ar: node.quantity.ar,
+            recipient: node.recipient.filter(|r| !r.is_empty()),
+        }
+    }
 }
 
 /// Mesmo timeout que `ipfs::fetch_from_gateway` usa pro mesmo motivo — sem
@@ -412,6 +495,56 @@ pub(crate) async fn get_wallet_balance(
     res.text().await.map_err(|e| e.to_string())
 }
 
+const WALLET_TRANSACTIONS_QUERY: &str = r#"
+    query($owner: String!, $first: Int!) {
+      transactions(owners: [$owner], first: $first) {
+        edges {
+          node {
+            id
+            tags { name value }
+            block { height timestamp }
+            fee { ar }
+            quantity { ar }
+            recipient
+          }
+        }
+      }
+    }
+"#;
+
+/// `POST /graphql` — histórico de transações da wallet (comando exposto à UI
+/// como `arweave_wallet_transactions`). v1 sem paginação: só a página mais
+/// recente (`first` itens). Sem SLA documentado pro GraphQL público do
+/// gateway — chamador deve tratar falha como não-bloqueante (erro + retry
+/// manual), não retry automático.
+pub(crate) async fn fetch_wallet_transactions(
+    client: &reqwest::Client,
+    node_url: &str,
+    address: &str,
+    first: u32,
+) -> Result<Vec<ArweaveTxSummary>, String> {
+    let url = format!("{}/graphql", node_url.trim_end_matches('/'));
+    let body = serde_json::json!({
+        "query": WALLET_TRANSACTIONS_QUERY,
+        "variables": { "owner": address, "first": first },
+    });
+    let res = client
+        .post(&url)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !res.status().is_success() {
+        return Err(format!("POST /graphql retornou {}", res.status()));
+    }
+    let envelope: GraphQlEnvelope = res.json().await.map_err(|e| e.to_string())?;
+    let edges = envelope
+        .data
+        .map(|d| d.transactions.edges)
+        .unwrap_or_default();
+    Ok(edges.into_iter().map(|e| e.node.into()).collect())
+}
+
 /// Núcleo compartilhado de `publish_vault_blob_with_jwk`/
 /// `publish_pinned_content_with_jwk` — mesmas tags genéricas, mesmo formato
 /// de resultado (`ar://` + `keccak256`). As duas funções públicas existem
@@ -576,6 +709,16 @@ pub async fn arweave_wallet_balance() -> Result<String, String> {
     let jwk = wallet::parse_jwk(&json)?;
     let address = wallet::wallet_address(&jwk)?;
     get_wallet_balance(&http_client(), ARWEAVE_DEFAULT_NODE, &address).await
+}
+
+/// Histórico de transações da wallet local, contra `ARWEAVE_DEFAULT_NODE`.
+/// Usado pela visão Arweave do dashboard único (P67).
+#[tauri::command]
+pub async fn arweave_wallet_transactions(
+    address: String,
+    first: u32,
+) -> Result<Vec<ArweaveTxSummary>, String> {
+    fetch_wallet_transactions(&http_client(), ARWEAVE_DEFAULT_NODE, &address, first).await
 }
 
 /// `node_url` vazio usa `ARWEAVE_DEFAULT_NODE` — o caller (devtools/UI de
@@ -920,6 +1063,158 @@ mod get_tx_status_tests {
             start_mock_status_node(axum::http::StatusCode::INTERNAL_SERVER_ERROR, None).await;
         let result = get_tx_status(&http_client(), &node_url, "abc").await;
         assert!(result.is_err(), "500 real do node deve virar Err, não confirmed=false");
+        handle.abort();
+    }
+}
+
+// Mock de node pra fetch_wallet_transactions — mesmo padrão de
+// get_tx_status_tests, agora simulando `POST /graphql` (o corpo da
+// requisição não é inspecionado, só a resposta é fixa por teste).
+#[cfg(test)]
+mod arweave_wallet_transactions_tests {
+    use super::*;
+    use axum::{routing::post, Router};
+    use tokio::net::TcpListener;
+
+    async fn start_mock_graphql_node(
+        status_code: axum::http::StatusCode,
+        body: serde_json::Value,
+    ) -> (String, tokio::task::JoinHandle<()>) {
+        async fn handler(
+            axum::extract::State((status, body)): axum::extract::State<(
+                axum::http::StatusCode,
+                serde_json::Value,
+            )>,
+            _req_body: String,
+        ) -> (axum::http::StatusCode, axum::Json<serde_json::Value>) {
+            (status, axum::Json(body))
+        }
+
+        let router = Router::new()
+            .route("/graphql", post(handler))
+            .with_state((status_code, body));
+
+        let listener = TcpListener::bind("127.0.0.1:0").await.expect("bind deve suceder");
+        let addr = listener.local_addr().expect("addr deve resolver");
+        let handle = tokio::spawn(async move {
+            let _ = axum::serve(listener, router).await;
+        });
+        (format!("http://{addr}"), handle)
+    }
+
+    fn node_json(
+        id: &str,
+        block: serde_json::Value,
+        fee_ar: &str,
+        quantity_ar: &str,
+        recipient: &str,
+        tags: serde_json::Value,
+    ) -> serde_json::Value {
+        serde_json::json!({
+            "id": id,
+            "tags": tags,
+            "block": block,
+            "fee": { "ar": fee_ar },
+            "quantity": { "ar": quantity_ar },
+            "recipient": recipient,
+        })
+    }
+
+    #[tokio::test]
+    async fn parses_full_edges_with_tags_and_block() {
+        let body = serde_json::json!({
+            "data": {
+                "transactions": {
+                    "edges": [
+                        { "node": node_json(
+                            "tx1",
+                            serde_json::json!({ "height": 100, "timestamp": 1_700_000_000 }),
+                            "0.0001",
+                            "0",
+                            "",
+                            serde_json::json!([
+                                { "name": "App-Name", "value": "TruthID" },
+                                { "name": "Content-Type", "value": "application/octet-stream" },
+                            ]),
+                        ) },
+                    ]
+                }
+            }
+        });
+        let (node_url, handle) =
+            start_mock_graphql_node(axum::http::StatusCode::OK, body).await;
+
+        let txs = fetch_wallet_transactions(&http_client(), &node_url, "addr", 25)
+            .await
+            .unwrap();
+        assert_eq!(txs.len(), 1);
+        assert_eq!(txs[0].id, "tx1");
+        assert_eq!(txs[0].block_height, Some(100));
+        assert_eq!(txs[0].block_timestamp, Some(1_700_000_000));
+        assert_eq!(txs[0].app_name.as_deref(), Some("TruthID"));
+        assert_eq!(txs[0].content_type.as_deref(), Some("application/octet-stream"));
+        // recipient vazio ("") vira None — data-only tx não tem destinatário.
+        assert_eq!(txs[0].recipient, None);
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn null_block_becomes_none_not_error() {
+        let body = serde_json::json!({
+            "data": {
+                "transactions": {
+                    "edges": [
+                        { "node": node_json(
+                            "tx-pending",
+                            serde_json::Value::Null,
+                            "0.0002",
+                            "1.5",
+                            "0xRecipient",
+                            serde_json::json!([]),
+                        ) },
+                    ]
+                }
+            }
+        });
+        let (node_url, handle) =
+            start_mock_graphql_node(axum::http::StatusCode::OK, body).await;
+
+        let txs = fetch_wallet_transactions(&http_client(), &node_url, "addr", 25)
+            .await
+            .unwrap();
+        assert_eq!(txs.len(), 1);
+        assert_eq!(txs[0].block_height, None);
+        assert_eq!(txs[0].block_timestamp, None);
+        assert_eq!(txs[0].quantity_ar, "1.5");
+        assert_eq!(txs[0].recipient.as_deref(), Some("0xRecipient"));
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn empty_edges_is_ok_empty_vec() {
+        let body = serde_json::json!({
+            "data": { "transactions": { "edges": [] } }
+        });
+        let (node_url, handle) =
+            start_mock_graphql_node(axum::http::StatusCode::OK, body).await;
+
+        let txs = fetch_wallet_transactions(&http_client(), &node_url, "addr", 25)
+            .await
+            .unwrap();
+        assert!(txs.is_empty());
+        handle.abort();
+    }
+
+    #[tokio::test]
+    async fn non_2xx_is_an_error() {
+        let (node_url, handle) = start_mock_graphql_node(
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            serde_json::Value::Null,
+        )
+        .await;
+
+        let result = fetch_wallet_transactions(&http_client(), &node_url, "addr", 25).await;
+        assert!(result.is_err(), "500 do node deve virar Err");
         handle.abort();
     }
 }

@@ -26,6 +26,32 @@ class TxStatus {
   final int? numberOfConfirmations;
 }
 
+// Resumo de uma transação da wallet, devolvido por `getWalletTransactions`
+// (histórico — dashboard único ETH/Arweave, P67). Mirror de `ArweaveTxSummary`
+// (Rust, `arweave/mod.rs`). `blockHeight`/`blockTimestamp` ficam `null` pra
+// tx ainda não minerada (o GraphQL devolve `block: null`).
+class ArweaveTxSummary {
+  const ArweaveTxSummary({
+    required this.id,
+    this.blockHeight,
+    this.blockTimestamp,
+    required this.feeAr,
+    required this.quantityAr,
+    this.recipient,
+    this.appName,
+    this.contentType,
+  });
+
+  final String id;
+  final int? blockHeight;
+  final int? blockTimestamp;
+  final String feeAr;
+  final String quantityAr;
+  final String? recipient;
+  final String? appName;
+  final String? contentType;
+}
+
 String _trimTrailingSlash(String url) => url.endsWith('/') ? url.substring(0, url.length - 1) : url;
 
 // Mesmo timeout que `ipfs_gateway_client.dart` usa pro mesmo motivo — sem
@@ -186,6 +212,79 @@ Future<String> getWalletBalance(String nodeUrl, String address) async {
       throw Exception('GET /wallet/{address}/balance retornou ${response.statusCode}');
     }
     return await response.transform(utf8.decoder).join();
+  } finally {
+    client.close();
+  }
+}
+
+const String _walletTransactionsQuery = r'''
+    query($owner: String!, $first: Int!) {
+      transactions(owners: [$owner], first: $first) {
+        edges {
+          node {
+            id
+            tags { name value }
+            block { height timestamp }
+            fee { ar }
+            quantity { ar }
+            recipient
+          }
+        }
+      }
+    }
+''';
+
+String? _findTag(List<dynamic> tags, String name) {
+  for (final tag in tags) {
+    if ((tag as Map<String, dynamic>)['name'] == name) return tag['value'] as String?;
+  }
+  return null;
+}
+
+List<ArweaveTxSummary> _parseWalletTransactions(Map<String, dynamic> body) {
+  final data = body['data'] as Map<String, dynamic>?;
+  final edges = (data?['transactions'] as Map<String, dynamic>?)?['edges'] as List<dynamic>? ?? [];
+  return edges.map((edge) {
+    final node = (edge as Map<String, dynamic>)['node'] as Map<String, dynamic>;
+    final block = node['block'] as Map<String, dynamic>?;
+    final tags = node['tags'] as List<dynamic>? ?? [];
+    final recipient = node['recipient'] as String?;
+    return ArweaveTxSummary(
+      id: node['id'] as String,
+      blockHeight: (block?['height'] as num?)?.toInt(),
+      blockTimestamp: (block?['timestamp'] as num?)?.toInt(),
+      feeAr: (node['fee'] as Map<String, dynamic>)['ar'] as String,
+      quantityAr: (node['quantity'] as Map<String, dynamic>)['ar'] as String,
+      recipient: (recipient == null || recipient.isEmpty) ? null : recipient,
+      appName: _findTag(tags, 'App-Name'),
+      contentType: _findTag(tags, 'Content-Type'),
+    );
+  }).toList();
+}
+
+// `POST /graphql` — histórico de transações da wallet (mirror de
+// `fetch_wallet_transactions` em desktop/src-tauri/src/arweave/mod.rs). v1
+// sem paginação: só a página mais recente (`first` itens).
+Future<List<ArweaveTxSummary>> getWalletTransactions(
+  String nodeUrl,
+  String address, {
+  int first = 25,
+}) async {
+  final client = _newClient();
+  try {
+    final uri = Uri.parse('${_trimTrailingSlash(nodeUrl)}/graphql');
+    final request = await client.postUrl(uri);
+    request.headers.contentType = ContentType.json;
+    request.write(jsonEncode({
+      'query': _walletTransactionsQuery,
+      'variables': {'owner': address, 'first': first},
+    }));
+    final response = await request.close().timeout(_httpTimeout);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('POST /graphql retornou ${response.statusCode}');
+    }
+    final body = await response.transform(utf8.decoder).join();
+    return _parseWalletTransactions(jsonDecode(body) as Map<String, dynamic>);
   } finally {
     client.close();
   }

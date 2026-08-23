@@ -74,11 +74,9 @@
   "header": {
     "title": "密码库",
     "backToVault": "← 密码库",
-    "arweaveWalletTitle": "Arweave 钱包",
     "backupTitle": "备份",
     "bitwardenImportButton": "⇩ 从 Bitwarden 导入",
     "backupButton": "⏏ 备份",
-    "providersButton": "⚙ 提供方",
     "bitwardenImportTitle": "从 Bitwarden 导入"
   },
   "status": {

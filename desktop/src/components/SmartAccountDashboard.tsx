@@ -15,9 +15,11 @@ const REVOKED_TYPES = new Set<SmartAccountActivityType>([
   "device_revoked",
 ]);
 
+// @{username} vive em `DashboardScreen` (container do toggle ETH↔Arweave,
+// P67) — içado de lá pra não duplicar ao trocar de visão.
 export function SmartAccountDashboard() {
   const { t, i18n } = useTranslation();
-  const { username, identityId, smartAccountAddress } = useIdentity();
+  const { identityId, smartAccountAddress } = useIdentity();
   const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
 
@@ -59,7 +61,6 @@ export function SmartAccountDashboard() {
 
   return (
     <div>
-      <h2>@{username}</h2>
       <h3>{t("smartAccountDashboard.title")}</h3>
 
       <div className="card">

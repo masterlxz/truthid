@@ -6,6 +6,9 @@ import 'package:web3dart/web3dart.dart';
 import '../l10n/l10n_extensions.dart';
 import '../models/smart_account_activity.dart';
 import '../services/activity_cache_service.dart';
+import '../services/arweave_client.dart'
+    show ArweaveTxSummary, arweaveDefaultNode, getWalletBalance, getWalletTransactions;
+import '../services/arweave_wallet_service.dart';
 import '../services/blockchain_service.dart';
 import '../services/bundler_config_service.dart';
 import '../services/device_key_service.dart';
@@ -16,12 +19,19 @@ import '../services/session_creator.dart';
 import '../services/smart_account_activity_scanner.dart';
 import '../theme.dart';
 
+enum _WalletView { eth, arweave }
+
 // Dashboard da smart account no mobile — porta de
 // desktop/src/components/SmartAccountDashboard.tsx (14.10): saldo, resumo de
 // custo por tipo de operação, histórico de atividade completo (desde o bloco
 // de deploy dos contratos) e depósito/saque de ETH. Vive numa aba própria
 // (ao contrário do saldo, que antes ficava dentro de SessionsScreen) pra
 // espelhar a aba "dashboard" dedicada do Desktop.
+//
+// P67 (dashboard único ETH/Arweave): a visão Arweave foi incorporada aqui
+// (portada de `arweave_wallet_screen.dart`, removido) via um toggle no topo
+// — sem `Scaffold`/`AppBar` próprio, já que esta tela também não tem (herda
+// a casca do `main.dart`).
 class WalletScreen extends StatefulWidget {
   // Injetáveis para testes — em produção usa os defaults.
   final BlockchainService? blockchainService;
@@ -31,6 +41,10 @@ class WalletScreen extends StatefulWidget {
   final SessionCreator? sessionCreator;
   final SmartAccountActivityScanner? activityScanner;
   final ActivityCacheService? activityCacheService;
+  final ArweaveWalletService? arweaveWalletService;
+  final Future<String> Function(String nodeUrl, String address) fetchArweaveBalance;
+  final Future<List<ArweaveTxSummary>> Function(String nodeUrl, String address, {int first})
+      fetchArweaveTransactions;
 
   const WalletScreen({
     super.key,
@@ -41,6 +55,9 @@ class WalletScreen extends StatefulWidget {
     this.sessionCreator,
     this.activityScanner,
     this.activityCacheService,
+    this.arweaveWalletService,
+    this.fetchArweaveBalance = getWalletBalance,
+    this.fetchArweaveTransactions = getWalletTransactions,
   });
 
   @override
@@ -54,7 +71,10 @@ class _WalletScreenState extends State<WalletScreen> {
   late final BundlerConfigService _bundlerConfigService;
   late final SmartAccountActivityScanner _activityScanner;
   late final ActivityCacheService _activityCacheService;
+  late final ArweaveWalletService _arweaveWalletService;
   SessionCreator? _sessionCreator;
+
+  _WalletView _view = _WalletView.eth;
 
   bool _isLoading = true;
   bool _isPaired = false;
@@ -69,6 +89,18 @@ class _WalletScreenState extends State<WalletScreen> {
   bool _isScanning = false;
   ScanProgress? _scanProgress;
   String? _scanError;
+
+  bool _arweaveLoading = true;
+  bool _arweaveExists = false;
+  String? _arweaveAddress;
+  String? _arweaveBalanceWinston;
+  bool _arweaveGenerating = false;
+  String? _arweaveError;
+  bool _arweaveCopied = false;
+
+  List<ArweaveTxSummary> _arweaveHistory = [];
+  bool _arweaveHistoryLoading = false;
+  String? _arweaveHistoryError;
 
   String _activityLabel(BuildContext context, SmartAccountActivityType type) {
     switch (type) {
@@ -101,8 +133,87 @@ class _WalletScreenState extends State<WalletScreen> {
         widget.bundlerConfigService ?? BundlerConfigService();
     _activityScanner = widget.activityScanner ?? SmartAccountActivityScanner();
     _activityCacheService = widget.activityCacheService ?? ActivityCacheService();
+    _arweaveWalletService = widget.arweaveWalletService ?? ArweaveWalletService();
     _sessionCreator = widget.sessionCreator;
     _load();
+    _loadArweaveWallet();
+  }
+
+  Future<void> _loadArweaveWallet() async {
+    setState(() => _arweaveLoading = true);
+    try {
+      final exists = await _arweaveWalletService.exists();
+      if (!mounted) return;
+      setState(() => _arweaveExists = exists);
+      if (!exists) return;
+      final address = await _arweaveWalletService.address();
+      if (!mounted) return;
+      setState(() => _arweaveAddress = address);
+      await _loadArweaveBalance(address);
+      await _loadArweaveHistory(address);
+    } catch (e) {
+      if (mounted) setState(() => _arweaveError = '$e');
+    } finally {
+      if (mounted) setState(() => _arweaveLoading = false);
+    }
+  }
+
+  // Best-effort — uma wallet sem tráfego ainda deve aparecer com endereço
+  // mesmo se a consulta de saldo falhar.
+  Future<void> _loadArweaveBalance(String address) async {
+    try {
+      final balance = await widget.fetchArweaveBalance(arweaveDefaultNode, address);
+      if (mounted) setState(() => _arweaveBalanceWinston = balance);
+    } catch (_) {
+      if (mounted) setState(() => _arweaveBalanceWinston = null);
+    }
+  }
+
+  Future<void> _loadArweaveHistory(String address) async {
+    setState(() {
+      _arweaveHistoryLoading = true;
+      _arweaveHistoryError = null;
+    });
+    try {
+      final history = await widget.fetchArweaveTransactions(arweaveDefaultNode, address);
+      if (mounted) setState(() => _arweaveHistory = history);
+    } catch (e) {
+      if (mounted) setState(() => _arweaveHistoryError = '$e');
+    } finally {
+      if (mounted) setState(() => _arweaveHistoryLoading = false);
+    }
+  }
+
+  Future<void> _handleGenerateArweaveWallet() async {
+    setState(() {
+      _arweaveError = null;
+      _arweaveGenerating = true;
+    });
+    try {
+      final address = await _arweaveWalletService.generate();
+      if (!mounted) return;
+      setState(() {
+        _arweaveAddress = address;
+        _arweaveExists = true;
+      });
+      await _loadArweaveBalance(address);
+      await _loadArweaveHistory(address);
+    } catch (e) {
+      if (mounted) setState(() => _arweaveError = '$e');
+    } finally {
+      if (mounted) setState(() => _arweaveGenerating = false);
+    }
+  }
+
+  Future<void> _handleCopyArweaveAddress() async {
+    final address = _arweaveAddress;
+    if (address == null) return;
+    await Clipboard.setData(ClipboardData(text: address));
+    if (!mounted) return;
+    setState(() => _arweaveCopied = true);
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) setState(() => _arweaveCopied = false);
+    });
   }
 
   Future<void> _load() async {
@@ -406,6 +517,37 @@ class _WalletScreenState extends State<WalletScreen> {
       );
     }
 
+    return RefreshIndicator(
+      onRefresh: _view == _WalletView.eth ? _load : () => _loadArweaveWallet(),
+      child: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Text(
+            _pairedUsername != null
+                ? context.l10n.walletScreenUsernameHandle(_pairedUsername!)
+                : context.l10n.walletScreenIdentityFallback(_pairedIdentityId ?? ''),
+            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 12),
+
+          // ── Toggle ETH ↔ Arweave (P67) ──────────────────────────────────────
+          SegmentedButton<_WalletView>(
+            segments: [
+              ButtonSegment(value: _WalletView.eth, label: Text(context.l10n.walletScreenToggleEth)),
+              ButtonSegment(value: _WalletView.arweave, label: Text(context.l10n.walletScreenToggleArweave)),
+            ],
+            selected: {_view},
+            onSelectionChanged: (selection) => setState(() => _view = selection.first),
+          ),
+          const SizedBox(height: 12),
+
+          if (_view == _WalletView.eth) ..._buildEthChildren(context) else ..._buildArweaveChildren(context),
+        ],
+      ),
+    );
+  }
+
+  List<Widget> _buildEthChildren(BuildContext context) {
     var sessionCount = 0;
     var sessionCostWei = BigInt.zero;
     var deviceCount = 0;
@@ -422,19 +564,7 @@ class _WalletScreenState extends State<WalletScreen> {
 
     final sortedActivities = _activities.reversed.toList();
 
-    return RefreshIndicator(
-      onRefresh: _load,
-      child: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          Text(
-            _pairedUsername != null
-                ? context.l10n.walletScreenUsernameHandle(_pairedUsername!)
-                : context.l10n.walletScreenIdentityFallback(_pairedIdentityId ?? ''),
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 12),
-
+    return [
           // ── Saldo + ações ────────────────────────────────────────────────
           Card(
             child: Padding(
@@ -595,9 +725,185 @@ class _WalletScreenState extends State<WalletScreen> {
                 ),
               );
             }),
-        ],
+    ];
+  }
+
+  List<Widget> _buildArweaveChildren(BuildContext context) {
+    if (_arweaveLoading) {
+      return const [
+        Padding(
+          padding: EdgeInsets.symmetric(vertical: 24),
+          child: Center(child: CircularProgressIndicator()),
+        ),
+      ];
+    }
+
+    final balanceWinston = _arweaveBalanceWinston;
+    final balanceAr = balanceWinston != null
+        ? (double.parse(balanceWinston) / 1e12).toStringAsFixed(6)
+        : null;
+
+    return [
+      // ── Wallet Arweave (endereço + saldo + gerar) ─────────────────────────
+      Card(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                context.l10n.walletScreenArweaveIntro,
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+              ),
+              const SizedBox(height: 12),
+              if (_arweaveError != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Text(_arweaveError!, style: const TextStyle(color: AppColors.danger)),
+                ),
+              if (!_arweaveExists)
+                ElevatedButton(
+                  onPressed: _arweaveGenerating ? null : _handleGenerateArweaveWallet,
+                  child: Text(_arweaveGenerating
+                      ? context.l10n.walletScreenArweaveGeneratingButton
+                      : context.l10n.walletScreenArweaveGenerateButton),
+                )
+              else
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    SelectableText(
+                      _arweaveAddress ?? '',
+                      style: const TextStyle(fontFamily: 'monospace', fontSize: 13),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        OutlinedButton.icon(
+                          onPressed: _handleCopyArweaveAddress,
+                          icon: Icon(_arweaveCopied ? Icons.check : Icons.copy, size: 16),
+                          label: Text(_arweaveCopied
+                              ? context.l10n.walletScreenArweaveCopiedButton
+                              : context.l10n.walletScreenArweaveCopyButton),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            balanceAr != null
+                                ? context.l10n.walletScreenArweaveBalanceLabel(balanceAr)
+                                : context.l10n.walletScreenArweaveBalanceUnavailable,
+                            style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (balanceAr != null && double.parse(balanceAr) == 0)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 12),
+                        child: Text(
+                          context.l10n.walletScreenArweaveNoBalanceHint,
+                          style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                        ),
+                      ),
+                  ],
+                ),
+            ],
+          ),
+        ),
       ),
-    );
+
+      if (_arweaveExists && _arweaveAddress != null) ...[
+        const SizedBox(height: 12),
+        // ── Histórico de transações ─────────────────────────────────────────
+        Row(
+          children: [
+            Text(context.l10n.walletScreenArweaveHistoryTitle,
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+            const Spacer(),
+            TextButton(
+              onPressed: () => _loadArweaveHistory(_arweaveAddress!),
+              child: Text(context.l10n.walletScreenArweaveHistoryRefresh, style: const TextStyle(fontSize: 13)),
+            ),
+          ],
+        ),
+        if (_arweaveHistoryLoading)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16),
+            child: Text(context.l10n.walletScreenArweaveHistoryLoading,
+                style: const TextStyle(color: AppColors.textMuted, fontSize: 13)),
+          ),
+        if (_arweaveHistoryError != null && !_arweaveHistoryLoading)
+          Card(
+            color: AppColors.dangerBg,
+            child: Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(context.l10n.walletScreenArweaveHistoryFailedToLoad(_arweaveHistoryError!),
+                      style: const TextStyle(color: AppColors.danger, fontSize: 13)),
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: () => _loadArweaveHistory(_arweaveAddress!),
+                    child: Text(context.l10n.walletScreenArweaveHistoryRetry),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        if (!_arweaveHistoryLoading && _arweaveHistoryError == null && _arweaveHistory.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            child: Center(
+              child: Text(context.l10n.walletScreenArweaveHistoryEmpty,
+                  style: const TextStyle(color: AppColors.textMuted)),
+            ),
+          ),
+        if (!_arweaveHistoryLoading && _arweaveHistoryError == null)
+          ..._arweaveHistory.map((tx) {
+            final idShort = '${tx.id.substring(0, 10)}...${tx.id.substring(tx.id.length - 6)}';
+            final isTransfer = tx.quantityAr != '0';
+            return Card(
+              margin: const EdgeInsets.only(bottom: 8),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Chip(
+                          label: Text(isTransfer
+                              ? context.l10n.walletScreenArweaveHistoryQuantity(tx.quantityAr)
+                              : (tx.contentType ?? context.l10n.walletScreenArweaveHistoryDataTx)),
+                          backgroundColor: AppColors.successBg,
+                          labelStyle: const TextStyle(fontSize: 11, color: AppColors.success),
+                          padding: EdgeInsets.zero,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            idShort,
+                            style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      tx.blockTimestamp != null
+                          ? '${_formatDate(tx.blockTimestamp!)} · ${context.l10n.walletScreenArweaveHistoryFee(tx.feeAr)}'
+                          : '${context.l10n.walletScreenArweaveHistoryPending} · ${context.l10n.walletScreenArweaveHistoryFee(tx.feeAr)}',
+                      style: const TextStyle(fontSize: 12, color: AppColors.textMuted),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+      ],
+    ];
   }
 }
 

@@ -74,11 +74,9 @@
   "header": {
     "title": "Vault",
     "backToVault": "← Vault",
-    "arweaveWalletTitle": "Carteira Arweave",
     "backupTitle": "Backup",
     "bitwardenImportButton": "⇩ Importar do Bitwarden",
     "backupButton": "⏏ Backup",
-    "providersButton": "⚙ Provedores",
     "bitwardenImportTitle": "Importar do Bitwarden"
   },
   "status": {

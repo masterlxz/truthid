@@ -513,32 +513,32 @@
   "@walletScreenSubmittingButton": {
     "description": "Withdraw sheet: submit button label while the withdrawal transaction is being submitted."
   },
-  "arweaveWalletScreenTitle": "Arweave 钱包",
-  "@arweaveWalletScreenTitle": {
+  "walletScreenArweaveTitle": "Arweave 钱包",
+  "@walletScreenArweaveTitle": {
     "description": "Arweave wallet screen: app bar title."
   },
-  "arweaveWalletScreenIntro": "密码库（主数据块及附加文档）以及已授权的第三方应用都会发布到 Arweave — 这需要一个已充值 AR 的本地钱包。",
-  "@arweaveWalletScreenIntro": {
+  "walletScreenArweaveIntro": "密码库（主数据块及附加文档）以及已授权的第三方应用都会发布到 Arweave — 这需要一个已充值 AR 的本地钱包。",
+  "@walletScreenArweaveIntro": {
     "description": "Arweave wallet screen: introductory paragraph explaining why an Arweave wallet is needed."
   },
-  "arweaveWalletScreenGeneratingButton": "正在生成...",
-  "@arweaveWalletScreenGeneratingButton": {
+  "walletScreenArweaveGeneratingButton": "正在生成...",
+  "@walletScreenArweaveGeneratingButton": {
     "description": "Arweave wallet screen: button label while a new Arweave wallet is being generated."
   },
-  "arweaveWalletScreenGenerateButton": "生成 Arweave 钱包",
-  "@arweaveWalletScreenGenerateButton": {
+  "walletScreenArweaveGenerateButton": "生成 Arweave 钱包",
+  "@walletScreenArweaveGenerateButton": {
     "description": "Arweave wallet screen: button label to generate a new Arweave wallet when none exists yet."
   },
-  "arweaveWalletScreenCopiedButton": "✓ 已复制！",
-  "@arweaveWalletScreenCopiedButton": {
+  "walletScreenArweaveCopiedButton": "✓ 已复制！",
+  "@walletScreenArweaveCopiedButton": {
     "description": "Arweave wallet screen: button label shown briefly after the wallet address was copied to the clipboard."
   },
-  "arweaveWalletScreenCopyButton": "复制地址",
-  "@arweaveWalletScreenCopyButton": {
+  "walletScreenArweaveCopyButton": "复制地址",
+  "@walletScreenArweaveCopyButton": {
     "description": "Arweave wallet screen: button label to copy the Arweave wallet address to the clipboard."
   },
-  "arweaveWalletScreenBalanceLabel": "余额：{balance} AR",
-  "@arweaveWalletScreenBalanceLabel": {
+  "walletScreenArweaveBalanceLabel": "余额：{balance} AR",
+  "@walletScreenArweaveBalanceLabel": {
     "description": "Arweave wallet screen: shows the current wallet balance in AR once known.",
     "placeholders": {
       "balance": {
@@ -546,13 +546,76 @@
       }
     }
   },
-  "arweaveWalletScreenBalanceUnavailable": "暂时无法获取余额",
-  "@arweaveWalletScreenBalanceUnavailable": {
+  "walletScreenArweaveBalanceUnavailable": "暂时无法获取余额",
+  "@walletScreenArweaveBalanceUnavailable": {
     "description": "Arweave wallet screen: shown in place of the balance when it could not be fetched."
   },
-  "arweaveWalletScreenNoBalanceHint": "尚无余额 — 请先在交易所购买 AR 并发送到上方地址，然后再发布。",
-  "@arweaveWalletScreenNoBalanceHint": {
+  "walletScreenArweaveNoBalanceHint": "尚无余额 — 请先在交易所购买 AR 并发送到上方地址，然后再发布。",
+  "@walletScreenArweaveNoBalanceHint": {
     "description": "Arweave wallet screen: hint shown when the wallet balance is zero, telling the user how to fund it."
+  },
+  "walletScreenArweaveHistoryTitle": "交易历史",
+  "@walletScreenArweaveHistoryTitle": {
+    "description": "Wallet screen (Arweave view): transaction history card title."
+  },
+  "walletScreenArweaveHistoryRefresh": "刷新",
+  "@walletScreenArweaveHistoryRefresh": {
+    "description": "Wallet screen (Arweave view): button label to refresh the transaction history."
+  },
+  "walletScreenArweaveHistoryLoading": "正在加载历史记录...",
+  "@walletScreenArweaveHistoryLoading": {
+    "description": "Wallet screen (Arweave view): shown while the transaction history is loading."
+  },
+  "walletScreenArweaveHistoryFailedToLoad": "加载历史记录失败：{error}",
+  "@walletScreenArweaveHistoryFailedToLoad": {
+    "description": "Wallet screen (Arweave view): shown when the transaction history fails to load.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "walletScreenArweaveHistoryRetry": "重试",
+  "@walletScreenArweaveHistoryRetry": {
+    "description": "Wallet screen (Arweave view): button label to retry loading the transaction history."
+  },
+  "walletScreenArweaveHistoryEmpty": "暂无交易",
+  "@walletScreenArweaveHistoryEmpty": {
+    "description": "Wallet screen (Arweave view): shown when the wallet has no transactions yet."
+  },
+  "walletScreenArweaveHistoryPending": "待确认",
+  "@walletScreenArweaveHistoryPending": {
+    "description": "Wallet screen (Arweave view): shown in place of the date for a transaction not yet mined (block is null)."
+  },
+  "walletScreenArweaveHistoryFee": "手续费：{fee} AR",
+  "@walletScreenArweaveHistoryFee": {
+    "description": "Wallet screen (Arweave view): shows the fee paid for a transaction, in AR.",
+    "placeholders": {
+      "fee": {
+        "type": "String"
+      }
+    }
+  },
+  "walletScreenArweaveHistoryQuantity": "{quantity} AR",
+  "@walletScreenArweaveHistoryQuantity": {
+    "description": "Wallet screen (Arweave view): shows the AR amount transferred by a transaction.",
+    "placeholders": {
+      "quantity": {
+        "type": "String"
+      }
+    }
+  },
+  "walletScreenArweaveHistoryDataTx": "已发布数据",
+  "@walletScreenArweaveHistoryDataTx": {
+    "description": "Wallet screen (Arweave view): label for a transaction that published data (not a value transfer) when it has no Content-Type tag."
+  },
+  "walletScreenToggleEth": "以太坊",
+  "@walletScreenToggleEth": {
+    "description": "Wallet screen: toggle label for the Ethereum view."
+  },
+  "walletScreenToggleArweave": "Arweave",
+  "@walletScreenToggleArweave": {
+    "description": "Wallet screen: toggle label for the Arweave view."
   },
   "guardianStatusScreenReadyToExecute": "已就绪，可以执行",
   "@guardianStatusScreenReadyToExecute": {
@@ -1650,10 +1713,6 @@
   "vaultScreenPinningProvidersTooltip": "固定服务提供方",
   "@vaultScreenPinningProvidersTooltip": {
     "description": "Tooltip for the pinning providers icon button on the Vault screen."
-  },
-  "vaultScreenArweaveWalletTooltip": "Arweave 钱包",
-  "@vaultScreenArweaveWalletTooltip": {
-    "description": "Tooltip for the Arweave wallet icon button on the Vault screen."
   },
   "vaultScreenManageProfilesTooltip": "管理配置文件",
   "@vaultScreenManageProfilesTooltip": {

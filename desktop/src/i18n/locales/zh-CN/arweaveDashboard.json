@@ -9,5 +9,17 @@
     "balance": "余额：{{balance}} AR",
     "balanceUnavailable": "暂时无法获取余额",
     "noBalanceWarning": "尚无余额 — 请先在交易所购买 AR 并发送到上方地址，然后再点击\"发送\"。"
+  },
+  "history": {
+    "title": "交易历史",
+    "refresh": "刷新",
+    "loading": "正在加载历史记录...",
+    "failedToLoad": "加载历史记录失败：{{error}}",
+    "retry": "重试",
+    "empty": "暂无交易",
+    "pending": "待确认",
+    "fee": "手续费：{{fee}} AR",
+    "quantity": "{{quantity}} AR",
+    "dataTx": "已发布数据"
   }
 }

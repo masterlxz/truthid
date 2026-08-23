@@ -513,32 +513,32 @@
   "@walletScreenSubmittingButton": {
     "description": "Withdraw sheet: submit button label while the withdrawal transaction is being submitted."
   },
-  "arweaveWalletScreenTitle": "Wallet de Arweave",
-  "@arweaveWalletScreenTitle": {
+  "walletScreenArweaveTitle": "Wallet de Arweave",
+  "@walletScreenArweaveTitle": {
     "description": "Arweave wallet screen: app bar title."
   },
-  "arweaveWalletScreenIntro": "El vault (el blob principal y los documentos adjuntos) y las apps de terceros autorizadas se publican en Arweave — esto requiere una wallet local financiada con AR.",
-  "@arweaveWalletScreenIntro": {
+  "walletScreenArweaveIntro": "El vault (el blob principal y los documentos adjuntos) y las apps de terceros autorizadas se publican en Arweave — esto requiere una wallet local financiada con AR.",
+  "@walletScreenArweaveIntro": {
     "description": "Arweave wallet screen: introductory paragraph explaining why an Arweave wallet is needed."
   },
-  "arweaveWalletScreenGeneratingButton": "Generando...",
-  "@arweaveWalletScreenGeneratingButton": {
+  "walletScreenArweaveGeneratingButton": "Generando...",
+  "@walletScreenArweaveGeneratingButton": {
     "description": "Arweave wallet screen: button label while a new Arweave wallet is being generated."
   },
-  "arweaveWalletScreenGenerateButton": "Generar wallet de Arweave",
-  "@arweaveWalletScreenGenerateButton": {
+  "walletScreenArweaveGenerateButton": "Generar wallet de Arweave",
+  "@walletScreenArweaveGenerateButton": {
     "description": "Arweave wallet screen: button label to generate a new Arweave wallet when none exists yet."
   },
-  "arweaveWalletScreenCopiedButton": "✓ ¡Copiado!",
-  "@arweaveWalletScreenCopiedButton": {
+  "walletScreenArweaveCopiedButton": "✓ ¡Copiado!",
+  "@walletScreenArweaveCopiedButton": {
     "description": "Arweave wallet screen: button label shown briefly after the wallet address was copied to the clipboard."
   },
-  "arweaveWalletScreenCopyButton": "Copiar dirección",
-  "@arweaveWalletScreenCopyButton": {
+  "walletScreenArweaveCopyButton": "Copiar dirección",
+  "@walletScreenArweaveCopyButton": {
     "description": "Arweave wallet screen: button label to copy the Arweave wallet address to the clipboard."
   },
-  "arweaveWalletScreenBalanceLabel": "Saldo: {balance} AR",
-  "@arweaveWalletScreenBalanceLabel": {
+  "walletScreenArweaveBalanceLabel": "Saldo: {balance} AR",
+  "@walletScreenArweaveBalanceLabel": {
     "description": "Arweave wallet screen: shows the current wallet balance in AR once known.",
     "placeholders": {
       "balance": {
@@ -546,13 +546,76 @@
       }
     }
   },
-  "arweaveWalletScreenBalanceUnavailable": "Saldo no disponible en este momento",
-  "@arweaveWalletScreenBalanceUnavailable": {
+  "walletScreenArweaveBalanceUnavailable": "Saldo no disponible en este momento",
+  "@walletScreenArweaveBalanceUnavailable": {
     "description": "Arweave wallet screen: shown in place of the balance when it could not be fetched."
   },
-  "arweaveWalletScreenNoBalanceHint": "Aún no hay saldo — compra AR en un exchange y envíalo a la dirección de arriba antes de publicar.",
-  "@arweaveWalletScreenNoBalanceHint": {
+  "walletScreenArweaveNoBalanceHint": "Aún no hay saldo — compra AR en un exchange y envíalo a la dirección de arriba antes de publicar.",
+  "@walletScreenArweaveNoBalanceHint": {
     "description": "Arweave wallet screen: hint shown when the wallet balance is zero, telling the user how to fund it."
+  },
+  "walletScreenArweaveHistoryTitle": "Historial de transacciones",
+  "@walletScreenArweaveHistoryTitle": {
+    "description": "Wallet screen (Arweave view): transaction history card title."
+  },
+  "walletScreenArweaveHistoryRefresh": "Actualizar",
+  "@walletScreenArweaveHistoryRefresh": {
+    "description": "Wallet screen (Arweave view): button label to refresh the transaction history."
+  },
+  "walletScreenArweaveHistoryLoading": "Cargando historial...",
+  "@walletScreenArweaveHistoryLoading": {
+    "description": "Wallet screen (Arweave view): shown while the transaction history is loading."
+  },
+  "walletScreenArweaveHistoryFailedToLoad": "Error al cargar el historial: {error}",
+  "@walletScreenArweaveHistoryFailedToLoad": {
+    "description": "Wallet screen (Arweave view): shown when the transaction history fails to load.",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "walletScreenArweaveHistoryRetry": "Reintentar",
+  "@walletScreenArweaveHistoryRetry": {
+    "description": "Wallet screen (Arweave view): button label to retry loading the transaction history."
+  },
+  "walletScreenArweaveHistoryEmpty": "Aún no hay transacciones",
+  "@walletScreenArweaveHistoryEmpty": {
+    "description": "Wallet screen (Arweave view): shown when the wallet has no transactions yet."
+  },
+  "walletScreenArweaveHistoryPending": "Pendiente",
+  "@walletScreenArweaveHistoryPending": {
+    "description": "Wallet screen (Arweave view): shown in place of the date for a transaction not yet mined (block is null)."
+  },
+  "walletScreenArweaveHistoryFee": "Comisión: {fee} AR",
+  "@walletScreenArweaveHistoryFee": {
+    "description": "Wallet screen (Arweave view): shows the fee paid for a transaction, in AR.",
+    "placeholders": {
+      "fee": {
+        "type": "String"
+      }
+    }
+  },
+  "walletScreenArweaveHistoryQuantity": "{quantity} AR",
+  "@walletScreenArweaveHistoryQuantity": {
+    "description": "Wallet screen (Arweave view): shows the AR amount transferred by a transaction.",
+    "placeholders": {
+      "quantity": {
+        "type": "String"
+      }
+    }
+  },
+  "walletScreenArweaveHistoryDataTx": "Dato publicado",
+  "@walletScreenArweaveHistoryDataTx": {
+    "description": "Wallet screen (Arweave view): label for a transaction that published data (not a value transfer) when it has no Content-Type tag."
+  },
+  "walletScreenToggleEth": "Ethereum",
+  "@walletScreenToggleEth": {
+    "description": "Wallet screen: toggle label for the Ethereum view."
+  },
+  "walletScreenToggleArweave": "Arweave",
+  "@walletScreenToggleArweave": {
+    "description": "Wallet screen: toggle label for the Arweave view."
   },
   "guardianStatusScreenReadyToExecute": "Listo para ejecutar",
   "@guardianStatusScreenReadyToExecute": {
@@ -1650,10 +1713,6 @@
   "vaultScreenPinningProvidersTooltip": "Proveedores de pinning",
   "@vaultScreenPinningProvidersTooltip": {
     "description": "Tooltip for the pinning providers icon button on the Vault screen."
-  },
-  "vaultScreenArweaveWalletTooltip": "Wallet de Arweave",
-  "@vaultScreenArweaveWalletTooltip": {
-    "description": "Tooltip for the Arweave wallet icon button on the Vault screen."
   },
   "vaultScreenManageProfilesTooltip": "Administrar perfiles",
   "@vaultScreenManageProfilesTooltip": {
