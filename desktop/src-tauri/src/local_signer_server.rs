@@ -2,7 +2,10 @@ use std::net::{Ipv4Addr, SocketAddr};
 use std::sync::Arc;
 use std::time::Duration;
 
-use axum::{extract::Json, extract::State, http::StatusCode, routing::get, routing::post, Router};
+use axum::{
+    extract::DefaultBodyLimit, extract::Json, extract::State, http::StatusCode, routing::get,
+    routing::post, Router,
+};
 use serde::{Deserialize, Serialize};
 use tokio::net::TcpListener;
 use tokio::sync::{oneshot, Mutex};
@@ -432,6 +435,16 @@ fn router(config: &ServerConfig) -> Router {
             post(autofill_creditcard_handler),
         )
         .layer(CorsLayer::permissive())
+        // Achado real (app terceiro, Anchor — ver commands/truthid.rs de lá):
+        // `/pin` recebe o conteúdo inteiro em base64 dentro do corpo JSON, e o
+        // padrão do axum pro extrator `Json` é 2MB — qualquer coisa maior (um
+        // snapshot de banco de app terceiro facilmente passa disso) é
+        // rejeitada com 413 *antes* do handler rodar (corpo em texto puro,
+        // não JSON, então o cliente nem consegue decodificar o erro
+        // direito). 128MiB dá folga confortável até pro maior conteúdo já
+        // documentado (documentos de até 50MB, ver `arweave/mod.rs`) mesmo
+        // depois do overhead de ~33% do base64.
+        .layer(DefaultBodyLimit::max(128 * 1024 * 1024))
         .with_state(router_state)
 }
 
