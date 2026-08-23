@@ -62,6 +62,6 @@ describe("computeSmartAccountAddress", () => {
       PARITY_NETWORK,
       PARITY_INDEX,
     );
-    expect(addr).toBe("0x83E364261871F2eC815dD7a63bD7455B69e2d9B9");
+    expect(addr).toBe("0xD1B20201b4fA21c8Ab76aEEB52Ae57A0a6C9546c");
   });
 });

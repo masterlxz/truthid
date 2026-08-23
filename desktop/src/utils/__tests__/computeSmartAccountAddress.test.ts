@@ -127,9 +127,12 @@ describe("computeSmartAccountAddress", () => {
   });
 
   it("creation code is non-empty and starts with EVM preamble", () => {
+    // "0x60" (PUSH1) — não travar num prefixo mais específico (ex: "0x6101")
+    // aqui de novo: já escondeu uma regressão real de bytecode desatualizado
+    // (ver comentário em ../../config/truthidAccount.ts).
     const code: Hex = TRUTHID_ACCOUNT_CREATION_CODE;
     expect(code.length).toBeGreaterThan(100);
-    expect(code.startsWith("0x61")).toBe(true);
+    expect(code.startsWith("0x60")).toBe(true);
   });
 
   it("address is reproducible across calls — no side effects", () => {
