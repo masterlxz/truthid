@@ -1,6 +1,6 @@
 name: truthid_sdk
 description: TruthID passwordless, decentralized authentication SDK for Dart/Flutter — verifier and cross-device requester roles, pure Dart.
-version: 0.1.0
+version: 0.1.1
 homepage: https://github.com/masterlxz/truthid/tree/main/sdk/dart
 repository: https://github.com/masterlxz/truthid
 issue_tracker: https://github.com/masterlxz/truthid/issues

@@ -1,6 +1,6 @@
 Gem::Specification.new do |spec|
   spec.name        = "truthid-sdk"
-  spec.version     = "0.2.0"
+  spec.version     = "0.2.1"
   spec.summary     = "TruthID authentication SDK for Ruby"
   spec.description = "TruthID passwordless, decentralized authentication SDK for Ruby. " \
                       "No TruthID-operated server, no passwords, no third-party login."
