@@ -2262,3 +2262,50 @@ winget-pkgs (1ª submissão sempre passa por review manual; bumps futuros dá pr
 acesso a Windows neste ambiente) — só a validação de schema e a resolução da URL foram confirmadas.
 Se o pipeline do winget-pkgs (que roda em runners Windows de verdade) apontar algo, vai aparecer
 como comentário automatizado no PR.
+
+---
+
+### Novas ideias — Sessão 220 (2026-08-23): Trezor, dashboard Arweave↔ETH alternável, fluxo 100% mobile
+
+**Contexto**: pedido direto do dono do projeto — só registrar estas 3 ideias agora, sem `/plan` nem
+código, mesmo padrão da Sessão 214 (`site/ROADMAP.md`/`PENDING.md` como "desenho", não decisão
+fechada).
+
+1. **Integração com Trezor** — já registrada como ideia de expansão (P24 em `PENDING.md`, linha 270
+   deste arquivo: "Suporte a hardware wallets alternativas como root key — Trezor, YubiKey/FIDO2").
+   Reafirmada nesta sessão junto com as outras 2 ideias, sem escopo novo além do que já estava
+   registrado — hoje só a Ledger é suportada como root key (`desktop/src-tauri/src/ledger.rs`, via
+   USB HID).
+
+2. **Tela do Arweave ao lado da tela do ETH, com alternância entre as duas (saldo + transações)** —
+   hoje as duas superfícies (Desktop `VaultSettings.tsx::ArweaveWalletSection`, Mobile
+   `arweave_wallet_screen.dart`) já existem, mas são sub-telas de configuração — só mostram
+   endereço+saldo da wallet Arweave usada pra financiar publish do vault, sem histórico de
+   transações e sem nenhuma relação visual/de navegação com a visão da conta ETH
+   (`SmartAccountDashboard.tsx` no Desktop, `wallet_screen.dart` no Mobile, que já mostram saldo
+   ETH — não confirmado se já mostram histórico de transações ou só o saldo atual). A ideia nova é
+   um dashboard único com alternância (toggle/tab) entre as duas visões — "wallet Ethereum" e
+   "wallet Arweave" — cada uma mostrando saldo **e histórico de transações**, não só saldo. Precisa
+   de `/plan` pra decidir: fundir com o dashboard ETH existente vs. tela nova lado a lado; de onde
+   vem o histórico de transações Arweave (não existe indexador próprio hoje — teria que ser via
+   `arweave.net/tx`/GraphQL do gateway, ou similar do lado ETH via algum indexador/explorer API).
+
+3. **Fluxo 100% mobile, sem depender do Desktop** — hoje o app Mobile só tem papel de
+   requisitante/verificador em fluxos cross-device (`sdk/dart`::`TruthIDRequester`, scan de
+   QR/dead-drop) — toda operação que precisa assinar como "root key" (criar identidade, parear
+   device, publicar vault, gerenciar guardiões) depende do Desktop conectado a uma wallet (Ledger
+   via USB ou software wallet via WalletConnect/injected provider no navegador embutido do Tauri).
+   O pedido é permitir o mesmo fluxo **inteiramente no celular**: (a) usando uma wallet nativa do
+   próprio celular (ex: MetaMask Mobile/Rainbow via WalletConnect, ou uma chave gerada/importada
+   direto no app), ou (b) conectando a Ledger física ao celular (USB-C OTG ou Bluetooth, a Ledger
+   Nano X suporta BLE nativamente via Ledger Live SDK — a Nano S/S Plus só USB). Hoje não existe
+   nenhum código de wallet/hardware wallet no Mobile (`mobile/lib` não tem nada de HID/USB/BLE nem
+   WalletConnect — confirmado por busca nesta sessão) — seria uma peça nova inteira, não uma
+   portagem do que já existe no Desktop (`ledger.rs` usa `hidapi`, que não roda em Android/iOS do
+   jeito que roda em desktop). Precisa de `/plan` pra decidir o mecanismo (WalletConnect v2 é o
+   caminho mais maduro pra wallet software; Ledger BLE exigiria SDK nativo específico por
+   plataforma) e o escopo (que operações do fluxo Desktop precisam mesmo rodar no celular vs. quais
+   continuam exigindo Desktop, ex. por causa de UI mais complexa como `GuardianManagement`).
+
+**Nada implementado, nada desenhado em detalhe — fica pra quando o dono do projeto quiser rodar
+`/plan` de verdade sobre algum desses itens.**

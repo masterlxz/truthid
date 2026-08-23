@@ -4,7 +4,7 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-08-23 (Sessão 220: P66 FECHADO — os 4 SDKs republicados de verdade com o bytecode corrigido, npm/PyPI/RubyGems em 0.2.1 e pub.dev em 0.1.1, confirmado via curl nos 4 registries)
+> Última atualização: 2026-08-23 (Sessão 220: P66 FECHADO — os 4 SDKs republicados de verdade com o bytecode corrigido; P67/P68 novos — dashboard Arweave↔ETH alternável e fluxo 100% mobile, só registrados, sem `/plan`)
 
 ---
 
@@ -102,7 +102,9 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 | P21 | **Vault compartilhado (Family/Team)** — múltiplos Devices de pessoas diferentes. | `ROADMAP.md` (Expansão) | 💡 Ideia |
 | P22 | **Detecção de vazamento de senha** — k-anonymity (HIBP-like). | `ROADMAP.md` (Expansão) | 💡 Ideia |
 | P23 | **Modo panic/duress** — PIN secundário mostrando vault vazio. | `ROADMAP.md` (Expansão) | 💡 Ideia |
-| P24 | **Suporte a hardware wallets alternativas** — Trezor, YubiKey/FIDO2. | `ROADMAP.md` (Expansão) | 💡 Ideia |
+| P24 | **Suporte a hardware wallets alternativas** — Trezor, YubiKey/FIDO2. Reafirmada pelo dono do projeto na Sessão 220, junto com P67/P68. | `ROADMAP.md` (Expansão) | 💡 Ideia |
+| P67 | **Dashboard Arweave↔ETH alternável, com saldo e histórico de transações** — hoje `ArweaveWalletSection` (Desktop)/`arweave_wallet_screen.dart` (Mobile) só mostram endereço+saldo da wallet Arweave (sub-tela de configuração pra financiar publish do vault), sem histórico de transações e sem relação com a visão da conta ETH (`SmartAccountDashboard.tsx`/`wallet_screen.dart`). Ideia: um dashboard único com toggle entre as 2 visões, cada uma com saldo **e** transações. Ver `ROADMAP.md` (Sessão 220) pra detalhe das perguntas em aberto (fundir com dashboard existente vs. tela nova; fonte do histórico de transações Arweave). | `ROADMAP.md` (Sessão 220) | 💡 Ideia |
+| P68 | **Fluxo 100% mobile (sem depender do Desktop)** — permitir criar identidade/parear device/publicar vault/gerenciar guardiões inteiramente pelo celular, usando uma wallet nativa do próprio celular (WalletConnect ou chave local) ou conectando a Ledger física ao celular (USB-C OTG ou BLE, só Nano X). Hoje o Mobile não tem nenhum código de wallet/hardware wallet — seria peça nova, não portagem do `ledger.rs` (usa `hidapi`, não roda em Android/iOS do mesmo jeito). Ver `ROADMAP.md` (Sessão 220) pra detalhe. | `ROADMAP.md` (Sessão 220) | 💡 Ideia |
 
 ---
 
