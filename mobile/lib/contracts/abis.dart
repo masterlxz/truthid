@@ -62,6 +62,7 @@ const String identityRegistryAbi = '''[
   {
     "type": "event",
     "name": "IdentityCreated",
+    "anonymous": false,
     "inputs": [
       {"name": "id", "type": "uint256", "indexed": true},
       {"name": "username", "type": "string", "indexed": false},
@@ -82,6 +83,63 @@ const String identityRegistryAbi = '''[
         {"name": "exists", "type": "bool"}
       ]
     }],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "createIdentity",
+    "inputs": [
+      {"name": "username", "type": "string"},
+      {"name": "controller", "type": "address"},
+      {"name": "v", "type": "uint8"},
+      {"name": "r", "type": "bytes32"},
+      {"name": "s", "type": "bytes32"}
+    ],
+    "outputs": [{"name": "id", "type": "uint256"}],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "isUsernameTaken",
+    "inputs": [{"name": "username", "type": "string"}],
+    "outputs": [{"name": "", "type": "bool"}],
+    "stateMutability": "view"
+  },
+  {
+    "type": "function",
+    "name": "getUsernameByController",
+    "inputs": [{"name": "controller", "type": "address"}],
+    "outputs": [{"name": "", "type": "string"}],
+    "stateMutability": "view"
+  }
+]''';
+
+// TruthIDAccountFactory — só `createAccount`/`getAddress`, usados pelo fluxo
+// de criar identidade 100% pelo Mobile (P68, fatia 1). `getAddress` é a
+// única fonte de verdade pro endereço previsto da smart account — nunca
+// replicar o cálculo de CREATE2 localmente (foi exatamente isso que causou
+// o bug real do P66 no Desktop: bytecode copiado ficou desatualizado após
+// um redeploy e o endereço previsto divergiu do real).
+// Source: contracts/src/TruthIDAccountFactory.sol
+const String truthidAccountFactoryAbi = '''[
+  {
+    "type": "function",
+    "name": "createAccount",
+    "inputs": [
+      {"name": "owner_", "type": "address"},
+      {"name": "index", "type": "uint256"}
+    ],
+    "outputs": [{"name": "ret", "type": "address"}],
+    "stateMutability": "nonpayable"
+  },
+  {
+    "type": "function",
+    "name": "getAddress",
+    "inputs": [
+      {"name": "owner_", "type": "address"},
+      {"name": "index", "type": "uint256"}
+    ],
+    "outputs": [{"name": "", "type": "address"}],
     "stateMutability": "view"
   }
 ]''';

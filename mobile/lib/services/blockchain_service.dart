@@ -104,6 +104,13 @@ class BlockchainService {
       '0x937702CBABDab0EEBD1A29f0a7A658FeF4582543';
   static const _identityRegistryAddress =
       '0x97787D6EE3EfD76962dc7E3Bf143E659D9961962';
+  // Mesmo endereço já usado em desktop/src/config/truthidAccount.ts
+  // (TRUTHID_ACCOUNT_FACTORY_ADDRESS). Único ponto de verdade pro endereço
+  // previsto de uma smart account é a view `getAddress` on-chain (ver
+  // predictSmartAccountAddress abaixo) — nunca replicar CREATE2 localmente,
+  // foi exatamente isso que causou o bug real do P66 no Desktop.
+  static const _truthidAccountFactoryAddress =
+      '0xc2C86cB7d8694EcA8BaAdD95B14842E8643aB262';
   // Redeploy em cascata (débito #52) — mesmo endereço Mainnet já usado em
   // desktop/src/config/contracts.ts.
   static const _vaultRegistryAddress =
@@ -122,6 +129,15 @@ class BlockchainService {
   // Exposto publicamente — o SmartAccountActivityScanner (aba Wallet) precisa
   // deste endereço pra escanear os eventos DeviceRegistered/DeviceRevoked.
   static const deviceRegistryAddress = _deviceRegistryAddress;
+
+  // Exposto publicamente — buildIdentityConsentHash (P68, fatia 1) precisa
+  // deste endereço fora deste arquivo, pro mesmo hash que
+  // IdentityRegistry.sol verifica via ecrecover.
+  static const identityRegistryAddress = _identityRegistryAddress;
+
+  // Exposto publicamente — CreateIdentityScreen (P68, fatia 1) precisa deste
+  // endereço como `to` da transação createAccount.
+  static const truthidAccountFactoryAddress = _truthidAccountFactoryAddress;
 
   // Blocos de deploy na Base Mainnet (redeploy em cascata, débito #52) —
   // mesmos valores já usados no Desktop (desktop/src/config/contracts.ts),
@@ -160,6 +176,16 @@ class BlockchainService {
   static final _recoveryContract = DeployedContract(
     ContractAbi.fromJson(recoveryManagerAbi, 'RecoveryManager'),
     EthereumAddress.fromHex(_recoveryManagerAddress),
+  );
+
+  static final _identityContract = DeployedContract(
+    ContractAbi.fromJson(identityRegistryAbi, 'IdentityRegistry'),
+    EthereumAddress.fromHex(_identityRegistryAddress),
+  );
+
+  static final _factoryContract = DeployedContract(
+    ContractAbi.fromJson(truthidAccountFactoryAbi, 'TruthIDAccountFactory'),
+    EthereumAddress.fromHex(_truthidAccountFactoryAddress),
   );
 
   // Faz uma leitura (eth_call) no contrato e retorna os valores decodificados.
@@ -536,6 +562,102 @@ class BlockchainService {
     );
   }
 
+  // Confirma se um @username já está em uso — checagem de leitura antes de
+  // gastar gas com createIdentity (P68, fatia 1, mesmo guard que
+  // CreateIdentity.tsx já faz no Desktop via useReadContract).
+  Future<bool> isUsernameTaken(String username) async {
+    final fn = _identityContract.function('isUsernameTaken');
+    final result = await _ethCall(_identityRegistryAddress, fn, [username]);
+    return result[0] as bool;
+  }
+
+  // Resolve o @username já registrado pra um controller (endereço da smart
+  // account), se houver — mesma checagem que CreateIdentity.tsx faz no
+  // Desktop pra evitar criar uma 2ª identidade pra uma wallet que já tem uma.
+  // Retorna string vazia se não achar (fonte de verdade: isUsernameTaken
+  // acima é quem decide "está em uso", aqui só resolvemos o nome quando já
+  // se sabe que existe).
+  Future<String> getUsernameByController(EthereumAddress controller) async {
+    final fn = _identityContract.function('getUsernameByController');
+    final result = await _ethCall(_identityRegistryAddress, fn, [controller]);
+    return result[0] as String;
+  }
+
+  // Endereço (20 bytes) alinhado à direita num slot de 32 bytes — mesma
+  // convenção ABI que _uint256Bytes já usa, só com zeros à esquerda em vez
+  // de um valor numérico. Usado pelos calldata builders abaixo.
+  Uint8List _addressBytes(EthereumAddress address) {
+    final raw = address.addressBytes;
+    return Uint8List.fromList([...Uint8List(32 - raw.length), ...raw]);
+  }
+
+  // Calldata de IdentityRegistry.createIdentity(username, controller, v, r, s)
+  // — codificado à mão, mesmo motivo de getIdentityByUsername/hasVault/getVault
+  // (débito #32: o encoder de ContractFunction do web3dart não é confiável
+  // pra esta base de código quando há um tipo dinâmico envolvido — aqui é só
+  // um parâmetro dinâmico (username) e ele é o primeiro, então tecnicamente
+  // seria um caso mais simples, mas hand-rolling elimina qualquer dúvida
+  // sobre o comportamento do encoder pra `uint8`/`bytes32`, nunca exercitados
+  // em outro lugar deste arquivo). `v`/`r`/`s` vêm de
+  // utils/ecdsa_signature.dart (P68, fatia 1).
+  Uint8List buildCreateIdentityCalldata({
+    required String username,
+    required EthereumAddress controller,
+    required int v,
+    required Uint8List r,
+    required Uint8List s,
+  }) {
+    final selector = keccak256(Uint8List.fromList(
+            utf8.encode('createIdentity(string,address,uint8,bytes32,bytes32)')))
+        .sublist(0, 4);
+    final usernameBytes = Uint8List.fromList(utf8.encode(username));
+    final paddedUsernameLen = ((usernameBytes.length + 31) ~/ 32) * 32;
+
+    final callData = BytesBuilder()
+      ..add(selector)
+      ..add(_uint256Bytes(160)) // offset do único param dinâmico: 5*32
+      ..add(_addressBytes(controller))
+      ..add(_uint256Bytes(v))
+      ..add(r)
+      ..add(s)
+      ..add(_uint256Bytes(usernameBytes.length))
+      ..add(usernameBytes)
+      ..add(Uint8List(paddedUsernameLen - usernameBytes.length));
+
+    return callData.toBytes();
+  }
+
+  // Calldata de TruthIDAccountFactory.createAccount(owner_, index) — sem
+  // parâmetro dinâmico nenhum, o mais simples dos dois.
+  Uint8List buildCreateAccountCalldata(EthereumAddress owner) {
+    final selector = keccak256(
+            Uint8List.fromList(utf8.encode('createAccount(address,uint256)')))
+        .sublist(0, 4);
+    final callData = BytesBuilder()
+      ..add(selector)
+      ..add(_addressBytes(owner))
+      ..add(_uint256Bytes(0)); // index, sempre 0 nesta app
+    return callData.toBytes();
+  }
+
+  // Endereço previsto (CREATE2) da smart account de um owner, lido direto da
+  // view on-chain da factory — única fonte de verdade usada neste app pra
+  // esse endereço (P68, fatia 1). Nunca replicar o cálculo de CREATE2
+  // localmente: foi exatamente isso que causou o bug real do P66 no Desktop
+  // (bytecode copiado ficou desatualizado após um redeploy da factory,
+  // endereço previsto localmente divergiu do real). `index` é sempre 0 nesta
+  // app — mesma convenção do Desktop (CreateIdentity.tsx sempre usa index 0).
+  Future<EthereumAddress> predictSmartAccountAddress(
+      EthereumAddress owner) async {
+    final fn = _factoryContract.function('getAddress');
+    final result = await _ethCall(
+      _truthidAccountFactoryAddress,
+      fn,
+      [owner, BigInt.zero],
+    );
+    return result[0] as EthereumAddress;
+  }
+
   Uint8List _uint256Bytes(int value) {
     final hex = value.toRadixString(16).padLeft(64, '0');
     return Uint8List.fromList(List.generate(
@@ -665,6 +787,20 @@ class BlockchainService {
       effectiveGasPrice:
           BigInt.parse((map['effectiveGasPrice'] as String).substring(2), radix: 16),
     );
+  }
+
+  // eth_getTransactionReceipt, mas sem lançar pra tx ainda pendente (não
+  // minerada) — só pra saber "já terminou, e deu certo?" via polling, sem
+  // precisar de try/catch a cada rodada. Usado por CreateIdentityScreen
+  // (P68, fatia 1) entre cada transação da sequência, já que
+  // `eth_sendTransaction` via WalletConnect devolve só o hash, não o recibo.
+  // null = ainda pendente; true = minerada com sucesso (status 0x1); false =
+  // minerada mas revertida (status 0x0).
+  Future<bool?> isTransactionConfirmed(String txHash) async {
+    final result = await _rpcCall('eth_getTransactionReceipt', [txHash]);
+    if (result == null) return null;
+    final map = result as Map<String, dynamic>;
+    return (map['status'] as String) == '0x1';
   }
 
   // eth_getBlockByNumber (sem transações completas — segundo parâmetro

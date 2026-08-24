@@ -46,4 +46,26 @@ void main() {
 
     expect(() => contract.function('getNonce'), returnsNormally);
   });
+
+  test('identityRegistryAbi tem todas as funções usadas em blockchain_service.dart (P68, fatia 1)', () {
+    final contract = DeployedContract(
+      ContractAbi.fromJson(identityRegistryAbi, 'IdentityRegistry'),
+      _dummyAddress,
+    );
+
+    expect(() => contract.function('getIdentity'), returnsNormally);
+    expect(() => contract.function('createIdentity'), returnsNormally);
+    expect(() => contract.function('isUsernameTaken'), returnsNormally);
+    expect(() => contract.function('getUsernameByController'), returnsNormally);
+  });
+
+  test('truthidAccountFactoryAbi tem todas as funções usadas em blockchain_service.dart (P68, fatia 1)', () {
+    final contract = DeployedContract(
+      ContractAbi.fromJson(truthidAccountFactoryAbi, 'TruthIDAccountFactory'),
+      _dummyAddress,
+    );
+
+    expect(() => contract.function('createAccount'), returnsNormally);
+    expect(() => contract.function('getAddress'), returnsNormally);
+  });
 }

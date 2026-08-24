@@ -34,6 +34,13 @@ dependencies:
   cupertino_icons: ^1.0.8
   flutter_secure_storage: ^9.2.4
   web3dart: ^2.7.3
+  # Pinado em 1.7.6 (não a última, >=1.7.7-beta02) de propósito: a partir da
+  # 1.7.7-beta02 o reown_appkit sobe a dependência de web3dart pra ^3.0.1,
+  # incompatível com o web3dart ^2.7.3 que o resto do app já usa em todo
+  # lugar (blockchain_service.dart, device_key_service.dart, etc — upgrade
+  # pra v3 é mudança grande, fora de escopo aqui). 1.7.6 ainda usa web3dart
+  # ^2.x, satisfaz os dois.
+  reown_appkit: ^1.7.6
   mobile_scanner: ^7.4.0
   qr_flutter: ^4.1.0
   url_launcher: ^6.3.0

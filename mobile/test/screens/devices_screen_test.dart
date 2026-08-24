@@ -132,4 +132,41 @@ void main() {
     verify(() => mockStorage.clearPairedIdentity()).called(1);
     verifyNever(() => mockBlockchain.getUsernameForIdentity(any()));
   });
+
+  // P68, fatia 1 — o botão "Create new identity" é o novo caminho pra criar
+  // identidade sem Desktop, então só faz sentido aparecer junto do botão de
+  // QR, no mesmo estado "ainda não pareado" — nunca quando já existe uma
+  // identidade pareada.
+  testWidgets(
+      'P68: mostra o botão "Create new identity" junto do QR quando não '
+      'pareado', (tester) async {
+    when(() => mockStorage.getPairedIdentityId())
+        .thenAnswer((_) async => null);
+    when(() => mockStorage.getPairedUsername()).thenAnswer((_) async => null);
+    when(() => mockBlockchain.getDevice(deviceAddress))
+        .thenAnswer((_) async => null);
+
+    await tester.pumpWidget(buildScreen());
+    await tester.pumpAndSettle();
+
+    expect(find.text('Show QR to pair'), findsOneWidget);
+    expect(find.text('Create new identity'), findsOneWidget);
+  });
+
+  testWidgets(
+      'P68: NÃO mostra o botão "Create new identity" quando já há uma '
+      'identidade pareada', (tester) async {
+    when(() => mockStorage.getPairedIdentityId()).thenAnswer((_) async => '1');
+    when(() => mockStorage.getPairedUsername())
+        .thenAnswer((_) async => 'alice');
+    when(() => mockBlockchain.getDevice(deviceAddress)).thenAnswer(
+      (_) async =>
+          DeviceInfo(identityId: BigInt.one, revoked: false, exists: true),
+    );
+
+    await tester.pumpWidget(buildScreen());
+    await tester.pumpAndSettle();
+
+    expect(find.text('Create new identity'), findsNothing);
+  });
 }

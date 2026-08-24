@@ -172,6 +172,90 @@
   "@devicesScreenShowQrButton": {
     "description": "Primary button label on the Devices screen that opens the pairing QR code screen."
   },
+  "devicesScreenCreateIdentityButton": "Crear identidad nueva",
+  "@devicesScreenCreateIdentityButton": {
+    "description": "Secondary button label on the Devices screen (unpaired state) that opens the create-identity screen (P68, slice 1)."
+  },
+  "createIdentityScreenTitle": "Crear identidad",
+  "@createIdentityScreenTitle": {
+    "description": "AppBar title of CreateIdentityScreen (P68, slice 1)."
+  },
+  "createIdentityScreenConnectWalletButton": "Conectar wallet",
+  "@createIdentityScreenConnectWalletButton": {
+    "description": "Button label on CreateIdentityScreen to open the WalletConnect connect modal."
+  },
+  "createIdentityScreenConnectedAddressLabel": "Wallet conectada",
+  "@createIdentityScreenConnectedAddressLabel": {
+    "description": "Label above the connected wallet address on CreateIdentityScreen."
+  },
+  "createIdentityScreenUsernameLabel": "Nombre de usuario",
+  "@createIdentityScreenUsernameLabel": {
+    "description": "Text field label for the desired @username on CreateIdentityScreen."
+  },
+  "createIdentityScreenFundingLabel": "Fondos iniciales (ETH)",
+  "@createIdentityScreenFundingLabel": {
+    "description": "Text field label for the ETH amount to send to the new smart account on CreateIdentityScreen."
+  },
+  "createIdentityScreenCreateButton": "Crear identidad",
+  "@createIdentityScreenCreateButton": {
+    "description": "Primary button label on CreateIdentityScreen that starts the sign+create sequence."
+  },
+  "createIdentityScreenUsernameTakenError": "Este nombre de usuario ya está en uso.",
+  "@createIdentityScreenUsernameTakenError": {
+    "description": "Error message on CreateIdentityScreen when the chosen username is already registered."
+  },
+  "createIdentityScreenAlreadyHasIdentityError": "Esta wallet ya tiene una identidad.",
+  "@createIdentityScreenAlreadyHasIdentityError": {
+    "description": "Error message on CreateIdentityScreen when the connected wallet already controls an identity."
+  },
+  "createIdentityScreenStepConnecting": "Conectando con tu wallet…",
+  "@createIdentityScreenStepConnecting": {
+    "description": "Progress label on CreateIdentityScreen while the WalletConnect modal is open."
+  },
+  "createIdentityScreenStepChecking": "Comprobando disponibilidad…",
+  "@createIdentityScreenStepChecking": {
+    "description": "Progress label on CreateIdentityScreen while checking username/wallet availability."
+  },
+  "createIdentityScreenStepPredicting": "Resolviendo la dirección de la smart account…",
+  "@createIdentityScreenStepPredicting": {
+    "description": "Progress label on CreateIdentityScreen while reading the predicted smart account address."
+  },
+  "createIdentityScreenStepSigningConsent": "Esperando la firma de consentimiento en tu wallet…",
+  "@createIdentityScreenStepSigningConsent": {
+    "description": "Progress label on CreateIdentityScreen while waiting for personal_sign in the connected wallet app."
+  },
+  "createIdentityScreenStepCreatingIdentity": "Creando identidad on-chain…",
+  "@createIdentityScreenStepCreatingIdentity": {
+    "description": "Progress label on CreateIdentityScreen while the createIdentity transaction is pending."
+  },
+  "createIdentityScreenStepDeployingAccount": "Desplegando smart account…",
+  "@createIdentityScreenStepDeployingAccount": {
+    "description": "Progress label on CreateIdentityScreen while the createAccount transaction is pending."
+  },
+  "createIdentityScreenStepFunding": "Financiando la smart account…",
+  "@createIdentityScreenStepFunding": {
+    "description": "Progress label on CreateIdentityScreen while the funding transaction is pending."
+  },
+  "createIdentityScreenSuccessMessage": "¡Identidad creada con éxito!",
+  "@createIdentityScreenSuccessMessage": {
+    "description": "Success message shown on CreateIdentityScreen once the full sequence completes."
+  },
+  "createIdentityScreenDeriveVaultKeyButton": "Configurar clave del Vault",
+  "@createIdentityScreenDeriveVaultKeyButton": {
+    "description": "Button label on CreateIdentityScreen's success step, offering the optional vault key derivation."
+  },
+  "createIdentityScreenSkipVaultKeyButton": "Omitir por ahora",
+  "@createIdentityScreenSkipVaultKeyButton": {
+    "description": "Button label on CreateIdentityScreen's success step to skip vault key derivation and finish."
+  },
+  "createIdentityScreenVaultKeyDerivedMessage": "Clave del Vault configurada.",
+  "@createIdentityScreenVaultKeyDerivedMessage": {
+    "description": "Confirmation message on CreateIdentityScreen after the vault key was derived and stored."
+  },
+  "createIdentityScreenContinueButton": "Continuar",
+  "@createIdentityScreenContinueButton": {
+    "description": "Final button label on CreateIdentityScreen after the vault key step, closes the screen."
+  },
   "scanScreenInvalidMessage": "QR no válido — intenta de nuevo",
   "@scanScreenInvalidMessage": {
     "description": "Default snackbar message on the generic Scan screen when the scanned QR code fails to parse (used when no custom invalidMessage is supplied)."

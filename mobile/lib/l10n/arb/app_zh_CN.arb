@@ -172,6 +172,90 @@
   "@devicesScreenShowQrButton": {
     "description": "Primary button label on the Devices screen that opens the pairing QR code screen."
   },
+  "devicesScreenCreateIdentityButton": "创建新身份",
+  "@devicesScreenCreateIdentityButton": {
+    "description": "Secondary button label on the Devices screen (unpaired state) that opens the create-identity screen (P68, slice 1)."
+  },
+  "createIdentityScreenTitle": "创建身份",
+  "@createIdentityScreenTitle": {
+    "description": "AppBar title of CreateIdentityScreen (P68, slice 1)."
+  },
+  "createIdentityScreenConnectWalletButton": "连接钱包",
+  "@createIdentityScreenConnectWalletButton": {
+    "description": "Button label on CreateIdentityScreen to open the WalletConnect connect modal."
+  },
+  "createIdentityScreenConnectedAddressLabel": "已连接的钱包",
+  "@createIdentityScreenConnectedAddressLabel": {
+    "description": "Label above the connected wallet address on CreateIdentityScreen."
+  },
+  "createIdentityScreenUsernameLabel": "用户名",
+  "@createIdentityScreenUsernameLabel": {
+    "description": "Text field label for the desired @username on CreateIdentityScreen."
+  },
+  "createIdentityScreenFundingLabel": "初始资金 (ETH)",
+  "@createIdentityScreenFundingLabel": {
+    "description": "Text field label for the ETH amount to send to the new smart account on CreateIdentityScreen."
+  },
+  "createIdentityScreenCreateButton": "创建身份",
+  "@createIdentityScreenCreateButton": {
+    "description": "Primary button label on CreateIdentityScreen that starts the sign+create sequence."
+  },
+  "createIdentityScreenUsernameTakenError": "该用户名已被使用。",
+  "@createIdentityScreenUsernameTakenError": {
+    "description": "Error message on CreateIdentityScreen when the chosen username is already registered."
+  },
+  "createIdentityScreenAlreadyHasIdentityError": "该钱包已拥有一个身份。",
+  "@createIdentityScreenAlreadyHasIdentityError": {
+    "description": "Error message on CreateIdentityScreen when the connected wallet already controls an identity."
+  },
+  "createIdentityScreenStepConnecting": "正在连接您的钱包…",
+  "@createIdentityScreenStepConnecting": {
+    "description": "Progress label on CreateIdentityScreen while the WalletConnect modal is open."
+  },
+  "createIdentityScreenStepChecking": "正在检查可用性…",
+  "@createIdentityScreenStepChecking": {
+    "description": "Progress label on CreateIdentityScreen while checking username/wallet availability."
+  },
+  "createIdentityScreenStepPredicting": "正在解析智能账户地址…",
+  "@createIdentityScreenStepPredicting": {
+    "description": "Progress label on CreateIdentityScreen while reading the predicted smart account address."
+  },
+  "createIdentityScreenStepSigningConsent": "正在等待您钱包中的同意签名…",
+  "@createIdentityScreenStepSigningConsent": {
+    "description": "Progress label on CreateIdentityScreen while waiting for personal_sign in the connected wallet app."
+  },
+  "createIdentityScreenStepCreatingIdentity": "正在链上创建身份…",
+  "@createIdentityScreenStepCreatingIdentity": {
+    "description": "Progress label on CreateIdentityScreen while the createIdentity transaction is pending."
+  },
+  "createIdentityScreenStepDeployingAccount": "正在部署智能账户…",
+  "@createIdentityScreenStepDeployingAccount": {
+    "description": "Progress label on CreateIdentityScreen while the createAccount transaction is pending."
+  },
+  "createIdentityScreenStepFunding": "正在为智能账户注资…",
+  "@createIdentityScreenStepFunding": {
+    "description": "Progress label on CreateIdentityScreen while the funding transaction is pending."
+  },
+  "createIdentityScreenSuccessMessage": "身份创建成功！",
+  "@createIdentityScreenSuccessMessage": {
+    "description": "Success message shown on CreateIdentityScreen once the full sequence completes."
+  },
+  "createIdentityScreenDeriveVaultKeyButton": "设置密码库密钥",
+  "@createIdentityScreenDeriveVaultKeyButton": {
+    "description": "Button label on CreateIdentityScreen's success step, offering the optional vault key derivation."
+  },
+  "createIdentityScreenSkipVaultKeyButton": "暂时跳过",
+  "@createIdentityScreenSkipVaultKeyButton": {
+    "description": "Button label on CreateIdentityScreen's success step to skip vault key derivation and finish."
+  },
+  "createIdentityScreenVaultKeyDerivedMessage": "密码库密钥已设置。",
+  "@createIdentityScreenVaultKeyDerivedMessage": {
+    "description": "Confirmation message on CreateIdentityScreen after the vault key was derived and stored."
+  },
+  "createIdentityScreenContinueButton": "继续",
+  "@createIdentityScreenContinueButton": {
+    "description": "Final button label on CreateIdentityScreen after the vault key step, closes the screen."
+  },
   "scanScreenInvalidMessage": "二维码无效 — 请重试",
   "@scanScreenInvalidMessage": {
     "description": "Default snackbar message on the generic Scan screen when the scanned QR code fails to parse (used when no custom invalidMessage is supplied)."

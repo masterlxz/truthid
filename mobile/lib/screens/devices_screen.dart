@@ -6,6 +6,7 @@ import '../services/device_key_service.dart';
 import '../services/local_storage_service.dart';
 import '../services/paired_username_resolver.dart';
 import '../theme.dart';
+import 'create_identity_screen.dart';
 import 'show_device_qr_screen.dart';
 
 class DevicesScreen extends StatefulWidget {
@@ -118,6 +119,16 @@ class _DevicesScreenState extends State<DevicesScreen> {
   Future<void> _openPairing() async {
     final success = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => const ShowDeviceQrScreen()),
+    );
+    if (success == true) _reload();
+  }
+
+  // Criar identidade 100% pelo Mobile (P68, fatia 1) — reaproveita
+  // savePairedIdentity() dentro do fluxo, então já volta pareado, sem
+  // precisar de um passo de pareamento separado depois.
+  Future<void> _openCreateIdentity() async {
+    final success = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const CreateIdentityScreen()),
     );
     if (success == true) _reload();
   }
@@ -328,6 +339,18 @@ class _DevicesScreenState extends State<DevicesScreen> {
                 icon: const Icon(Icons.qr_code),
                 label: Text(context.l10n.devicesScreenShowQrButton),
                 style: ElevatedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _openCreateIdentity,
+                icon: const Icon(Icons.add_circle_outline),
+                label: Text(context.l10n.devicesScreenCreateIdentityButton),
+                style: OutlinedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
               ),

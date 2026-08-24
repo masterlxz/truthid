@@ -13,6 +13,8 @@ class VaultKeyService {
   static const _storageKey = 'truthid_vault_key';
   static const _legacySalt = 'TruthID';
   static const _legacyInfo = 'vault-key-v1';
+  static const _walletSalt = 'TruthID';
+  static const _walletInfo = 'vault-key-v2';
 
   final DeviceKeyService _deviceKeyService;
   final EciesService _ecies;
@@ -61,6 +63,31 @@ class VaultKeyService {
     } catch (_) {
       return false;
     }
+  }
+
+  // Deriva a vault key a partir de uma assinatura `personal_sign` da wallet
+  // externa (via WalletConnect, P68 fatia 1) sobre a mensagem fixa
+  // "TruthID Vault Key v1" — mesmo HKDF que `derive_vault_key_from_wallet`
+  // já faz no Rust do Desktop (`desktop/src-tauri/src/lib.rs:262-275`, salt
+  // "TruthID", info "vault-key-v2"), mas persistido (diferente da derivação
+  // legada acima, que nunca grava em disco). Como wallets modernas assinam
+  // de forma determinística (RFC 6979), a mesma wallet + mesma mensagem
+  // produz sempre a mesma assinatura — e portanto a mesma chave — em
+  // qualquer device, mesmo sem ter passado por pareamento nenhum.
+  Future<void> deriveAndStoreFromWalletSignature({
+    required Uint8List r,
+    required Uint8List s,
+    required int v,
+  }) async {
+    final ikm = Uint8List.fromList([...r, ...s, v]);
+    final key = hkdfSha256(
+      ikm: ikm,
+      salt: utf8.encode(_walletSalt),
+      info: utf8.encode(_walletInfo),
+      length: 32,
+    );
+
+    await _storage.write(key: _storageKey, value: base64Encode(key));
   }
 
   Future<Uint8List> _deriveLegacyKey() async {
