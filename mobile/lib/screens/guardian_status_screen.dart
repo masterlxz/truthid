@@ -4,11 +4,15 @@ import '../services/blockchain_service.dart';
 import '../services/local_storage_service.dart';
 import '../services/paired_username_resolver.dart';
 import '../theme.dart';
+import 'configure_guardians_screen.dart';
 
-// Tela de visualização do status de Social Recovery — apenas leitura.
-// O Mobile nunca escreve no RecoveryManager (blockedForDevices na smart
-// account). Toda operação de recovery (configurar guardians, propor,
-// aprovar, executar, cancelar) é feita pelo Desktop com wallet (Ledger).
+// Status de Social Recovery. Configurar os próprios guardians passou a ser
+// possível pelo Mobile (P68, fatia 2, via WalletConnect — a mesma infra da
+// fatia 1) — ver ConfigureGuardiansScreen. O que continua exclusivo do
+// Desktop (com wallet, Ledger/Trezor) é agir como guardian de OUTRA
+// identidade — propor/aprovar/executar/cancelar recovery —, deixado de fora
+// desta rodada de propósito (não exige owner, mas está fora do escopo
+// "pareamento + configurar guardians"; ver P75 em PENDING.md).
 class GuardianStatusScreen extends StatefulWidget {
   const GuardianStatusScreen({super.key});
 
@@ -64,6 +68,19 @@ class _GuardianStatusScreenState extends State<GuardianStatusScreen> {
       _timelock = results[2] as BigInt?;
       _loading = false;
     });
+  }
+
+  Future<void> _openConfigureGuardians() async {
+    final success = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => ConfigureGuardiansScreen(
+          username: _username!,
+          initialGuardians: _guardians,
+          initialThreshold: _threshold,
+        ),
+      ),
+    );
+    if (success == true) _load();
   }
 
   String _timeRemaining(BigInt proposedAt) {
@@ -199,6 +216,20 @@ class _GuardianStatusScreenState extends State<GuardianStatusScreen> {
                           ),
                         ),
                       ],
+
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _openConfigureGuardians,
+                          icon: const Icon(Icons.edit_outlined),
+                          label: Text(_guardians == null
+                              ? context.l10n
+                                  .guardianStatusScreenConfigureButton
+                              : context.l10n
+                                  .guardianStatusScreenChangeGuardiansButton),
+                        ),
+                      ),
 
                       const SizedBox(height: 20),
 

@@ -176,6 +176,10 @@
   "@devicesScreenCreateIdentityButton": {
     "description": "Secondary button label on the Devices screen (unpaired state) that opens the create-identity screen (P68, slice 1)."
   },
+  "devicesScreenPairNewDeviceButton": "配对新设备",
+  "@devicesScreenPairNewDeviceButton": {
+    "description": "Button label on the Devices screen (paired state) that opens PairDeviceScreen to authorize a new device (P68, slice 2)."
+  },
   "createIdentityScreenTitle": "创建身份",
   "@createIdentityScreenTitle": {
     "description": "AppBar title of CreateIdentityScreen (P68, slice 1)."
@@ -810,9 +814,17 @@
   "@guardianStatusScreenRecoveryCancelled": {
     "description": "Guardian/social recovery screen: message shown when a recovery proposal has been cancelled."
   },
-  "guardianStatusScreenDesktopOnlyFootnote": "恢复操作只能在连接了 Ledger 钱包的 TruthID Desktop 中进行管理。",
+  "guardianStatusScreenConfigureButton": "配置监护人",
+  "@guardianStatusScreenConfigureButton": {
+    "description": "Button label on the guardian status screen when no guardians are configured yet, opens ConfigureGuardiansScreen (P68, slice 2)."
+  },
+  "guardianStatusScreenChangeGuardiansButton": "更改监护人",
+  "@guardianStatusScreenChangeGuardiansButton": {
+    "description": "Button label on the guardian status screen when guardians are already configured, opens ConfigureGuardiansScreen to change them (P68, slice 2)."
+  },
+  "guardianStatusScreenDesktopOnlyFootnote": "代表他人的恢复担任监护人(提议/批准/执行/取消)仍需要连接钱包的 TruthID Desktop。",
   "@guardianStatusScreenDesktopOnlyFootnote": {
-    "description": "Guardian/social recovery screen: footnote explaining that recovery actions require TruthID Desktop with a connected Ledger."
+    "description": "Guardian/social recovery screen: footnote explaining that acting as a guardian for someone else's recovery still requires TruthID Desktop with a connected wallet (P68, slice 2: configuring one's own guardians is now possible on Mobile)."
   },
   "approvalScreenTitle": "登录请求",
   "@approvalScreenTitle": {
@@ -2981,5 +2993,134 @@
   "settingsScreenLanguageSheetTitle": "选择语言",
   "@settingsScreenLanguageSheetTitle": {
     "description": "Header of the bottom sheet listing the available languages"
+  },
+  "pairDeviceScreenTitle": "配对新设备",
+  "@pairDeviceScreenTitle": {
+    "description": "AppBar title of PairDeviceScreen (P68, slice 2)."
+  },
+  "pairDeviceScreenConnectWalletButton": "连接钱包",
+  "@pairDeviceScreenConnectWalletButton": {
+    "description": "Button label on PairDeviceScreen to open the WalletConnect connect modal."
+  },
+  "pairDeviceScreenConnectedAddressLabel": "已连接的钱包",
+  "@pairDeviceScreenConnectedAddressLabel": {
+    "description": "Label above the connected wallet address on PairDeviceScreen."
+  },
+  "pairDeviceScreenScanButton": "扫描设备二维码",
+  "@pairDeviceScreenScanButton": {
+    "description": "Button label on PairDeviceScreen that opens the QR scanner to read the new device's payload."
+  },
+  "pairDeviceScreenConfirmTitle": "确认新设备",
+  "@pairDeviceScreenConfirmTitle": {
+    "description": "Heading shown on PairDeviceScreen after a device QR code has been scanned, before confirming the pairing."
+  },
+  "pairDeviceScreenLabelField": "设备名称",
+  "@pairDeviceScreenLabelField": {
+    "description": "Text field label for the new device's label on PairDeviceScreen."
+  },
+  "pairDeviceScreenPairButton": "配对设备",
+  "@pairDeviceScreenPairButton": {
+    "description": "Primary button label on PairDeviceScreen that starts the commit-reveal sequence."
+  },
+  "pairDeviceScreenStepConnecting": "正在连接您的钱包…",
+  "@pairDeviceScreenStepConnecting": {
+    "description": "Progress label on PairDeviceScreen while the WalletConnect modal is open."
+  },
+  "pairDeviceScreenStepCommitting": "正在链上提交承诺…",
+  "@pairDeviceScreenStepCommitting": {
+    "description": "Progress label on PairDeviceScreen while the commitDevice transaction is pending."
+  },
+  "pairDeviceScreenStepWaitingReveal": "正在等待承诺可被打包…",
+  "@pairDeviceScreenStepWaitingReveal": {
+    "description": "Progress label on PairDeviceScreen during the wait between commit and reveal."
+  },
+  "pairDeviceScreenStepRevealing": "正在注册并授权设备…",
+  "@pairDeviceScreenStepRevealing": {
+    "description": "Progress label on PairDeviceScreen while the registerDevice+addDevice transaction is pending."
+  },
+  "pairDeviceScreenSuccessMessage": "设备配对成功!",
+  "@pairDeviceScreenSuccessMessage": {
+    "description": "Success message shown on PairDeviceScreen once the device has been paired."
+  },
+  "pairDeviceScreenInvalidQrMessage": "这看起来不是 TruthID 设备二维码 — 请重试。",
+  "@pairDeviceScreenInvalidQrMessage": {
+    "description": "Snackbar message on PairDeviceScreen's QR scanner when the scanned code isn't a valid TruthID device payload."
+  },
+  "configureGuardiansScreenTitle": "配置监护人",
+  "@configureGuardiansScreenTitle": {
+    "description": "AppBar title of ConfigureGuardiansScreen (P68, slice 2)."
+  },
+  "configureGuardiansScreenConnectWalletButton": "连接钱包",
+  "@configureGuardiansScreenConnectWalletButton": {
+    "description": "Button label on ConfigureGuardiansScreen to open the WalletConnect connect modal."
+  },
+  "configureGuardiansScreenConnectedAddressLabel": "已连接的钱包",
+  "@configureGuardiansScreenConnectedAddressLabel": {
+    "description": "Label above the connected wallet address on ConfigureGuardiansScreen."
+  },
+  "configureGuardiansScreenGuardiansLabel": "监护人",
+  "@configureGuardiansScreenGuardiansLabel": {
+    "description": "Section heading above the list of guardian address fields on ConfigureGuardiansScreen."
+  },
+  "configureGuardiansScreenAddressField": "监护人地址",
+  "@configureGuardiansScreenAddressField": {
+    "description": "Text field label for each guardian address on ConfigureGuardiansScreen."
+  },
+  "configureGuardiansScreenRemoveGuardianTooltip": "移除监护人",
+  "@configureGuardiansScreenRemoveGuardianTooltip": {
+    "description": "Tooltip on the button that removes one guardian address field on ConfigureGuardiansScreen."
+  },
+  "configureGuardiansScreenAddGuardianButton": "添加监护人",
+  "@configureGuardiansScreenAddGuardianButton": {
+    "description": "Button label on ConfigureGuardiansScreen to add another guardian address field."
+  },
+  "configureGuardiansScreenThresholdLabel": "批准阈值",
+  "@configureGuardiansScreenThresholdLabel": {
+    "description": "Text field label for the approval threshold on ConfigureGuardiansScreen."
+  },
+  "configureGuardiansScreenSubmitButton": "保存监护人",
+  "@configureGuardiansScreenSubmitButton": {
+    "description": "Primary button label on ConfigureGuardiansScreen that submits the configureGuardians transaction."
+  },
+  "configureGuardiansScreenStepConnecting": "正在连接您的钱包…",
+  "@configureGuardiansScreenStepConnecting": {
+    "description": "Progress label on ConfigureGuardiansScreen while the WalletConnect modal is open."
+  },
+  "configureGuardiansScreenStepSubmitting": "正在链上保存监护人…",
+  "@configureGuardiansScreenStepSubmitting": {
+    "description": "Progress label on ConfigureGuardiansScreen while the configureGuardians transaction is pending."
+  },
+  "configureGuardiansScreenSuccessMessage": "监护人配置成功!",
+  "@configureGuardiansScreenSuccessMessage": {
+    "description": "Success message shown on ConfigureGuardiansScreen once guardians have been saved."
+  },
+  "configureGuardiansScreenEmptyGuardiansError": "请至少添加一个监护人地址。",
+  "@configureGuardiansScreenEmptyGuardiansError": {
+    "description": "Validation error on ConfigureGuardiansScreen when no guardian address was entered."
+  },
+  "configureGuardiansScreenTooManyGuardiansError": "最多只能添加 20 个监护人。",
+  "@configureGuardiansScreenTooManyGuardiansError": {
+    "description": "Validation error on ConfigureGuardiansScreen when more than RecoveryManager.MAX_GUARDIANS (20) addresses were entered."
+  },
+  "configureGuardiansScreenDuplicateGuardianError": "监护人地址不能重复。",
+  "@configureGuardiansScreenDuplicateGuardianError": {
+    "description": "Validation error on ConfigureGuardiansScreen when the same guardian address was entered more than once."
+  },
+  "configureGuardiansScreenInvalidAddressError": "一个或多个监护人地址无效。",
+  "@configureGuardiansScreenInvalidAddressError": {
+    "description": "Validation error on ConfigureGuardiansScreen when a guardian address isn't a valid Ethereum address."
+  },
+  "configureGuardiansScreenThresholdRangeError": "阈值必须介于 1 和监护人数量之间。",
+  "@configureGuardiansScreenThresholdRangeError": {
+    "description": "Validation error on ConfigureGuardiansScreen when the threshold is below 1 or above the number of guardians."
+  },
+  "configureGuardiansScreenThresholdOfSuffix": "共 {count} 位",
+  "@configureGuardiansScreenThresholdOfSuffix": {
+    "description": "Suffix on the threshold field of ConfigureGuardiansScreen showing the total number of guardians entered, e.g. \"of 3\".",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
   }
 }

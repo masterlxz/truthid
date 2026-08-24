@@ -7,6 +7,7 @@ import '../services/local_storage_service.dart';
 import '../services/paired_username_resolver.dart';
 import '../theme.dart';
 import 'create_identity_screen.dart';
+import 'pair_device_screen.dart';
 import 'show_device_qr_screen.dart';
 
 class DevicesScreen extends StatefulWidget {
@@ -133,6 +134,19 @@ class _DevicesScreenState extends State<DevicesScreen> {
     if (success == true) _reload();
   }
 
+  // Parear um novo device pelo Mobile (P68, fatia 2) — reaproveita a mesma
+  // infra WalletConnect da fatia 1. Só faz sentido com uma identidade já
+  // pareada neste device (precisa saber o @username pra resolver a smart
+  // account que vai autorizar o device escaneado).
+  Future<void> _openPairNewDevice() async {
+    final success = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => PairDeviceScreen(username: _pairedUsername!),
+      ),
+    );
+    if (success == true) _reload();
+  }
+
   void _copyAddress() {
     if (_deviceAddress == null) return;
     Clipboard.setData(ClipboardData(text: _deviceAddress!));
@@ -255,6 +269,16 @@ class _DevicesScreenState extends State<DevicesScreen> {
                         onPressed: _showEncryptionKey,
                         icon: const Icon(Icons.key, size: 18),
                         label: Text(context.l10n.devicesScreenShowEncryptionKeyButton),
+                      ),
+                    ],
+
+                    if (_pairedUsername != null) ...[
+                      const SizedBox(height: 4),
+                      TextButton.icon(
+                        onPressed: _openPairNewDevice,
+                        icon: const Icon(Icons.qr_code_scanner, size: 18),
+                        label: Text(
+                            context.l10n.devicesScreenPairNewDeviceButton),
                       ),
                     ],
 

@@ -139,6 +139,10 @@ class BlockchainService {
   // endereço como `to` da transação createAccount.
   static const truthidAccountFactoryAddress = _truthidAccountFactoryAddress;
 
+  // Exposto publicamente — ConfigureGuardiansScreen (P68, fatia 2) precisa
+  // deste endereço como `dest` da chamada TruthIDAccount.execute.
+  static const recoveryManagerAddress = _recoveryManagerAddress;
+
   // Blocos de deploy na Base Mainnet (redeploy em cascata, débito #52) —
   // mesmos valores já usados no Desktop (desktop/src/config/contracts.ts),
   // confirmados nos artefatos de broadcast do Foundry. Ponto de partida do
@@ -640,6 +644,239 @@ class BlockchainService {
     return callData.toBytes();
   }
 
+  // ── Parear device + configurar guardians (P68, fatia 2) ───────────────────
+  //
+  // Toda escrita abaixo é roteada pela smart account (TruthIDAccount.execute
+  // /executeBatch), nunca chamando DeviceRegistry/RecoveryManager direto —
+  // `msg.sender` visto por esses contratos precisa ser o controller (a smart
+  // account), não a wallet externa que assina via WalletConnect. Confirmado
+  // lendo DeviceRegistry.sol (comentário do commitDevice) e
+  // GuardianManagement.tsx (handleConfigure) no Desktop, que já faz exatamente
+  // isso — `sendConfig({ functionName: "execute", args: [dest, value, func] })`.
+
+  /// commitment = keccak256(abi.encodePacked(devicePubKey, salt, smartAccount))
+  /// — abi.encodePacked de (address,bytes32,address) é concatenação crua sem
+  /// padding (20+32+20 = 72 bytes), diferente do abi.encode usado pelos
+  /// outros builders deste arquivo.
+  Uint8List buildDeviceCommitment({
+    required EthereumAddress devicePubKey,
+    required Uint8List salt,
+    required EthereumAddress smartAccount,
+  }) {
+    final packed = Uint8List.fromList([
+      ...devicePubKey.addressBytes,
+      ...salt,
+      ...smartAccount.addressBytes,
+    ]);
+    return keccak256(packed);
+  }
+
+  // Calldata de DeviceRegistry.commitDevice(bytes32) — sem parâmetro
+  // dinâmico.
+  Uint8List buildCommitDeviceCalldata(Uint8List commitment) {
+    final selector = keccak256(
+            Uint8List.fromList(utf8.encode('commitDevice(bytes32)')))
+        .sublist(0, 4);
+    return (BytesBuilder()
+          ..add(selector)
+          ..add(commitment))
+        .toBytes();
+  }
+
+  // Calldata de DeviceRegistry.registerDevice(address,string,bytes32,bytes)
+  // — os slots do cabeçalho seguem a ORDEM DE DECLARAÇÃO dos parâmetros, não
+  // "estáticos primeiro": devicePubKey (estático, inline), offset_label
+  // (string é o 2º parâmetro, dinâmico), salt (bytes32 é ESTÁTICO — tamanho
+  // fixo, vai inline mesmo sendo o 3º parâmetro, não no bloco de dados
+  // dinâmicos), offset_encryptedVaultKey (4º parâmetro, dinâmico). Achado
+  // real (P68, fatia 2): a 1ª versão agrupava os 2 estáticos primeiro
+  // (devicePubKey, salt) e só depois os 2 offsets — divergia do vetor viem
+  // real porque a ABI exige a ordem de declaração dos parâmetros no
+  // cabeçalho, nunca reagrupada por "estático vs. dinâmico".
+  Uint8List buildRegisterDeviceCalldata({
+    required EthereumAddress devicePubKey,
+    required String label,
+    required Uint8List salt,
+    required Uint8List encryptedVaultKey,
+  }) {
+    final selector = keccak256(Uint8List.fromList(
+            utf8.encode('registerDevice(address,string,bytes32,bytes)')))
+        .sublist(0, 4);
+
+    final labelBytes = Uint8List.fromList(utf8.encode(label));
+    final paddedLabelLen = ((labelBytes.length + 31) ~/ 32) * 32;
+    final paddedKeyLen = ((encryptedVaultKey.length + 31) ~/ 32) * 32;
+
+    final labelOffset = 128; // 4 slots de cabeçalho * 32
+    final labelBlockLen = 32 + paddedLabelLen; // slot de tamanho + dados
+    final keyOffset = labelOffset + labelBlockLen;
+
+    final callData = BytesBuilder()
+      ..add(selector)
+      ..add(_addressBytes(devicePubKey))
+      ..add(_uint256Bytes(labelOffset))
+      ..add(salt)
+      ..add(_uint256Bytes(keyOffset))
+      ..add(_uint256Bytes(labelBytes.length))
+      ..add(labelBytes)
+      ..add(Uint8List(paddedLabelLen - labelBytes.length))
+      ..add(_uint256Bytes(encryptedVaultKey.length))
+      ..add(encryptedVaultKey)
+      ..add(Uint8List(paddedKeyLen - encryptedVaultKey.length));
+
+    return callData.toBytes();
+  }
+
+  // Calldata de TruthIDAccount.addDevice(address) — sem dinâmico.
+  Uint8List buildAddDeviceCalldata(EthereumAddress device) {
+    final selector = keccak256(
+            Uint8List.fromList(utf8.encode('addDevice(address)')))
+        .sublist(0, 4);
+    return (BytesBuilder()
+          ..add(selector)
+          ..add(_addressBytes(device)))
+        .toBytes();
+  }
+
+  // Calldata de TruthIDAccount.execute(address,uint256,bytes) — 1 parâmetro
+  // dinâmico (func), sempre o último. Usado como wrapper pra rotear qualquer
+  // chamada (commitDevice, configureGuardians) através da smart account.
+  Uint8List buildExecuteCalldata({
+    required EthereumAddress dest,
+    required BigInt value,
+    required Uint8List func,
+  }) {
+    final selector = keccak256(Uint8List.fromList(
+            utf8.encode('execute(address,uint256,bytes)')))
+        .sublist(0, 4);
+    final paddedFuncLen = ((func.length + 31) ~/ 32) * 32;
+
+    final callData = BytesBuilder()
+      ..add(selector)
+      ..add(_addressBytes(dest))
+      ..add(_uint256BytesFromBigInt(value))
+      ..add(_uint256Bytes(96)) // offset do param dinâmico: 3*32
+      ..add(_uint256Bytes(func.length))
+      ..add(func)
+      ..add(Uint8List(paddedFuncLen - func.length));
+
+    return callData.toBytes();
+  }
+
+  // Calldata de TruthIDAccount.executeBatch(address[],uint256[],bytes[]) —
+  // 3 arrays dinâmicos; `func` é o mais complexo porque cada elemento
+  // (bytes) é ele mesmo dinâmico, então carrega seu próprio offset relativo
+  // dentro do bloco de `func`. Usado pro reveal do pareamento de device
+  // (registerDevice + addDevice sempre juntos — nunca separar, ver P52/P53
+  // em PENDING.md: um device "registrado" mas sem addDevice fica incapaz de
+  // assinar qualquer UserOp pra própria conta).
+  Uint8List buildExecuteBatchCalldata({
+    required List<EthereumAddress> dest,
+    required List<BigInt> value,
+    required List<Uint8List> func,
+  }) {
+    assert(dest.length == value.length && value.length == func.length);
+    final n = dest.length;
+    final selector = keccak256(Uint8List.fromList(utf8.encode(
+            'executeBatch(address[],uint256[],bytes[])')))
+        .sublist(0, 4);
+
+    // Cabeçalho: 3 offsets (dest, value, func), cada um relativo ao início
+    // dos dados dos parâmetros (logo após o selector).
+    final destOffset = 96; // 3 slots de cabeçalho * 32
+    final destBlockLen = 32 + n * 32; // slot de length + n endereços
+    final valueOffset = destOffset + destBlockLen;
+    final valueBlockLen = 32 + n * 32; // slot de length + n uint256
+    final funcOffset = valueOffset + valueBlockLen;
+
+    // Bloco de `func`: slot de length + n offsets, seguido dos n elementos
+    // bytes (cada um com seu próprio slot de length + dados com padding).
+    // Achado real (P68, fatia 2): os offsets de `func[i]` são relativos ao
+    // INÍCIO da tabela de offsets (logo após o slot de length, não depois
+    // dela) — a 1ª versão começava a contagem em `32 + n*32` (depois da
+    // tabela inteira), divergindo do vetor viem real por exatamente
+    // `n*32` bytes. Confirmado byte a byte contra `encodeFunctionData` do
+    // viem: pra n=2, o 1º offset é `64` (= n*32), não `96`.
+    final funcOffsetsTableLen = n * 32;
+    final elementOffsets = <int>[];
+    final elementBlocks = <Uint8List>[];
+    var runningOffset = funcOffsetsTableLen;
+    for (final f in func) {
+      elementOffsets.add(runningOffset);
+      final paddedLen = ((f.length + 31) ~/ 32) * 32;
+      final block = BytesBuilder()
+        ..add(_uint256Bytes(f.length))
+        ..add(f)
+        ..add(Uint8List(paddedLen - f.length));
+      final blockBytes = block.toBytes();
+      elementBlocks.add(blockBytes);
+      runningOffset += blockBytes.length;
+    }
+
+    final callData = BytesBuilder()
+      ..add(selector)
+      ..add(_uint256Bytes(destOffset))
+      ..add(_uint256Bytes(valueOffset))
+      ..add(_uint256Bytes(funcOffset))
+      // bloco dest[]
+      ..add(_uint256Bytes(n));
+    for (final d in dest) {
+      callData.add(_addressBytes(d));
+    }
+    // bloco value[]
+    callData.add(_uint256Bytes(n));
+    for (final v in value) {
+      callData.add(_uint256BytesFromBigInt(v));
+    }
+    // bloco func[]
+    callData.add(_uint256Bytes(n));
+    for (final offset in elementOffsets) {
+      callData.add(_uint256Bytes(offset));
+    }
+    for (final block in elementBlocks) {
+      callData.add(block);
+    }
+
+    return callData.toBytes();
+  }
+
+  // Calldata de RecoveryManager.configureGuardians(string,address[],uint256)
+  // — mesmo padrão de buildCreateIdentityCalldata (1 string dinâmica entre
+  // estáticos) + um array dinâmico (guardians).
+  Uint8List buildConfigureGuardiansCalldata({
+    required String username,
+    required List<EthereumAddress> guardians,
+    required BigInt threshold,
+  }) {
+    final selector = keccak256(Uint8List.fromList(utf8.encode(
+            'configureGuardians(string,address[],uint256)')))
+        .sublist(0, 4);
+
+    final usernameBytes = Uint8List.fromList(utf8.encode(username));
+    final paddedUsernameLen = ((usernameBytes.length + 31) ~/ 32) * 32;
+    final usernameBlockLen = 32 + paddedUsernameLen; // length slot + dados
+
+    final usernameOffset = 96; // 3 slots de cabeçalho * 32
+    final guardiansOffset = usernameOffset + usernameBlockLen;
+
+    final callData = BytesBuilder()
+      ..add(selector)
+      ..add(_uint256Bytes(usernameOffset))
+      ..add(_uint256Bytes(guardiansOffset))
+      ..add(_uint256BytesFromBigInt(threshold))
+      // bloco username (string)
+      ..add(_uint256Bytes(usernameBytes.length))
+      ..add(usernameBytes)
+      ..add(Uint8List(paddedUsernameLen - usernameBytes.length))
+      // bloco guardians (address[])
+      ..add(_uint256Bytes(guardians.length));
+    for (final g in guardians) {
+      callData.add(_addressBytes(g));
+    }
+
+    return callData.toBytes();
+  }
+
   // Endereço previsto (CREATE2) da smart account de um owner, lido direto da
   // view on-chain da factory — única fonte de verdade usada neste app pra
   // esse endereço (P68, fatia 1). Nunca replicar o cálculo de CREATE2
@@ -817,6 +1054,9 @@ class BlockchainService {
   }
 
   // ── Social Recovery (RecoveryManager) — leituras ──────────────────────────
+  // (escrita de configureGuardians fica em buildConfigureGuardiansCalldata,
+  // acima — propor/aprovar/executar/cancelar recovery de OUTRA identidade
+  // continua exclusivo do Desktop, ver P75 em PENDING.md)
 
   /// Retorna a config de guardians de uma identidade: lista de endereços +
   /// threshold (M de N). Retorna null se nunca foi configurado (tupla vazia).
@@ -882,8 +1122,11 @@ class TxReceiptInfo {
   const TxReceiptInfo({required this.gasUsed, required this.effectiveGasPrice});
 }
 
-// Proposta de recovery social lida do RecoveryManager. Só leitura — o Mobile
-// nunca escreve no RecoveryManager (blockedForDevices na smart account).
+// Proposta de recovery social lida do RecoveryManager. O Mobile só escreve
+// configureGuardians (P68, fatia 2, owner-gated via WalletConnect) — propor/
+// aprovar/executar/cancelar recovery de OUTRA identidade como guardian segue
+// exclusivo do Desktop (não é owner-gated, mas fora de escopo desta rodada;
+// ver P75 em PENDING.md).
 class RecoveryProposal {
   final String proposedBy;
   final String newController;
