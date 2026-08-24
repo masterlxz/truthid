@@ -822,7 +822,11 @@
   "@guardianStatusScreenChangeGuardiansButton": {
     "description": "Button label on the guardian status screen when guardians are already configured, opens ConfigureGuardiansScreen to change them (P68, slice 2)."
   },
-  "guardianStatusScreenDesktopOnlyFootnote": "代表他人的恢复担任监护人(提议/批准/执行/取消)仍需要连接钱包的 TruthID Desktop。",
+  "guardianStatusScreenActAsGuardianTooltip": "作为他人的监护人",
+  "@guardianStatusScreenActAsGuardianTooltip": {
+    "description": "Tooltip of the AppBar action on GuardianStatusScreen that opens ActAsGuardianScreen (P68, slice 3)."
+  },
+  "guardianStatusScreenDesktopOnlyFootnote": "取消针对您自己身份的有效恢复提议仍需要连接钱包的 TruthID Desktop。",
   "@guardianStatusScreenDesktopOnlyFootnote": {
     "description": "Guardian/social recovery screen: footnote explaining that acting as a guardian for someone else's recovery still requires TruthID Desktop with a connected wallet (P68, slice 2: configuring one's own guardians is now possible on Mobile)."
   },
@@ -3122,5 +3126,63 @@
         "type": "int"
       }
     }
+  },
+  "actAsGuardianScreenTitle": "作为监护人",
+  "@actAsGuardianScreenTitle": {
+    "description": "AppBar title of ActAsGuardianScreen (P68, slice 3)."
+  },
+  "actAsGuardianScreenConnectWalletButton": "连接钱包",
+  "@actAsGuardianScreenConnectWalletButton": {
+    "description": "Button label on ActAsGuardianScreen to open the WalletConnect connect modal."
+  },
+  "actAsGuardianScreenUsernameField": "身份用户名",
+  "@actAsGuardianScreenUsernameField": {
+    "description": "Text field label for the target identity's @username on ActAsGuardianScreen."
+  },
+  "actAsGuardianScreenLookUpButton": "查询",
+  "@actAsGuardianScreenLookUpButton": {
+    "description": "Button label on ActAsGuardianScreen that loads the target identity's guardian config and proposal."
+  },
+  "actAsGuardianScreenNotGuardianFor": "您不是 @{username} 的监护人。",
+  "@actAsGuardianScreenNotGuardianFor": {
+    "description": "Message on ActAsGuardianScreen when the connected wallet is not a guardian of the looked-up identity.",
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "actAsGuardianScreenNoActiveRecoveryFor": "@{username} 没有正在进行的恢复。",
+  "@actAsGuardianScreenNoActiveRecoveryFor": {
+    "description": "Message on ActAsGuardianScreen when the looked-up identity has no active recovery proposal.",
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "actAsGuardianScreenNewControllerField": "新控制者地址",
+  "@actAsGuardianScreenNewControllerField": {
+    "description": "Text field label for the proposed new controller address on ActAsGuardianScreen."
+  },
+  "actAsGuardianScreenProposeButton": "提议恢复",
+  "@actAsGuardianScreenProposeButton": {
+    "description": "Button label on ActAsGuardianScreen that submits proposeRecovery."
+  },
+  "actAsGuardianScreenInvalidAddressError": "请输入有效的以太坊地址。",
+  "@actAsGuardianScreenInvalidAddressError": {
+    "description": "Validation error on ActAsGuardianScreen when the new controller address isn't a valid Ethereum address."
+  },
+  "actAsGuardianScreenApproveButton": "批准恢复",
+  "@actAsGuardianScreenApproveButton": {
+    "description": "Button label on ActAsGuardianScreen that submits approveRecovery."
+  },
+  "actAsGuardianScreenApprovedBadge": "您已批准此次恢复。",
+  "@actAsGuardianScreenApprovedBadge": {
+    "description": "Message on ActAsGuardianScreen confirming the connected wallet already approved the active proposal."
+  },
+  "actAsGuardianScreenExecuteButton": "立即执行恢复",
+  "@actAsGuardianScreenExecuteButton": {
+    "description": "Button label on ActAsGuardianScreen that submits executeRecovery once threshold and timelock are met."
   }
 }

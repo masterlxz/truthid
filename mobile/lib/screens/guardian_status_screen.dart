@@ -4,15 +4,16 @@ import '../services/blockchain_service.dart';
 import '../services/local_storage_service.dart';
 import '../services/paired_username_resolver.dart';
 import '../theme.dart';
+import 'act_as_guardian_screen.dart';
 import 'configure_guardians_screen.dart';
 
-// Status de Social Recovery. Configurar os próprios guardians passou a ser
-// possível pelo Mobile (P68, fatia 2, via WalletConnect — a mesma infra da
-// fatia 1) — ver ConfigureGuardiansScreen. O que continua exclusivo do
-// Desktop (com wallet, Ledger/Trezor) é agir como guardian de OUTRA
-// identidade — propor/aprovar/executar/cancelar recovery —, deixado de fora
-// desta rodada de propósito (não exige owner, mas está fora do escopo
-// "pareamento + configurar guardians"; ver P75 em PENDING.md).
+// Status de Social Recovery. Configurar os próprios guardians (owner-gated,
+// via WalletConnect) e agir como guardian de OUTRA identidade — propor/
+// aprovar/executar recovery, chamadas diretas ao RecoveryManager assinadas
+// pela wallet do guardião — já são possíveis pelo Mobile (P68, fatias 2 e 3)
+// — ver ConfigureGuardiansScreen/ActAsGuardianScreen. Só `cancelRecovery`
+// (owner-gated, pra cancelar uma proposta contra a própria identidade)
+// continua fora, junto de revogar device — ver P75 em PENDING.md.
 class GuardianStatusScreen extends StatefulWidget {
   const GuardianStatusScreen({super.key});
 
@@ -95,10 +96,25 @@ class _GuardianStatusScreenState extends State<GuardianStatusScreen> {
     return context.l10n.guardianStatusScreenTimeRemaining(d, h, m);
   }
 
+  Future<void> _openActAsGuardian() async {
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute(builder: (_) => const ActAsGuardianScreen()),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(context.l10n.guardianStatusScreenTitle)),
+      appBar: AppBar(
+        title: Text(context.l10n.guardianStatusScreenTitle),
+        actions: [
+          IconButton(
+            onPressed: _openActAsGuardian,
+            icon: const Icon(Icons.shield_outlined),
+            tooltip: context.l10n.guardianStatusScreenActAsGuardianTooltip,
+          ),
+        ],
+      ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : _username == null

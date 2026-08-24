@@ -1053,10 +1053,65 @@ class BlockchainService {
     return int.parse((map['timestamp'] as String).substring(2), radix: 16);
   }
 
+  // Calldata de RecoveryManager.proposeRecovery(string,address) — 1
+  // parâmetro dinâmico (username, 1º) + 1 estático (newController, 2º)
+  // inline logo após o offset — mesmo layout de cabeçalho que
+  // buildCreateIdentityCalldata já usa. Chamada DIRETA no RecoveryManager
+  // (nunca via TruthIDAccount.execute) — quem assina é a wallet do
+  // guardião, não a smart account da identidade alvo.
+  Uint8List buildProposeRecoveryCalldata({
+    required String username,
+    required EthereumAddress newController,
+  }) {
+    final selector = keccak256(Uint8List.fromList(
+            utf8.encode('proposeRecovery(string,address)')))
+        .sublist(0, 4);
+    final usernameBytes = Uint8List.fromList(utf8.encode(username));
+    final paddedUsernameLen = ((usernameBytes.length + 31) ~/ 32) * 32;
+
+    final callData = BytesBuilder()
+      ..add(selector)
+      ..add(_uint256Bytes(64)) // offset do único dinâmico: 2*32
+      ..add(_addressBytes(newController))
+      ..add(_uint256Bytes(usernameBytes.length))
+      ..add(usernameBytes)
+      ..add(Uint8List(paddedUsernameLen - usernameBytes.length));
+
+    return callData.toBytes();
+  }
+
+  // Calldata de RecoveryManager.approveRecovery(string)/executeRecovery(string)
+  // — só o parâmetro dinâmico, mesmo shape da cauda de
+  // buildCreateIdentityCalldata (offset fixo 32, length + dados + padding),
+  // sem nenhum estático antes. Chamada DIRETA no RecoveryManager, mesma
+  // observação de buildProposeRecoveryCalldata.
+  Uint8List _buildSingleUsernameCalldata(String functionSignature, String username) {
+    final selector =
+        keccak256(Uint8List.fromList(utf8.encode(functionSignature))).sublist(0, 4);
+    final usernameBytes = Uint8List.fromList(utf8.encode(username));
+    final paddedUsernameLen = ((usernameBytes.length + 31) ~/ 32) * 32;
+
+    final callData = BytesBuilder()
+      ..add(selector)
+      ..add(_uint256Bytes(32)) // offset do único parâmetro: 1*32
+      ..add(_uint256Bytes(usernameBytes.length))
+      ..add(usernameBytes)
+      ..add(Uint8List(paddedUsernameLen - usernameBytes.length));
+
+    return callData.toBytes();
+  }
+
+  Uint8List buildApproveRecoveryCalldata(String username) =>
+      _buildSingleUsernameCalldata('approveRecovery(string)', username);
+
+  Uint8List buildExecuteRecoveryCalldata(String username) =>
+      _buildSingleUsernameCalldata('executeRecovery(string)', username);
+
   // ── Social Recovery (RecoveryManager) — leituras ──────────────────────────
-  // (escrita de configureGuardians fica em buildConfigureGuardiansCalldata,
-  // acima — propor/aprovar/executar/cancelar recovery de OUTRA identidade
-  // continua exclusivo do Desktop, ver P75 em PENDING.md)
+  // (escrita: buildConfigureGuardiansCalldata — owner-gated, via execute();
+  // buildProposeRecoveryCalldata/buildApproveRecoveryCalldata/
+  // buildExecuteRecoveryCalldata — chamadas diretas assinadas pelo guardião,
+  // acima)
 
   /// Retorna a config de guardians de uma identidade: lista de endereços +
   /// threshold (M de N). Retorna null se nunca foi configurado (tupla vazia).
@@ -1109,6 +1164,22 @@ class BlockchainService {
       return result[0] as BigInt;
     } catch (_) {
       return null;
+    }
+  }
+
+  /// Retorna se `guardianHex` já aprovou a proposta ATIVA de `username`.
+  /// Usado só quando o endereço conectado é guardião do alvo e há uma
+  /// proposta ativa — mesma checagem que `GuardianManagement.tsx` faz no
+  /// Desktop antes de mostrar o botão "Approve" (evita gastar gas numa tx
+  /// que reverteria com `AlreadyApproved`).
+  Future<bool> hasGuardianApproved(String username, String guardianHex) async {
+    try {
+      final fn = _recoveryContract.function('hasGuardianApproved');
+      final result = await _ethCall(_recoveryManagerAddress, fn,
+          [username, EthereumAddress.fromHex(guardianHex)]);
+      return result[0] as bool;
+    } catch (_) {
+      return false;
     }
   }
 }

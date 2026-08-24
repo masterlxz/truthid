@@ -195,4 +195,40 @@ void main() {
       );
     });
   });
+
+  group('buildProposeRecoveryCalldata', () {
+    test('bate com o vetor gerado via viem', () {
+      final calldata = blockchain.buildProposeRecoveryCalldata(
+        username: 'alice',
+        newController: devicePubKey,
+      );
+
+      expect(
+        bytesToHex(calldata, include0x: true),
+        '0xdf86b82c000000000000000000000000000000000000000000000000000000000000004000000000000000000000000012345678901234567890123456789012345678900000000000000000000000000000000000000000000000000000000000000005616c696365000000000000000000000000000000000000000000000000000000',
+      );
+    });
+  });
+
+  group('buildApproveRecoveryCalldata', () {
+    test('bate com o vetor gerado via viem', () {
+      final calldata = blockchain.buildApproveRecoveryCalldata('alice');
+
+      expect(
+        bytesToHex(calldata, include0x: true),
+        '0xb99a101100000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000005616c696365000000000000000000000000000000000000000000000000000000',
+      );
+    });
+  });
+
+  group('buildExecuteRecoveryCalldata', () {
+    test('bate com o vetor gerado via viem', () {
+      final calldata = blockchain.buildExecuteRecoveryCalldata('alice');
+
+      expect(
+        bytesToHex(calldata, include0x: true),
+        '0x5085355e00000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000005616c696365000000000000000000000000000000000000000000000000000000',
+      );
+    });
+  });
 }

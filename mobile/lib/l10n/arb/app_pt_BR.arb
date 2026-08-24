@@ -822,7 +822,11 @@
   "@guardianStatusScreenChangeGuardiansButton": {
     "description": "Button label on the guardian status screen when guardians are already configured, opens ConfigureGuardiansScreen to change them (P68, slice 2)."
   },
-  "guardianStatusScreenDesktopOnlyFootnote": "Agir como guardião na recuperação de outra pessoa (propor/aprovar/executar/cancelar) ainda exige o TruthID Desktop com uma wallet conectada.",
+  "guardianStatusScreenActAsGuardianTooltip": "Agir como guardião de outra pessoa",
+  "@guardianStatusScreenActAsGuardianTooltip": {
+    "description": "Tooltip of the AppBar action on GuardianStatusScreen that opens ActAsGuardianScreen (P68, slice 3)."
+  },
+  "guardianStatusScreenDesktopOnlyFootnote": "Cancelar uma proposta de recovery ativa contra a própria identidade ainda exige o TruthID Desktop com uma wallet conectada.",
   "@guardianStatusScreenDesktopOnlyFootnote": {
     "description": "Guardian/social recovery screen: footnote explaining that acting as a guardian for someone else's recovery still requires TruthID Desktop with a connected wallet (P68, slice 2: configuring one's own guardians is now possible on Mobile)."
   },
@@ -3122,5 +3126,63 @@
         "type": "int"
       }
     }
+  },
+  "actAsGuardianScreenTitle": "Agir como guardião",
+  "@actAsGuardianScreenTitle": {
+    "description": "AppBar title of ActAsGuardianScreen (P68, slice 3)."
+  },
+  "actAsGuardianScreenConnectWalletButton": "Conectar wallet",
+  "@actAsGuardianScreenConnectWalletButton": {
+    "description": "Button label on ActAsGuardianScreen to open the WalletConnect connect modal."
+  },
+  "actAsGuardianScreenUsernameField": "Username da identidade",
+  "@actAsGuardianScreenUsernameField": {
+    "description": "Text field label for the target identity's @username on ActAsGuardianScreen."
+  },
+  "actAsGuardianScreenLookUpButton": "Buscar",
+  "@actAsGuardianScreenLookUpButton": {
+    "description": "Button label on ActAsGuardianScreen that loads the target identity's guardian config and proposal."
+  },
+  "actAsGuardianScreenNotGuardianFor": "Você não é guardião de @{username}.",
+  "@actAsGuardianScreenNotGuardianFor": {
+    "description": "Message on ActAsGuardianScreen when the connected wallet is not a guardian of the looked-up identity.",
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "actAsGuardianScreenNoActiveRecoveryFor": "Nenhuma recovery ativa pra @{username}.",
+  "@actAsGuardianScreenNoActiveRecoveryFor": {
+    "description": "Message on ActAsGuardianScreen when the looked-up identity has no active recovery proposal.",
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "actAsGuardianScreenNewControllerField": "Endereço do novo controller",
+  "@actAsGuardianScreenNewControllerField": {
+    "description": "Text field label for the proposed new controller address on ActAsGuardianScreen."
+  },
+  "actAsGuardianScreenProposeButton": "Propor recovery",
+  "@actAsGuardianScreenProposeButton": {
+    "description": "Button label on ActAsGuardianScreen that submits proposeRecovery."
+  },
+  "actAsGuardianScreenInvalidAddressError": "Digite um endereço Ethereum válido.",
+  "@actAsGuardianScreenInvalidAddressError": {
+    "description": "Validation error on ActAsGuardianScreen when the new controller address isn't a valid Ethereum address."
+  },
+  "actAsGuardianScreenApproveButton": "Aprovar recovery",
+  "@actAsGuardianScreenApproveButton": {
+    "description": "Button label on ActAsGuardianScreen that submits approveRecovery."
+  },
+  "actAsGuardianScreenApprovedBadge": "Você aprovou esta recovery.",
+  "@actAsGuardianScreenApprovedBadge": {
+    "description": "Message on ActAsGuardianScreen confirming the connected wallet already approved the active proposal."
+  },
+  "actAsGuardianScreenExecuteButton": "Executar recovery agora",
+  "@actAsGuardianScreenExecuteButton": {
+    "description": "Button label on ActAsGuardianScreen that submits executeRecovery once threshold and timelock are met."
   }
 }

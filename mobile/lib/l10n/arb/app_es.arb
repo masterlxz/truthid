@@ -822,7 +822,11 @@
   "@guardianStatusScreenChangeGuardiansButton": {
     "description": "Button label on the guardian status screen when guardians are already configured, opens ConfigureGuardiansScreen to change them (P68, slice 2)."
   },
-  "guardianStatusScreenDesktopOnlyFootnote": "Actuar como guardián en la recuperación de otra persona (proponer/aprobar/ejecutar/cancelar) todavía requiere TruthID Desktop con una wallet conectada.",
+  "guardianStatusScreenActAsGuardianTooltip": "Actuar como guardián de otra persona",
+  "@guardianStatusScreenActAsGuardianTooltip": {
+    "description": "Tooltip of the AppBar action on GuardianStatusScreen that opens ActAsGuardianScreen (P68, slice 3)."
+  },
+  "guardianStatusScreenDesktopOnlyFootnote": "Cancelar una propuesta de recuperación activa contra tu propia identidad todavía requiere TruthID Desktop con una wallet conectada.",
   "@guardianStatusScreenDesktopOnlyFootnote": {
     "description": "Guardian/social recovery screen: footnote explaining that acting as a guardian for someone else's recovery still requires TruthID Desktop with a connected wallet (P68, slice 2: configuring one's own guardians is now possible on Mobile)."
   },
@@ -3122,5 +3126,63 @@
         "type": "int"
       }
     }
+  },
+  "actAsGuardianScreenTitle": "Actuar como guardián",
+  "@actAsGuardianScreenTitle": {
+    "description": "AppBar title of ActAsGuardianScreen (P68, slice 3)."
+  },
+  "actAsGuardianScreenConnectWalletButton": "Conectar wallet",
+  "@actAsGuardianScreenConnectWalletButton": {
+    "description": "Button label on ActAsGuardianScreen to open the WalletConnect connect modal."
+  },
+  "actAsGuardianScreenUsernameField": "Username de la identidad",
+  "@actAsGuardianScreenUsernameField": {
+    "description": "Text field label for the target identity's @username on ActAsGuardianScreen."
+  },
+  "actAsGuardianScreenLookUpButton": "Buscar",
+  "@actAsGuardianScreenLookUpButton": {
+    "description": "Button label on ActAsGuardianScreen that loads the target identity's guardian config and proposal."
+  },
+  "actAsGuardianScreenNotGuardianFor": "No eres guardián de @{username}.",
+  "@actAsGuardianScreenNotGuardianFor": {
+    "description": "Message on ActAsGuardianScreen when the connected wallet is not a guardian of the looked-up identity.",
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "actAsGuardianScreenNoActiveRecoveryFor": "No hay recuperación activa para @{username}.",
+  "@actAsGuardianScreenNoActiveRecoveryFor": {
+    "description": "Message on ActAsGuardianScreen when the looked-up identity has no active recovery proposal.",
+    "placeholders": {
+      "username": {
+        "type": "String"
+      }
+    }
+  },
+  "actAsGuardianScreenNewControllerField": "Dirección del nuevo controller",
+  "@actAsGuardianScreenNewControllerField": {
+    "description": "Text field label for the proposed new controller address on ActAsGuardianScreen."
+  },
+  "actAsGuardianScreenProposeButton": "Proponer recuperación",
+  "@actAsGuardianScreenProposeButton": {
+    "description": "Button label on ActAsGuardianScreen that submits proposeRecovery."
+  },
+  "actAsGuardianScreenInvalidAddressError": "Ingresa una dirección Ethereum válida.",
+  "@actAsGuardianScreenInvalidAddressError": {
+    "description": "Validation error on ActAsGuardianScreen when the new controller address isn't a valid Ethereum address."
+  },
+  "actAsGuardianScreenApproveButton": "Aprobar recuperación",
+  "@actAsGuardianScreenApproveButton": {
+    "description": "Button label on ActAsGuardianScreen that submits approveRecovery."
+  },
+  "actAsGuardianScreenApprovedBadge": "Aprobaste esta recuperación.",
+  "@actAsGuardianScreenApprovedBadge": {
+    "description": "Message on ActAsGuardianScreen confirming the connected wallet already approved the active proposal."
+  },
+  "actAsGuardianScreenExecuteButton": "Ejecutar recuperación ahora",
+  "@actAsGuardianScreenExecuteButton": {
+    "description": "Button label on ActAsGuardianScreen that submits executeRecovery once threshold and timelock are met."
   }
 }
