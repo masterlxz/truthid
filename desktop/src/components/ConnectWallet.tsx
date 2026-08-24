@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useConnect } from "wagmi";
 import { useTranslation } from "react-i18next";
 import { ConnectLedger } from "./ConnectLedger";
+import { ConnectTrezor } from "./ConnectTrezor";
 
 function IconWalletConnect() {
   return (
@@ -29,10 +30,28 @@ function IconLedger() {
   );
 }
 
+function IconTrezor() {
+  return (
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="36" height="36" rx="9" fill="#00854D"/>
+      <path
+        d="M18 9C14.5 9 12 11 12 14.5V16.5H11C10.4 16.5 10 16.9 10 17.5V25.5C10 26.1 10.4 26.5 11 26.5H25C25.6 26.5 26 26.1 26 25.5V17.5C26 16.9 25.6 16.5 25 16.5H24V14.5C24 11 21.5 9 18 9Z"
+        fill="white"
+      />
+      <path
+        d="M18 11.2C20.2 11.2 21.8 12.5 21.8 14.5V16.5H14.2V14.5C14.2 12.5 15.8 11.2 18 11.2Z"
+        fill="#00854D"
+      />
+      <circle cx="18" cy="21" r="2" fill="#00854D"/>
+    </svg>
+  );
+}
+
 export function ConnectWallet({ asModal, onClose }: { asModal?: boolean; onClose?: () => void }) {
   const { t } = useTranslation();
   const { connect, connectors } = useConnect();
   const [showLedger, setShowLedger] = useState(false);
+  const [showTrezor, setShowTrezor] = useState(false);
 
   const walletConnectConnector = connectors.find((c) => c.id === "walletConnect");
 
@@ -40,6 +59,14 @@ export function ConnectWallet({ asModal, onClose }: { asModal?: boolean; onClose
     return (
       <div className={asModal ? undefined : "wallet-screen"}>
         <ConnectLedger onBack={() => setShowLedger(false)} />
+      </div>
+    );
+  }
+
+  if (showTrezor) {
+    return (
+      <div className={asModal ? undefined : "wallet-screen"}>
+        <ConnectTrezor onBack={() => setShowTrezor(false)} />
       </div>
     );
   }
@@ -94,6 +121,17 @@ export function ConnectWallet({ asModal, onClose }: { asModal?: boolean; onClose
               <IconLedger />
             </span>
             <span className="wallet-option-name">{t("connectWallet.ledger")}</span>
+            <span className="wallet-option-arrow">›</span>
+          </button>
+
+          <button
+            className="wallet-option"
+            onClick={() => setShowTrezor(true)}
+          >
+            <span className="wallet-option-icon">
+              <IconTrezor />
+            </span>
+            <span className="wallet-option-name">{t("connectWallet.trezor")}</span>
             <span className="wallet-option-arrow">›</span>
           </button>
         </div>

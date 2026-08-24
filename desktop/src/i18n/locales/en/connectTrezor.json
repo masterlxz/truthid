@@ -1,0 +1,16 @@
+{
+  "back": "Back",
+  "title": "Connect your Trezor",
+  "steps": {
+    "connectUsb": "Connect your Trezor via USB",
+    "unlockDevice": "Unlock with your PIN on the device"
+  },
+  "accessDenied": "Could not access the Trezor. Check USB permissions (Linux: udev rule).",
+  "notInitialized": "This Trezor isn't set up yet. Set it up in Trezor Suite first, then try again.",
+  "selectAccount": "Select account",
+  "accountName": "Account {{index}}",
+  "loading": "loading…",
+  "connecting": "Connecting...",
+  "connectAccount": "Connect Account {{index}}",
+  "connectTimeout": "Trezor did not respond in time. Make sure it's unlocked, then try again."
+}

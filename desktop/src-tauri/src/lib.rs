@@ -19,6 +19,7 @@ mod bundler;
 mod config;
 mod ipfs;
 mod ledger;
+mod trezor;
 mod local_signer_server;
 mod pin;
 mod sign_message;
@@ -1335,6 +1336,10 @@ pub fn run() {
             ledger::get_ledger_address,
             ledger::sign_ledger_transaction,
             ledger::sign_ledger_personal_message,
+            trezor::is_trezor_connected,
+            trezor::get_trezor_address,
+            trezor::sign_trezor_transaction,
+            trezor::sign_trezor_personal_message,
             arweave::arweave_generate_wallet,
             arweave::arweave_import_wallet,
             arweave::arweave_wallet_exists,

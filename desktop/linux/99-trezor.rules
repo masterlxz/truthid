@@ -1,0 +1,23 @@
+# Regras udev para dispositivos Trezor (Model T, Safe 3, Safe 5, e o Model One legado).
+#
+# Diferente da Ledger (transporte hidapi/hidraw), o transporte da Trezor usa
+# libusb (rusb) — a permissão relevante é sobre o nó USB bruto
+# (/dev/bus/usb/BBB/DDD), não /dev/hidraw*.
+#
+# TAG+="uaccess" dá acesso ao usuário logado na sessão atual sem precisar de root
+# ou de adicionar o usuário a um grupo (forma recomendada em sistemas com systemd-logind).
+#
+# Instalação:
+#   sudo cp 99-trezor.rules /etc/udev/rules.d/
+#   sudo udevadm control --reload-rules && sudo udevadm trigger
+#
+# Depois disso, desplugue e replugue a Trezor — não precisa reiniciar.
+
+# Trezor moderna (Model T, Safe 3, Safe 5) — modo normal
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="53c1", TAG+="uaccess"
+
+# Trezor moderna em modo bootloader (atualização de firmware)
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="1209", ATTRS{idProduct}=="53c0", TAG+="uaccess"
+
+# Trezor One (legado)
+SUBSYSTEMS=="usb", ATTRS{idVendor}=="534c", ATTRS{idProduct}=="0001", TAG+="uaccess"

@@ -278,7 +278,7 @@ code, .address {
    Ledger Connect Flow
 ═══════════════════════════════════════════════════════ */
 
-.ledger-connect {
+.ledger-connect, .trezor-connect {
   width: 100%;
   max-width: 360px;
   display: flex;
@@ -304,7 +304,7 @@ code, .address {
   background: transparent;
 }
 
-.ledger-connect-title {
+.ledger-connect-title, .trezor-connect-title {
   font-family: var(--font-heading);
   font-size: 1.2rem;
   font-weight: 600;
@@ -312,7 +312,7 @@ code, .address {
   color: var(--color-text);
 }
 
-.ledger-error-box {
+.ledger-error-box, .trezor-error-box {
   color: var(--color-danger);
   font-size: 0.875rem;
   background: rgba(226, 92, 92, 0.08);

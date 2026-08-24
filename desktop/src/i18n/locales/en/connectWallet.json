@@ -1,5 +1,6 @@
 {
   "tagline": "Sign in to your decentralized identity",
   "walletConnect": "WalletConnect",
-  "ledger": "Ledger"
+  "ledger": "Ledger",
+  "trezor": "Trezor"
 }

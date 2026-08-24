@@ -1,0 +1,16 @@
+{
+  "back": "返回",
+  "title": "连接您的 Trezor",
+  "steps": {
+    "connectUsb": "通过 USB 连接您的 Trezor",
+    "unlockDevice": "在设备上输入 PIN 解锁"
+  },
+  "accessDenied": "无法访问 Trezor。请检查 USB 权限（Linux：udev 规则）。",
+  "notInitialized": "此 Trezor 尚未设置。请先在 Trezor Suite 中完成设置，然后重试。",
+  "selectAccount": "选择账户",
+  "accountName": "账户 {{index}}",
+  "loading": "加载中…",
+  "connecting": "正在连接...",
+  "connectAccount": "连接账户 {{index}}",
+  "connectTimeout": "Trezor 未能及时响应。请确认已解锁，然后重试。"
+}

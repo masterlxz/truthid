@@ -1,0 +1,16 @@
+{
+  "back": "Atrás",
+  "title": "Conecta tu Trezor",
+  "steps": {
+    "connectUsb": "Conecta tu Trezor por USB",
+    "unlockDevice": "Desbloquéala con tu PIN en el dispositivo"
+  },
+  "accessDenied": "No se pudo acceder a la Trezor. Verifica los permisos USB (Linux: regla udev).",
+  "notInitialized": "Esta Trezor todavía no está configurada. Configúrala primero en Trezor Suite y vuelve a intentarlo.",
+  "selectAccount": "Selecciona una cuenta",
+  "accountName": "Cuenta {{index}}",
+  "loading": "cargando…",
+  "connecting": "Conectando...",
+  "connectAccount": "Conectar cuenta {{index}}",
+  "connectTimeout": "La Trezor no respondió a tiempo. Asegúrate de que esté desbloqueada, luego vuelve a intentarlo."
+}
