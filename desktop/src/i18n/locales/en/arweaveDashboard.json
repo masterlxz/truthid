@@ -8,7 +8,8 @@
     "copyAddress": "Copy address",
     "balance": "Balance: {{balance}} AR",
     "balanceUnavailable": "Balance unavailable right now",
-    "noBalanceWarning": "No balance yet — buy AR on an exchange and send it to the address above before clicking \"Send\"."
+    "noBalanceWarning": "No balance yet — buy AR on an exchange and send it to the address above before clicking \"Send\".",
+    "backupWarning": "This wallet's keys live only on this device — back it up now via Vault → Export Backup, or you will permanently lose access to any funds if you lose or reinstall this device."
   },
   "history": {
     "title": "Transaction history",

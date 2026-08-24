@@ -805,6 +805,13 @@ class _WalletScreenState extends State<WalletScreen> {
                           style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
                         ),
                       ),
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12),
+                      child: Text(
+                        context.l10n.walletScreenArweaveBackupWarning,
+                        style: const TextStyle(color: AppColors.textMuted, fontSize: 13),
+                      ),
+                    ),
                   ],
                 ),
             ],

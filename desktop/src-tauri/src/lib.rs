@@ -63,7 +63,7 @@ pub(crate) fn get_device_key_hex() -> Result<String, String> {
         .is_ok();
 
     if !saved {
-        crate::config::write_file(&path, hex.as_bytes())?;
+        crate::config::write_secret_file(&path, hex.as_bytes())?;
     }
 
     Ok(hex)
@@ -174,7 +174,7 @@ pub(crate) fn set_vault_key(key: &[u8; 32]) -> Result<(), String> {
     // Fallback: arquivo
     if !saved {
         let path = vault_key_path()?;
-        crate::config::write_file(&path, hex_key.as_bytes())?;
+        crate::config::write_secret_file(&path, hex_key.as_bytes())?;
     }
 
     Ok(())
@@ -212,7 +212,7 @@ pub(crate) fn set_arweave_wallet(jwk_json: &str) -> Result<(), String> {
 
     if !saved {
         let path = arweave_wallet_path()?;
-        crate::config::write_file(&path, jwk_json.as_bytes())?;
+        crate::config::write_secret_file(&path, jwk_json.as_bytes())?;
     }
 
     Ok(())
@@ -834,10 +834,47 @@ fn vault_decrypt(blob_b64: String) -> Result<String, String> {
     Ok(STANDARD.encode(plaintext))
 }
 
+/// Insere a wallet Arweave local (JWK JSON, string opaca) como campo extra
+/// no ENVELOPE do backup — nunca no struct `Vault` em si (que é o mesmo
+/// tipo publicado no Arweave e sincronizado entre devices pareados; um
+/// campo lá vazaria a chave privada pro ledger público e pro canal de
+/// pareamento). `wallet_json` é `None` quando não há wallet local — nesse
+/// caso o Value não é alterado, backups continuam idênticos aos de antes
+/// desta mudança.
+fn splice_arweave_wallet_into_export(
+    mut vault_value: serde_json::Value,
+    wallet_json: Option<String>,
+) -> serde_json::Value {
+    if let Some(w) = wallet_json {
+        if let serde_json::Value::Object(map) = &mut vault_value {
+            map.insert("arweave_wallet_jwk".to_string(), serde_json::Value::String(w));
+        }
+    }
+    vault_value
+}
+
+/// Lado inverso de `splice_arweave_wallet_into_export`: extrai
+/// "arweave_wallet_jwk" do envelope de um backup, se presente — backups
+/// antigos (de antes desta mudança) simplesmente não têm a chave, `None`
+/// sem erro.
+fn extract_arweave_wallet_from_import(vault_value: &serde_json::Value) -> Option<String> {
+    vault_value
+        .get("arweave_wallet_jwk")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+}
+
 /// Serializa o vault local inteiro e cifra com uma senha de export (PBKDF2 +
 /// AES-256-GCM), independente da vault key derivada da wallet. Retorna o
 /// blob completo (magic+salt+iterations+nonce+ciphertext) em Base64 — o
 /// frontend só grava esses bytes no arquivo escolhido pelo usuário.
+///
+/// Se houver uma wallet Arweave local, ela viaja embutida no mesmo backup
+/// (ver `splice_arweave_wallet_into_export`) — é a única forma de
+/// recuperá-la numa reinstalação/troca de device, já que ela não tem
+/// nenhum vínculo com a wallet Ethereum/identidade (achado real, Sessão
+/// 221: wallet órfã depois de reinstalar, saldo perdido por não ter
+/// backup nenhum).
 #[tauri::command]
 fn vault_export_backup(password: String) -> Result<String, String> {
     use base64::{engine::general_purpose::STANDARD, Engine as _};
@@ -846,7 +883,9 @@ fn vault_export_backup(password: String) -> Result<String, String> {
     // card_number/cvv ganham a mesma cifra individual extra que vault.enc
     // já tem, além da cifra por senha do backup em si.
     let for_export = vault::vault_with_encrypted_card_fields(&v)?;
-    let json = serde_json::to_vec(&for_export).map_err(|e| e.to_string())?;
+    let value = serde_json::to_value(&for_export).map_err(|e| e.to_string())?;
+    let value = splice_arweave_wallet_into_export(value, crate::get_arweave_wallet().ok());
+    let json = serde_json::to_vec(&value).map_err(|e| e.to_string())?;
     let blob = backup::encrypt(&json, &password)?;
     Ok(STANDARD.encode(blob))
 }
@@ -856,13 +895,28 @@ fn vault_export_backup(password: String) -> Result<String, String> {
 /// nunca é usada pro armazenamento local. Não altera a `version` do JSON
 /// importado (ver VaultSyncService.sync() no Mobile, que corrige sozinho se
 /// a versão importada estiver desatualizada frente à on-chain).
+///
+/// Se o backup carrega uma wallet Arweave embutida e este device ainda não
+/// tem nenhuma, ela é restaurada — mas nunca sobrescrevendo uma wallet
+/// local já existente (poderia estar fundada; é a mesma classe do bug real
+/// que motivou isso, só que no sentido import→overwrite em vez de
+/// generate→overwrite).
 #[tauri::command]
 fn vault_import_backup(blob_b64: String, password: String) -> Result<(), String> {
     let _guard = vault::lock_vault();
     use base64::{engine::general_purpose::STANDARD, Engine as _};
     let blob = STANDARD.decode(&blob_b64).map_err(|e| e.to_string())?;
     let json = backup::decrypt(&blob, &password)?;
-    let mut imported: vault::Vault = serde_json::from_slice(&json)
+    let value: serde_json::Value = serde_json::from_slice(&json)
+        .map_err(|_| "backup file has invalid vault contents".to_string())?;
+
+    if crate::get_arweave_wallet().is_err() {
+        if let Some(wallet_json) = extract_arweave_wallet_from_import(&value) {
+            crate::set_arweave_wallet(&wallet_json)?;
+        }
+    }
+
+    let mut imported: vault::Vault = serde_json::from_value(value)
         .map_err(|_| "backup file has invalid vault contents".to_string())?;
     // Fase 15.8: normaliza card_number/cvv pra texto plano antes de
     // save() — o backup carrega os campos já cifrados (ver
@@ -1464,6 +1518,60 @@ mod tests {
             "0xc957aeb33d6e8289d733442cf9b44fbafc6c1c07fbb71eef974c724cc087dea\
 e0a4be53c6a97b8f41e53559d6327017adcf62341fc176583751ab61f1020f85\
 51c"
+        );
+    }
+
+    // Achado real, Sessão 221: a wallet Arweave (JWK) nunca entrava no
+    // backup exportável do Vault — reinstalar o app/trocar de device
+    // gerava uma wallet nova do zero, órfã de qualquer saldo já enviado
+    // pra wallet antiga, sem nenhuma forma de recuperação. Estes testes
+    // cobrem a lógica pura de inserir/extrair a chave do envelope do
+    // backup (sem tocar $HOME/keyring reais, mesma convenção já usada no
+    // resto do arquivo) — o round-trip completo dos comandos
+    // vault_export_backup/vault_import_backup (que tocam estado global de
+    // verdade) é validado manualmente, não em cargo test.
+    #[test]
+    fn splice_arweave_wallet_into_export_adds_field_when_wallet_present() {
+        let value =
+            serde_json::json!({"version": 1, "entries": [], "profile_names": [], "device_permissions": []});
+        let spliced = splice_arweave_wallet_into_export(value, Some("fake-jwk-json".to_string()));
+        assert_eq!(spliced["arweave_wallet_jwk"], "fake-jwk-json");
+    }
+
+    #[test]
+    fn splice_arweave_wallet_into_export_is_noop_when_no_wallet() {
+        let value =
+            serde_json::json!({"version": 1, "entries": [], "profile_names": [], "device_permissions": []});
+        let spliced = splice_arweave_wallet_into_export(value.clone(), None);
+        assert_eq!(spliced, value);
+        assert!(spliced.get("arweave_wallet_jwk").is_none());
+    }
+
+    #[test]
+    fn extract_arweave_wallet_from_import_reads_field_when_present() {
+        let value = serde_json::json!({"version": 1, "arweave_wallet_jwk": "fake-jwk-json"});
+        assert_eq!(
+            extract_arweave_wallet_from_import(&value),
+            Some("fake-jwk-json".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_arweave_wallet_from_import_returns_none_for_old_format_backup() {
+        // Simula um backup gerado antes desta mudança — sem o campo extra.
+        let value =
+            serde_json::json!({"version": 1, "entries": [], "profile_names": [], "device_permissions": []});
+        assert_eq!(extract_arweave_wallet_from_import(&value), None);
+    }
+
+    #[test]
+    fn splice_then_extract_round_trips() {
+        let value = serde_json::json!({"version": 1});
+        let spliced =
+            splice_arweave_wallet_into_export(value, Some("round-trip-jwk".to_string()));
+        assert_eq!(
+            extract_arweave_wallet_from_import(&spliced),
+            Some("round-trip-jwk".to_string())
         );
     }
 }

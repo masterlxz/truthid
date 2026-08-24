@@ -8,6 +8,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:web3dart/crypto.dart' show keccak256, bytesToHex;
 
+import 'arweave_wallet_service.dart';
 import 'backup_cipher_service.dart';
 import 'ipfs_gateway_client.dart';
 import 'vault_cipher_service.dart';
@@ -514,15 +515,18 @@ class _VaultData {
 class VaultRepository {
   final VaultCipherService _cipherService;
   final BackupCipherService _backupCipherService;
+  final ArweaveWalletService _arweaveWalletService;
   // Caminho injetado nos testes; null = usa path_provider em produção.
   final String? _testPath;
 
   VaultRepository({
     VaultCipherService? cipherService,
     BackupCipherService? backupCipherService,
+    ArweaveWalletService? arweaveWalletService,
     this._testPath,
   })  : _cipherService = cipherService ?? VaultCipherService(),
-        _backupCipherService = backupCipherService ?? BackupCipherService();
+        _backupCipherService = backupCipherService ?? BackupCipherService(),
+        _arweaveWalletService = arweaveWalletService ?? ArweaveWalletService();
 
   Future<List<VaultEntry>> listEntries() async {
     final data = await _load();
@@ -1015,6 +1019,13 @@ class VaultRepository {
   // Serializa o vault local inteiro e cifra com uma senha de export (PBKDF2 +
   // AES-256-GCM via BackupCipherService), independente da vault key derivada
   // da wallet/pareamento — ver project/INDEX.md, roadmap item 4.
+  //
+  // Se houver uma wallet Arweave local, ela viaja embutida no mesmo backup
+  // (campo extra no envelope, nunca no _VaultData/vault.enc local — ver
+  // `_vaultDataToJsonMap`) — é a única forma de recuperá-la numa
+  // reinstalação/troca de device, já que ela não tem nenhum vínculo com a
+  // wallet Ethereum/identidade (achado real, Sessão 221: wallet órfã depois
+  // de reinstalar, saldo perdido por não ter backup nenhum).
   Future<Uint8List> exportBackup(String password) async {
     final data = await _load();
     // Fase 15.8: backup exportado sai de circulação (USB, nuvem, etc.) —
@@ -1026,7 +1037,15 @@ class VaultRepository {
       profileNames: data.profileNames,
       devicePermissions: data.devicePermissions,
     );
-    return _backupCipherService.encrypt(_serializeVaultData(forExport), password);
+    final map = _vaultDataToJsonMap(forExport);
+    final walletJson = await _arweaveWalletService.exportJwkJson();
+    if (walletJson != null) {
+      map['arweave_wallet_jwk'] = walletJson;
+    }
+    return _backupCipherService.encrypt(
+      Uint8List.fromList(utf8.encode(jsonEncode(map))),
+      password,
+    );
   }
 
   // Decifra um blob de backup com a senha de export e **sobrescreve** o
@@ -1035,9 +1054,22 @@ class VaultRepository {
   // `version` do JSON importado: se estiver desatualizada frente à on-chain,
   // VaultSyncService.sync() corrige sozinho no próximo sync (ver
   // vault_sync_service.dart, `if (ref.version <= localVersion)`).
+  //
+  // Se o backup carrega uma wallet Arweave embutida e este device ainda não
+  // tem nenhuma, ela é restaurada — mas nunca sobrescrevendo uma wallet
+  // local já existente (poderia estar fundada; é a mesma classe do bug real
+  // que motivou isso, só que no sentido import→overwrite em vez de
+  // generate→overwrite).
   Future<void> importBackup(Uint8List blob, String password) async {
     final json = await _backupCipherService.decrypt(blob, password);
-    final parsed = _parseVaultJson(json);
+    final map = jsonDecode(utf8.decode(json)) as Map<String, dynamic>;
+    final parsed = _vaultDataFromJsonMap(map);
+
+    final walletJson = map['arweave_wallet_jwk'] as String?;
+    if (walletJson != null && !(await _arweaveWalletService.exists())) {
+      await _arweaveWalletService.import(walletJson);
+    }
+
     // Fase 15.8: normaliza card_number/cvv pra texto plano antes de
     // _save() — o backup carrega os campos já cifrados (ver
     // exportBackup); sem isso, _save() cifraria de novo em cima de um
@@ -1060,10 +1092,12 @@ class VaultRepository {
     return '${dir.path}/vault.enc';
   }
 
-  // Desserializa o JSON plano (já decifrado) do vault — compartilhado entre
-  // _load() (lê do vault.enc local) e importBackup() (lê de um backup).
-  _VaultData _parseVaultJson(Uint8List json) {
-    final map = jsonDecode(utf8.decode(json)) as Map<String, dynamic>;
+  // Converte o Map JSON já decodificado pro _VaultData — extraído de
+  // _parseVaultJson pra ser reaproveitado por importBackup() sem passar
+  // pelo passo de decode/encode duas vezes, e pra manter o parsing
+  // separado de qualquer campo extra (como arweave_wallet_jwk) que só
+  // existe no envelope do backup, nunca no _VaultData em si.
+  _VaultData _vaultDataFromJsonMap(Map<String, dynamic> map) {
     final entries = (map['entries'] as List)
         .map((e) => VaultEntry.fromJson(e as Map<String, dynamic>))
         .toList();
@@ -1083,15 +1117,29 @@ class VaultRepository {
     );
   }
 
+  // Desserializa o JSON plano (já decifrado) do vault — compartilhado entre
+  // _load() (lê do vault.enc local) e o path de sync.
+  _VaultData _parseVaultJson(Uint8List json) {
+    final map = jsonDecode(utf8.decode(json)) as Map<String, dynamic>;
+    return _vaultDataFromJsonMap(map);
+  }
+
+  // Converte o _VaultData pro Map JSON (ainda não codificado/cifrado) —
+  // extraído de _serializeVaultData pra ser reaproveitado por
+  // exportBackup(), que precisa inserir um campo extra (arweave_wallet_jwk)
+  // no Map antes de codificar, sem que esse campo nunca chegue a passar
+  // por aqui de volta pro vault.enc local.
+  Map<String, dynamic> _vaultDataToJsonMap(_VaultData data) => {
+        'version': data.version,
+        'entries': data.entries.map((e) => e.toJson()).toList(),
+        'profile_names': data.profileNames,
+        'device_permissions': data.devicePermissions.map((p) => p.toJson()).toList(),
+      };
+
   // Serializa o vault pro JSON plano (ainda não cifrado) — compartilhado
-  // entre _save() (grava no vault.enc local) e exportBackup().
+  // entre _save() (grava no vault.enc local) e o path de sync.
   Uint8List _serializeVaultData(_VaultData data) {
-    final map = {
-      'version': data.version,
-      'entries': data.entries.map((e) => e.toJson()).toList(),
-      'profile_names': data.profileNames,
-      'device_permissions': data.devicePermissions.map((p) => p.toJson()).toList(),
-    };
+    final map = _vaultDataToJsonMap(data);
     return Uint8List.fromList(utf8.encode(jsonEncode(map)));
   }
 

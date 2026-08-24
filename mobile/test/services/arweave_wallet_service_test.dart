@@ -77,6 +77,18 @@ void main() {
       expect(await service.exists(), isFalse);
     });
 
+    test('exportJwkJson() devolve null quando nada foi gravado ainda', () async {
+      mockStorage();
+      final service = ArweaveWalletService();
+      expect(await service.exportJwkJson(), isNull);
+    });
+
+    test('exportJwkJson() devolve o JSON cru quando existe wallet', () async {
+      mockStorage(initialValue: testWalletJson);
+      final service = ArweaveWalletService();
+      expect(await service.exportJwkJson(), testWalletJson);
+    });
+
     // generate() não é coberto aqui de propósito — chama generateJwk(),
     // keygen RSA-4096 real, lenta (segundos) e não-determinística em tempo
     // (mesmo motivo do Rust marcar o teste equivalente como #[ignore]).

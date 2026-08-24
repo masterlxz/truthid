@@ -6,6 +6,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:web3dart/crypto.dart' show keccak256, bytesToHex;
 
+import 'package:truthid_mobile/services/arweave_wallet_service.dart';
+import 'package:truthid_mobile/services/backup_cipher_service.dart';
 import 'package:truthid_mobile/services/vault_cipher_service.dart';
 import 'package:truthid_mobile/services/vault_repository.dart';
 
@@ -16,6 +18,26 @@ class _FakeCipherService extends VaultCipherService {
 
   @override
   Future<Uint8List> decrypt(Uint8List blob) async => blob;
+}
+
+// Double em memória — evita depender de uma 2ª chave JWK RSA-4096 válida
+// (lenta/não-determinística de gerar, ver arweave_wallet_service_test.dart)
+// só pra testar que importBackup() não sobrescreve uma wallet já existente.
+class _FakeArweaveWalletService extends ArweaveWalletService {
+  String? stored;
+  _FakeArweaveWalletService([this.stored]);
+
+  @override
+  Future<bool> exists() async => stored != null;
+
+  @override
+  Future<String?> exportJwkJson() async => stored;
+
+  @override
+  Future<String> import(String jwkJson) async {
+    stored = jwkJson;
+    return 'fake-arweave-address';
+  }
 }
 
 void main() {
@@ -596,6 +618,128 @@ void main() {
       final entries = await repo.listEntries();
       expect(entries, hasLength(1));
       expect(entries.first.site, 'github.com');
+    });
+  });
+
+  // Achado real, Sessão 221: a wallet Arweave (JWK) nunca entrava no backup
+  // exportável do Vault — reinstalar o app/trocar de device gerava uma
+  // wallet nova do zero, órfã de qualquer saldo já enviado pra wallet
+  // antiga. Estes testes cobrem o embutir/restaurar dela dentro do mesmo
+  // envelope de backup, com a garantia central de nunca sobrescrever uma
+  // wallet local já existente.
+  group('VaultRepository backup export/import — wallet Arweave embutida', () {
+    test('exportBackup embute a wallet Arweave local no envelope do backup', () async {
+      final arweave = _FakeArweaveWalletService('fake-jwk-json');
+      final repoWithWallet = VaultRepository(
+        cipherService: _FakeCipherService(),
+        testPath: vaultPath,
+        arweaveWalletService: arweave,
+      );
+      await repoWithWallet.addEntry(site: 'github.com', username: 'fab', password: 'x');
+
+      final blob = await repoWithWallet.exportBackup('hunter2');
+      final json = await BackupCipherService().decrypt(blob, 'hunter2');
+      final map = jsonDecode(utf8.decode(json)) as Map<String, dynamic>;
+
+      expect(map['arweave_wallet_jwk'], 'fake-jwk-json');
+    });
+
+    test('exportBackup não inclui a chave quando não há wallet Arweave local', () async {
+      final arweave = _FakeArweaveWalletService(); // sem wallet
+      final repoNoWallet = VaultRepository(
+        cipherService: _FakeCipherService(),
+        testPath: vaultPath,
+        arweaveWalletService: arweave,
+      );
+      await repoNoWallet.addEntry(site: 'github.com', username: 'fab', password: 'x');
+
+      final blob = await repoNoWallet.exportBackup('hunter2');
+      final json = await BackupCipherService().decrypt(blob, 'hunter2');
+      final map = jsonDecode(utf8.decode(json)) as Map<String, dynamic>;
+
+      expect(map.containsKey('arweave_wallet_jwk'), isFalse);
+    });
+
+    test('importBackup restaura a wallet Arweave quando o device de destino não tem nenhuma', () async {
+      final sourceArweave = _FakeArweaveWalletService('wallet-do-device-de-origem');
+      final sourceRepo = VaultRepository(
+        cipherService: _FakeCipherService(),
+        testPath: vaultPath,
+        arweaveWalletService: sourceArweave,
+      );
+      await sourceRepo.addEntry(site: 'github.com', username: 'fab', password: 'x');
+      final blob = await sourceRepo.exportBackup('hunter2');
+
+      // "Máquina nova": nenhuma wallet Arweave local ainda.
+      final destArweave = _FakeArweaveWalletService();
+      final freshTempDir = await Directory.systemTemp.createTemp('vault_import_wallet_test_');
+      final destRepo = VaultRepository(
+        cipherService: _FakeCipherService(),
+        testPath: '${freshTempDir.path}/vault.enc',
+        arweaveWalletService: destArweave,
+      );
+
+      await destRepo.importBackup(blob, 'hunter2');
+
+      expect(destArweave.stored, 'wallet-do-device-de-origem');
+
+      await freshTempDir.delete(recursive: true);
+    });
+
+    test('importBackup NÃO sobrescreve uma wallet Arweave já existente no device de destino', () async {
+      final sourceArweave = _FakeArweaveWalletService('wallet-do-backup');
+      final sourceRepo = VaultRepository(
+        cipherService: _FakeCipherService(),
+        testPath: vaultPath,
+        arweaveWalletService: sourceArweave,
+      );
+      await sourceRepo.addEntry(site: 'github.com', username: 'fab', password: 'x');
+      final blob = await sourceRepo.exportBackup('hunter2');
+
+      // Device de destino já tem uma wallet local — possivelmente fundada.
+      final destArweave = _FakeArweaveWalletService('wallet-ja-existente-no-destino');
+      final freshTempDir = await Directory.systemTemp.createTemp('vault_import_wallet_test_');
+      final destRepo = VaultRepository(
+        cipherService: _FakeCipherService(),
+        testPath: '${freshTempDir.path}/vault.enc',
+        arweaveWalletService: destArweave,
+      );
+
+      await destRepo.importBackup(blob, 'hunter2');
+
+      expect(destArweave.stored, 'wallet-ja-existente-no-destino');
+
+      await freshTempDir.delete(recursive: true);
+    });
+
+    test('importBackup de um backup em formato antigo (sem arweave_wallet_jwk) continua funcionando', () async {
+      // Simula um backup criado antes desta mudança — monta o envelope na
+      // mão, sem o campo extra.
+      final oldFormatMap = {
+        'version': 1,
+        'entries': [],
+        'profile_names': <String>[],
+        'device_permissions': <Map<String, dynamic>>[],
+      };
+      final blob = await BackupCipherService().encrypt(
+        Uint8List.fromList(utf8.encode(jsonEncode(oldFormatMap))),
+        'hunter2',
+      );
+
+      final destArweave = _FakeArweaveWalletService();
+      final freshTempDir = await Directory.systemTemp.createTemp('vault_import_old_format_test_');
+      final destRepo = VaultRepository(
+        cipherService: _FakeCipherService(),
+        testPath: '${freshTempDir.path}/vault.enc',
+        arweaveWalletService: destArweave,
+      );
+
+      await destRepo.importBackup(blob, 'hunter2');
+
+      expect(await destRepo.listEntries(), isEmpty);
+      expect(destArweave.stored, isNull);
+
+      await freshTempDir.delete(recursive: true);
     });
   });
 

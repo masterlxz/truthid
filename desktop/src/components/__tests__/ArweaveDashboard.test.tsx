@@ -116,4 +116,22 @@ describe("ArweaveDashboard", () => {
       ).toBeInTheDocument(),
     );
   });
+
+  it("shows the device-local backup warning whenever a wallet exists", async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "arweave_wallet_exists") return Promise.resolve(true);
+      if (cmd === "arweave_wallet_address") return Promise.resolve(ADDRESS);
+      if (cmd === "arweave_wallet_balance") return Promise.resolve(String(2 * 1e12)); // 2 AR, non-zero on purpose
+      if (cmd === "arweave_wallet_transactions") return Promise.resolve([]);
+      throw new Error(`unexpected invoke: ${cmd}`);
+    });
+
+    render(<ArweaveDashboard />);
+
+    expect(
+      await screen.findByText(
+        "This wallet's keys live only on this device — back it up now via Vault → Export Backup, or you will permanently lose access to any funds if you lose or reinstall this device.",
+      ),
+    ).toBeInTheDocument();
+  });
 });

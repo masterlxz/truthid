@@ -371,6 +371,29 @@ void main() {
       expect(find.text('application/octet-stream'), findsOneWidget);
     });
 
+    // Achado real, Sessão 221: a wallet Arweave nunca entrava no backup do
+    // Vault, então reinstalar/trocar de device sempre gerava uma órfã.
+    testWidgets('mostra o aviso de backup device-local sempre que a wallet existe',
+        (tester) async {
+      when(() => mockArweaveWalletService.exists()).thenAnswer((_) async => true);
+      when(() => mockArweaveWalletService.address())
+          .thenAnswer((_) async => 'arweave-address-1');
+
+      await tester.pumpWidget(buildScreen());
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Arweave'));
+      await tester.pumpAndSettle();
+
+      expect(
+        find.text(
+          "This wallet's keys live only on this device — back it up now via "
+          'Vault → Backup / restore, or you will permanently lose access to '
+          'any funds if you lose or reinstall this device.',
+        ),
+        findsOneWidget,
+      );
+    });
+
     testWidgets('falha ao carregar histórico mostra erro sem quebrar o saldo',
         (tester) async {
       when(() => mockArweaveWalletService.exists()).thenAnswer((_) async => true);

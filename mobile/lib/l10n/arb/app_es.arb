@@ -554,6 +554,10 @@
   "@walletScreenArweaveNoBalanceHint": {
     "description": "Arweave wallet screen: hint shown when the wallet balance is zero, telling the user how to fund it."
   },
+  "walletScreenArweaveBackupWarning": "Las claves de esta wallet solo existen en este dispositivo — hazle una copia de seguridad ahora en Vault → Respaldo / restauración, o perderás el acceso a cualquier fondo de forma permanente si pierdes o reinstalas este dispositivo.",
+  "@walletScreenArweaveBackupWarning": {
+    "description": "Arweave wallet screen: warning shown whenever a wallet exists, reminding the user their keys are device-local and must be backed up via the vault backup flow."
+  },
   "walletScreenArweaveHistoryTitle": "Historial de transacciones",
   "@walletScreenArweaveHistoryTitle": {
     "description": "Wallet screen (Arweave view): transaction history card title."

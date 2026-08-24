@@ -554,6 +554,10 @@
   "@walletScreenArweaveNoBalanceHint": {
     "description": "Arweave wallet screen: hint shown when the wallet balance is zero, telling the user how to fund it."
   },
+  "walletScreenArweaveBackupWarning": "此钱包的密钥只保存在本设备上 — 请立即通过 密码库 → 备份 / 恢复 进行备份，否则一旦丢失或重装本设备，任何资金都将永久无法找回。",
+  "@walletScreenArweaveBackupWarning": {
+    "description": "Arweave wallet screen: warning shown whenever a wallet exists, reminding the user their keys are device-local and must be backed up via the vault backup flow."
+  },
   "walletScreenArweaveHistoryTitle": "交易历史",
   "@walletScreenArweaveHistoryTitle": {
     "description": "Wallet screen (Arweave view): transaction history card title."

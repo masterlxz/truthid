@@ -143,6 +143,9 @@ export function ArweaveDashboard() {
                 {t("arweaveDashboard.arweaveWallet.noBalanceWarning")}
               </p>
             )}
+            <p className="muted" style={{ fontSize: "0.85em", marginTop: "0.75rem", marginBottom: 0 }}>
+              {t("arweaveDashboard.arweaveWallet.backupWarning")}
+            </p>
           </div>
         )}
       </div>

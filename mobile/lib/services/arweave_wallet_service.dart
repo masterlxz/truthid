@@ -19,6 +19,11 @@ class ArweaveWalletService {
 
   Future<bool> exists() async => (await _readRaw()) != null;
 
+  // Devolve o JWK JSON cru local (ou null se nenhuma wallet existe) — usado
+  // por VaultRepository.exportBackup pra embutir a wallet no envelope do
+  // backup, mesmo padrão do Desktop (get_arweave_wallet, lib.rs).
+  Future<String?> exportJwkJson() => _readRaw();
+
   // Carrega a wallet local — erro claro se ausente, sem fallback (mesmo
   // padrão de corte direto já usado no Desktop pra publicação no Arweave).
   Future<arweave_jwk.ArweaveJwk> load() async {

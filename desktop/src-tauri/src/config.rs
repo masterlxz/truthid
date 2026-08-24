@@ -28,6 +28,23 @@ pub(crate) fn write_file(path: &Path, data: &[u8]) -> Result<(), String> {
     std::fs::write(path, data).map_err(|e| e.to_string())
 }
 
+/// Como `write_file`, mas grava com permissão 0o600 (leitura/escrita só pro
+/// dono) no Unix — usado pros fallbacks de segredo em texto plano que só
+/// existem quando o keyring do SO não está disponível (`device.key`,
+/// `vault.key`, `arweave_wallet.json`). Sem isso, o arquivo sai com o umask
+/// padrão do sistema (tipicamente 0o644, mundo-legível). No Windows é
+/// no-op — ACL de arquivo é outro mecanismo, fora de escopo.
+pub(crate) fn write_secret_file(path: &Path, data: &[u8]) -> Result<(), String> {
+    write_file(path, data)?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
 /// Lê o conteúdo de um arquivo de texto.
 pub(crate) fn read_text(path: &Path) -> Result<String, String> {
     std::fs::read_to_string(path).map_err(|e| e.to_string())
@@ -48,4 +65,26 @@ pub(crate) fn save_json<T: serde::Serialize + ?Sized>(
 ) -> Result<(), String> {
     let json = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
     write_file(path, json.as_bytes())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    #[cfg(unix)]
+    fn write_secret_file_sets_0600_permissions() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = std::env::temp_dir().join("truthid_config_write_secret_file_test");
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("write_secret_file_sets_0600_permissions.secret");
+
+        write_secret_file(&path, b"top-secret").unwrap();
+
+        let mode = std::fs::metadata(&path).unwrap().permissions().mode() & 0o777;
+        assert_eq!(mode, 0o600);
+        assert_eq!(std::fs::read(&path).unwrap(), b"top-secret");
+
+        std::fs::remove_file(&path).ok();
+    }
 }

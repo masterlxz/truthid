@@ -8,7 +8,8 @@
     "copyAddress": "复制地址",
     "balance": "余额：{{balance}} AR",
     "balanceUnavailable": "暂时无法获取余额",
-    "noBalanceWarning": "尚无余额 — 请先在交易所购买 AR 并发送到上方地址，然后再点击\"发送\"。"
+    "noBalanceWarning": "尚无余额 — 请先在交易所购买 AR 并发送到上方地址，然后再点击\"发送\"。",
+    "backupWarning": "此钱包的密钥只保存在本设备上 — 请立即通过 密码库 → 导出备份 进行备份，否则一旦丢失或重装本设备，任何资金都将永久无法找回。"
   },
   "history": {
     "title": "交易历史",

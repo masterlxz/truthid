@@ -8,7 +8,8 @@
     "copyAddress": "Copiar endereço",
     "balance": "Saldo: {{balance}} AR",
     "balanceUnavailable": "Saldo indisponível no momento",
-    "noBalanceWarning": "Ainda sem saldo — compre AR em uma exchange e envie para o endereço acima antes de clicar em \"Enviar\"."
+    "noBalanceWarning": "Ainda sem saldo — compre AR em uma exchange e envie para o endereço acima antes de clicar em \"Enviar\".",
+    "backupWarning": "As chaves desta carteira só existem neste dispositivo — faça backup agora em Vault → Exportar backup, ou você perderá o acesso a qualquer saldo de forma permanente se perder ou reinstalar este dispositivo."
   },
   "history": {
     "title": "Histórico de transações",
