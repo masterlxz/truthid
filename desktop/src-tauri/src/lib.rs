@@ -191,10 +191,21 @@ fn arweave_wallet_path() -> Result<std::path::PathBuf, String> {
 /// — mesmo padrão de `get_vault_key`. Diferente da vault key, não há
 /// fallback legado: erro explícito se nenhuma wallet foi gerada/importada
 /// ainda (`arweave_wallet_exists`/`arweave_publish` checam isso antes de agir).
+///
+/// Achado real validando o P71 (Sessão 222): uma leitura do keyring que
+/// retorna `Ok("")` (entrada existe mas vazia — visto de verdade nesta
+/// máquina, causa exata não identificada, provável sobra de uma sessão
+/// anterior) antes mascarava por completo o fallback em arquivo, mesmo com
+/// uma wallet válida ali. `entry.get_password()` só falha (`Err`) se a
+/// entrada não existir — uma entrada vazia é um `Ok` "válido" do ponto de
+/// vista do keyring, então o vazio precisa ser filtrado explicitamente aqui,
+/// não só o `Err`.
 pub(crate) fn get_arweave_wallet() -> Result<String, String> {
     if let Ok(entry) = Entry::new(SERVICE, ARWEAVE_WALLET_ACCOUNT) {
         if let Ok(json) = entry.get_password() {
-            return Ok(json);
+            if !json.trim().is_empty() {
+                return Ok(json);
+            }
         }
     }
 
