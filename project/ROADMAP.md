@@ -2309,3 +2309,37 @@ fechada).
 
 **Nada implementado, nada desenhado em detalhe — fica pra quando o dono do projeto quiser rodar
 `/plan` de verdade sobre algum desses itens.**
+
+### Ideia pesquisada e adiada — Sessão 221 (2026-08-23): derivar a wallet Arweave da identidade
+
+**Contexto**: depois de fechar o P70 (wallet Arweave embutida no backup do Vault — ver `PENDING.md`,
+achado real de wallet órfã após reinstalar), o dono do projeto pediu pra estudar uma solução melhor:
+derivar a wallet Arweave automaticamente a partir da identidade (assinatura da wallet Ethereum), pra
+não depender de backup manual nenhum. Rodado `/plan` completo (2 agentes Explore + pesquisa direta
+no protocolo real do Arweave via `curl` no GitHub, não resumo de busca) — **conclusão: não dá pra
+implementar com confiança agora, duas barreiras reais encontradas**:
+
+1. **Deriv­ar o tipo de wallet atual (RSA-4096) de forma determinística não é viável** entre Rust e
+   Dart — nenhuma solução da comunidade (EthAReum, ZELF, `virdpool/hdwallet_rsa`) garante
+   reprodutibilidade bit a bit entre duas linguagens/bibliotecas diferentes.
+
+2. **Caminho melhor (Arweave suporta wallets ECDSA/secp256k1 desde o hard fork 2.9, mesma curva da
+   identidade Ethereum) esbarra em 2 problemas concretos**:
+   - **Inconsistência não resolvida no próprio protocolo**: rastreando o código-fonte real do
+     Arweave (`ar_tx.erl`/`ar_wallet.erl`/`secp256k1_nif.c`), o "deep hash" da assinatura usa SHA-384
+     (48 bytes), mas o NIF C que assina ECDSA exige estritamente 32 bytes e não hasheia
+     internamente — não achei, em nenhum lugar do código rastreado, o passo que reduz 48→32
+     especificamente no caminho ECDSA. O PR original que introduziu ECDSA no Arweave (#309) nunca
+     foi mergeado, branch apagada — sem uma implementação de referência confiável, não dá pra
+     confiar que uma transação assinada por nós seria aceita pela rede.
+   - **O Mobile não tem wallet Ethereum externa conectada** — a "identidade" lá hoje é uma chave
+     local gerada aleatoriamente por device (`DeviceKeyService`), sem WalletConnect nem qualquer
+     conexão de wallet externa (mesmo achado do item 3 acima, Sessão 220). A derivação funcionaria
+     no Desktop (que já tem wallet externa conectada, via `derive_vault_key_from_wallet`,
+     `lib.rs:248`), mas o Mobile sozinho não reproduziria a mesma chave — só receberia via
+     pareamento de um Desktop que já derivou, ou ganhando conexão de wallet externa própria.
+
+**Retomar quando**: (1) o suporte ECDSA do Arweave estiver confirmado funcional contra um nó/testnet
+real ou uma implementação de referência que comprovadamente funcione for encontrada; (2) o item 3
+acima (P68, fluxo 100% mobile) avançar o suficiente pro Mobile ter algum jeito de reproduzir a
+derivação. Registrado como P72 em `PENDING.md`. Nada implementado.
