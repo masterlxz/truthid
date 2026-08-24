@@ -1,0 +1,14 @@
+{
+  "back": "返回",
+  "intro": {
+    "title": "创建本地钱包",
+    "warning": "此密钥仅在此电脑上生成和保存。如果您在未导出备份的情况下丢失此设备,将彻底失去该身份——无法恢复。",
+    "createButton": "创建本地钱包"
+  },
+  "created": {
+    "title": "钱包已创建",
+    "addressLabel": "地址",
+    "fundingHint": "创建身份前请先向此地址充值 ETH——没有代付服务(paymaster),需要手动充值。"
+  },
+  "connecting": "连接中…"
+}

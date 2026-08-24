@@ -17,6 +17,8 @@ import { IdentityProvider } from "./contexts/IdentityContext";
 import { WalletModalContext } from "./contexts/WalletModalContext";
 import { useStoredUsername } from "./hooks/useStoredUsername";
 import { useUpdateCheck } from "./hooks/useUpdateCheck";
+import { useLocalWalletBackupGate } from "./hooks/useLocalWalletBackupGate";
+import { LocalWalletBackupGate } from "./components/LocalWalletBackupGate";
 import { IDENTITY_REGISTRY_ADDRESS, IDENTITY_REGISTRY_ABI } from "./config/contracts";
 import {
   TRUTHID_ACCOUNT_FACTORY_ADDRESS,
@@ -67,6 +69,7 @@ function App() {
   const { username: storedUsername, save: saveUsername, clear: clearUsername } = useStoredUsername();
   const { updateVersion, updateUrl } = useUpdateCheck();
   const [updateDismissed, setUpdateDismissed] = useState(false);
+  const { needsBackup, markConfirmed } = useLocalWalletBackupGate();
 
   const isWrongNetwork = isConnected && chainId !== base.id;
   const { switchChain, isPending: isSwitching } = useSwitchChain();
@@ -131,6 +134,18 @@ function App() {
   // Practice Valuation, ao testar o canal /sign-request contra este app).
   const openConnectModal = useCallback(() => setConnectModalOpen(true), []);
   const walletModalContextValue = useMemo(() => ({ openConnectModal }), [openConnectModal]);
+
+  // ── Wallet local sem backup confirmado → bloqueia TUDO ────────────────────
+  // A chave da wallet local (P78, pedaço 1) já existe no keyring assim que
+  // `local_wallet_generate` roda — se o app fechar antes do usuário
+  // confirmar/exportar o backup (ex. o fluxo de criação foi interrompido),
+  // isso intercepta na reabertura, antes até da tela de login. `null` =
+  // ainda checando (evita mostrar a tela normal por um instante antes do
+  // check assíncrono resolver).
+  if (needsBackup) {
+    return <LocalWalletBackupGate onConfirmed={markConfirmed} />;
+  }
+  if (needsBackup === null) return null;
 
   // ── No identity at all → full-screen login ───────────────────────────────
   // SignRequestModal fica montado nos dois caminhos de retorno (aqui e no

@@ -1,0 +1,12 @@
+{
+  "title": "Backup required",
+  "severeWarning": "This identity depends on a key that exists ONLY on this device. Without a backup, losing or reinstalling this computer means losing the identity permanently — there is no way to recover it.",
+  "exportSectionTitle": "Export backup now",
+  "exportPasswordLabel": "Backup password",
+  "confirmPasswordLabel": "Confirm password",
+  "exportButton": "Export and continue",
+  "exporting": "Exporting…",
+  "orDivider": "or",
+  "alreadyExportedCheckbox": "I already exported a backup of this vault elsewhere",
+  "confirmButton": "Confirm and continue"
+}

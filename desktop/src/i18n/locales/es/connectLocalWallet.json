@@ -1,0 +1,14 @@
+{
+  "back": "Volver",
+  "intro": {
+    "title": "Crear wallet local",
+    "warning": "Esta clave se genera y se guarda solo en esta computadora. Si pierdes este dispositivo sin haber exportado un backup, pierdes la identidad por completo — no hay forma de recuperarla.",
+    "createButton": "Crear wallet local"
+  },
+  "created": {
+    "title": "Wallet creada",
+    "addressLabel": "Dirección",
+    "fundingHint": "Deposita ETH en esta dirección antes de crear tu identidad — no hay paymaster, el financiamiento es manual."
+  },
+  "connecting": "Conectando…"
+}

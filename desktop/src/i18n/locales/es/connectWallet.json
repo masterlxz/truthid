@@ -2,5 +2,6 @@
   "tagline": "Inicia sesión en tu identidad descentralizada",
   "walletConnect": "WalletConnect",
   "ledger": "Ledger",
-  "trezor": "Trezor"
+  "trezor": "Trezor",
+  "localWallet": "Wallet local (sin hardware)"
 }

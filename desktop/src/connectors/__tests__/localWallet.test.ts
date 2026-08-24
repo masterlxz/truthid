@@ -1,0 +1,122 @@
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+const invokeMock = vi.fn();
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: (...args: unknown[]) => invokeMock(...args),
+}));
+
+// Importado depois do mock — localWallet.ts chama invoke() no momento da
+// conexão/assinatura, não no import, mesma convenção de trezor.test.ts.
+const { localWallet } = await import("../localWallet");
+
+const CHAIN = { id: 8453, rpcUrls: { default: { http: ["https://mainnet.base.org"] } } } as never;
+const ADDRESS = "0x1234567890123456789012345678901234567890";
+
+function makeInstance(emit: (...args: unknown[]) => void = vi.fn()) {
+  return localWallet({
+    chains: [CHAIN],
+    emitter: { emit, on: vi.fn(), off: vi.fn() } as never,
+    transports: {},
+  } as never);
+}
+
+describe("localWallet connector", () => {
+  beforeEach(async () => {
+    invokeMock.mockReset();
+    // `cachedAddress` é estado a nível de módulo — desconecta antes de cada
+    // teste pra nenhum teste anterior vazar um endereço "conectado" pro
+    // próximo.
+    await makeInstance().disconnect!();
+  });
+
+  it("has the expected connector id/type", () => {
+    const instance = makeInstance();
+    expect(instance.id).toBe("localWallet");
+    expect(instance.type).toBe("localWallet");
+    expect(instance.name).toBe("Local Wallet");
+  });
+
+  it("isAuthorized() reflects local_wallet_exists — true when a local key already exists", async () => {
+    invokeMock.mockResolvedValueOnce(true);
+    await expect(makeInstance().isAuthorized!()).resolves.toBe(true);
+    expect(invokeMock).toHaveBeenCalledWith("local_wallet_exists");
+  });
+
+  it("isAuthorized() reflects local_wallet_exists — false when no local key exists yet", async () => {
+    invokeMock.mockResolvedValueOnce(false);
+    await expect(makeInstance().isAuthorized!()).resolves.toBe(false);
+  });
+
+  it("isAuthorized() swallows invoke() errors and returns false", async () => {
+    invokeMock.mockRejectedValueOnce("some_error");
+    await expect(makeInstance().isAuthorized!()).resolves.toBe(false);
+  });
+
+  it("getAccounts throws a plain Error when not connected", async () => {
+    await expect(makeInstance().getAccounts!()).rejects.toThrow("Local wallet not connected.");
+  });
+
+  it("connect() invokes local_wallet_address and normalizes the address", async () => {
+    invokeMock.mockResolvedValueOnce(ADDRESS);
+    const emit = vi.fn();
+    const instance = makeInstance(emit);
+
+    const result = await instance.connect!({ chainId: 8453 } as never);
+
+    expect(invokeMock).toHaveBeenCalledWith("local_wallet_address");
+    expect((result as { accounts: readonly string[] }).accounts[0].toLowerCase()).toBe(ADDRESS);
+    expect(emit).toHaveBeenCalledWith("connect", expect.objectContaining({ chainId: 8453 }));
+
+    await expect(instance.getAccounts!()).resolves.toEqual([expect.stringMatching(/^0x/)]);
+  });
+
+  it("provider dispatches eth_chainId/eth_accounts without touching invoke()", async () => {
+    invokeMock.mockResolvedValueOnce(ADDRESS); // connect()
+    const instance = makeInstance();
+    await instance.connect!({ chainId: 8453 } as never);
+    invokeMock.mockReset();
+
+    const provider = (await instance.getProvider!({ chainId: 8453 })) as {
+      request: (args: { method: string; params?: readonly unknown[] }) => Promise<unknown>;
+    };
+
+    await expect(provider.request({ method: "eth_chainId" })).resolves.toBe("0x2105"); // 8453
+    await expect(provider.request({ method: "eth_accounts" })).resolves.toEqual([
+      expect.stringMatching(/^0x/),
+    ]);
+    expect(invokeMock).not.toHaveBeenCalled();
+  });
+
+  it("provider wraps a plain-string rejection from invoke() into a real Error (personal_sign)", async () => {
+    invokeMock.mockResolvedValueOnce(ADDRESS); // connect()
+    const instance = makeInstance();
+    await instance.connect!({ chainId: 8453 } as never);
+
+    invokeMock.mockRejectedValueOnce("some_error"); // sign_local_wallet_personal_message
+    const provider = (await instance.getProvider!({ chainId: 8453 })) as {
+      request: (args: { method: string; params?: readonly unknown[] }) => Promise<unknown>;
+    };
+
+    await expect(
+      provider.request({ method: "personal_sign", params: ["0xdeadbeef"] }),
+    ).rejects.toBeInstanceOf(Error);
+  });
+
+  it("personal_sign forwards the message hex to sign_local_wallet_personal_message", async () => {
+    invokeMock.mockResolvedValueOnce(ADDRESS); // connect()
+    const instance = makeInstance();
+    await instance.connect!({ chainId: 8453 } as never);
+
+    invokeMock.mockResolvedValueOnce("0xsignature");
+    const provider = (await instance.getProvider!({ chainId: 8453 })) as {
+      request: (args: { method: string; params?: readonly unknown[] }) => Promise<unknown>;
+    };
+
+    const result = await provider.request({ method: "personal_sign", params: ["0xdeadbeef", ADDRESS] });
+
+    expect(result).toBe("0xsignature");
+    expect(invokeMock).toHaveBeenCalledWith("sign_local_wallet_personal_message", {
+      messageHex: "0xdeadbeef",
+    });
+  });
+});

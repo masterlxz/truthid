@@ -2,5 +2,6 @@
   "tagline": "Sign in to your decentralized identity",
   "walletConnect": "WalletConnect",
   "ledger": "Ledger",
-  "trezor": "Trezor"
+  "trezor": "Trezor",
+  "localWallet": "Local Wallet (no hardware needed)"
 }

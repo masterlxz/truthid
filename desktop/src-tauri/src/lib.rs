@@ -20,6 +20,7 @@ mod config;
 mod ipfs;
 mod ledger;
 mod trezor;
+mod local_wallet;
 mod local_signer_server;
 mod pin;
 mod sign_message;
@@ -876,6 +877,32 @@ fn extract_arweave_wallet_from_import(vault_value: &serde_json::Value) -> Option
         .map(|s| s.to_string())
 }
 
+/// Mesmo padrão de `splice_arweave_wallet_into_export`, agora pra chave
+/// privada (hex) da wallet local (P78, pedaço 1) — também fora do struct
+/// `Vault` tipado, pelo mesmo motivo: não vazar pro schema publicado
+/// on-chain/sincronizado entre devices pareados. Essa chave é o único jeito
+/// de controlar a identidade até uma eventual migração pra outra wallet, daí
+/// o backup ser o único mecanismo de recuperação (ver o gate de backup
+/// obrigatório no frontend, `LocalWalletBackupGate.tsx`).
+fn splice_local_wallet_into_export(
+    mut vault_value: serde_json::Value,
+    wallet_priv_hex: Option<String>,
+) -> serde_json::Value {
+    if let Some(k) = wallet_priv_hex {
+        if let serde_json::Value::Object(map) = &mut vault_value {
+            map.insert("local_wallet_private_key".to_string(), serde_json::Value::String(k));
+        }
+    }
+    vault_value
+}
+
+fn extract_local_wallet_from_import(vault_value: &serde_json::Value) -> Option<String> {
+    vault_value
+        .get("local_wallet_private_key")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string())
+}
+
 /// Serializa o vault local inteiro e cifra com uma senha de export (PBKDF2 +
 /// AES-256-GCM), independente da vault key derivada da wallet. Retorna o
 /// blob completo (magic+salt+iterations+nonce+ciphertext) em Base64 — o
@@ -897,6 +924,8 @@ fn vault_export_backup(password: String) -> Result<String, String> {
     let for_export = vault::vault_with_encrypted_card_fields(&v)?;
     let value = serde_json::to_value(&for_export).map_err(|e| e.to_string())?;
     let value = splice_arweave_wallet_into_export(value, crate::get_arweave_wallet().ok());
+    let value =
+        splice_local_wallet_into_export(value, local_wallet::get_local_wallet_key_hex().ok());
     let json = serde_json::to_vec(&value).map_err(|e| e.to_string())?;
     let blob = backup::encrypt(&json, &password)?;
     Ok(STANDARD.encode(blob))
@@ -925,6 +954,16 @@ fn vault_import_backup(blob_b64: String, password: String) -> Result<(), String>
     if crate::get_arweave_wallet().is_err() {
         if let Some(wallet_json) = extract_arweave_wallet_from_import(&value) {
             crate::set_arweave_wallet(&wallet_json)?;
+        }
+    }
+
+    if local_wallet::get_local_wallet_key_hex().is_err() {
+        if let Some(priv_hex) = extract_local_wallet_from_import(&value) {
+            local_wallet::set_local_wallet_key_hex(&priv_hex)?;
+            // Importar um backup já prova que existe cópia em outro lugar —
+            // não reexibir o gate de backup obrigatório depois de uma
+            // restauração.
+            local_wallet::mark_backup_confirmed()?;
         }
     }
 
@@ -1351,6 +1390,13 @@ pub fn run() {
             trezor::get_trezor_address,
             trezor::sign_trezor_transaction,
             trezor::sign_trezor_personal_message,
+            local_wallet::local_wallet_generate,
+            local_wallet::local_wallet_exists,
+            local_wallet::local_wallet_address,
+            local_wallet::sign_local_wallet_transaction,
+            local_wallet::sign_local_wallet_personal_message,
+            local_wallet::local_wallet_backup_confirmed,
+            local_wallet::confirm_local_wallet_backup,
             arweave::arweave_generate_wallet,
             arweave::arweave_import_wallet,
             arweave::arweave_wallet_exists,
@@ -1588,6 +1634,52 @@ e0a4be53c6a97b8f41e53559d6327017adcf62341fc176583751ab61f1020f85\
         assert_eq!(
             extract_arweave_wallet_from_import(&spliced),
             Some("round-trip-jwk".to_string())
+        );
+    }
+
+    // Mesmo padrão dos testes acima, agora pra chave privada (hex) da wallet
+    // local (P78, pedaço 1) embutida no backup exportável.
+    #[test]
+    fn splice_local_wallet_into_export_adds_field_when_wallet_present() {
+        let value =
+            serde_json::json!({"version": 1, "entries": [], "profile_names": [], "device_permissions": []});
+        let spliced = splice_local_wallet_into_export(value, Some("fake-priv-hex".to_string()));
+        assert_eq!(spliced["local_wallet_private_key"], "fake-priv-hex");
+    }
+
+    #[test]
+    fn splice_local_wallet_into_export_is_noop_when_no_wallet() {
+        let value =
+            serde_json::json!({"version": 1, "entries": [], "profile_names": [], "device_permissions": []});
+        let spliced = splice_local_wallet_into_export(value.clone(), None);
+        assert_eq!(spliced, value);
+        assert!(spliced.get("local_wallet_private_key").is_none());
+    }
+
+    #[test]
+    fn extract_local_wallet_from_import_reads_field_when_present() {
+        let value = serde_json::json!({"version": 1, "local_wallet_private_key": "fake-priv-hex"});
+        assert_eq!(
+            extract_local_wallet_from_import(&value),
+            Some("fake-priv-hex".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_local_wallet_from_import_returns_none_for_old_format_backup() {
+        let value =
+            serde_json::json!({"version": 1, "entries": [], "profile_names": [], "device_permissions": []});
+        assert_eq!(extract_local_wallet_from_import(&value), None);
+    }
+
+    #[test]
+    fn splice_then_extract_round_trips_local_wallet() {
+        let value = serde_json::json!({"version": 1});
+        let spliced =
+            splice_local_wallet_into_export(value, Some("round-trip-priv-hex".to_string()));
+        assert_eq!(
+            extract_local_wallet_from_import(&spliced),
+            Some("round-trip-priv-hex".to_string())
         );
     }
 }

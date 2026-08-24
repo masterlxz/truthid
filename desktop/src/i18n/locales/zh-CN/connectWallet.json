@@ -2,5 +2,6 @@
   "tagline": "登录您的去中心化身份",
   "walletConnect": "WalletConnect",
   "ledger": "Ledger",
-  "trezor": "Trezor"
+  "trezor": "Trezor",
+  "localWallet": "本地钱包(无需硬件)"
 }

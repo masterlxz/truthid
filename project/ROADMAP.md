@@ -2343,3 +2343,70 @@ implementar com confiança agora, duas barreiras reais encontradas**:
 real ou uma implementação de referência que comprovadamente funcione for encontrada; (2) o item 3
 acima (P68, fluxo 100% mobile) avançar o suficiente pro Mobile ter algum jeito de reproduzir a
 derivação. Registrado como P72 em `PENDING.md`. Nada implementado.
+
+### Ideia pesquisada — Sessão 224 (2026-08-24): wallet local embutida (bootstrap sem wallet externa) + migração hot↔hardware wallet
+
+**Contexto**: o dono do projeto propôs uma feature separada do tier facilitado/billing (P47 já tinha
+um item "bootstrap de identidade TruthID sem Ledger" amarrado ao épico pago — essa amarração não se
+aplica mais): em vez de exigir Ledger/Metamask/WalletConnect pra criar identidade, o app geraria uma
+wallet LOCAL (chave gerada e guardada no próprio device) que funcionaria como se estivesse "sempre
+conectada" — cria identidade, cria smart account, tudo sem wallet externa. Depois, o usuário poderia
+migrar a identidade pra outra wallet (ex. uma Ledger), e o mesmo mecanismo serviria de forma geral
+pra trocar de hot wallet pra hardware wallet (ou o inverso). Pedido explícito: só rodar `/plan` pra
+avaliar viabilidade e **registrar no projeto — sem implementar nada agora**.
+
+Investigação direta no código real (contratos + Desktop), não memória de treino sobre ERC-4337 em
+geral. **Conclusão: viável, com desenho já claro — dois pedaços distintos, complexidade bem
+desigual entre eles**.
+
+**Pedaço 1 — bootstrap local (fácil, quase infraestrutura existente)**:
+- `IdentityRegistry.sol::createIdentity()` já aceita nativamente uma smart account que ainda não
+  existe on-chain, assinada por quem vai virar seu `owner` (`factory.getAddress(signer, 0) ==
+  controller`) — o contrato não distingue chave "hardware" de chave "software", é só um endereço.
+  Não precisa de nenhuma mudança de contrato pra esse caso já funcionar com uma chave puramente
+  local.
+- `CreateIdentity.tsx` (Desktop) já é agnóstico a conector (`wagmi`, comentário confirma "works with
+  any connector — Ledger, WalletConnect, or injected") — precisaria só de um conector novo que
+  assina com uma chave local em vez de delegar pra um app externo.
+- Geração/custódia de chave local **já existe e é reaproveitável**: `get_device_key_hex`
+  (`desktop/src-tauri/src/lib.rs:43`, `SigningKey::random` + keyring/fallback em arquivo) é
+  exatamente o padrão que uma "wallet owner local" precisaria, só duplicado pra uma 2ª chave com
+  papel diferente (hoje a device key é sempre signer de nível restrito, nunca `owner`). O mesmo
+  backup exportável (`.truthid-backup`) que já embute a wallet Arweave (P70/P71) cobriria essa chave
+  nova sem mecanismo novo de backup.
+- **Limite real**: não existe paymaster (`userOpExecutor.ts:58`, comentário explícito — "a smart
+  account paga o próprio gas"). A wallet local nasce sem ETH; o usuário ainda precisa depositar de
+  fora (exchange), só que sem a fricção de instalar/parear uma wallet externa antes disso. O ganho é
+  de fricção de onboarding, não de custo de gas.
+
+**Pedaço 2 — migrar identidade pra outra wallet (ex. software→Ledger, ou o inverso) — viável, mas é
+processo de vários passos, não uma troca atômica**:
+- `IdentityRegistry.sol::transferController()` já existe pronto e é literalmente o primitivo certo
+  — troca `identity.controller` pra qualquer endereço novo, só exige que quem assina seja o
+  controller atual.
+- **Achado que muda o desenho**: `TruthIDAccount.sol:88` declara `address public immutable owner` —
+  o dono de uma smart account **nunca** pode ser trocado depois de deployada. "Migrar" não é trocar
+  a chave dentro da mesma conta, é: (1) criar uma smart account NOVA via
+  `TruthIDAccountFactory.createAccount(enderecoNovo, index)`; (2) `transferController()` da conta
+  antiga pra nova; (3) mover o saldo manualmente (`execute()` comum — não existe função de migração
+  de saldo pronta); (4) re-autorizar cada device na conta nova via `addDevice()` (o mapping
+  `authorizedDevices` é local por contrato, não migra sozinho).
+- Ponto a favor: como o `identityId` não muda (só o campo `controller`) e o `DeviceRegistry` indexa
+  devices por `identityId` (resolvido a partir do controller corrente via `IdentityResolver.sol`),
+  os devices não precisam de re-pareamento completo (commit-reveal de novo) — só precisam ser
+  re-autorizados na conta nova, um passo bem mais leve.
+- **Riscos identificados, não resolvidos por este `/plan`**: (a) se o processo for interrompido no
+  meio (`transferController` já rodou mas devices/saldo ainda não migraram), a identidade fica
+  temporariamente sem nenhum device autorizado na conta nova — nenhum device consegue assinar
+  UserOps até completar os passos restantes; precisa de UI que force o fluxo completo antes de
+  considerar "migrado", ou uma função atômica nova no contrato que faça os 4 passos numa transação
+  só; (b) não investigado ainda se os guardiões de Social Recovery (`RecoveryManager.sol`,
+  `configureGuardians`) ficam amarrados ao endereço da smart account antiga, exigindo reconfiguração
+  depois da migração — fica como pergunta em aberto pro próximo `/plan` se a feature avançar.
+
+**Retomar quando**: o dono do projeto decidir priorizar (nada bloqueando tecnicamente, ao contrário
+do P72/Arweave). Se avançar, o pedaço 1 (bootstrap local) é o ponto de entrada natural — mais simples,
+maior ganho de fricção de onboarding — com o pedaço 2 (migração) como fatia separada depois,
+precisando primeiro resolver a pergunta em aberto dos guardiões e decidir entre "UI que força o
+fluxo de 4 passos" vs "função atômica nova no contrato". Registrado como P78 em `PENDING.md`. Nada
+implementado.

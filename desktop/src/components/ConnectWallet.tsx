@@ -3,6 +3,7 @@ import { useConnect } from "wagmi";
 import { useTranslation } from "react-i18next";
 import { ConnectLedger } from "./ConnectLedger";
 import { ConnectTrezor } from "./ConnectTrezor";
+import { ConnectLocalWallet } from "./ConnectLocalWallet";
 
 function IconWalletConnect() {
   return (
@@ -47,11 +48,23 @@ function IconTrezor() {
   );
 }
 
+function IconLocalWallet() {
+  return (
+    <svg width="36" height="36" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <rect width="36" height="36" rx="9" fill="#4DD0E1"/>
+      <rect x="9" y="14" width="18" height="12" rx="2.5" fill="white"/>
+      <path d="M13 14V11.5C13 9 15 7.5 18 7.5C21 7.5 23 9 23 11.5V14" stroke="white" strokeWidth="2" fill="none"/>
+      <circle cx="18" cy="20" r="2" fill="#4DD0E1"/>
+    </svg>
+  );
+}
+
 export function ConnectWallet({ asModal, onClose }: { asModal?: boolean; onClose?: () => void }) {
   const { t } = useTranslation();
   const { connect, connectors } = useConnect();
   const [showLedger, setShowLedger] = useState(false);
   const [showTrezor, setShowTrezor] = useState(false);
+  const [showLocalWallet, setShowLocalWallet] = useState(false);
 
   const walletConnectConnector = connectors.find((c) => c.id === "walletConnect");
 
@@ -67,6 +80,14 @@ export function ConnectWallet({ asModal, onClose }: { asModal?: boolean; onClose
     return (
       <div className={asModal ? undefined : "wallet-screen"}>
         <ConnectTrezor onBack={() => setShowTrezor(false)} />
+      </div>
+    );
+  }
+
+  if (showLocalWallet) {
+    return (
+      <div className={asModal ? undefined : "wallet-screen"}>
+        <ConnectLocalWallet onBack={() => setShowLocalWallet(false)} />
       </div>
     );
   }
@@ -132,6 +153,17 @@ export function ConnectWallet({ asModal, onClose }: { asModal?: boolean; onClose
               <IconTrezor />
             </span>
             <span className="wallet-option-name">{t("connectWallet.trezor")}</span>
+            <span className="wallet-option-arrow">›</span>
+          </button>
+
+          <button
+            className="wallet-option"
+            onClick={() => setShowLocalWallet(true)}
+          >
+            <span className="wallet-option-icon">
+              <IconLocalWallet />
+            </span>
+            <span className="wallet-option-name">{t("connectWallet.localWallet")}</span>
             <span className="wallet-option-arrow">›</span>
           </button>
         </div>

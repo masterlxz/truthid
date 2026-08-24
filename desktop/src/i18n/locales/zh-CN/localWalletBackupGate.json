@@ -1,0 +1,12 @@
+{
+  "title": "必须备份",
+  "severeWarning": "此身份依赖于一个仅存在于此设备上的密钥。如果没有备份,丢失或重装此电脑将意味着永久失去该身份——无法恢复。",
+  "exportSectionTitle": "立即导出备份",
+  "exportPasswordLabel": "备份密码",
+  "confirmPasswordLabel": "确认密码",
+  "exportButton": "导出并继续",
+  "exporting": "正在导出…",
+  "orDivider": "或",
+  "alreadyExportedCheckbox": "我已经在其他地方导出过此保险库的备份",
+  "confirmButton": "确认并继续"
+}

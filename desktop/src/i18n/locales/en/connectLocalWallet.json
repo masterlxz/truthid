@@ -1,0 +1,14 @@
+{
+  "back": "Back",
+  "intro": {
+    "title": "Create local wallet",
+    "warning": "This key is generated and stored only on this computer. If you lose this device without having exported a backup, you lose the identity entirely — there is no recovery.",
+    "createButton": "Create local wallet"
+  },
+  "created": {
+    "title": "Wallet created",
+    "addressLabel": "Address",
+    "fundingHint": "Deposit ETH to this address before creating your identity — there's no paymaster, funding is manual."
+  },
+  "connecting": "Connecting…"
+}
