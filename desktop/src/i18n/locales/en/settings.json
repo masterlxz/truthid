@@ -1,0 +1,23 @@
+{
+  "title": "Settings",
+  "language": {
+    "title": "Language"
+  },
+  "wallet": {
+    "title": "Wallet"
+  },
+  "appLock": {
+    "title": "App lock",
+    "explanation": "Require a password to open TruthID. Optional — off by default.",
+    "loading": "Loading...",
+    "enableButton": "Enable app lock",
+    "disableButton": "Disable app lock",
+    "newPasswordLabel": "New password",
+    "confirmPasswordLabel": "Confirm password",
+    "currentPasswordLabel": "Current password",
+    "confirmEnableButton": "Enable",
+    "confirmDisableButton": "Disable",
+    "cancel": "Cancel",
+    "saving": "Saving..."
+  }
+}

@@ -1,0 +1,23 @@
+{
+  "title": "Configuración",
+  "language": {
+    "title": "Idioma"
+  },
+  "wallet": {
+    "title": "Wallet"
+  },
+  "appLock": {
+    "title": "Bloqueo del app",
+    "explanation": "Exige una contraseña para abrir TruthID. Opcional — desactivado por defecto.",
+    "loading": "Cargando...",
+    "enableButton": "Habilitar bloqueo",
+    "disableButton": "Deshabilitar bloqueo",
+    "newPasswordLabel": "Contraseña nueva",
+    "confirmPasswordLabel": "Confirmar contraseña",
+    "currentPasswordLabel": "Contraseña actual",
+    "confirmEnableButton": "Habilitar",
+    "confirmDisableButton": "Deshabilitar",
+    "cancel": "Cancelar",
+    "saving": "Guardando..."
+  }
+}

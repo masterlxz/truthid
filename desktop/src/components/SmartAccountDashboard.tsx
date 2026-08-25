@@ -7,7 +7,6 @@ import { useSmartAccountActivity } from "../hooks/useSmartAccountActivity";
 import { formatDateTime } from "../i18n/formatDate";
 import { DepositModal } from "./DepositModal";
 import { WithdrawModal } from "./WithdrawModal";
-import { MigrateWallet } from "./MigrateWallet";
 import type { SmartAccountActivityType } from "../types";
 
 const REVOKED_TYPES = new Set<SmartAccountActivityType>([
@@ -23,7 +22,6 @@ export function SmartAccountDashboard() {
   const { identityId, smartAccountAddress } = useIdentity();
   const [depositOpen, setDepositOpen] = useState(false);
   const [withdrawOpen, setWithdrawOpen] = useState(false);
-  const [migrateOpen, setMigrateOpen] = useState(false);
 
   const activityLabels: Record<SmartAccountActivityType, string> = {
     session_created: t("smartAccountDashboard.activity.labels.session_created"),
@@ -80,9 +78,6 @@ export function SmartAccountDashboard() {
           <button onClick={() => setDepositOpen(true)}>{t("smartAccountDashboard.actions.deposit")}</button>
           <button onClick={() => setWithdrawOpen(true)} disabled={!balance || balance.value === 0n}>
             {t("smartAccountDashboard.actions.withdraw")}
-          </button>
-          <button onClick={() => setMigrateOpen(true)}>
-            {t("smartAccountDashboard.actions.migrateWallet")}
           </button>
         </div>
       </div>
@@ -190,18 +185,6 @@ export function SmartAccountDashboard() {
               availableBalance={balance.value}
               onClose={() => setWithdrawOpen(false)}
             />
-          </div>
-        </div>
-      )}
-
-      {migrateOpen && (
-        <div className="modal-overlay" onClick={() => setMigrateOpen(false)}>
-          <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2 className="modal-title">{t("smartAccountDashboard.modal.migrateWallet")}</h2>
-              <button className="modal-close" onClick={() => setMigrateOpen(false)}>✕</button>
-            </div>
-            <MigrateWallet onClose={() => setMigrateOpen(false)} />
           </div>
         </div>
       )}

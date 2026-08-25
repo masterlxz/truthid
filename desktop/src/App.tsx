@@ -10,7 +10,6 @@ import { ManageDevices } from "./components/ManageDevices";
 import { ActiveSessions } from "./components/ActiveSessions";
 import { QuickLogin } from "./components/QuickLogin";
 import { DonateModal } from "./components/DonateModal";
-import { LanguageSelector } from "./components/LanguageSelector";
 import { VaultManagement } from "./components/VaultManagement";
 import { DashboardScreen } from "./components/DashboardScreen";
 import { IdentityProvider } from "./contexts/IdentityContext";
@@ -19,6 +18,9 @@ import { useStoredUsername } from "./hooks/useStoredUsername";
 import { useUpdateCheck } from "./hooks/useUpdateCheck";
 import { useLocalWalletBackupGate } from "./hooks/useLocalWalletBackupGate";
 import { LocalWalletBackupGate } from "./components/LocalWalletBackupGate";
+import { useAppLock } from "./hooks/useAppLock";
+import { AppLockGate } from "./components/AppLockGate";
+import { Settings } from "./components/Settings";
 import { IDENTITY_REGISTRY_ADDRESS, IDENTITY_REGISTRY_ABI } from "./config/contracts";
 import {
   TRUTHID_ACCOUNT_FACTORY_ADDRESS,
@@ -64,12 +66,14 @@ function App() {
   const [loginOpen, setLoginOpen] = useState(false);
   const [connectModalOpen, setConnectModalOpen] = useState(false);
   const [donateOpen, setDonateOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const queryClient = useQueryClient();
 
   const { username: storedUsername, save: saveUsername, clear: clearUsername } = useStoredUsername();
   const { updateVersion, updateUrl } = useUpdateCheck();
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const { needsBackup, markConfirmed } = useLocalWalletBackupGate();
+  const { isLocked, unlock } = useAppLock();
 
   const isWrongNetwork = isConnected && chainId !== base.id;
   const { switchChain, isPending: isSwitching } = useSwitchChain();
@@ -134,6 +138,14 @@ function App() {
   // Practice Valuation, ao testar o canal /sign-request contra este app).
   const openConnectModal = useCallback(() => setConnectModalOpen(true), []);
   const walletModalContextValue = useMemo(() => ({ openConnectModal }), [openConnectModal]);
+
+  // ── Bloqueio por senha (opcional, ativável nas Configurações) → bloqueia
+  // TUDO, inclusive o gate de backup abaixo — é a primeira porta de entrada
+  // no app quando habilitado. `null` = ainda checando.
+  if (isLocked) {
+    return <AppLockGate onUnlock={unlock} />;
+  }
+  if (isLocked === null) return null;
 
   // ── Wallet local sem backup confirmado → bloqueia TUDO ────────────────────
   // A chave da wallet local (P78, pedaço 1) já existe no keyring assim que
@@ -226,7 +238,15 @@ function App() {
             >
               ♥
             </button>
-            <LanguageSelector />
+            {displayUsername && (
+              <button
+                className="topbar-btn"
+                onClick={() => setSettingsOpen(true)}
+                title={t("app.topbar.settings")}
+              >
+                ⚙
+              </button>
+            )}
             <button
               className="topbar-btn topbar-btn-danger"
               onClick={handleLogout}
@@ -317,6 +337,18 @@ function App() {
               {activeTab === "sessions" && <ActiveSessions />}
               {activeTab === "vault" && <VaultManagement />}
               {activeTab === "recovery" && <GuardianManagement />}
+
+              {settingsOpen && (
+                <div className="modal-overlay" onClick={() => setSettingsOpen(false)}>
+                  <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+                    <div className="modal-header">
+                      <h2 className="modal-title">{t("app.topbar.settings")}</h2>
+                      <button className="modal-close" onClick={() => setSettingsOpen(false)}>✕</button>
+                    </div>
+                    <Settings onClose={() => setSettingsOpen(false)} />
+                  </div>
+                </div>
+              )}
             </IdentityProvider>
           )}
         </main>

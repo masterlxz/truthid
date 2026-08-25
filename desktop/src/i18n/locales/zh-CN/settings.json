@@ -1,0 +1,23 @@
+{
+  "title": "设置",
+  "language": {
+    "title": "语言"
+  },
+  "wallet": {
+    "title": "钱包"
+  },
+  "appLock": {
+    "title": "应用锁",
+    "explanation": "打开 TruthID 时需要输入密码。可选功能——默认关闭。",
+    "loading": "加载中...",
+    "enableButton": "启用应用锁",
+    "disableButton": "禁用应用锁",
+    "newPasswordLabel": "新密码",
+    "confirmPasswordLabel": "确认密码",
+    "currentPasswordLabel": "当前密码",
+    "confirmEnableButton": "启用",
+    "confirmDisableButton": "禁用",
+    "cancel": "取消",
+    "saving": "保存中..."
+  }
+}

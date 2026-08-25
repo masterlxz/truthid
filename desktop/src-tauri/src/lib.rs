@@ -10,6 +10,7 @@ use serde::Serialize;
 use sha2::Sha256;
 use sha3::{Digest, Keccak256};
 
+mod app_lock;
 mod arweave;
 mod autofill_address;
 mod autofill_creditcard;
@@ -1397,6 +1398,10 @@ pub fn run() {
             local_wallet::sign_local_wallet_personal_message,
             local_wallet::local_wallet_backup_confirmed,
             local_wallet::confirm_local_wallet_backup,
+            app_lock::app_lock_is_enabled,
+            app_lock::app_lock_enable,
+            app_lock::app_lock_verify,
+            app_lock::app_lock_disable,
             arweave::arweave_generate_wallet,
             arweave::arweave_import_wallet,
             arweave::arweave_wallet_exists,
