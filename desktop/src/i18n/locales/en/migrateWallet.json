@@ -1,0 +1,40 @@
+{
+  "cancel": "Cancel",
+  "close": "Close",
+  "intro": {
+    "title": "Migrate to another wallet",
+    "explanation": "This moves control of your identity to a different wallet (e.g. from a hot wallet to a hardware wallet, or the other way around). It deploys a new smart account for the new wallet, transfers your identity to it, and moves your current balance over — all in a single transaction signed by your current wallet.",
+    "guardiansAndDevicesSurvive": "Your guardians and device history stay valid automatically, nothing to reconfigure. After migrating, reconnect with the new wallet and go to \"Devices\" to reauthorize them there.",
+    "start": "Start"
+  },
+  "connectNew": {
+    "instruction": "Connect the NEW wallet now, just to record its address — no transaction will be sent yet."
+  },
+  "connectOld": {
+    "instruction": "Now reconnect your CURRENT (old) wallet to authorize the migration."
+  },
+  "confirmNew": {
+    "newOwnerLabel": "New wallet address",
+    "newAccountLabel": "New smart account address (will be deployed)",
+    "sameWalletError": "That's the same wallet already controlling this identity — choose a different one.",
+    "confirmButton": "This is correct, continue",
+    "chooseDifferentWallet": "Choose a different wallet"
+  },
+  "review": {
+    "oldAccountLabel": "Current smart account",
+    "oldBalance": "Balance to move: {{amount}} ETH",
+    "newAccountLabel": "New smart account",
+    "confirmButton": "Confirm migration",
+    "confirmInWallet": "Confirm in wallet...",
+    "waitingForConfirmation": "Waiting for confirmation...",
+    "confirming": "Confirming...",
+    "rejectedOnWallet": "Rejected on wallet.",
+    "errorPrefix": "Error: {{message}}",
+    "tryAgain": "Try again"
+  },
+  "done": {
+    "title": "Migration complete! Your identity now points to:",
+    "nextSteps": "Reconnect with the new wallet and go to \"Devices\" — a banner there will let you reauthorize your existing devices with one confirmation.",
+    "oldAddressWarning": "Don't send anything else to the old smart account address — its balance was already moved, but it's no longer part of your identity."
+  }
+}

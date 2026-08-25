@@ -6,7 +6,8 @@
   },
   "actions": {
     "deposit": "Deposit",
-    "withdraw": "Withdraw"
+    "withdraw": "Withdraw",
+    "migrateWallet": "Migrate to another wallet"
   },
   "costByType": {
     "title": "Cost by type",
@@ -34,6 +35,7 @@
   },
   "modal": {
     "deposit": "Deposit",
-    "withdraw": "Withdraw"
+    "withdraw": "Withdraw",
+    "migrateWallet": "Migrate to another wallet"
   }
 }

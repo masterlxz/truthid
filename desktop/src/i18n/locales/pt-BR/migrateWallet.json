@@ -1,0 +1,40 @@
+{
+  "cancel": "Cancelar",
+  "close": "Fechar",
+  "intro": {
+    "title": "Migrar pra outra wallet",
+    "explanation": "Isso move o controle da sua identidade pra outra wallet (ex: de uma wallet local pra uma hardware wallet, ou o inverso). Uma smart account nova é implantada pra wallet nova, sua identidade é transferida pra ela e o saldo atual é movido junto — tudo numa única transação, assinada pela sua wallet atual.",
+    "guardiansAndDevicesSurvive": "Seus guardiões e o histórico de devices continuam válidos automaticamente, nada a reconfigurar. Depois de migrar, reconecte com a wallet nova e vá em \"Devices\" pra reautorizá-los lá.",
+    "start": "Começar"
+  },
+  "connectNew": {
+    "instruction": "Conecte a wallet NOVA agora, só pra registrarmos o endereço dela — nenhuma transação será enviada ainda."
+  },
+  "connectOld": {
+    "instruction": "Agora reconecte sua wallet ATUAL (a antiga) pra autorizar a migração."
+  },
+  "confirmNew": {
+    "newOwnerLabel": "Endereço da wallet nova",
+    "newAccountLabel": "Endereço da smart account nova (será implantada)",
+    "sameWalletError": "Essa é a mesma wallet que já controla essa identidade hoje — escolha outra.",
+    "confirmButton": "Está correto, continuar",
+    "chooseDifferentWallet": "Escolher outra wallet"
+  },
+  "review": {
+    "oldAccountLabel": "Smart account atual",
+    "oldBalance": "Saldo a mover: {{amount}} ETH",
+    "newAccountLabel": "Smart account nova",
+    "confirmButton": "Confirmar migração",
+    "confirmInWallet": "Confirmando na carteira...",
+    "waitingForConfirmation": "Aguardando confirmação...",
+    "confirming": "Confirmando...",
+    "rejectedOnWallet": "Rejeitado na carteira.",
+    "errorPrefix": "Erro: {{message}}",
+    "tryAgain": "Tentar de novo"
+  },
+  "done": {
+    "title": "Migração concluída! Sua identidade agora aponta pra:",
+    "nextSteps": "Reconecte com a wallet nova e vá em \"Devices\" — um aviso lá vai deixar você reautorizar seus devices existentes com uma única confirmação.",
+    "oldAddressWarning": "Não envie mais nada pro endereço da smart account antiga — o saldo dela já foi movido, mas ela não faz mais parte da sua identidade."
+  }
+}

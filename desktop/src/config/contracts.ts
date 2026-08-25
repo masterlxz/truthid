@@ -47,6 +47,16 @@ export const IDENTITY_REGISTRY_ABI = [
     ],
     stateMutability: "view",
   },
+  {
+    type: "function",
+    name: "transferController",
+    inputs: [
+      { name: "username", type: "string" },
+      { name: "newController", type: "address" },
+    ],
+    outputs: [],
+    stateMutability: "nonpayable",
+  },
 ] as const;
 
 // ─── DeviceRegistry ────────────────────────────────────────────────────────────

@@ -6,7 +6,8 @@
   },
   "actions": {
     "deposit": "存入",
-    "withdraw": "提取"
+    "withdraw": "提取",
+    "migrateWallet": "迁移到另一个钱包"
   },
   "costByType": {
     "title": "按类型划分的费用",
@@ -34,6 +35,7 @@
   },
   "modal": {
     "deposit": "存入",
-    "withdraw": "提取"
+    "withdraw": "提取",
+    "migrateWallet": "迁移到另一个钱包"
   }
 }

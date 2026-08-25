@@ -1,0 +1,40 @@
+{
+  "cancel": "Cancelar",
+  "close": "Cerrar",
+  "intro": {
+    "title": "Migrar a otra wallet",
+    "explanation": "Esto mueve el control de tu identidad a otra wallet (por ejemplo, de una wallet local a una hardware wallet, o al revés). Se implementa una cuenta inteligente nueva para la wallet nueva, tu identidad se transfiere a ella y el saldo actual se mueve junto — todo en una única transacción, firmada por tu wallet actual.",
+    "guardiansAndDevicesSurvive": "Tus guardianes y el historial de dispositivos siguen siendo válidos automáticamente, no hay nada que reconfigurar. Después de migrar, reconéctate con la wallet nueva y ve a \"Dispositivos\" para reautorizarlos ahí.",
+    "start": "Empezar"
+  },
+  "connectNew": {
+    "instruction": "Conecta la wallet NUEVA ahora, solo para registrar su dirección — todavía no se enviará ninguna transacción."
+  },
+  "connectOld": {
+    "instruction": "Ahora reconecta tu wallet ACTUAL (la antigua) para autorizar la migración."
+  },
+  "confirmNew": {
+    "newOwnerLabel": "Dirección de la wallet nueva",
+    "newAccountLabel": "Dirección de la cuenta inteligente nueva (se implementará)",
+    "sameWalletError": "Esa es la misma wallet que ya controla esta identidad hoy — elige otra.",
+    "confirmButton": "Es correcto, continuar",
+    "chooseDifferentWallet": "Elegir otra wallet"
+  },
+  "review": {
+    "oldAccountLabel": "Cuenta inteligente actual",
+    "oldBalance": "Saldo a mover: {{amount}} ETH",
+    "newAccountLabel": "Cuenta inteligente nueva",
+    "confirmButton": "Confirmar migración",
+    "confirmInWallet": "Confirmando en la wallet...",
+    "waitingForConfirmation": "Esperando confirmación...",
+    "confirming": "Confirmando...",
+    "rejectedOnWallet": "Rechazado en la wallet.",
+    "errorPrefix": "Error: {{message}}",
+    "tryAgain": "Intentar de nuevo"
+  },
+  "done": {
+    "title": "¡Migración completa! Tu identidad ahora apunta a:",
+    "nextSteps": "Reconéctate con la wallet nueva y ve a \"Dispositivos\" — un aviso ahí te permitirá reautorizar tus dispositivos existentes con una sola confirmación.",
+    "oldAddressWarning": "No envíes nada más a la dirección de la cuenta inteligente antigua — su saldo ya fue movido, pero ya no forma parte de tu identidad."
+  }
+}

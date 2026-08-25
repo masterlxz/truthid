@@ -1,0 +1,40 @@
+{
+  "cancel": "取消",
+  "close": "关闭",
+  "intro": {
+    "title": "迁移到另一个钱包",
+    "explanation": "此操作会把你身份的控制权转移到另一个钱包（例如从热钱包转到硬件钱包，或反过来）。系统会为新钱包部署一个新的智能账户，把你的身份转移过去，并把当前余额一并转移——这一切都由你当前的钱包在一笔交易中完成签名。",
+    "guardiansAndDevicesSurvive": "你的监护人和设备历史会自动保持有效，无需重新配置。迁移完成后，用新钱包重新连接，前往“设备”页面重新授权它们。",
+    "start": "开始"
+  },
+  "connectNew": {
+    "instruction": "现在连接新钱包，只是为了记录它的地址——暂时不会发送任何交易。"
+  },
+  "connectOld": {
+    "instruction": "现在重新连接你当前（旧）的钱包，以授权此次迁移。"
+  },
+  "confirmNew": {
+    "newOwnerLabel": "新钱包地址",
+    "newAccountLabel": "新智能账户地址（即将部署）",
+    "sameWalletError": "这与当前已控制该身份的钱包相同——请选择另一个钱包。",
+    "confirmButton": "确认无误，继续",
+    "chooseDifferentWallet": "选择另一个钱包"
+  },
+  "review": {
+    "oldAccountLabel": "当前智能账户",
+    "oldBalance": "待转移余额：{{amount}} ETH",
+    "newAccountLabel": "新智能账户",
+    "confirmButton": "确认迁移",
+    "confirmInWallet": "正在钱包中确认...",
+    "waitingForConfirmation": "正在等待确认...",
+    "confirming": "确认中...",
+    "rejectedOnWallet": "在钱包中被拒绝。",
+    "errorPrefix": "错误：{{message}}",
+    "tryAgain": "重试"
+  },
+  "done": {
+    "title": "迁移完成！你的身份现在指向：",
+    "nextSteps": "用新钱包重新连接，然后前往“设备”页面——那里的提示会让你一次确认即可重新授权现有设备。",
+    "oldAddressWarning": "不要再向旧的智能账户地址发送任何资产——它的余额已经转移，但它已不再是你身份的一部分。"
+  }
+}

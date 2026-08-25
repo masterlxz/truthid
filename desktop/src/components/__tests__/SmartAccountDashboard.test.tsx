@@ -27,6 +27,14 @@ vi.mock("../../hooks/useSmartAccountActivity", () => ({
   useSmartAccountActivity: vi.fn(),
 }));
 
+// MigrateWallet renderiza ConnectWallet, que puxa os conectores de Ledger/
+// Trezor (`createConnector` real de wagmi no topo do módulo) — não faz
+// sentido mockar essa árvore inteira só pra este teste, que não exercita o
+// fluxo de migração.
+vi.mock("../MigrateWallet", () => ({
+  MigrateWallet: () => <div data-testid="migrate-wallet-stub" />,
+}));
+
 import {
   useBalance,
   useAccount,
