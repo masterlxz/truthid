@@ -4,14 +4,19 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-08-26 (Sessão 226, 4ª parte: os 2 travamentos totais do P84 (itens 1 e 2)
-> **corrigidos** — reconectar wallet local existente sem passar por `local_wallet_generate`, e novo
-> comando `app_lock_reset` + link "Esqueceu sua senha?" no `AppLockGate` pra recuperar o bloqueio sem
-> senha (só remove o gate, não toca no Vault). Itens (3)-(10) do P84 continuam não corrigidos, fica
-> pra uma rodada seguinte. `cargo test --lib`/`cargo clippy --lib`/`npx vitest run` (176/176)/
-> `tsc --noEmit` limpos (1 falha pré-existente e ambiental em `local_signer_server`, confirmada
-> reproduzindo numa worktree limpa do commit anterior, sem relação com este fix). Sessão 226, 3ª
-> parte: P83 fechada — `/code-review high desktop/`
+> Última atualização: 2026-08-26 (Sessão 226, 5ª parte: os 5 bugs de correção restantes do P84 (itens
+> 4-8) **corrigidos** — guarda de "ocupado" impedindo fechar Configurações em pleno migração; espera
+> o saldo carregar antes de mover (evita saldo órfão); mutex fechando a corrida de duplo-clique em
+> `local_wallet_generate` + botão desabilitado no frontend; `SigningKey::from_slice` em vez de
+> `.into()` (panic→`Err` limpo em chave de tamanho errado); `vault_import_backup` aborta o import
+> inteiro se detectar uma chave local diferente da já configurada, em vez de manter a errada em
+> silêncio. Só sobram os itens (9)-(10) do P84 (duplicação de código, sem urgência). `cargo test --lib`
+> (232/233)/`cargo clippy --lib`/`npx vitest run` (179/179)/`tsc --noEmit` limpos (mesma falha
+> ambiental pré-existente de sempre em `local_signer_server`, sem relação). Sessão 226, 4ª parte: os 2
+> travamentos totais do P84 (itens 1 e 2) **corrigidos** — reconectar wallet local existente sem
+> passar por `local_wallet_generate`, e novo comando `app_lock_reset` + link "Esqueceu sua senha?" no
+> `AppLockGate` pra recuperar o bloqueio sem senha (só remove o gate, não toca no Vault). Sessão 226,
+> 3ª parte: P83 fechada — `/code-review high desktop/`
 > rodado sobre P78 pedaço 1/2 + Configurações/senha, achados registrados em P84: **2 bugs de
 > travamento total do app sem recovery** (reconectar wallet local depois de reiniciar o app; esquecer
 > a senha do bloqueio ou o blob corromper) + 6 bugs reais de correção (gate de app-lock sem try/catch
@@ -93,11 +98,48 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 |---|---|---|---|
 | P83 | Sessão 226 rodou `/code-review high mobile/` (achados em P82), mas **nenhum `/code-review` do Desktop chegou a rodar** — a recomendação original era rodar os dois juntos (`/code-review high desktop/ mobile/`), só o Mobile foi disparado de fato. Acumulou feature nova sem revisão desde a última passada de `/code-review` no Desktop: P78 pedaço 1 (wallet local embutida), P78 pedaço 2 (migrar identidade pra outra wallet — `executeBatch` com 3 chamadas + fluxo de reconectar 2 wallets diferentes), e a tela de Configurações + bloqueio do app por senha (`app_lock.rs` novo, reaproveitando `backup::encrypt`/`decrypt`). **Rodado nesta mesma sessão** (`/code-review high desktop/`) — achados em [[P84]]. | conversa direta (Sessão 226) | ✅ Resolvida |
 
-### P84 — `/code-review` do Desktop (P78 pedaço 1/2 + Configurações/senha): 2 bugs de travamento total ✅ CORRIGIDOS + 6 bugs de correção + 2 achados de reuso, todos verificados (Sessão 226)
+### P84 — `/code-review` do Desktop (P78 pedaço 1/2 + Configurações/senha): 2 travamentos totais + 6 bugs de correção ✅ CORRIGIDOS, só sobram 2 achados de reuso (Sessão 226)
 
-**Atualização (Sessão 226, mesma sessão)**: os itens **(1) e (2)** — os dois travamentos totais do app
-sem recovery — foram corrigidos, a pedido do dono do projeto ("pode começar pelos dois"), depois de um
-`/plan` dedicado. Os itens (3)-(10) continuam **não corrigidos**, registrados abaixo como estavam.
+**Atualização 2 (Sessão 226, mesma sessão)**: os itens **(4)-(8)** também foram corrigidos, a pedido
+do dono do projeto ("recomenda tudo de uma vez?" → sim pros 5 juntos), depois de um `/plan` dedicado
+com 3 explorações + 1 validação de plano em paralelo. Só sobram os itens **(9) e (10)** (duplicação de
+código — sem urgência, decisão de deixar pra outra rodada).
+
+- **(4) Settings/MigrateWallet — fechar Configurações não pode mais derrubar uma migração em
+  andamento**: `MigrateWallet.tsx` ganhou prop `onBusyChange?` que reporta `phase === "confirming"`;
+  `Settings.tsx` repassa via `onMigrationBusyChange?`; `App.tsx` guarda o backdrop/✕ do modal de
+  Configurações (`!settingsBusy &&`) e desabilita o ✕ enquanto uma migração está em voo. Sem toque em
+  `Settings.test.tsx`/`MigrateWallet.test.tsx` existentes (props novas são opcionais).
+- **(5) MigrateWallet — saldo não fica mais órfão com RPC lento**: efeito de envio do `executeBatch`
+  agora espera `!isOldBalanceLoading` (novo campo destructurado de `useBalance`) antes de decidir
+  `balanceToMove`, em vez de aceitar um `oldBalance` ainda não carregado como zero silencioso.
+- **(6) `local_wallet_generate` — corrida de duplo-clique fechada nas duas pontas**: Rust ganhou
+  `LOCAL_WALLET_MUTEX`/`lock_local_wallet()` (mesmo padrão de `VAULT_MUTEX`/`lock_vault` em
+  `vault.rs`) guardando o check-then-act; `ConnectLocalWallet.tsx` ganhou `creating` desabilitando o
+  botão "Create local wallet" durante a chamada (sem troca de texto/i18n — janela de corrida
+  sub-perceptível, só cifra local, sem round-trip de rede).
+- **(7) panic → `Err` em chave de tamanho errado**: `derive_address`/`sign_digest_recoverable`
+  trocaram `SigningKey::from_bytes(bytes.into())` (que faz `assert_eq!`/panic em `GenericArray` pra
+  tamanho ≠32) por `SigningKey::from_slice(bytes)`, que já existe no mesmo crate e retorna `Err`
+  limpo pra qualquer tamanho fora do aceito (confirmado: 24-31 bytes viram zero-pad intencional da
+  lib, não um bug — testes novos usam 16 e 40 bytes, fora desse intervalo, pra exercitar rejeição de
+  verdade).
+- **(8) `vault_import_backup` não mantém mais silenciosamente uma chave local errada**: nova função
+  pura `local_wallet_keys_conflict` (deriva e compara endereços das duas chaves) roda **antes** de
+  qualquer mutação (reordenado pra antes do bloco da wallet Arweave, senão um abort deixaria estado
+  parcial); se o device já tem uma chave local diferente da importada, o import inteiro é abortado com
+  erro claro em vez de sobrescrever o vault por baixo mantendo a chave errada. Também fecha de quebra
+  parte do gap de validação do #7 — a chave importada agora é validada via `derive_address` mesmo
+  quando não há conflito (chave malformada vira `Err` limpo na hora do import, não mais só na hora de
+  assinar depois).
+- `cargo test --lib` (232/233, só a mesma falha ambiental pré-existente de
+  `local_signer_server::sign_message_endpoint_...`, sem relação)/`cargo clippy --lib` (só o warning
+  pré-existente de `type_complexity` em `vault.rs`)/`npx vitest run` (179/179, 3 testes novos)/
+  `tsc --noEmit` limpos. Sem validação manual real — mesma limitação já registrada em P79/P80/P81.
+
+**Atualização 1 (Sessão 226, mesma sessão)**: os itens **(1) e (2)** — os dois travamentos totais do
+app sem recovery — foram corrigidos, a pedido do dono do projeto ("pode começar pelos dois"), depois
+de um `/plan` dedicado.
 
 - **(1) reconectar wallet local**: `ConnectLocalWallet.tsx` agora checa `local_wallet_exists()` no
   mount (nova fase `"checking"`); se já existe chave, mostra uma tela nova (`"existing"`) com o

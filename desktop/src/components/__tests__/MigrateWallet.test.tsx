@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MigrateWallet } from "../MigrateWallet";
 
@@ -229,5 +229,42 @@ describe("MigrateWallet", () => {
     const call = mockWriteContract.mock.calls[0][0];
     expect(call.args[0]).toHaveLength(2);
     expect(call.args[1]).toEqual([0n, 0n]);
+  });
+
+  it("waits for the balance query to resolve before submitting, to avoid moving a stale zero balance", async () => {
+    const { mockWriteContract } = setupMocks({ newOwnerConnected: true });
+    vi.mocked(useBalance).mockReturnValue({
+      data: undefined,
+      isLoading: true,
+    } as ReturnType<typeof useBalance>);
+
+    const view = render(<MigrateWallet onClose={vi.fn()} />);
+    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+    await userEvent.click(screen.getByRole("button", { name: "This is correct, continue" }));
+    await userEvent.click(screen.getByRole("button", { name: "Confirm migration" }));
+
+    expect(mockWriteContract).not.toHaveBeenCalled();
+
+    vi.mocked(useBalance).mockReturnValue({
+      data: { value: 1_000_000_000_000_000_000n },
+      isLoading: false,
+    } as ReturnType<typeof useBalance>);
+    view.rerender(<MigrateWallet onClose={vi.fn()} />);
+
+    await waitFor(() => expect(mockWriteContract).toHaveBeenCalled());
+  });
+
+  it("reports busy while confirming and not-busy before that", async () => {
+    const onBusyChange = vi.fn();
+    setupMocks({ newOwnerConnected: true });
+    render(<MigrateWallet onClose={vi.fn()} onBusyChange={onBusyChange} />);
+    await userEvent.click(screen.getByRole("button", { name: "Start" }));
+    await userEvent.click(screen.getByRole("button", { name: "This is correct, continue" }));
+
+    expect(onBusyChange).toHaveBeenLastCalledWith(false);
+
+    await userEvent.click(screen.getByRole("button", { name: "Confirm migration" }));
+
+    expect(onBusyChange).toHaveBeenLastCalledWith(true);
   });
 });

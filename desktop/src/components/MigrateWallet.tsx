@@ -47,7 +47,13 @@ type Phase = "intro" | "connectNew" | "confirmNew" | "connectOld" | "review" | "
 // sequencial: conectar a wallet NOVA só pra aprender o endereço dela (sem
 // gastar gas), desconectar, reconectar a wallet ANTIGA pra assinar a
 // migração.
-export function MigrateWallet({ onClose }: { onClose: () => void }) {
+export function MigrateWallet({
+  onClose,
+  onBusyChange,
+}: {
+  onClose: () => void;
+  onBusyChange?: (busy: boolean) => void;
+}) {
   const { t } = useTranslation();
   const { username, smartAccountAddress } = useIdentity();
   const { address, isConnected } = useAccount();
@@ -57,7 +63,7 @@ export function MigrateWallet({ onClose }: { onClose: () => void }) {
   const [phase, setPhase] = useState<Phase>("intro");
   const [newOwnerAddress, setNewOwnerAddress] = useState<Address | null>(null);
 
-  const { data: oldBalance } = useBalance({
+  const { data: oldBalance, isLoading: isOldBalanceLoading } = useBalance({
     address: smartAccountAddress ?? undefined,
     query: { enabled: !!smartAccountAddress },
   });
@@ -108,6 +114,7 @@ export function MigrateWallet({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     if (
       phase === "confirming" &&
+      !isOldBalanceLoading &&
       !txHash &&
       !isPending &&
       !isConfirming &&
@@ -146,6 +153,7 @@ export function MigrateWallet({ onClose }: { onClose: () => void }) {
     }
   }, [
     phase,
+    isOldBalanceLoading,
     txHash,
     isPending,
     isConfirming,
@@ -163,6 +171,16 @@ export function MigrateWallet({ onClose }: { onClose: () => void }) {
       queryClient.invalidateQueries();
     }
   }, [isSuccess, queryClient]);
+
+  // Avisa o Settings/App.tsx que uma migração está em andamento (transação
+  // já enviada) — pra eles guardarem o backdrop/✕ do modal de Configurações
+  // e não derrubar isso no meio do caminho (achado real, P84 #4): esta tela
+  // já não mostra nenhum botão de cancelar durante "confirming" por design,
+  // mas o modal externo não sabia disso e fechava tudo incondicionalmente.
+  useEffect(() => {
+    onBusyChange?.(phase === "confirming");
+    return () => onBusyChange?.(false);
+  }, [phase, onBusyChange]);
 
   function handleRetry() {
     txSubmitted.current = false;

@@ -2,6 +2,7 @@ use k256::ecdsa::{RecoveryId, Signature, SigningKey};
 use keyring::Entry;
 use rand::rngs::OsRng;
 use sha3::{Digest, Keccak256};
+use std::sync::Mutex;
 
 /// Wallet local embutida (P78, pedaço 1) — permite criar uma identidade
 /// TruthID sem Ledger/Trezor/WalletConnect: gera e guarda uma chave
@@ -12,6 +13,18 @@ use sha3::{Digest, Keccak256};
 /// (`ledger.rs`), só que a assinatura acontece direto aqui em vez de via
 /// HID/USB — não há hardware, a chave privada é local.
 const LOCAL_WALLET_ACCOUNT: &str = "local-wallet-private-key";
+
+// Mesmo padrão de VAULT_MUTEX/lock_vault (vault.rs) — fecha a corrida de
+// duplo-clique em `local_wallet_generate`: duas chamadas concorrentes
+// podiam ambas passar no check-then-act e gerar chaves diferentes, a
+// última escrita vencendo silenciosamente (achado real, P84 #6).
+static LOCAL_WALLET_MUTEX: Mutex<()> = Mutex::new(());
+
+fn lock_local_wallet() -> std::sync::MutexGuard<'static, ()> {
+    LOCAL_WALLET_MUTEX
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
 
 fn local_wallet_key_path() -> Result<std::path::PathBuf, String> {
     crate::config::truthid_file_path("local_wallet.key")
@@ -61,10 +74,9 @@ pub(crate) fn set_local_wallet_key_hex(hex: &str) -> Result<(), String> {
 /// lógica já usada em `get_or_create_device_key` (`lib.rs`): keccak256 da
 /// chave pública não comprimida (sem o prefixo `0x04`), últimos 20 bytes.
 /// Extraída aqui como função pura testável com uma chave conhecida.
-fn derive_address(priv_hex: &str) -> Result<String, String> {
+pub(crate) fn derive_address(priv_hex: &str) -> Result<String, String> {
     let priv_bytes = hex::decode(priv_hex).map_err(|e| e.to_string())?;
-    let signing_key =
-        SigningKey::from_bytes(priv_bytes.as_slice().into()).map_err(|e| e.to_string())?;
+    let signing_key = SigningKey::from_slice(&priv_bytes).map_err(|e| e.to_string())?;
     let pub_point = signing_key.verifying_key().to_encoded_point(false);
     let pub_bytes = pub_point.as_bytes();
     let hash = Keccak256::digest(&pub_bytes[1..]);
@@ -92,7 +104,7 @@ fn sign_digest_recoverable(
     priv_bytes: &[u8],
     digest: &[u8; 32],
 ) -> Result<(Signature, RecoveryId), String> {
-    let signing_key = SigningKey::from_bytes(priv_bytes.into()).map_err(|e| e.to_string())?;
+    let signing_key = SigningKey::from_slice(priv_bytes).map_err(|e| e.to_string())?;
     signing_key
         .sign_prehash_recoverable(digest)
         .map_err(|e| e.to_string())
@@ -114,6 +126,7 @@ fn format_combined_signature(signature: Signature, recovery_id: RecoveryId) -> S
 /// wallet Arweave, P70/P71).
 #[tauri::command]
 pub fn local_wallet_generate() -> Result<String, String> {
+    let _guard = lock_local_wallet();
     if get_local_wallet_key_hex().is_ok() {
         return Err("já existe uma wallet local neste device".to_string());
     }
@@ -204,6 +217,22 @@ mod tests {
         assert!(derive_address("not_hex").is_err());
     }
 
+    // P84 #7: antes disso, uma chave hex válida mas de tamanho errado
+    // panicava (`GenericArray`'s `.into()` fazia `assert_eq!` no tamanho)
+    // em vez de retornar `Err` — `SigningKey::from_slice` valida o tamanho
+    // sozinho. 16 bytes e 40 bytes ficam fora do intervalo 24..32 que
+    // `from_slice` aceita com zero-padding, então os dois têm que rejeitar
+    // de verdade. Construído por repetição pra não depender de contar
+    // caracteres hex à mão.
+    #[test]
+    fn derive_address_rejects_wrong_length_key() {
+        let too_short = "11".repeat(16); // 16 bytes
+        assert!(derive_address(&too_short).is_err());
+
+        let too_long = format!("{KNOWN_PRIV_HEX}{}", "11".repeat(8)); // 32+8=40 bytes
+        assert!(derive_address(&too_long).is_err());
+    }
+
     // Cross-checa `eip191_digest`+`sign_digest_recoverable` (opera sobre
     // bytes crus) contra `crate::sign_personal_message_raw` (já validada em
     // `lib.rs` contra vetores reais do Dart/viem, opera sobre `&str` UTF-8)
@@ -222,6 +251,16 @@ mod tests {
         let actual = format_combined_signature(signature, recovery_id);
 
         assert_eq!(actual, expected);
+    }
+
+    // P84 #7: mesmo cuidado de `derive_address_rejects_wrong_length_key`,
+    // agora pro outro call-site de `SigningKey::from_slice`.
+    #[test]
+    fn sign_digest_recoverable_rejects_wrong_length_key() {
+        let priv_bytes = hex::decode(KNOWN_PRIV_HEX).unwrap();
+        let digest = eip191_digest(b"wrong length key check");
+
+        assert!(sign_digest_recoverable(&priv_bytes[..16], &digest).is_err());
     }
 
     #[test]

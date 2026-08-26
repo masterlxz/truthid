@@ -9,7 +9,13 @@ type LockPhase = "idle" | "enabling" | "disabling";
 // Tela de Configurações (⚙) — reúne o que antes estava espalhado (idioma no
 // topbar, migrar wallet no dashboard) mais o bloqueio do app por senha,
 // pedido direto do dono do projeto.
-export function Settings({ onClose }: { onClose: () => void }) {
+export function Settings({
+  onClose,
+  onMigrationBusyChange,
+}: {
+  onClose: () => void;
+  onMigrationBusyChange?: (busy: boolean) => void;
+}) {
   const { t } = useTranslation();
 
   const [lockEnabled, setLockEnabled] = useState<boolean | null>(null);
@@ -71,7 +77,7 @@ export function Settings({ onClose }: { onClose: () => void }) {
 
       <div className="card">
         <h3 style={{ marginTop: 0 }}>{t("settings.wallet.title")}</h3>
-        <MigrateWallet onClose={onClose} />
+        <MigrateWallet onClose={onClose} onBusyChange={onMigrationBusyChange} />
       </div>
 
       <div className="card">

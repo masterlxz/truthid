@@ -67,6 +67,7 @@ function App() {
   const [connectModalOpen, setConnectModalOpen] = useState(false);
   const [donateOpen, setDonateOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsBusy, setSettingsBusy] = useState(false);
   const queryClient = useQueryClient();
 
   const { username: storedUsername, save: saveUsername, clear: clearUsername } = useStoredUsername();
@@ -339,13 +340,25 @@ function App() {
               {activeTab === "recovery" && <GuardianManagement />}
 
               {settingsOpen && (
-                <div className="modal-overlay" onClick={() => setSettingsOpen(false)}>
+                <div
+                  className="modal-overlay"
+                  onClick={() => !settingsBusy && setSettingsOpen(false)}
+                >
                   <div className="modal-box" onClick={(e) => e.stopPropagation()}>
                     <div className="modal-header">
                       <h2 className="modal-title">{t("app.topbar.settings")}</h2>
-                      <button className="modal-close" onClick={() => setSettingsOpen(false)}>✕</button>
+                      <button
+                        className="modal-close"
+                        onClick={() => !settingsBusy && setSettingsOpen(false)}
+                        disabled={settingsBusy}
+                      >
+                        ✕
+                      </button>
                     </div>
-                    <Settings onClose={() => setSettingsOpen(false)} />
+                    <Settings
+                      onClose={() => setSettingsOpen(false)}
+                      onMigrationBusyChange={setSettingsBusy}
+                    />
                   </div>
                 </div>
               )}

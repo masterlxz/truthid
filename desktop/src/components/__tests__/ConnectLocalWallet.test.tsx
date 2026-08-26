@@ -159,6 +159,30 @@ describe("ConnectLocalWallet", () => {
     expect(screen.getByRole("button", { name: "Connect" })).not.toBeDisabled();
   });
 
+  it("disables the create button while local_wallet_generate is in flight, and only invokes it once", async () => {
+    let resolveGenerate!: (addr: string) => void;
+    const generatePromise = new Promise<string>((resolve) => {
+      resolveGenerate = resolve;
+    });
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "local_wallet_exists") return Promise.resolve(false);
+      if (cmd === "local_wallet_generate") return generatePromise;
+      throw new Error(`unexpected invoke: ${cmd}`);
+    });
+
+    render(<ConnectLocalWallet onBack={vi.fn()} />);
+    const button = await screen.findByRole("button", { name: "Create local wallet" });
+
+    await userEvent.click(button);
+    expect(button).toBeDisabled();
+
+    await userEvent.click(button);
+    expect(invokeMock.mock.calls.filter((c) => c[0] === "local_wallet_generate")).toHaveLength(1);
+
+    resolveGenerate(ADDRESS);
+    expect(await screen.findByText(ADDRESS)).toBeInTheDocument();
+  });
+
   it("falls back to the create flow if local_wallet_exists rejects", async () => {
     invokeMock.mockImplementation((cmd: string) => {
       if (cmd === "local_wallet_exists") return Promise.reject("boom");

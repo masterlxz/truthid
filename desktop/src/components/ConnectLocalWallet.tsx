@@ -25,6 +25,7 @@ export function ConnectLocalWallet({ onBack }: { onBack: () => void }) {
   const [address, setAddress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connectingExisting, setConnectingExisting] = useState(false);
+  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     invoke<boolean>("local_wallet_exists")
@@ -43,12 +44,15 @@ export function ConnectLocalWallet({ onBack }: { onBack: () => void }) {
 
   async function handleCreate() {
     setError(null);
+    setCreating(true);
     try {
       const addr = await invoke<string>("local_wallet_generate");
       setAddress(addr);
       setPhase("created");
     } catch (e) {
       setError(String(e));
+    } finally {
+      setCreating(false);
     }
   }
 
@@ -103,7 +107,9 @@ export function ConnectLocalWallet({ onBack }: { onBack: () => void }) {
           <h2 className="local-wallet-connect-title">{t("connectLocalWallet.intro.title")}</h2>
           <div className="local-wallet-error-box">{t("connectLocalWallet.intro.warning")}</div>
           {error && <div className="local-wallet-error-box">{error}</div>}
-          <button onClick={handleCreate}>{t("connectLocalWallet.intro.createButton")}</button>
+          <button onClick={handleCreate} disabled={creating}>
+            {t("connectLocalWallet.intro.createButton")}
+          </button>
         </>
       )}
 

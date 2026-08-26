@@ -904,6 +904,14 @@ fn extract_local_wallet_from_import(vault_value: &serde_json::Value) -> Option<S
         .map(|s| s.to_string())
 }
 
+/// Retorna true se as duas chaves hex derivam endereços diferentes — usado
+/// por `vault_import_backup` pra abortar o import inteiro em vez de deixar
+/// o vault (identidade nova) dessincronizado da chave de assinatura (ainda
+/// a identidade antiga, mantida em silêncio). P84 #8.
+fn local_wallet_keys_conflict(a_priv_hex: &str, b_priv_hex: &str) -> Result<bool, String> {
+    Ok(local_wallet::derive_address(a_priv_hex)? != local_wallet::derive_address(b_priv_hex)?)
+}
+
 /// Serializa o vault local inteiro e cifra com uma senha de export (PBKDF2 +
 /// AES-256-GCM), independente da vault key derivada da wallet. Retorna o
 /// blob completo (magic+salt+iterations+nonce+ciphertext) em Base64 — o
@@ -951,6 +959,27 @@ fn vault_import_backup(blob_b64: String, password: String) -> Result<(), String>
     let json = backup::decrypt(&blob, &password)?;
     let value: serde_json::Value = serde_json::from_slice(&json)
         .map_err(|_| "backup file has invalid vault contents".to_string())?;
+
+    // Detecta ANTES de mutar qualquer coisa: se este device já tem uma
+    // wallet local e o backup carrega uma diferente, aborta o import
+    // inteiro — continuar deixaria o vault (identidade nova) dessincronizado
+    // da chave de assinatura (ainda a identidade antiga), sem aviso nenhum
+    // (achado real, P84 #8). Também valida o formato da chave importada
+    // mesmo sem chave existente ainda, fechando o gap de zero-validação do
+    // import (P84 #7 — antes só panicava depois, na hora de assinar; agora
+    // `derive_address` retorna `Err` de forma limpa).
+    if let Some(imported_priv_hex) = extract_local_wallet_from_import(&value) {
+        local_wallet::derive_address(&imported_priv_hex)?;
+
+        if let Ok(existing_hex) = local_wallet::get_local_wallet_key_hex() {
+            if local_wallet_keys_conflict(&imported_priv_hex, &existing_hex)? {
+                return Err(
+                    "este backup foi criado com uma wallet local diferente da já configurada neste device — import abortado"
+                        .to_string(),
+                );
+            }
+        }
+    }
 
     if crate::get_arweave_wallet().is_err() {
         if let Some(wallet_json) = extract_arweave_wallet_from_import(&value) {
@@ -1687,5 +1716,28 @@ e0a4be53c6a97b8f41e53559d6327017adcf62341fc176583751ab61f1020f85\
             extract_local_wallet_from_import(&spliced),
             Some("round-trip-priv-hex".to_string())
         );
+    }
+
+    // P84 #8 — duas chaves arbitrárias válidas (não precisa de vetor
+    // "conhecido" tipo Anvil, `derive_address_matches_known_vector` em
+    // `local_wallet.rs` já cobre isso), construídas por repetição pra evitar
+    // erro de contagem de caracteres hex.
+    #[test]
+    fn local_wallet_keys_conflict_returns_false_for_same_key() {
+        let key_a = "11".repeat(32);
+        assert_eq!(local_wallet_keys_conflict(&key_a, &key_a), Ok(false));
+    }
+
+    #[test]
+    fn local_wallet_keys_conflict_returns_true_for_different_keys() {
+        let key_a = "11".repeat(32);
+        let key_b = "22".repeat(32);
+        assert_eq!(local_wallet_keys_conflict(&key_a, &key_b), Ok(true));
+    }
+
+    #[test]
+    fn local_wallet_keys_conflict_propagates_malformed_hex_error() {
+        let key_a = "11".repeat(32);
+        assert!(local_wallet_keys_conflict("not_hex", &key_a).is_err());
     }
 }
