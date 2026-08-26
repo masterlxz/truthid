@@ -37,16 +37,25 @@ describe("ConnectLocalWallet", () => {
     connectAsyncMock.mockReset();
   });
 
-  it("shows the intro warning before any key is generated", () => {
+  it("shows the intro warning before any key is generated", async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "local_wallet_exists") return Promise.resolve(false);
+      throw new Error(`unexpected invoke: ${cmd}`);
+    });
+
     render(<ConnectLocalWallet onBack={vi.fn()} />);
 
     expect(
-      screen.getByText(/only on this computer/i),
+      await screen.findByText(/only on this computer/i),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Create local wallet" })).toBeInTheDocument();
   });
 
   it("calls onBack when the back button is clicked", async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "local_wallet_exists") return Promise.resolve(false);
+      throw new Error(`unexpected invoke: ${cmd}`);
+    });
     const onBack = vi.fn();
     render(<ConnectLocalWallet onBack={onBack} />);
 
@@ -56,13 +65,14 @@ describe("ConnectLocalWallet", () => {
 
   it("generates the wallet and shows the address + backup gate, without connecting yet", async () => {
     invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "local_wallet_exists") return Promise.resolve(false);
       if (cmd === "local_wallet_generate") return Promise.resolve(ADDRESS);
       throw new Error(`unexpected invoke: ${cmd}`);
     });
 
     render(<ConnectLocalWallet onBack={vi.fn()} />);
 
-    await userEvent.click(screen.getByRole("button", { name: "Create local wallet" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Create local wallet" }));
 
     expect(await screen.findByText(ADDRESS)).toBeInTheDocument();
     expect(screen.getByText("Backup required")).toBeInTheDocument();
@@ -70,17 +80,22 @@ describe("ConnectLocalWallet", () => {
   });
 
   it("shows an error if local_wallet_generate fails", async () => {
-    invokeMock.mockRejectedValueOnce("já existe uma wallet local neste device");
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "local_wallet_exists") return Promise.resolve(false);
+      if (cmd === "local_wallet_generate") return Promise.reject("já existe uma wallet local neste device");
+      throw new Error(`unexpected invoke: ${cmd}`);
+    });
 
     render(<ConnectLocalWallet onBack={vi.fn()} />);
 
-    await userEvent.click(screen.getByRole("button", { name: "Create local wallet" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Create local wallet" }));
 
     expect(await screen.findByText("já existe uma wallet local neste device")).toBeInTheDocument();
   });
 
   it("only calls connectAsync after the backup gate is confirmed (already-exported checkbox)", async () => {
     invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "local_wallet_exists") return Promise.resolve(false);
       if (cmd === "local_wallet_generate") return Promise.resolve(ADDRESS);
       if (cmd === "confirm_local_wallet_backup") return Promise.resolve(undefined);
       throw new Error(`unexpected invoke: ${cmd}`);
@@ -88,7 +103,7 @@ describe("ConnectLocalWallet", () => {
     connectAsyncMock.mockResolvedValue(undefined);
 
     render(<ConnectLocalWallet onBack={vi.fn()} />);
-    await userEvent.click(screen.getByRole("button", { name: "Create local wallet" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Create local wallet" }));
     await screen.findByText("Backup required");
 
     expect(connectAsyncMock).not.toHaveBeenCalled();
@@ -98,5 +113,60 @@ describe("ConnectLocalWallet", () => {
 
     await waitFor(() => expect(connectAsyncMock).toHaveBeenCalledWith({ connector: { id: "localWallet" } }));
     expect(invokeMock).toHaveBeenCalledWith("confirm_local_wallet_backup");
+  });
+
+  it("shows the existing-wallet screen with a Connect button when a local wallet already exists, without ever calling local_wallet_generate", async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "local_wallet_exists") return Promise.resolve(true);
+      if (cmd === "local_wallet_address") return Promise.resolve(ADDRESS);
+      throw new Error(`unexpected invoke: ${cmd}`);
+    });
+
+    render(<ConnectLocalWallet onBack={vi.fn()} />);
+
+    expect(await screen.findByText(ADDRESS)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect" })).toBeInTheDocument();
+    expect(invokeMock).not.toHaveBeenCalledWith("local_wallet_generate");
+  });
+
+  it("calls connectAsync directly when Connect is clicked on the existing-wallet screen", async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "local_wallet_exists") return Promise.resolve(true);
+      if (cmd === "local_wallet_address") return Promise.resolve(ADDRESS);
+      throw new Error(`unexpected invoke: ${cmd}`);
+    });
+    connectAsyncMock.mockResolvedValue(undefined);
+
+    render(<ConnectLocalWallet onBack={vi.fn()} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Connect" }));
+
+    await waitFor(() => expect(connectAsyncMock).toHaveBeenCalledWith({ connector: { id: "localWallet" } }));
+    expect(invokeMock).not.toHaveBeenCalledWith("local_wallet_generate");
+  });
+
+  it("shows an error and re-enables the Connect button if connectAsync rejects", async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "local_wallet_exists") return Promise.resolve(true);
+      if (cmd === "local_wallet_address") return Promise.resolve(ADDRESS);
+      throw new Error(`unexpected invoke: ${cmd}`);
+    });
+    connectAsyncMock.mockRejectedValue(new Error("boom"));
+
+    render(<ConnectLocalWallet onBack={vi.fn()} />);
+    await userEvent.click(await screen.findByRole("button", { name: "Connect" }));
+
+    expect(await screen.findByText("Error: boom")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Connect" })).not.toBeDisabled();
+  });
+
+  it("falls back to the create flow if local_wallet_exists rejects", async () => {
+    invokeMock.mockImplementation((cmd: string) => {
+      if (cmd === "local_wallet_exists") return Promise.reject("boom");
+      throw new Error(`unexpected invoke: ${cmd}`);
+    });
+
+    render(<ConnectLocalWallet onBack={vi.fn()} />);
+
+    expect(await screen.findByRole("button", { name: "Create local wallet" })).toBeInTheDocument();
   });
 });

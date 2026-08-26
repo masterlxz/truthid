@@ -117,6 +117,17 @@ pub fn app_lock_disable(password: String) -> Result<(), String> {
     clear_app_lock_blob()
 }
 
+/// Reseta o bloqueio sem exigir a senha atual — único jeito de recuperar
+/// acesso ao app se a senha foi esquecida ou o blob armazenado está
+/// corrompido (`app_lock_verify` rejeitando em vez de resolver `false`).
+/// Sem confirmação criptográfica por design: não há senha alternativa pra
+/// checar. Só remove o gate de abertura do app — não toca no Vault nem em
+/// nenhuma outra credencial.
+#[tauri::command]
+pub fn app_lock_reset() -> Result<(), String> {
+    clear_app_lock_blob()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

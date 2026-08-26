@@ -1,5 +1,10 @@
 {
   "back": "返回",
+  "checkingExisting": "正在检查是否已有钱包…",
+  "existing": {
+    "title": "在此设备上找到钱包",
+    "connectButton": "连接"
+  },
   "intro": {
     "title": "创建本地钱包",
     "warning": "此密钥仅在此电脑上生成和保存。如果您在未导出备份的情况下丢失此设备,将彻底失去该身份——无法恢复。",

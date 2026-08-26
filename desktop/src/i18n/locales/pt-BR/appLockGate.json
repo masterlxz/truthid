@@ -2,6 +2,12 @@
   "title": "O TruthID está bloqueado",
   "passwordLabel": "Senha",
   "wrongPassword": "Senha incorreta.",
+  "unexpectedError": "Algo deu errado ao verificar sua senha. Você pode tentar de novo ou remover o bloqueio abaixo.",
   "checking": "Verificando...",
-  "unlockButton": "Desbloquear"
+  "unlockButton": "Desbloquear",
+  "forgotPassword": "Esqueceu sua senha?",
+  "resetExplanation": "Isso remove só a senha de abertura do app — não afeta seu Vault nem os dados da identidade. Você vai precisar definir uma senha nova (ou deixar o bloqueio desativado) depois.",
+  "confirmResetButton": "Remover o bloqueio do app",
+  "resetting": "Removendo…",
+  "cancel": "Cancelar"
 }

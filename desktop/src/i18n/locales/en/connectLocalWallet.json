@@ -1,5 +1,10 @@
 {
   "back": "Back",
+  "checkingExisting": "Checking for an existing wallet…",
+  "existing": {
+    "title": "Wallet found on this device",
+    "connectButton": "Connect"
+  },
   "intro": {
     "title": "Create local wallet",
     "warning": "This key is generated and stored only on this computer. If you lose this device without having exported a backup, you lose the identity entirely — there is no recovery.",

@@ -2,6 +2,12 @@
   "title": "TruthID 已锁定",
   "passwordLabel": "密码",
   "wrongPassword": "密码错误。",
+  "unexpectedError": "验证密码时出现问题。您可以重试,或在下方移除锁定。",
   "checking": "验证中...",
-  "unlockButton": "解锁"
+  "unlockButton": "解锁",
+  "forgotPassword": "忘记密码?",
+  "resetExplanation": "此操作仅移除应用打开密码——不会影响您的 Vault 或身份数据。之后您需要重新设置密码(或保持锁定关闭状态)。",
+  "confirmResetButton": "移除应用锁定",
+  "resetting": "正在移除…",
+  "cancel": "取消"
 }

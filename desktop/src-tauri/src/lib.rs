@@ -1402,6 +1402,7 @@ pub fn run() {
             app_lock::app_lock_enable,
             app_lock::app_lock_verify,
             app_lock::app_lock_disable,
+            app_lock::app_lock_reset,
             arweave::arweave_generate_wallet,
             arweave::arweave_import_wallet,
             arweave::arweave_wallet_exists,

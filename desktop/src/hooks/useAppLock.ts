@@ -22,5 +22,13 @@ export function useAppLock() {
     return correct;
   }, []);
 
-  return { isLocked, unlock };
+  // Único jeito de sair do AppLockGate sem a senha — pra quem esqueceu a
+  // senha ou tem o blob armazenado corrompido. Sem confirmação de senha (não
+  // há uma pra checar); só remove o gate, não afeta Vault/identidade.
+  const reset = useCallback(async () => {
+    await invoke("app_lock_reset");
+    setIsLocked(false);
+  }, []);
+
+  return { isLocked, unlock, reset };
 }

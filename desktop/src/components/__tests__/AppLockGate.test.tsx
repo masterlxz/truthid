@@ -9,13 +9,13 @@ describe("AppLockGate", () => {
   });
 
   it("keeps the unlock button disabled until a password is typed", () => {
-    render(<AppLockGate onUnlock={vi.fn()} />);
+    render(<AppLockGate onUnlock={vi.fn()} onReset={vi.fn()} />);
     expect(screen.getByRole("button", { name: "Unlock" })).toBeDisabled();
   });
 
   it("calls onUnlock with the typed password", async () => {
     const mockUnlock = vi.fn().mockResolvedValue(true);
-    render(<AppLockGate onUnlock={mockUnlock} />);
+    render(<AppLockGate onUnlock={mockUnlock} onReset={vi.fn()} />);
 
     await userEvent.type(screen.getByLabelText("Password"), "hunter2");
     await userEvent.click(screen.getByRole("button", { name: "Unlock" }));
@@ -25,7 +25,7 @@ describe("AppLockGate", () => {
 
   it("shows an error and clears the field when the password is wrong", async () => {
     const mockUnlock = vi.fn().mockResolvedValue(false);
-    render(<AppLockGate onUnlock={mockUnlock} />);
+    render(<AppLockGate onUnlock={mockUnlock} onReset={vi.fn()} />);
 
     await userEvent.type(screen.getByLabelText("Password"), "wrong");
     await userEvent.click(screen.getByRole("button", { name: "Unlock" }));
@@ -36,11 +36,53 @@ describe("AppLockGate", () => {
 
   it("does not show an error after a correct password", async () => {
     const mockUnlock = vi.fn().mockResolvedValue(true);
-    render(<AppLockGate onUnlock={mockUnlock} />);
+    render(<AppLockGate onUnlock={mockUnlock} onReset={vi.fn()} />);
 
     await userEvent.type(screen.getByLabelText("Password"), "correct");
     await userEvent.click(screen.getByRole("button", { name: "Unlock" }));
 
     expect(screen.queryByText("Wrong password.")).not.toBeInTheDocument();
+  });
+
+  it("shows an unexpected-error message and re-enables the button when onUnlock rejects", async () => {
+    const mockUnlock = vi.fn().mockRejectedValue(new Error("corrupt blob"));
+    render(<AppLockGate onUnlock={mockUnlock} onReset={vi.fn()} />);
+
+    await userEvent.type(screen.getByLabelText("Password"), "anything");
+    await userEvent.click(screen.getByRole("button", { name: "Unlock" }));
+
+    expect(await screen.findByText(/something went wrong/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Unlock" })).not.toBeDisabled();
+    expect(screen.queryByText("Wrong password.")).not.toBeInTheDocument();
+  });
+
+  it("shows a forgot-password link that reveals a reset confirmation step", async () => {
+    render(<AppLockGate onUnlock={vi.fn()} onReset={vi.fn()} />);
+
+    await userEvent.click(screen.getByText("Forgot your password?"));
+
+    expect(screen.getByText(/removes only the app-open password/i)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove the app lock" })).toBeInTheDocument();
+  });
+
+  it("calls onReset when the reset confirmation is confirmed", async () => {
+    const mockReset = vi.fn().mockResolvedValue(undefined);
+    render(<AppLockGate onUnlock={vi.fn()} onReset={mockReset} />);
+
+    await userEvent.click(screen.getByText("Forgot your password?"));
+    await userEvent.click(screen.getByRole("button", { name: "Remove the app lock" }));
+
+    expect(mockReset).toHaveBeenCalled();
+  });
+
+  it("cancelling the reset confirmation does not call onReset", async () => {
+    const mockReset = vi.fn();
+    render(<AppLockGate onUnlock={vi.fn()} onReset={mockReset} />);
+
+    await userEvent.click(screen.getByText("Forgot your password?"));
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    expect(mockReset).not.toHaveBeenCalled();
+    expect(screen.queryByText(/removes only the app-open password/i)).not.toBeInTheDocument();
   });
 });

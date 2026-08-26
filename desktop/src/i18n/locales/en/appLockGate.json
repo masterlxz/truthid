@@ -2,6 +2,12 @@
   "title": "TruthID is locked",
   "passwordLabel": "Password",
   "wrongPassword": "Wrong password.",
+  "unexpectedError": "Something went wrong checking your password. You can try again, or remove the lock below.",
   "checking": "Checking...",
-  "unlockButton": "Unlock"
+  "unlockButton": "Unlock",
+  "forgotPassword": "Forgot your password?",
+  "resetExplanation": "This removes only the app-open password — it does not affect your Vault or identity data. You'll need to set a new password (or leave the lock disabled) afterward.",
+  "confirmResetButton": "Remove the app lock",
+  "resetting": "Removing…",
+  "cancel": "Cancel"
 }

@@ -73,7 +73,7 @@ function App() {
   const { updateVersion, updateUrl } = useUpdateCheck();
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const { needsBackup, markConfirmed } = useLocalWalletBackupGate();
-  const { isLocked, unlock } = useAppLock();
+  const { isLocked, unlock, reset } = useAppLock();
 
   const isWrongNetwork = isConnected && chainId !== base.id;
   const { switchChain, isPending: isSwitching } = useSwitchChain();
@@ -143,7 +143,7 @@ function App() {
   // TUDO, inclusive o gate de backup abaixo — é a primeira porta de entrada
   // no app quando habilitado. `null` = ainda checando.
   if (isLocked) {
-    return <AppLockGate onUnlock={unlock} />;
+    return <AppLockGate onUnlock={unlock} onReset={reset} />;
   }
   if (isLocked === null) return null;
 

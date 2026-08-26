@@ -4,7 +4,14 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-08-26 (Sessão 226, 3ª parte: P83 fechada — `/code-review high desktop/`
+> Última atualização: 2026-08-26 (Sessão 226, 4ª parte: os 2 travamentos totais do P84 (itens 1 e 2)
+> **corrigidos** — reconectar wallet local existente sem passar por `local_wallet_generate`, e novo
+> comando `app_lock_reset` + link "Esqueceu sua senha?" no `AppLockGate` pra recuperar o bloqueio sem
+> senha (só remove o gate, não toca no Vault). Itens (3)-(10) do P84 continuam não corrigidos, fica
+> pra uma rodada seguinte. `cargo test --lib`/`cargo clippy --lib`/`npx vitest run` (176/176)/
+> `tsc --noEmit` limpos (1 falha pré-existente e ambiental em `local_signer_server`, confirmada
+> reproduzindo numa worktree limpa do commit anterior, sem relação com este fix). Sessão 226, 3ª
+> parte: P83 fechada — `/code-review high desktop/`
 > rodado sobre P78 pedaço 1/2 + Configurações/senha, achados registrados em P84: **2 bugs de
 > travamento total do app sem recovery** (reconectar wallet local depois de reiniciar o app; esquecer
 > a senha do bloqueio ou o blob corromper) + 6 bugs reais de correção (gate de app-lock sem try/catch
@@ -86,7 +93,34 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 |---|---|---|---|
 | P83 | Sessão 226 rodou `/code-review high mobile/` (achados em P82), mas **nenhum `/code-review` do Desktop chegou a rodar** — a recomendação original era rodar os dois juntos (`/code-review high desktop/ mobile/`), só o Mobile foi disparado de fato. Acumulou feature nova sem revisão desde a última passada de `/code-review` no Desktop: P78 pedaço 1 (wallet local embutida), P78 pedaço 2 (migrar identidade pra outra wallet — `executeBatch` com 3 chamadas + fluxo de reconectar 2 wallets diferentes), e a tela de Configurações + bloqueio do app por senha (`app_lock.rs` novo, reaproveitando `backup::encrypt`/`decrypt`). **Rodado nesta mesma sessão** (`/code-review high desktop/`) — achados em [[P84]]. | conversa direta (Sessão 226) | ✅ Resolvida |
 
-### P84 — `/code-review` do Desktop (P78 pedaço 1/2 + Configurações/senha): 2 bugs de travamento total + 6 bugs de correção + 2 achados de reuso, todos verificados (Sessão 226)
+### P84 — `/code-review` do Desktop (P78 pedaço 1/2 + Configurações/senha): 2 bugs de travamento total ✅ CORRIGIDOS + 6 bugs de correção + 2 achados de reuso, todos verificados (Sessão 226)
+
+**Atualização (Sessão 226, mesma sessão)**: os itens **(1) e (2)** — os dois travamentos totais do app
+sem recovery — foram corrigidos, a pedido do dono do projeto ("pode começar pelos dois"), depois de um
+`/plan` dedicado. Os itens (3)-(10) continuam **não corrigidos**, registrados abaixo como estavam.
+
+- **(1) reconectar wallet local**: `ConnectLocalWallet.tsx` agora checa `local_wallet_exists()` no
+  mount (nova fase `"checking"`); se já existe chave, mostra uma tela nova (`"existing"`) com o
+  endereço (via `local_wallet_address()`, já existente) e um botão "Conectar" que chama
+  `connectAsync({connector: localWallet})` direto — nunca mais toca em `local_wallet_generate`. Se a
+  checagem falhar, cai pro fluxo de criação de sempre (fail-open). Nenhuma mudança no Rust foi
+  necessária (`local_wallet_exists`/`local_wallet_address` já existiam e já suportavam isso).
+- **(2) recovery do bloqueio por senha**: novo comando Tauri `app_lock_reset` (wrapper público sobre
+  `clear_app_lock_blob`, que já existia mas era privada) — remove o gate sem exigir senha (não há uma
+  alternativa pra checar; só desliga o gate de abertura, não toca no Vault/identidade, confirmado lendo
+  `create_blob`/`verify_blob`: cifram só um marcador fixo). `useAppLock.ts` ganhou `reset()`.
+  `AppLockGate.tsx` ganhou: try/catch em volta de `onUnlock` (erro inesperado agora mostra mensagem
+  distinta de "senha errada" e sempre reabilita o botão — fecha o bug real do "Verificando..." travado
+  pra sempre); link "Esqueceu sua senha?" com confirmação de um clique antes de chamar `onReset`.
+- i18n: novas keys em `appLockGate.json`/`connectLocalWallet.json` traduzidas nos 4 locales
+  (`pt-BR`/`en`/`es`/`zh-CN`).
+- Testes novos/atualizados: `ConnectLocalWallet.test.tsx` (+4 testes, 4 existentes ajustados pro mount
+  check novo), `AppLockGate.test.tsx` (+4 testes), `useAppLock.test.ts` (arquivo novo, 6 testes).
+  `cargo test --lib` (só 1 falha, `local_signer_server::sign_message_endpoint_...`, confirmada
+  pré-existente e sem relação — reproduzida idêntica numa worktree limpa do commit anterior, causa
+  ambiental desta máquina, não deste fix)/`cargo clippy --lib` (só o warning pré-existente de
+  `type_complexity` em `vault.rs`, sem relação)/`npx vitest run` (176/176)/`tsc --noEmit` limpos.
+  Sem validação manual real (clique de verdade) — mesma limitação já registrada em P79/P81.
 
 | ID | Item | Onde se originou | Prioridade |
 |---|---|---|---|

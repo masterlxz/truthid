@@ -2,6 +2,12 @@
   "title": "TruthID está bloqueado",
   "passwordLabel": "Contraseña",
   "wrongPassword": "Contraseña incorrecta.",
+  "unexpectedError": "Algo salió mal al verificar tu contraseña. Puedes intentar de nuevo o quitar el bloqueo abajo.",
   "checking": "Verificando...",
-  "unlockButton": "Desbloquear"
+  "unlockButton": "Desbloquear",
+  "forgotPassword": "¿Olvidaste tu contraseña?",
+  "resetExplanation": "Esto solo quita la contraseña de apertura de la app — no afecta tu Vault ni los datos de identidad. Deberás definir una contraseña nueva (o dejar el bloqueo desactivado) después.",
+  "confirmResetButton": "Quitar el bloqueo de la app",
+  "resetting": "Quitando…",
+  "cancel": "Cancelar"
 }
