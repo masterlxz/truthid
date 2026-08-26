@@ -1,3 +1,4 @@
+use keyring::Entry;
 use std::path::{Path, PathBuf};
 
 /// Retorna o diretório `$HOME/.truthid`, criando-o se não existir.
@@ -65,6 +66,61 @@ pub(crate) fn save_json<T: serde::Serialize + ?Sized>(
 ) -> Result<(), String> {
     let json = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
     write_file(path, json.as_bytes())
+}
+
+/// Lê um segredo de texto (chave hex, blob cifrado, JSON) do keyring do SO,
+/// com fallback em arquivo — padrão repetido em `get_device_key_hex`
+/// (`lib.rs`), `get_arweave_wallet` (`lib.rs`), `get_local_wallet_key_hex`
+/// (`local_wallet.rs`) e `get_app_lock_blob_hex` (`app_lock.rs`) antes desta
+/// extração (achado de reuso, P84 #9). Retorna `Ok(None)` quando não há
+/// segredo em nenhum dos dois lugares — cabe a cada chamador decidir a
+/// mensagem de "não encontrado" (elas variam: "gere uma primeiro", "bloqueio
+/// não está habilitado", etc). Um erro de I/O real lendo o arquivo de
+/// fallback ainda propaga como `Err`, não vira `None` silenciosamente.
+///
+/// Trata uma entrada de keyring vazia como "não existe" (achado real, P71):
+/// `entry.get_password()` só falha (`Err`) se a entrada não existir — uma
+/// entrada vazia é um `Ok` "válido" do ponto de vista do keyring, que antes
+/// mascarava por completo o fallback em arquivo se não filtrada aqui.
+pub(crate) fn get_keyring_or_file(
+    service: &str,
+    account: &str,
+    path: &Path,
+) -> Result<Option<String>, String> {
+    if let Ok(entry) = Entry::new(service, account) {
+        if let Ok(value) = entry.get_password() {
+            if !value.trim().is_empty() {
+                return Ok(Some(value));
+            }
+        }
+    }
+
+    if path.exists() {
+        return read_text(path).map(|s| Some(s.trim().to_string()));
+    }
+
+    Ok(None)
+}
+
+/// Grava um segredo de texto no keyring do SO; se o keyring não estiver
+/// disponível (ex: Docker, daemon fora do ar), grava em arquivo com
+/// `write_secret_file` (permissão 0o600). Par de `get_keyring_or_file`, mesma
+/// extração (P84 #9).
+pub(crate) fn set_keyring_or_file(
+    service: &str,
+    account: &str,
+    path: &Path,
+    value: &str,
+) -> Result<(), String> {
+    let saved = Entry::new(service, account)
+        .and_then(|e| e.set_password(value))
+        .is_ok();
+
+    if !saved {
+        write_secret_file(path, value.as_bytes())?;
+    }
+
+    Ok(())
 }
 
 #[cfg(test)]

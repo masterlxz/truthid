@@ -1,5 +1,4 @@
 use k256::ecdsa::{RecoveryId, Signature, SigningKey};
-use keyring::Entry;
 use rand::rngs::OsRng;
 use sha3::{Digest, Keccak256};
 use std::sync::Mutex;
@@ -35,39 +34,21 @@ fn local_wallet_backup_confirmed_path() -> Result<std::path::PathBuf, String> {
 }
 
 /// Lê a chave privada da wallet local (hex) do keyring do SO, com fallback
-/// em arquivo — mesmo padrão de `get_arweave_wallet`, incluindo o mesmo
-/// cuidado (achado real, P71) de tratar uma entrada de keyring vazia como
-/// "não existe", não só o `Err`. Diferente da device key
-/// (`get_device_key_hex`), NÃO gera uma chave nova automaticamente — essa
-/// chave só nasce de uma ação explícita do usuário (`local_wallet_generate`).
+/// em arquivo — via `config::get_keyring_or_file` (P84 #9: mesma extração
+/// usada por `get_arweave_wallet`/`get_app_lock_blob_hex`/`get_device_key_hex`,
+/// dedup do padrão keyring→arquivo→trata vazio como ausente, achado real do
+/// P71). Diferente da device key (`get_device_key_hex`), NÃO gera uma chave
+/// nova automaticamente — essa chave só nasce de uma ação explícita do
+/// usuário (`local_wallet_generate`).
 pub(crate) fn get_local_wallet_key_hex() -> Result<String, String> {
-    if let Ok(entry) = Entry::new(crate::SERVICE, LOCAL_WALLET_ACCOUNT) {
-        if let Ok(hex) = entry.get_password() {
-            if !hex.trim().is_empty() {
-                return Ok(hex);
-            }
-        }
-    }
-
     let path = local_wallet_key_path()?;
-    if path.exists() {
-        return crate::config::read_text(&path).map(|s| s.trim().to_string());
-    }
-
-    Err("nenhuma wallet local encontrada — gere uma primeiro".to_string())
+    crate::config::get_keyring_or_file(crate::SERVICE, LOCAL_WALLET_ACCOUNT, &path)?
+        .ok_or_else(|| "nenhuma wallet local encontrada — gere uma primeiro".to_string())
 }
 
 pub(crate) fn set_local_wallet_key_hex(hex: &str) -> Result<(), String> {
-    let saved = Entry::new(crate::SERVICE, LOCAL_WALLET_ACCOUNT)
-        .and_then(|e| e.set_password(hex))
-        .is_ok();
-
-    if !saved {
-        let path = local_wallet_key_path()?;
-        crate::config::write_secret_file(&path, hex.as_bytes())?;
-    }
-
-    Ok(())
+    let path = local_wallet_key_path()?;
+    crate::config::set_keyring_or_file(crate::SERVICE, LOCAL_WALLET_ACCOUNT, &path, hex)
 }
 
 /// Deriva o endereço Ethereum a partir de uma chave privada hex — mesma

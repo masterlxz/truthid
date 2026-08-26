@@ -4,15 +4,29 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-08-26 (Sessão 226, 5ª parte: os 5 bugs de correção restantes do P84 (itens
+> Última atualização: 2026-08-26 (Sessão 226, 6ª parte: os 2 achados de reuso restantes do P84 (itens
+> 9-10) **corrigidos** — **(9)** novo `config::get_keyring_or_file`/`set_keyring_or_file` (Rust)
+> deduplica o padrão "keyring do SO → fallback em arquivo → trata string vazia como ausente" (P71),
+> antes copiado em `get_device_key_hex`/`get_arweave_wallet`/`set_vault_key` (`lib.rs`),
+> `local_wallet.rs` e `app_lock.rs`; achado colateral real: unificar `get_device_key_hex` também ganhou
+> o cuidado do P71 que só o Arweave tinha, e isso **corrigiu de vez a falha ambiental pré-existente**
+> em `local_signer_server::sign_message_endpoint_...` nesta máquina (keyring com entrada vazia pra
+> device key) — `cargo test --lib` foi de 232/233 pra **233/233**. **(10)** novo módulo
+> `connectors/evmProviderShared.ts` (TS) deduplica `parseLedgerSignature`/`parseTrezorSignature`/
+> `parseLocalWalletSignature` (agora um só `parseRsvSignature`) e o dispatcher inteiro do provider
+> EIP-1193 (eth_chainId/eth_accounts/eth_sendTransaction/personal_sign + loop de fallback de RPC),
+> antes ~90 linhas quase idênticas em `ledger.ts`/`trezor.ts`/`localWallet.ts`; mensagens de erro
+> específicas de cada wallet (incluindo a inconsistência de capitalização já existente,
+> "Local wallet not connected." vs "Ledger/Trezor not connected.") preservadas ao pé da letra —
+> nenhum teste existente precisou mudar. **P84 fechado por completo** (10/10 achados corrigidos).
+> `cargo test --lib` (233/233)/`cargo clippy --lib`/`npx vitest run` (179/179)/`tsc --noEmit` limpos.
+> Sessão 226, 5ª parte: os 5 bugs de correção restantes do P84 (itens
 > 4-8) **corrigidos** — guarda de "ocupado" impedindo fechar Configurações em pleno migração; espera
 > o saldo carregar antes de mover (evita saldo órfão); mutex fechando a corrida de duplo-clique em
 > `local_wallet_generate` + botão desabilitado no frontend; `SigningKey::from_slice` em vez de
 > `.into()` (panic→`Err` limpo em chave de tamanho errado); `vault_import_backup` aborta o import
 > inteiro se detectar uma chave local diferente da já configurada, em vez de manter a errada em
-> silêncio. Só sobram os itens (9)-(10) do P84 (duplicação de código, sem urgência). `cargo test --lib`
-> (232/233)/`cargo clippy --lib`/`npx vitest run` (179/179)/`tsc --noEmit` limpos (mesma falha
-> ambiental pré-existente de sempre em `local_signer_server`, sem relação). Sessão 226, 4ª parte: os 2
+> silêncio. Sessão 226, 4ª parte: os 2
 > travamentos totais do P84 (itens 1 e 2) **corrigidos** — reconectar wallet local existente sem
 > passar por `local_wallet_generate`, e novo comando `app_lock_reset` + link "Esqueceu sua senha?" no
 > `AppLockGate` pra recuperar o bloqueio sem senha (só remove o gate, não toca no Vault). Sessão 226,
@@ -98,12 +112,50 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 |---|---|---|---|
 | P83 | Sessão 226 rodou `/code-review high mobile/` (achados em P82), mas **nenhum `/code-review` do Desktop chegou a rodar** — a recomendação original era rodar os dois juntos (`/code-review high desktop/ mobile/`), só o Mobile foi disparado de fato. Acumulou feature nova sem revisão desde a última passada de `/code-review` no Desktop: P78 pedaço 1 (wallet local embutida), P78 pedaço 2 (migrar identidade pra outra wallet — `executeBatch` com 3 chamadas + fluxo de reconectar 2 wallets diferentes), e a tela de Configurações + bloqueio do app por senha (`app_lock.rs` novo, reaproveitando `backup::encrypt`/`decrypt`). **Rodado nesta mesma sessão** (`/code-review high desktop/`) — achados em [[P84]]. | conversa direta (Sessão 226) | ✅ Resolvida |
 
-### P84 — `/code-review` do Desktop (P78 pedaço 1/2 + Configurações/senha): 2 travamentos totais + 6 bugs de correção ✅ CORRIGIDOS, só sobram 2 achados de reuso (Sessão 226)
+### P84 — `/code-review` do Desktop (P78 pedaço 1/2 + Configurações/senha): ✅ FECHADO por completo — 2 travamentos totais + 6 bugs de correção + 2 achados de reuso, todos corrigidos (Sessão 226)
+
+**Atualização 3 (Sessão 226, mesma sessão)**: os itens **(9) e (10)** (duplicação de código) também
+foram corrigidos, a pedido do dono do projeto ("pode seguir com o 9 e 10").
+
+- **(9) padrão keyring→arquivo→trata-vazio-como-ausente deduplicado**: novo par
+  `config::get_keyring_or_file`/`config::set_keyring_or_file` (Rust) — o primeiro retorna `Ok(None)`
+  quando não há segredo em nenhum dos dois lugares (erro de "não encontrado" fica a cargo de cada
+  chamador, as mensagens variam), um erro de I/O real lendo o arquivo de fallback ainda propaga como
+  `Err`. Usado agora por `get_device_key_hex`/`get_arweave_wallet`/`set_arweave_wallet`/`set_vault_key`
+  (`lib.rs`), `local_wallet::get_local_wallet_key_hex`/`set_local_wallet_key_hex` e
+  `app_lock::get_app_lock_blob_hex`/`set_app_lock_blob_hex`. `get_vault_key`/`get_current_vault_key_strict`
+  ficaram de fora de propósito — decodificam pra `[u8; 32]` com validação de tamanho e têm um 3º nível
+  de fallback legado, forma estrutural diferente o bastante pra não caber no helper genérico sem
+  mudar comportamento. **Achado colateral real**: `get_device_key_hex` nunca tinha o cuidado do P71 de
+  tratar uma entrada de keyring vazia como ausente (só `get_arweave_wallet` tinha); unificar via
+  `get_keyring_or_file` deu esse cuidado de graça pra device key também — e isso **corrigiu de vez**
+  a falha ambiental que já vinha sendo reproduzida (e confirmada pré-existente, sem relação com nenhum
+  fix desta sessão) desde a Sessão 226 4ª parte: `local_signer_server::sign_message_endpoint_parks_until_resolved_and_returns_signature`
+  panicava porque a device key nesta máquina tinha uma entrada de keyring vazia mascarando o fallback
+  em arquivo. `cargo test --lib` foi de 232/233 pra **233/233**.
+- **(10) duplicação entre os 3 conectores EVM deduplicada**: novo módulo `connectors/evmProviderShared.ts`
+  com `parseRsvSignature` (substitui `parseLedgerSignature`/`parseTrezorSignature`/
+  `parseLocalWalletSignature`, corpo idêntico), `toError`, `unsupportedMethod`, `rpcFallbackRequest`
+  (o loop de fallback entre RPCs, sem nada específico de wallet) e `createEvmProviderRequest` (monta o
+  `request` inteiro do provider EIP-1193 — eth_chainId/eth_accounts/eth_sendTransaction/personal_sign
+  + fallback de RPC pro resto — parametrizado só no que cada conector faz diferente: como assina
+  transação/mensagem, o nome de exibição da wallet e a mensagem exata de "não conectado", que os 3
+  conectores têm cada um a sua, com uma inconsistência de capitalização pré-existente preservada de
+  propósito ("Local wallet not connected." vs "Ledger not connected."/"Trezor not connected." — os
+  testes de `localWallet.test.ts`/`trezor.test.ts` checam essas strings ao pé da letra). `ledger.ts`
+  caiu de 224 pra 133 linhas, `trezor.ts` de 225 pra 140, `localWallet.ts` de 208 pra 122 — o novo
+  compartilhado tem 141, líquido de -121 linhas nos 3 arquivos somados. Nenhum teste existente
+  precisou mudar (os 3 arquivos de teste de conector já testavam só o comportamento público da
+  instância, não os nomes das funções internas).
+- `cargo test --lib` (233/233, 0 falhas — a falha ambiental de sempre sumiu como efeito colateral do
+  #9)/`cargo clippy --lib` (só o warning pré-existente de `type_complexity` em `vault.rs`)/
+  `npx vitest run` (179/179, nenhum teste novo — refatoração pura, comportamento idêntico)/
+  `tsc --noEmit` limpos. Sem validação manual real — mesma limitação já registrada em P79/P80/P81
+  (mas este item é refatoração interna, sem superfície de UI nova pra clicar).
 
 **Atualização 2 (Sessão 226, mesma sessão)**: os itens **(4)-(8)** também foram corrigidos, a pedido
 do dono do projeto ("recomenda tudo de uma vez?" → sim pros 5 juntos), depois de um `/plan` dedicado
-com 3 explorações + 1 validação de plano em paralelo. Só sobram os itens **(9) e (10)** (duplicação de
-código — sem urgência, decisão de deixar pra outra rodada).
+com 3 explorações + 1 validação de plano em paralelo.
 
 - **(4) Settings/MigrateWallet — fechar Configurações não pode mais derrubar uma migração em
   andamento**: `MigrateWallet.tsx` ganhou prop `onBusyChange?` que reporta `phase === "confirming"`;

@@ -33,37 +33,19 @@ fn verify_blob(blob: &[u8], password: &str) -> bool {
     }
 }
 
-/// Lê o blob cifrado (hex) do keyring do SO, com fallback em arquivo — mesmo
-/// padrão de `local_wallet::get_local_wallet_key_hex`, incluindo o mesmo
-/// cuidado (P71) de tratar uma entrada de keyring vazia como "não existe".
+/// Lê o blob cifrado (hex) do keyring do SO, com fallback em arquivo — via
+/// `config::get_keyring_or_file` (P84 #9: mesma extração usada por
+/// `local_wallet::get_local_wallet_key_hex`/`get_arweave_wallet`, dedup do
+/// padrão keyring→arquivo→trata vazio como ausente, achado real do P71).
 fn get_app_lock_blob_hex() -> Result<String, String> {
-    if let Ok(entry) = Entry::new(crate::SERVICE, APP_LOCK_ACCOUNT) {
-        if let Ok(hex) = entry.get_password() {
-            if !hex.trim().is_empty() {
-                return Ok(hex);
-            }
-        }
-    }
-
     let path = app_lock_blob_path()?;
-    if path.exists() {
-        return crate::config::read_text(&path).map(|s| s.trim().to_string());
-    }
-
-    Err("bloqueio do app não está habilitado".to_string())
+    crate::config::get_keyring_or_file(crate::SERVICE, APP_LOCK_ACCOUNT, &path)?
+        .ok_or_else(|| "bloqueio do app não está habilitado".to_string())
 }
 
 fn set_app_lock_blob_hex(hex: &str) -> Result<(), String> {
-    let saved = Entry::new(crate::SERVICE, APP_LOCK_ACCOUNT)
-        .and_then(|e| e.set_password(hex))
-        .is_ok();
-
-    if !saved {
-        let path = app_lock_blob_path()?;
-        crate::config::write_secret_file(&path, hex.as_bytes())?;
-    }
-
-    Ok(())
+    let path = app_lock_blob_path()?;
+    crate::config::set_keyring_or_file(crate::SERVICE, APP_LOCK_ACCOUNT, &path, hex)
 }
 
 fn clear_app_lock_blob() -> Result<(), String> {

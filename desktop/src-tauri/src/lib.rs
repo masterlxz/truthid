@@ -40,35 +40,23 @@ fn fallback_key_path() -> Result<std::path::PathBuf, String> {
     crate::config::truthid_file_path("device.key")
 }
 
-/// Lê a chave privada do keyring ou do arquivo de fallback.
+/// Lê a chave privada do keyring ou do arquivo de fallback (via
+/// `config::get_keyring_or_file` — P84 #9, mesma extração de
+/// `get_arweave_wallet`/`local_wallet::get_local_wallet_key_hex`/
+/// `app_lock::get_app_lock_blob_hex`; ganha de brinde o mesmo cuidado do P71
+/// de tratar uma entrada de keyring vazia como ausente, que esta função não
+/// tinha antes da unificação).
 /// Gera e salva uma nova chave se nenhuma existir.
 pub(crate) fn get_device_key_hex() -> Result<String, String> {
-    // 1. Tenta keyring do SO
-    if let Ok(entry) = Entry::new(SERVICE, ACCOUNT) {
-        if let Ok(hex) = entry.get_password() {
-            return Ok(hex);
-        }
-    }
-
-    // 2. Fallback: arquivo ($HOME/.truthid/device.key)
     let path = fallback_key_path()?;
-    if path.exists() {
-        return crate::config::read_text(&path).map(|s| s.trim().to_string());
+    if let Some(hex) = crate::config::get_keyring_or_file(SERVICE, ACCOUNT, &path)? {
+        return Ok(hex);
     }
 
-    // 3. Gera nova chave secp256k1
+    // Gera nova chave secp256k1
     let signing_key = SigningKey::random(&mut OsRng);
     let hex = hex::encode(signing_key.to_bytes());
-
-    // Salva no keyring; se falhar, salva no arquivo
-    let saved = Entry::new(SERVICE, ACCOUNT)
-        .and_then(|e| e.set_password(&hex))
-        .is_ok();
-
-    if !saved {
-        crate::config::write_secret_file(&path, hex.as_bytes())?;
-    }
-
+    crate::config::set_keyring_or_file(SERVICE, ACCOUNT, &path, &hex)?;
     Ok(hex)
 }
 
@@ -168,19 +156,8 @@ pub(crate) fn get_current_vault_key_strict() -> Result<[u8; 32], String> {
 
 pub(crate) fn set_vault_key(key: &[u8; 32]) -> Result<(), String> {
     let hex_key = hex::encode(key);
-
-    // Salva no keyring do SO
-    let saved = Entry::new(SERVICE, VAULT_KEY_ACCOUNT)
-        .and_then(|e| e.set_password(&hex_key))
-        .is_ok();
-
-    // Fallback: arquivo
-    if !saved {
-        let path = vault_key_path()?;
-        crate::config::write_secret_file(&path, hex_key.as_bytes())?;
-    }
-
-    Ok(())
+    let path = vault_key_path()?;
+    crate::config::set_keyring_or_file(SERVICE, VAULT_KEY_ACCOUNT, &path, &hex_key)
 }
 
 const ARWEAVE_WALLET_ACCOUNT: &str = "arweave-wallet";
@@ -190,46 +167,22 @@ fn arweave_wallet_path() -> Result<std::path::PathBuf, String> {
 }
 
 /// Lê a wallet Arweave (JWK JSON) do keyring do SO, com fallback em arquivo
-/// — mesmo padrão de `get_vault_key`. Diferente da vault key, não há
-/// fallback legado: erro explícito se nenhuma wallet foi gerada/importada
-/// ainda (`arweave_wallet_exists`/`arweave_publish` checam isso antes de agir).
-///
-/// Achado real validando o P71 (Sessão 222): uma leitura do keyring que
-/// retorna `Ok("")` (entrada existe mas vazia — visto de verdade nesta
-/// máquina, causa exata não identificada, provável sobra de uma sessão
-/// anterior) antes mascarava por completo o fallback em arquivo, mesmo com
-/// uma wallet válida ali. `entry.get_password()` só falha (`Err`) se a
-/// entrada não existir — uma entrada vazia é um `Ok` "válido" do ponto de
-/// vista do keyring, então o vazio precisa ser filtrado explicitamente aqui,
-/// não só o `Err`.
+/// — via `config::get_keyring_or_file` (P84 #9, mesma extração de
+/// `get_device_key_hex`/`local_wallet::get_local_wallet_key_hex`/
+/// `app_lock::get_app_lock_blob_hex`, incluindo o mesmo cuidado do P71 de
+/// tratar uma entrada de keyring vazia — achada de verdade nesta máquina,
+/// Sessão 222 — como ausente). Diferente da vault key, não há fallback
+/// legado: erro explícito se nenhuma wallet foi gerada/importada ainda
+/// (`arweave_wallet_exists`/`arweave_publish` checam isso antes de agir).
 pub(crate) fn get_arweave_wallet() -> Result<String, String> {
-    if let Ok(entry) = Entry::new(SERVICE, ARWEAVE_WALLET_ACCOUNT) {
-        if let Ok(json) = entry.get_password() {
-            if !json.trim().is_empty() {
-                return Ok(json);
-            }
-        }
-    }
-
     let path = arweave_wallet_path()?;
-    if path.exists() {
-        return crate::config::read_text(&path);
-    }
-
-    Err("nenhuma wallet Arweave encontrada — gere ou importe uma primeiro".to_string())
+    crate::config::get_keyring_or_file(SERVICE, ARWEAVE_WALLET_ACCOUNT, &path)?
+        .ok_or_else(|| "nenhuma wallet Arweave encontrada — gere ou importe uma primeiro".to_string())
 }
 
 pub(crate) fn set_arweave_wallet(jwk_json: &str) -> Result<(), String> {
-    let saved = Entry::new(SERVICE, ARWEAVE_WALLET_ACCOUNT)
-        .and_then(|e| e.set_password(jwk_json))
-        .is_ok();
-
-    if !saved {
-        let path = arweave_wallet_path()?;
-        crate::config::write_secret_file(&path, jwk_json.as_bytes())?;
-    }
-
-    Ok(())
+    let path = arweave_wallet_path()?;
+    crate::config::set_keyring_or_file(SERVICE, ARWEAVE_WALLET_ACCOUNT, &path, jwk_json)
 }
 
 /// Verifica se a chave do vault já foi derivada (existe no keyring).
