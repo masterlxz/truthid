@@ -160,3 +160,14 @@ flutter:
           weight: 600
         - asset: assets/fonts/Inter-Variable.ttf
           weight: 700
+
+# P86: coinbase_wallet_sdk 1.0.10 (dependência transitiva do reown_appkit,
+# abandonada há ~23 meses no pub.dev) quebra assembleRelease de 2 formas —
+# compileSdk 31 incompatível com ~20 libs androidx mais novas, e um bug de
+# publish real do upstream (consumer-rules.pro referenciado no build.gradle
+# mas ausente do tarball). Cópia vendorizada em third_party/ com os 2
+# patches Android (compileSdk 36 + os 2 .pro vazios); API Dart/Kotlin/iOS
+# intacta, sem downgrade de androidx (que arriscaria o mobile_scanner).
+dependency_overrides:
+  coinbase_wallet_sdk:
+    path: third_party/coinbase_wallet_sdk

@@ -4,7 +4,12 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-08-27 (Sessão 227, 5ª parte: **tag `v2.2.0` cortada de verdade** pra validar
+> Última atualização: 2026-08-27 (Sessão 228: **P86 CORRIGIDO** — `coinbase_wallet_sdk` vendorizado em
+> `mobile/third_party/` com 3 patches (`compileSdk` 36 + 2 `.pro` vazios que faltavam no tarball
+> publicado, bug real do upstream achado só ao reproduzir o build de verdade) via
+> `dependency_overrides`; validado localmente via Docker: `assembleRelease` limpo →
+> `BUILD SUCCESSFUL`, `flutter analyze` limpo, `flutter test` 702/702 (2 pulados). Falta confirmar no
+> `build-mobile.yml` real do GitHub Actions. Sessão 227, 5ª parte: **tag `v2.2.0` cortada de verdade** pra validar
 > o P85 — `build.yml` (Desktop 3 SOs + extensão) passou 100%, release draft com todos os assets
 > assinados + `latest.json`; achado real no processo: input `uploadUpdaterJson` do `build.yml` estava
 > com nome errado (`includeUpdaterJson` é o certo, corrigido — o default já cobria, então não afetou
@@ -124,7 +129,37 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 
 ## Não Resolvidas
 
-### P86 — Build de release do Mobile (Android) quebrado: `coinbase_wallet_sdk` (dependência abandonada) trava em `compileSdk 31` (Sessão 227)
+### P86 — Build de release do Mobile (Android) quebrado: `coinbase_wallet_sdk` (dependência abandonada) trava em `compileSdk 31` — ✅ CORRIGIDO, validado localmente via Docker (Sessão 228)
+
+**Atualização (Sessão 228)**: corrigido via vendoring — `mobile/third_party/coinbase_wallet_sdk/` é uma
+cópia local do pacote `1.0.10` (a mesma versão do pub.dev, código Dart/Kotlin/iOS intocado) com 3
+patches no `android/build.gradle`: `compileSdkVersion` 31→36, e 2 arquivos `.pro` vazios criados
+(`consumer-rules.pro`/`proguard-rules.pro`). `pubspec.yaml` ganhou `dependency_overrides` apontando
+`coinbase_wallet_sdk` pro path local (`pubspec.lock` confirma `dependency: "direct overridden"`,
+`source: path`). **Achado real no processo, não documentado na Sessão 227**: o bloqueio não era só
+o `compileSdk` — reproduzindo `./gradlew :app:assembleRelease` de verdade via Docker (JDK+Android
+SDK completos, mesma imagem que valida o Mobile desde o P82), apareceu um **segundo erro
+independente**: `mergeReleaseConsumerProguardFiles` falhando porque `consumer-rules.pro` é
+referenciado no `build.gradle` do pacote mas **não existe no tarball publicado no pub.dev** — bug de
+publish real do upstream, não um problema de configuração do app. Forçar downgrade das ~20 libs
+androidx conflitantes (a rota considerada mais rápida na Sessão 227) não teria resolvido esse
+segundo bug de qualquer forma, e ainda carregaria o risco real de regressão no `mobile_scanner`
+registrado antes — descartado. Vendoring evita os dois problemas de uma vez, sem tocar em nenhuma
+API (Coinbase Wallet continua funcional no modal do WalletConnect, ao contrário de um stub) e sem
+mexer no grafo de dependências do resto do app. **Achado de processo, não do código**: o primeiro
+rebuild pós-patch falhou com `cannot find symbol: class CoinbaseWalletSdkFlutterPlugin` mesmo com o
+`.kt` compilando sem erro — causa era cache do Gradle (`gradle_cache` persistido no volume Docker)
+com estado inconsistente do módulo apontando pro path antigo (pub cache) vs. o novo (`third_party/`);
+`./gradlew clean` + rebuild completo resolveu — não deve se repetir num runner de CI real, que
+sempre começa limpo. **Validado nesta sessão**: `flutter build apk --release` via
+`./gradlew :app:assembleRelease` limpo → `BUILD SUCCESSFUL`, APK real gerado (91MB) em
+`build/app/outputs/flutter-apk/app-release.apk`; `flutter analyze` limpo (só os 13 infos
+pré-existentes, nada novo); `flutter test --concurrency=1 test/` → **702/702 passando, 2 pulados
+(`arlocal`), `All tests passed!`**. **O que ainda falta**: confirmar o mesmo resultado no
+`build-mobile.yml` real do GitHub Actions (runner Ubuntu, sem o cache Docker local que causou o
+achado de processo acima) — só validável cortando uma tag/rodando o workflow de verdade, decisão de
+quando fica pro dono do projeto. `releases.ts` ainda aponta o `.apk` pro `v2.1.0` (decisão da Sessão
+227); atualizar isso é o passo seguinte depois de confirmar o CI.
 
 | ID | Item | Onde se originou | Prioridade |
 |---|---|---|---|
