@@ -1,5 +1,5 @@
 // Desktop installers and the browser extension package, hosted as GitHub
-// Release assets (v2.0.0). Filenames embed the app version — when a newer
+// Release assets (v2.2.0). Filenames embed the app version — when a newer
 // tag is cut with a different version, these need updating by hand (Tauri's
 // bundler names installers after tauri.conf.json's productName + version,
 // so there's no stable "latest" filename to link against). Confirmed on the
@@ -8,7 +8,7 @@
 // were named "tauri-app_1.0.0_..." — not because of package.json's `name`
 // field, as originally assumed when this file was written for P57.
 const REPO = "masterlxz/truthid";
-const TAG = "v2.1.0";
+const TAG = "v2.2.0";
 
 function assetUrl(filename: string): string {
   return `https://github.com/${REPO}/releases/download/${TAG}/${filename}`;
@@ -16,27 +16,33 @@ function assetUrl(filename: string): string {
 
 export const desktopDownloads = {
   linux: {
-    deb: assetUrl("TruthID_2.1.0_amd64.deb"),
-    appImage: assetUrl("TruthID_2.1.0_amd64.AppImage"),
-    rpm: assetUrl("TruthID-2.1.0-1.x86_64.rpm"),
+    deb: assetUrl("TruthID_2.2.0_amd64.deb"),
+    appImage: assetUrl("TruthID_2.2.0_amd64.AppImage"),
+    rpm: assetUrl("TruthID-2.2.0-1.x86_64.rpm"),
   },
   windows: {
-    exe: assetUrl("TruthID_2.1.0_x64-setup.exe"),
-    msi: assetUrl("TruthID_2.1.0_x64_en-US.msi"),
+    exe: assetUrl("TruthID_2.2.0_x64-setup.exe"),
+    msi: assetUrl("TruthID_2.2.0_x64_en-US.msi"),
   },
   macos: {
     // Apple Silicon only — the macos-latest CI runner doesn't produce an
     // Intel build.
-    dmg: assetUrl("TruthID_2.1.0_aarch64.dmg"),
+    dmg: assetUrl("TruthID_2.2.0_aarch64.dmg"),
   },
   android: {
-    apk: assetUrl("app-release.apk"),
+    // Pinado no v2.1.0 de propósito — o build do Mobile pro v2.2.0 falhou
+    // (coinbase_wallet_sdk travado em compileSdk 31, ver P86 em
+    // PENDING.md); o release v2.2.0 saiu só com os assets do Desktop.
+    // Trocar pra TAG assim que o P86 for corrigido e o Mobile voltar a
+    // sair num release.
+    apk: `https://github.com/${REPO}/releases/download/v2.1.0/app-release.apk`,
   },
 };
 
-// Extension version stayed at 2.0.0 in the v2.1.0 release — this bump only
-// touched the Desktop/Mobile apps (Bitwarden import, language picker), so
-// extension/package.json wasn't rebuilt/republished.
+// Extension version stayed at 2.0.0 in the v2.2.0 release too — nada em
+// extension/ mudou desde o v2.1.0, então extension/package.json não foi
+// rebuildado/republicado (o build-extension job ainda anexa o mesmo .zip
+// de novo a cada tag, então o asset existe no v2.2.0 com o mesmo nome).
 export const extensionDownloadUrl = assetUrl(
   "truthid-vault-extension-2.0.0-chrome.zip",
 );
