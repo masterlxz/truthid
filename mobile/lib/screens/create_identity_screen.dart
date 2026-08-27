@@ -15,7 +15,7 @@ import '../utils/ecdsa_signature.dart';
 import '../utils/eth_amount.dart';
 import '../utils/identity_consent_hash.dart';
 
-enum UsernameAvailability { available, taken, alreadyHasIdentity }
+enum UsernameAvailability { available, taken, alreadyHasIdentity, error }
 
 enum CreateIdentityStep {
   form,
@@ -104,6 +104,7 @@ class CreateIdentityFlow {
   Future<UsernameAvailability> checkAvailability(String username) async {
     if (_busy) return UsernameAvailability.available;
     _busy = true;
+    errorMessage = null;
     _set(CreateIdentityStep.checkingAvailability);
     try {
       final owner = EthereumAddress.fromHex(connectedAddress!);
@@ -122,6 +123,9 @@ class CreateIdentityFlow {
       }
 
       return UsernameAvailability.available;
+    } catch (e) {
+      errorMessage = e.toString();
+      return UsernameAvailability.error;
     } finally {
       _set(CreateIdentityStep.form);
       _busy = false;
@@ -308,6 +312,11 @@ class _CreateIdentityScreenState extends State<CreateIdentityScreen> {
       case UsernameAvailability.alreadyHasIdentity:
         setState(() => _formError =
             context.l10n.createIdentityScreenAlreadyHasIdentityError);
+        return;
+      case UsernameAvailability.error:
+        // flow.errorMessage já foi setado (e o widget reconstruído via
+        // onChange) por checkAvailability — exibido pelo bloco de erro
+        // existente no build().
         return;
       case UsernameAvailability.available:
         break;

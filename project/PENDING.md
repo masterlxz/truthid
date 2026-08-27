@@ -4,7 +4,11 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-08-26 (Sessão 226, 6ª parte: os 2 achados de reuso restantes do P84 (itens
+> Última atualização: 2026-08-27 (Sessão 227: P82 itens (1)/(2)/(3) corrigidos — reatividade do campo
+> de username em `act_as_guardian_screen.dart`, catch faltando em `checkAvailability()` de
+> `create_identity_screen.dart`, timeout defensivo em `WalletConnectService.openConnectModal()`;
+> achados de limpeza (4)-(10) ficaram de fora desta rodada, decisão do dono do projeto; sem
+> `flutter` nesta máquina pra rodar os testes, revisão só manual). Sessão 226, 6ª parte: os 2 achados de reuso restantes do P84 (itens
 > 9-10) **corrigidos** — **(9)** novo `config::get_keyring_or_file`/`set_keyring_or_file` (Rust)
 > deduplica o padrão "keyring do SO → fallback em arquivo → trata string vazia como ausente" (P71),
 > antes copiado em `get_device_key_hex`/`get_arweave_wallet`/`set_vault_key` (`lib.rs`),
@@ -100,7 +104,36 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 
 ## Não Resolvidas
 
-### P82 — `/code-review` do P68 (fluxo 100% mobile): 2 bugs reais de correção + 1 risco de hang + 7 achados de limpeza, todos verificados (Sessão 226)
+### P82 — `/code-review` do P68 (fluxo 100% mobile): (1)/(2)/(3) ✅ corrigidos (Sessão 227); (4)-(10) limpeza seguem em aberto
+
+**Atualização (Sessão 227)**: os 2 bugs reais de correção e o risco de hang foram corrigidos, a pedido
+do dono do projeto (achados (4)-(10), de limpeza/duplicação, ficaram de fora desta rodada).
+- **(1) `act_as_guardian_screen.dart`** — `_usernameController` ganhou um listener
+  (`addListener`/`removeListener` em `initState`/`dispose`) que chama `setState` a cada digitação,
+  igual ao padrão já usado pra reagir a `flow.onChange`; o botão "Look up" agora habilita/desabilita
+  em tempo real. Teste de regressão novo (`act_as_guardian_screen_test.dart`, primeiro `testWidgets`
+  do arquivo — os demais só testavam `ActAsGuardianFlow` puro): pumpa a screen de verdade com
+  `wrapForTest` (helper de l10n já usado noutras telas), digita no campo e confere `onPressed` do
+  botão antes/depois.
+- **(2) `create_identity_screen.dart`** — `checkAvailability()` ganhou `catch` (novo valor de enum
+  `UsernameAvailability.error`, seta `errorMessage` e retorna) em vez de deixar a exceção escapar;
+  `_handleCreate()` trata o caso `.error` (não precisa fazer nada — o `errorMessage` já aparece no
+  bloco de erro existente do `build()`, e o widget já reconstruiu via `flow.onChange` antes do
+  `_handleCreate` continuar). 2 testes novos: falha de RPC vira `.error` + `errorMessage` sem exceção
+  escapando; guarda libera depois do erro e uma 2ª tentativa roda de verdade (mesmo padrão já usado
+  no teste equivalente de `createIdentity`).
+- **(3) `wallet_connect_service.dart`** — não foi possível confirmar 100% se `reown_appkit` sempre
+  dispara `onModalConnect`/`onModalError` ao fechar a modal (pacote não baixado nesta checkout, sem
+  `flutter pub get` rodado — mesma limitação já registrada em P62), então a correção é defensiva:
+  `openConnectModal()` ganhou um `timeout` (padrão 5min, mesmo valor de `_waitForReceipt`) sobre o
+  `Completer`, fecha a inscrição nos eventos e lança um erro claro se nenhum dos dois disparar a
+  tempo — `connectWallet()` já captura qualquer exceção e libera `_busy`, então o timeout se propaga
+  pro caminho de erro existente sem mudança adicional. Sem teste novo dedicado (pacote 3rd-party não
+  é mockado em nenhum teste existente do projeto; adicionar cobertura exigiria simular
+  `ReownAppKitModal` inteiro, fora de escopo desta correção pontual).
+- Sem `flutter`/`dart` instalados nesta máquina pra rodar `flutter test`/`flutter analyze` (mesma
+  limitação de P62) — mudanças revisadas manualmente linha a linha, chaves/parênteses conferidos por
+  script; falta rodar o test suite numa máquina com Flutter antes de considerar 100% validado.
 
 | ID | Item | Onde se originou | Prioridade |
 |---|---|---|---|

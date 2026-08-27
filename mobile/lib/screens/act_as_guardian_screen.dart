@@ -256,10 +256,19 @@ class _ActAsGuardianScreenState extends State<ActAsGuardianScreen> {
         ActAsGuardianFlow(onChange: () {
           if (mounted) setState(() {});
         });
+    // O botão "Look Up" habilita/desabilita conforme o texto digitado, mas
+    // só reconstrói via `_flow.onChange` (eventos do fluxo, não digitação) —
+    // sem este listener o botão fica preso no estado da última reconstrução.
+    _usernameController.addListener(_onUsernameChanged);
+  }
+
+  void _onUsernameChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    _usernameController.removeListener(_onUsernameChanged);
     _flow.dispose();
     _usernameController.dispose();
     _newControllerController.dispose();

@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:web3dart/web3dart.dart';
@@ -7,6 +8,8 @@ import 'package:web3dart/web3dart.dart';
 import 'package:truthid_mobile/screens/act_as_guardian_screen.dart';
 import 'package:truthid_mobile/services/blockchain_service.dart';
 import 'package:truthid_mobile/services/wallet_connect_service.dart';
+
+import '../utils/l10n_test_app.dart';
 
 class MockWalletConnectService extends Mock implements WalletConnectService {}
 
@@ -337,6 +340,26 @@ void main() {
             data: any(named: 'data'),
           )).called(1);
       expect(flow.errorMessage, isNull);
+    });
+  });
+
+  group('ActAsGuardianScreen — reatividade do campo de username', () {
+    // Regressão: o botão "Look up" só reconstruía via `flow.onChange`
+    // (eventos do fluxo), nunca ao digitar — ficava preso desabilitado
+    // mesmo com texto no campo (achado P82 #1).
+    testWidgets('digitar no campo habilita o botão Look up', (tester) async {
+      await tester.pumpWidget(wrapForTest(ActAsGuardianScreen(flow: flow)));
+
+      final lookUpButton =
+          find.widgetWithText(ElevatedButton, 'Look up');
+      expect(
+          tester.widget<ElevatedButton>(lookUpButton).onPressed, isNull);
+
+      await tester.enterText(find.byType(TextField), 'alice');
+      await tester.pump();
+
+      expect(
+          tester.widget<ElevatedButton>(lookUpButton).onPressed, isNotNull);
     });
   });
 }

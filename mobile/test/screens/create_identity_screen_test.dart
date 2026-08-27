@@ -149,6 +149,37 @@ void main() {
 
       expect(flow.step, CreateIdentityStep.form);
     });
+
+    test('falha de RPC vira UsernameAvailability.error + errorMessage, sem '
+        'deixar a exceção escapar', () async {
+      when(() => mockBlockchain.predictSmartAccountAddress(owner))
+          .thenThrow(Exception('RPC indisponível'));
+
+      final result = await flow.checkAvailability('alice');
+
+      expect(result, UsernameAvailability.error);
+      expect(flow.errorMessage, isNotNull);
+      expect(flow.step, CreateIdentityStep.form);
+      expect(flow.isBusy, isFalse);
+    });
+
+    test('libera a guarda depois de um erro — dá pra tentar de novo',
+        () async {
+      when(() => mockBlockchain.predictSmartAccountAddress(owner))
+          .thenThrow(Exception('RPC indisponível'));
+      await flow.checkAvailability('alice');
+
+      when(() => mockBlockchain.predictSmartAccountAddress(owner))
+          .thenAnswer((_) async => controller);
+      when(() => mockBlockchain.getUsernameByController(controller))
+          .thenAnswer((_) async => '');
+      when(() => mockBlockchain.isUsernameTaken('alice'))
+          .thenAnswer((_) async => false);
+
+      final result = await flow.checkAvailability('alice');
+
+      expect(result, UsernameAvailability.available);
+    });
   });
 
   group('createIdentity — sequência completa (happy path)', () {

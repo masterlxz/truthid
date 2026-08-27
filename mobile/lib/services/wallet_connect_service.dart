@@ -57,7 +57,14 @@ class WalletConnectService {
   /// Abre a modal de conexão (deep-link ou QR, conforme a wallet escolhida)
   /// e espera o resultado — resolve quando `onModalConnect` dispara, lança
   /// se `onModalError` disparar primeiro (ex: usuário rejeitou/fechou a modal).
-  Future<void> openConnectModal() async {
+  ///
+  /// `timeout` cobre o caso do pacote não disparar nenhum dos dois eventos
+  /// (ex: usuário fecha a modal no botão voltar/tap fora, sem confirmar
+  /// nem cancelar) — sem isso, `connectWallet()` travaria com `_busy` preso
+  /// pra sempre, sem jeito de tentar de novo sem sair da tela.
+  Future<void> openConnectModal({
+    Duration timeout = const Duration(minutes: 5),
+  }) async {
     final modal = _modal;
     if (modal == null) {
       throw StateError('WalletConnectService.init() must be called first.');
@@ -87,7 +94,13 @@ class WalletConnectService {
     modal.onModalError.subscribe(onError);
 
     await modal.openModalView();
-    return completer.future;
+    try {
+      return await completer.future.timeout(timeout);
+    } on TimeoutException {
+      cleanup();
+      throw Exception(
+          'WalletConnect: connection modal timed out after $timeout.');
+    }
   }
 
   /// `personal_sign` (EIP-191) sobre os bytes crus de `message` — quem chama
