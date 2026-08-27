@@ -30,12 +30,12 @@ export const desktopDownloads = {
     dmg: assetUrl("TruthID_2.2.0_aarch64.dmg"),
   },
   android: {
-    // Pinado no v2.1.0 de propósito — o build do Mobile pro v2.2.0 falhou
-    // (coinbase_wallet_sdk travado em compileSdk 31, ver P86 em
-    // PENDING.md); o release v2.2.0 saiu só com os assets do Desktop.
-    // Trocar pra TAG assim que o P86 for corrigido e o Mobile voltar a
-    // sair num release.
-    apk: `https://github.com/${REPO}/releases/download/v2.1.0/app-release.apk`,
+    // P86 corrigido (coinbase_wallet_sdk vendorizado, ver PENDING.md) —
+    // build do Mobile confirmado no CI real na tag v2.2.1 (Desktop nela é
+    // idêntico ao v2.2.0, TAG acima continua sendo a fonte certa pros
+    // instaladores Desktop/extensão). Não usa TAG porque o Mobile e o
+    // Desktop não saem sempre juntos no mesmo release.
+    apk: `https://github.com/${REPO}/releases/download/v2.2.1/app-release.apk`,
   },
 };
 

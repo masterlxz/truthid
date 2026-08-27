@@ -4,12 +4,14 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-08-27 (Sessão 228: **P86 CORRIGIDO** — `coinbase_wallet_sdk` vendorizado em
-> `mobile/third_party/` com 3 patches (`compileSdk` 36 + 2 `.pro` vazios que faltavam no tarball
-> publicado, bug real do upstream achado só ao reproduzir o build de verdade) via
-> `dependency_overrides`; validado localmente via Docker: `assembleRelease` limpo →
-> `BUILD SUCCESSFUL`, `flutter analyze` limpo, `flutter test` 702/702 (2 pulados). Falta confirmar no
-> `build-mobile.yml` real do GitHub Actions. Sessão 227, 5ª parte: **tag `v2.2.0` cortada de verdade** pra validar
+> Última atualização: 2026-08-27 (Sessão 228: **P86 FECHADO por completo** — `coinbase_wallet_sdk`
+> vendorizado em `mobile/third_party/` com 3 patches (`compileSdk` 36 + 2 `.pro` vazios que faltavam
+> no tarball publicado, bug real do upstream achado só ao reproduzir o build de verdade) via
+> `dependency_overrides`; validado localmente via Docker (`assembleRelease` limpo, `flutter analyze`
+> limpo, `flutter test` 702/702) e depois no CI real: tag `v2.2.1` cortada (só bump do build number do
+> Mobile, Desktop ficou em 2.2.0 de propósito) — `Build Mobile` e `Build` passaram (`success`) num
+> runner limpo do GitHub Actions, release publicado de verdade, `site/frontend/lib/releases.ts`
+> atualizado (`android.apk` → `v2.2.1`, confirmado ao vivo via `curl`). Sessão 227, 5ª parte: **tag `v2.2.0` cortada de verdade** pra validar
 > o P85 — `build.yml` (Desktop 3 SOs + extensão) passou 100%, release draft com todos os assets
 > assinados + `latest.json`; achado real no processo: input `uploadUpdaterJson` do `build.yml` estava
 > com nome errado (`includeUpdaterJson` é o certo, corrigido — o default já cobria, então não afetou
@@ -129,7 +131,7 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 
 ## Não Resolvidas
 
-### P86 — Build de release do Mobile (Android) quebrado: `coinbase_wallet_sdk` (dependência abandonada) trava em `compileSdk 31` — ✅ CORRIGIDO, validado localmente via Docker (Sessão 228)
+### P86 — Build de release do Mobile (Android) quebrado: `coinbase_wallet_sdk` (dependência abandonada) trava em `compileSdk 31` — ✅ FECHADO por completo, validado no CI real e publicado (Sessão 228)
 
 **Atualização (Sessão 228)**: corrigido via vendoring — `mobile/third_party/coinbase_wallet_sdk/` é uma
 cópia local do pacote `1.0.10` (a mesma versão do pub.dev, código Dart/Kotlin/iOS intocado) com 3
@@ -155,11 +157,16 @@ sempre começa limpo. **Validado nesta sessão**: `flutter build apk --release` 
 `./gradlew :app:assembleRelease` limpo → `BUILD SUCCESSFUL`, APK real gerado (91MB) em
 `build/app/outputs/flutter-apk/app-release.apk`; `flutter analyze` limpo (só os 13 infos
 pré-existentes, nada novo); `flutter test --concurrency=1 test/` → **702/702 passando, 2 pulados
-(`arlocal`), `All tests passed!`**. **O que ainda falta**: confirmar o mesmo resultado no
-`build-mobile.yml` real do GitHub Actions (runner Ubuntu, sem o cache Docker local que causou o
-achado de processo acima) — só validável cortando uma tag/rodando o workflow de verdade, decisão de
-quando fica pro dono do projeto. `releases.ts` ainda aponta o `.apk` pro `v2.1.0` (decisão da Sessão
-227); atualizar isso é o passo seguinte depois de confirmar o CI.
+(`arlocal`), `All tests passed!`**. **Confirmado no CI real (mesma sessão)**: bump só do build number do Mobile (`2.2.0+3`→`2.2.0+4`,
+Desktop ficou intocado em `2.2.0` de propósito, pra não disparar o auto-update do P85 à toa pra quem
+já tem o Desktop instalado) + tag `v2.2.1` cortada e empurrada. `Build Mobile` (runner Ubuntu real,
+sem o cache Docker local que causou o achado de processo) **passou** (`success`, 9m26s); `Build`
+(Desktop) também passou (`success`, 12m29s, esperado — sem mudança de código lá). Release draft
+`v2.2.1` no ar com `app-release.apk` de verdade entre os assets. **Dono do projeto decidiu publicar**
+— release `v2.2.1` publicado de verdade (deixou de ser draft), `.apk` confirmado ao vivo via `curl`
+(HTTP 200), `site/frontend/lib/releases.ts` atualizado apontando `android.apk` pra `v2.2.1` (URL
+separada de `TAG`, que continua em `v2.2.0` — Desktop/extensão não mudaram, só o Mobile saiu num
+release à parte desta vez). **P86 fechado por completo.**
 
 | ID | Item | Onde se originou | Prioridade |
 |---|---|---|---|
