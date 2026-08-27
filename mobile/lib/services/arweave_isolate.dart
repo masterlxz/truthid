@@ -1,10 +1,10 @@
 import 'dart:isolate';
-import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' show sha256;
 import 'package:pointycastle/export.dart' as pc;
 
+import '../utils/random_bytes.dart';
 import 'arweave_b64url.dart';
 import 'arweave_jwk.dart';
 import 'arweave_transaction.dart';
@@ -36,7 +36,7 @@ Future<void> signTransactionInIsolate(ArweaveTransaction tx, ArweaveJwk jwk) asy
 
 Uint8List _signInIsolate(ArweaveJwk jwk, Uint8List sigData) {
   final (privateKey, _) = jwkToKeyPair(jwk);
-  final saltBytes = Uint8List.fromList(List.generate(32, (_) => Random.secure().nextInt(256)));
+  final saltBytes = randomBytes32();
 
   final signer = pc.PSSSigner(pc.RSAEngine(), pc.SHA256Digest(), pc.SHA256Digest());
   signer.init(true, pc.ParametersWithSalt(pc.PrivateKeyParameter<pc.RSAPrivateKey>(privateKey), saltBytes));

@@ -14,6 +14,7 @@ import '../theme.dart';
 import '../utils/ecdsa_signature.dart';
 import '../utils/eth_amount.dart';
 import '../utils/identity_consent_hash.dart';
+import '../utils/wallet_connect_flow_mixin.dart';
 
 enum UsernameAvailability { available, taken, alreadyHasIdentity, error }
 
@@ -46,8 +47,10 @@ enum CreateIdentityStep {
 /// `isPending` a tempo de bloquear um 2º disparo síncrono), que aqui importa
 /// mais, não menos: um pedido WalletConnect é uma ida-e-volta assíncrona pra
 /// outro app, mais lenta e mais fácil de disparar 2x.
-class CreateIdentityFlow {
+class CreateIdentityFlow with WalletConnectFlowMixin<CreateIdentityStep> {
+  @override
   final WalletConnectService walletConnect;
+  @override
   final BlockchainService blockchain;
   final VaultKeyService vaultKeyService;
   final LocalStorageService storage;
@@ -66,9 +69,15 @@ class CreateIdentityFlow {
 
   bool _busy = false;
   bool get isBusy => _busy;
+  @override
+  bool get busy => _busy;
+  @override
+  set busy(bool value) => _busy = value;
 
   CreateIdentityStep step = CreateIdentityStep.form;
+  @override
   String? errorMessage;
+  @override
   String? connectedAddress;
   EthereumAddress? predictedAddress;
   BigInt? identityId;
@@ -79,23 +88,13 @@ class CreateIdentityFlow {
     onChange();
   }
 
-  Future<void> connectWallet(BuildContext context) async {
-    if (_busy) return;
-    _busy = true;
-    errorMessage = null;
-    _set(CreateIdentityStep.connectingWallet);
-    try {
-      await walletConnect.init(context);
-      await walletConnect.openConnectModal();
-      connectedAddress = walletConnect.connectedAddress;
-      _set(CreateIdentityStep.form);
-    } catch (e) {
-      errorMessage = e.toString();
-      _set(CreateIdentityStep.form);
-    } finally {
-      _busy = false;
-    }
-  }
+  @override
+  CreateIdentityStep get connectingWalletStep =>
+      CreateIdentityStep.connectingWallet;
+  @override
+  CreateIdentityStep get formStep => CreateIdentityStep.form;
+  @override
+  void setStep(CreateIdentityStep newStep) => _set(newStep);
 
   /// Confirma que o @username está livre e que esta wallet ainda não tem
   /// identidade — mesmo guard que CreateIdentity.tsx faz no Desktop antes de
@@ -172,7 +171,7 @@ class CreateIdentityFlow {
         to: BlockchainService.identityRegistryAddress,
         data: bytesToHex(createIdentityCalldata, include0x: true),
       );
-      final createIdentityOk = await _waitForReceipt(createIdentityTxHash);
+      final createIdentityOk = await waitForReceipt(createIdentityTxHash);
       if (!createIdentityOk) {
         throw Exception('createIdentity transaction reverted on-chain.');
       }
@@ -184,7 +183,7 @@ class CreateIdentityFlow {
         to: BlockchainService.truthidAccountFactoryAddress,
         data: bytesToHex(createAccountCalldata, include0x: true),
       );
-      final deployAccountOk = await _waitForReceipt(deployAccountTxHash);
+      final deployAccountOk = await waitForReceipt(deployAccountTxHash);
       if (!deployAccountOk) {
         throw Exception('createAccount transaction reverted on-chain.');
       }
@@ -196,7 +195,7 @@ class CreateIdentityFlow {
           to: controller.hex,
           valueWei: fundingWei,
         );
-        final fundingOk = await _waitForReceipt(fundingTxHash);
+        final fundingOk = await waitForReceipt(fundingTxHash);
         if (!fundingOk) {
           throw Exception('Funding transaction reverted on-chain.');
         }
@@ -243,21 +242,6 @@ class CreateIdentityFlow {
       _busy = false;
       onChange();
     }
-  }
-
-  Future<bool> _waitForReceipt(
-    String txHash, {
-    Duration timeout = const Duration(minutes: 5),
-    Duration pollInterval = const Duration(seconds: 2),
-  }) async {
-    final deadline = DateTime.now().add(timeout);
-    while (DateTime.now().isBefore(deadline)) {
-      final confirmed = await blockchain.isTransactionConfirmed(txHash);
-      if (confirmed != null) return confirmed;
-      await Future.delayed(pollInterval);
-    }
-    throw TimeoutException(
-        'Transaction $txHash was not mined within $timeout.');
   }
 
   void dispose() {

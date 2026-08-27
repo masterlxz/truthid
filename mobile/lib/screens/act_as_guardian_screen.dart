@@ -8,6 +8,7 @@ import '../l10n/l10n_extensions.dart';
 import '../services/blockchain_service.dart';
 import '../services/wallet_connect_service.dart';
 import '../theme.dart';
+import '../utils/wallet_connect_flow_mixin.dart';
 
 enum ActAsGuardianStep { form, connectingWallet, loadingTarget, submitting }
 
@@ -21,8 +22,10 @@ enum ProposalLifecycle { none, active, executed, cancelled }
 /// `proposeRecovery`/`approveRecovery`/`executeRecovery` — são chamadas
 /// DIRETAS no `RecoveryManager`, assinadas pela wallet do guardião. Nunca
 /// passam pela smart account da identidade alvo.
-class ActAsGuardianFlow {
+class ActAsGuardianFlow with WalletConnectFlowMixin<ActAsGuardianStep> {
+  @override
   final WalletConnectService walletConnect;
+  @override
   final BlockchainService blockchain;
   final void Function() onChange;
 
@@ -35,9 +38,15 @@ class ActAsGuardianFlow {
 
   bool _busy = false;
   bool get isBusy => _busy;
+  @override
+  bool get busy => _busy;
+  @override
+  set busy(bool value) => _busy = value;
 
   ActAsGuardianStep step = ActAsGuardianStep.form;
+  @override
   String? errorMessage;
+  @override
   String? connectedAddress;
 
   String? targetUsername;
@@ -83,23 +92,13 @@ class ActAsGuardianFlow {
     onChange();
   }
 
-  Future<void> connectWallet(BuildContext context) async {
-    if (_busy) return;
-    _busy = true;
-    errorMessage = null;
-    _set(ActAsGuardianStep.connectingWallet);
-    try {
-      await walletConnect.init(context);
-      await walletConnect.openConnectModal();
-      connectedAddress = walletConnect.connectedAddress;
-      _set(ActAsGuardianStep.form);
-    } catch (e) {
-      errorMessage = e.toString();
-      _set(ActAsGuardianStep.form);
-    } finally {
-      _busy = false;
-    }
-  }
+  @override
+  ActAsGuardianStep get connectingWalletStep =>
+      ActAsGuardianStep.connectingWallet;
+  @override
+  ActAsGuardianStep get formStep => ActAsGuardianStep.form;
+  @override
+  void setStep(ActAsGuardianStep newStep) => _set(newStep);
 
   Future<void> loadTarget(String username) async {
     if (_busy) return;
@@ -154,7 +153,7 @@ class ActAsGuardianFlow {
         to: BlockchainService.recoveryManagerAddress,
         data: bytesToHex(calldata, include0x: true),
       );
-      final ok = await _waitForReceipt(txHash);
+      final ok = await waitForReceipt(txHash);
       if (!ok) throw Exception('proposeRecovery transaction reverted on-chain.');
       _busy = false;
       await loadTarget(username);
@@ -178,7 +177,7 @@ class ActAsGuardianFlow {
         to: BlockchainService.recoveryManagerAddress,
         data: bytesToHex(calldata, include0x: true),
       );
-      final ok = await _waitForReceipt(txHash);
+      final ok = await waitForReceipt(txHash);
       if (!ok) throw Exception('approveRecovery transaction reverted on-chain.');
       _busy = false;
       await loadTarget(username);
@@ -202,7 +201,7 @@ class ActAsGuardianFlow {
         to: BlockchainService.recoveryManagerAddress,
         data: bytesToHex(calldata, include0x: true),
       );
-      final ok = await _waitForReceipt(txHash);
+      final ok = await waitForReceipt(txHash);
       if (!ok) throw Exception('executeRecovery transaction reverted on-chain.');
       _busy = false;
       await loadTarget(username);
@@ -211,21 +210,6 @@ class ActAsGuardianFlow {
       _busy = false;
       _set(ActAsGuardianStep.form);
     }
-  }
-
-  Future<bool> _waitForReceipt(
-    String txHash, {
-    Duration timeout = const Duration(minutes: 5),
-    Duration pollInterval = const Duration(seconds: 2),
-  }) async {
-    final deadline = DateTime.now().add(timeout);
-    while (DateTime.now().isBefore(deadline)) {
-      final confirmed = await blockchain.isTransactionConfirmed(txHash);
-      if (confirmed != null) return confirmed;
-      await Future.delayed(pollInterval);
-    }
-    throw TimeoutException(
-        'Transaction $txHash was not mined within $timeout.');
   }
 
   void dispose() {

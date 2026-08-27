@@ -13,6 +13,7 @@ import '../services/vault_key_service.dart';
 import '../services/wallet_connect_service.dart';
 import '../theme.dart';
 import '../utils/random_bytes.dart';
+import '../utils/wallet_connect_flow_mixin.dart';
 import 'scan_screen.dart';
 
 enum PairDeviceStep {
@@ -66,8 +67,10 @@ class ScannedDevicePayload {
 /// account, é ele (não o `DeviceRegistry`) que `_validateSignature` checa;
 /// um device "registrado" sem `addDevice` fica incapaz de assinar qualquer
 /// UserOp pra própria conta.
-class PairDeviceFlow {
+class PairDeviceFlow with WalletConnectFlowMixin<PairDeviceStep> {
+  @override
   final WalletConnectService walletConnect;
+  @override
   final BlockchainService blockchain;
   final VaultKeyService vaultKeyService;
   final EciesService ecies;
@@ -88,9 +91,15 @@ class PairDeviceFlow {
 
   bool _busy = false;
   bool get isBusy => _busy;
+  @override
+  bool get busy => _busy;
+  @override
+  set busy(bool value) => _busy = value;
 
   PairDeviceStep step = PairDeviceStep.form;
+  @override
   String? errorMessage;
+  @override
   String? connectedAddress;
   EthereumAddress? controller;
   ScannedDevicePayload? scannedDevice;
@@ -100,27 +109,16 @@ class PairDeviceFlow {
     onChange();
   }
 
+  @override
+  PairDeviceStep get connectingWalletStep => PairDeviceStep.connectingWallet;
+  @override
+  PairDeviceStep get formStep => PairDeviceStep.form;
+  @override
+  void setStep(PairDeviceStep newStep) => _set(newStep);
+
   void setScannedDevice(ScannedDevicePayload payload) {
     scannedDevice = payload;
     onChange();
-  }
-
-  Future<void> connectWallet(BuildContext context) async {
-    if (_busy) return;
-    _busy = true;
-    errorMessage = null;
-    _set(PairDeviceStep.connectingWallet);
-    try {
-      await walletConnect.init(context);
-      await walletConnect.openConnectModal();
-      connectedAddress = walletConnect.connectedAddress;
-      _set(PairDeviceStep.form);
-    } catch (e) {
-      errorMessage = e.toString();
-      _set(PairDeviceStep.form);
-    } finally {
-      _busy = false;
-    }
   }
 
   Future<void> pairDevice({String? labelOverride}) async {
@@ -156,7 +154,7 @@ class PairDeviceFlow {
         to: smartAccount.hex,
         data: bytesToHex(commitExecuteCalldata, include0x: true),
       );
-      final commitOk = await _waitForReceipt(commitTxHash);
+      final commitOk = await waitForReceipt(commitTxHash);
       if (!commitOk) {
         throw Exception('commitDevice transaction reverted on-chain.');
       }
@@ -227,22 +225,7 @@ class PairDeviceFlow {
       to: smartAccount.hex,
       data: bytesToHex(calldata, include0x: true),
     );
-    return _waitForReceipt(txHash);
-  }
-
-  Future<bool> _waitForReceipt(
-    String txHash, {
-    Duration timeout = const Duration(minutes: 5),
-    Duration pollInterval = const Duration(seconds: 2),
-  }) async {
-    final deadline = DateTime.now().add(timeout);
-    while (DateTime.now().isBefore(deadline)) {
-      final confirmed = await blockchain.isTransactionConfirmed(txHash);
-      if (confirmed != null) return confirmed;
-      await Future.delayed(pollInterval);
-    }
-    throw TimeoutException(
-        'Transaction $txHash was not mined within $timeout.');
+    return waitForReceipt(txHash);
   }
 
   void dispose() {

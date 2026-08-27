@@ -18,6 +18,7 @@ import '../services/pimlico_bundler_client.dart';
 import '../services/session_creator.dart';
 import '../services/smart_account_activity_scanner.dart';
 import '../theme.dart';
+import '../utils/eth_amount.dart' as eth_amount;
 
 enum _WalletView { eth, arweave }
 
@@ -149,8 +150,15 @@ class _WalletScreenState extends State<WalletScreen> {
       final address = await _arweaveWalletService.address();
       if (!mounted) return;
       setState(() => _arweaveAddress = address);
-      await _loadArweaveBalance(address);
-      await _loadArweaveHistory(address);
+      // Independentes entre si (cada uma só depende de `address`, cada uma
+      // já é best-effort com seu próprio try/catch) — disparadas em paralelo
+      // em vez de sequencial (achado P82 #8, inconsistente com
+      // `act_as_guardian_screen.dart`, que já usa Future.wait pro mesmo
+      // padrão).
+      await Future.wait([
+        _loadArweaveBalance(address),
+        _loadArweaveHistory(address),
+      ]);
     } catch (e) {
       if (mounted) setState(() => _arweaveError = '$e');
     } finally {
@@ -1102,33 +1110,22 @@ class _WithdrawSheetState extends State<_WithdrawSheet> {
 // EtherAmount.fromBase10String — esse método do web3dart faz
 // `BigInt.parse(amount)` puro sobre a string recebida (multiplicado pelo
 // fator da unidade), ou seja NÃO entende ponto decimal, só inteiros na
-// unidade dada. Como o formulário aceita "0.05" ETH, o parse tem que ser
-// manual: separa parte inteira/fracionária e preenche a fracionária até 18
-// casas (wei). Retorna null pra entrada vazia, não-numérica, negativa ou com
-// mais de 18 casas decimais (mais preciso que 1 wei — rejeitado em vez de
-// truncado silenciosamente).
+// unidade dada. Retorna null pra entrada vazia, não-numérica, negativa ou
+// com mais de 18 casas decimais (mais preciso que 1 wei — rejeitado em vez
+// de truncado silenciosamente); a validação sintática (regex) fica aqui, o
+// cálculo em si delega pra `eth_amount.parseEthToWei` (mesmo parsing
+// decimal→wei usado em CreateIdentityScreen — achado de duplicação P82 #6).
 BigInt? _parseEtherToWei(String input) {
   final trimmed = input.trim();
   if (trimmed.isEmpty) return null;
-  final match = RegExp(r'^(\d+)(\.(\d+))?$').firstMatch(trimmed);
-  if (match == null) return null;
-
-  final wholePart = match.group(1)!;
-  final fracPart = match.group(3) ?? '';
-  if (fracPart.length > 18) return null;
-
-  final paddedFrac = fracPart.padRight(18, '0');
-  final fracValue = paddedFrac.isEmpty ? BigInt.zero : BigInt.parse(paddedFrac);
-  return BigInt.parse(wholePart) * BigInt.from(10).pow(18) + fracValue;
+  if (!RegExp(r'^\d+(\.\d+)?$').hasMatch(trimmed)) return null;
+  try {
+    return eth_amount.parseEthToWei(trimmed);
+  } on FormatException {
+    return null;
+  }
 }
 
-// Inverso de _parseEtherToWei — string decimal exata (sem o arredondamento
-// de double de EtherAmount.getValueInUnit), usada pro botão "Max" pra que o
-// valor preenchido sempre passe na validação de <= saldo disponível.
-String _weiToDecimalString(BigInt wei) {
-  final base = BigInt.from(10).pow(18);
-  final whole = wei ~/ base;
-  final frac = (wei % base).toString().padLeft(18, '0');
-  final trimmedFrac = frac.replaceFirst(RegExp(r'0+$'), '');
-  return trimmedFrac.isEmpty ? '$whole' : '$whole.$trimmedFrac';
-}
+// Inverso de _parseEtherToWei — usada pro botão "Max" pra que o valor
+// preenchido sempre passe na validação de <= saldo disponível.
+String _weiToDecimalString(BigInt wei) => eth_amount.weiToDecimalString(wei);

@@ -1,10 +1,10 @@
 import 'dart:convert';
-import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart' show sha256;
 import 'package:pointycastle/export.dart' as pc;
 
+import '../utils/random_bytes.dart';
 import 'arweave_b64url.dart';
 import 'arweave_deep_hash.dart';
 import 'arweave_merkle.dart';
@@ -155,7 +155,7 @@ Uint8List signatureData(ArweaveTransaction tx) {
 // nem a reimplementação de verificação em JS do ArLocal).
 void signTransaction(ArweaveTransaction tx, pc.RSAPrivateKey privateKey) {
   final sigData = signatureData(tx);
-  final saltBytes = Uint8List.fromList(List.generate(32, (_) => Random.secure().nextInt(256)));
+  final saltBytes = randomBytes32();
 
   final signer = pc.PSSSigner(pc.RSAEngine(), pc.SHA256Digest(), pc.SHA256Digest());
   signer.init(true, pc.ParametersWithSalt(pc.PrivateKeyParameter<pc.RSAPrivateKey>(privateKey), saltBytes));

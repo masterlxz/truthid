@@ -41,4 +41,29 @@ void main() {
       expect(parseEthToWei('0.1'), BigInt.parse('100000000000000000'));
     });
   });
+
+  group('weiToDecimalString', () {
+    test('inverso exato de parseEthToWei pra um valor inteiro', () {
+      expect(weiToDecimalString(BigInt.from(10).pow(18)), '1');
+    });
+
+    test('inverso exato de parseEthToWei pra uma fração comum', () {
+      expect(
+          weiToDecimalString(BigInt.parse('1000000000000000')), '0.001');
+    });
+
+    test('zero', () {
+      expect(weiToDecimalString(BigInt.zero), '0');
+    });
+
+    test('zeros à direita da fração são cortados', () {
+      expect(
+          weiToDecimalString(BigInt.parse('1500000000000000000')), '1.5');
+    });
+
+    test('round-trip com parseEthToWei', () {
+      final wei = parseEthToWei('0.000000000000000001');
+      expect(weiToDecimalString(wei), '0.000000000000000001');
+    });
+  });
 }

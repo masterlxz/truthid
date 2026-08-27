@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:web3dart/crypto.dart';
 import 'package:web3dart/web3dart.dart';
 import '../contracts/abis.dart';
+import '../utils/abi_encoding.dart' as abi_encoding;
 import '../utils/user_operation.dart' show entryPointV07Address;
 
 // Dados de uma sessão retornados pelo contrato
@@ -590,10 +591,8 @@ class BlockchainService {
   // Endereço (20 bytes) alinhado à direita num slot de 32 bytes — mesma
   // convenção ABI que _uint256Bytes já usa, só com zeros à esquerda em vez
   // de um valor numérico. Usado pelos calldata builders abaixo.
-  Uint8List _addressBytes(EthereumAddress address) {
-    final raw = address.addressBytes;
-    return Uint8List.fromList([...Uint8List(32 - raw.length), ...raw]);
-  }
+  Uint8List _addressBytes(EthereumAddress address) =>
+      abi_encoding.addressBytes(address);
 
   // Calldata de IdentityRegistry.createIdentity(username, controller, v, r, s)
   // — codificado à mão, mesmo motivo de getIdentityByUsername/hasVault/getVault
@@ -895,19 +894,13 @@ class BlockchainService {
     return result[0] as EthereumAddress;
   }
 
-  Uint8List _uint256Bytes(int value) {
-    final hex = value.toRadixString(16).padLeft(64, '0');
-    return Uint8List.fromList(List.generate(
-        32, (i) => int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16)));
-  }
+  Uint8List _uint256Bytes(int value) =>
+      abi_encoding.uint256Bytes(BigInt.from(value));
 
   // Variante de _uint256Bytes pra identityId, que é BigInt no resto deste
   // arquivo (ver getSessionsForIdentity) — _uint256Bytes só aceita int.
-  Uint8List _uint256BytesFromBigInt(BigInt value) {
-    final hex = value.toRadixString(16).padLeft(64, '0');
-    return Uint8List.fromList(List.generate(
-        32, (i) => int.parse(hex.substring(i * 2, i * 2 + 2), radix: 16)));
-  }
+  Uint8List _uint256BytesFromBigInt(BigInt value) =>
+      abi_encoding.uint256Bytes(value);
 
   // Retorna true se a identidade já tem um vault publicado. Seguro chamar
   // especulativamente (ao contrário de getVault, que reverte se não existir).
@@ -1193,11 +1186,14 @@ class TxReceiptInfo {
   const TxReceiptInfo({required this.gasUsed, required this.effectiveGasPrice});
 }
 
-// Proposta de recovery social lida do RecoveryManager. O Mobile só escreve
-// configureGuardians (P68, fatia 2, owner-gated via WalletConnect) — propor/
-// aprovar/executar/cancelar recovery de OUTRA identidade como guardian segue
-// exclusivo do Desktop (não é owner-gated, mas fora de escopo desta rodada;
-// ver P75 em PENDING.md).
+// Proposta de recovery social lida do RecoveryManager. `configureGuardians`
+// (owner-gated, via WalletConnect direto na smart account) e propor/aprovar/
+// executar recovery de OUTRA identidade como guardian (não owner-gated,
+// assinado direto pela wallet do guardian) já rodam pelo Mobile — ver
+// `configure_guardians_screen.dart` (P68 fatia 2) e
+// `act_as_guardian_screen.dart` (P68 fatia 3). Só cancelar uma proposta
+// (`cancelRecovery`) e revogar device seguem fora de escopo — ver P75 em
+// PENDING.md.
 class RecoveryProposal {
   final String proposedBy;
   final String newController;

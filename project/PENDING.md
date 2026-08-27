@@ -4,11 +4,18 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-08-27 (Sessão 227: P82 itens (1)/(2)/(3) corrigidos — reatividade do campo
-> de username em `act_as_guardian_screen.dart`, catch faltando em `checkAvailability()` de
-> `create_identity_screen.dart`, timeout defensivo em `WalletConnectService.openConnectModal()`;
-> achados de limpeza (4)-(10) ficaram de fora desta rodada, decisão do dono do projeto; sem
-> `flutter` nesta máquina pra rodar os testes, revisão só manual). Sessão 226, 6ª parte: os 2 achados de reuso restantes do P84 (itens
+> Última atualização: 2026-08-27 (Sessão 227, 2ª parte: **P82 FECHADO por completo** — os 7 achados de
+> limpeza/duplicação (4)-(10) também corrigidos: mixin `WalletConnectFlowMixin` deduplica
+> `connectWallet`/`_waitForReceipt` nos 4 flows do Mobile; `abi_encoding.dart` compartilhado entre
+> `identity_consent_hash.dart`/`BlockchainService`; `eth_amount.dart` ganhou `weiToDecimalString` e
+> `wallet_screen.dart` passou a delegar o parsing decimal↔wei em vez de duplicá-lo;
+> `random_bytes.dart` virou a única fonte do salt Arweave (2 call-sites migrados); 2 lugares com
+> `await` sequencial viraram `Future.wait`; 1 comentário desatualizado corrigido em
+> `blockchain_service.dart`. Sem `flutter` nesta máquina pra rodar os testes — revisão só manual,
+> falta validar com o suite de verdade. Sessão 227, 1ª parte: P82 itens (1)/(2)/(3) corrigidos —
+> reatividade do campo de username em `act_as_guardian_screen.dart`, catch faltando em
+> `checkAvailability()` de `create_identity_screen.dart`, timeout defensivo em
+> `WalletConnectService.openConnectModal()`). Sessão 226, 6ª parte: os 2 achados de reuso restantes do P84 (itens
 > 9-10) **corrigidos** — **(9)** novo `config::get_keyring_or_file`/`set_keyring_or_file` (Rust)
 > deduplica o padrão "keyring do SO → fallback em arquivo → trata string vazia como ausente" (P71),
 > antes copiado em `get_device_key_hex`/`get_arweave_wallet`/`set_vault_key` (`lib.rs`),
@@ -104,10 +111,61 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 
 ## Não Resolvidas
 
-### P82 — `/code-review` do P68 (fluxo 100% mobile): (1)/(2)/(3) ✅ corrigidos (Sessão 227); (4)-(10) limpeza seguem em aberto
+### P82 — `/code-review` do P68 (fluxo 100% mobile): ✅ FECHADO por completo — (1)-(10), todos corrigidos (Sessão 227)
 
-**Atualização (Sessão 227)**: os 2 bugs reais de correção e o risco de hang foram corrigidos, a pedido
-do dono do projeto (achados (4)-(10), de limpeza/duplicação, ficaram de fora desta rodada).
+**Atualização 2 (Sessão 227, mesma sessão)**: os 7 achados de limpeza/duplicação restantes, (4)-(10),
+também foram corrigidos, a pedido do dono do projeto.
+- **(4) `connectWallet(BuildContext)`/`_waitForReceipt` deduplicados**: novo
+  `mixin WalletConnectFlowMixin<Step>` (`lib/utils/wallet_connect_flow_mixin.dart`) com os 2 métodos
+  compartilhados pelos 4 flows (`CreateIdentityFlow`, `PairDeviceFlow`, `ConfigureGuardiansFlow`,
+  `ActAsGuardianFlow`) — cada classe passou a `with WalletConnectFlowMixin<XStep>`, expondo só o que a
+  mixin precisa (getter/setter de `busy`, `connectingWalletStep`/`formStep`/`setStep`); `errorMessage`/
+  `connectedAddress`/`walletConnect`/`blockchain` já eram campos públicos, satisfazem os
+  getters/setters abstratos da mixin sem boilerplate extra. `_waitForReceipt` virou `waitForReceipt`
+  (público, chamado de fora da classe que o originou). Comportamento idêntico nas 4 classes — mesma
+  guarda síncrona de `busy`, mesmo timeout/poll de 5min/2s. Cobertura de regressão: os testes
+  existentes das 4 telas já exercitam `connectWallet`/`waitForReceipt` de ponta a ponta contra a nova
+  implementação (nenhum teste precisou mudar).
+- **(5) `identity_consent_hash.dart` não reimplementa mais o encoding ABI de `BlockchainService`**:
+  novo módulo `lib/utils/abi_encoding.dart` com `uint256Bytes`/`addressBytes` públicos —
+  `identity_consent_hash.dart` importa direto; `BlockchainService._uint256Bytes`/
+  `_uint256BytesFromBigInt`/`_addressBytes` viraram wrappers de 1 linha delegando pro módulo
+  compartilhado, mantendo os ~30 call sites internos intactos (nomes/assinaturas privados
+  preservados, só a implementação mudou). Teste novo dedicado (`abi_encoding_test.dart`) + os vetores
+  de hash conhecidos de `identity_consent_hash_test.dart` continuam validando o mesmo algoritmo.
+- **(6) `eth_amount.dart`/`wallet_screen.dart` não duplicam mais o parsing decimal↔wei**:
+  `eth_amount.dart` ganhou `weiToDecimalString` (movida de `wallet_screen.dart`, código idêntico);
+  `wallet_screen.dart._parseEtherToWei` manteve sua validação por regex (nullable, sem negativo,
+  sem `.` sem dígito antes) mas delega o cálculo pra `eth_amount.parseEthToWei` — equivalência
+  verificada campo a campo antes da troca (mesma aceitação, mesmo resultado). Testes novos em
+  `eth_amount_test.dart` pra `weiToDecimalString` (incl. round-trip com `parseEthToWei`).
+- **(7) `random_bytes.dart` agora é a única fonte do salt de 32 bytes**: os 2 call-sites que a
+  motivaram (`arweave_transaction.dart:158`, `arweave_isolate.dart:39`) foram migrados pra chamar
+  `randomBytes32()` (o comentário de `arweave_isolate.dart` sobre o salt precisar ser gerado *dentro*
+  do isolate continua válido — a chamada ainda executa lá dentro, só a função mudou de arquivo); os 2
+  `import 'dart:math'` ficaram sem uso e foram removidos. De brinde, `randomBytes32()` passou a
+  instanciar `Random.secure()` 1x fora do loop, não 32x dentro do `List.generate`.
+- **(8) `wallet_screen.dart._loadArweaveWallet` busca saldo e histórico em paralelo**: os 2 `await`
+  sequenciais viraram `Future.wait([...])` — as 2 chamadas só dependem de `address`, cada uma já é
+  best-effort com seu próprio try/catch interno, sem ordem que importe.
+- **(9) `configure_guardians_screen.dart.submit` busca identidade e proposta em paralelo**: quando
+  `controller` ainda não está em cache, `getIdentityByUsername`/`getProposal` agora disparam juntos
+  (`Future.wait` implícito via 2 futures independentes) em vez de sequencial — preserva o cache de
+  `controller` (só busca de novo se `null`) e o erro cedo se o controller não resolver.
+- **(10) comentário desatualizado em `blockchain_service.dart` (perto de `RecoveryProposal`)
+  corrigido**: não diz mais que ação de guardião em nome de outra identidade é "exclusivo do
+  Desktop" — `configure_guardians_screen.dart`/`act_as_guardian_screen.dart` já fazem isso pelo
+  Mobile (P68 fatias 2/3); só cancelar proposta e revogar device seguem fora de escopo (P75).
+- Sem `flutter`/`dart` instalados nesta máquina pra rodar `flutter test`/`flutter analyze` (mesma
+  limitação de P62, já registrada na atualização anterior) — todo o refactor foi revisado
+  manualmente linha a linha, chaves/parênteses conferidos por script; falta rodar o suite completo
+  numa máquina com Flutter antes de considerar P82 100% validado (correção, não só revisão).
+  **P82 está fechado no código — 10/10 achados corrigidos — mas ainda sem confirmação por teste
+  automatizado rodado de verdade.**
+
+**Atualização 1 (Sessão 227)**: os 2 bugs reais de correção e o risco de hang foram corrigidos, a
+pedido do dono do projeto (achados (4)-(10), de limpeza/duplicação, ficaram de fora desta rodada
+inicial — corrigidos na Atualização 2, mesma sessão).
 - **(1) `act_as_guardian_screen.dart`** — `_usernameController` ganhou um listener
   (`addListener`/`removeListener` em `initState`/`dispose`) que chama `setState` a cada digitação,
   igual ao padrão já usado pra reagir a `flow.onChange`; o botão "Look up" agora habilita/desabilita

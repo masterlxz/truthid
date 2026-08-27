@@ -33,3 +33,15 @@ BigInt parseEthToWei(String ethText) {
       BigInt.parse(fraction.isEmpty ? '0' : fraction);
   return negative ? -wei : wei;
 }
+
+/// Inverso de [parseEthToWei] — string decimal exata (sem o arredondamento
+/// de `double` de `EtherAmount.getValueInUnit`), usada onde o valor
+/// preenchido de volta precisa bater exatamente com o wei original (ex:
+/// botão "Max" de saque, que preenche o campo com o saldo disponível).
+String weiToDecimalString(BigInt wei) {
+  final base = BigInt.from(10).pow(18);
+  final whole = wei ~/ base;
+  final frac = (wei % base).toString().padLeft(18, '0');
+  final trimmedFrac = frac.replaceFirst(RegExp(r'0+$'), '');
+  return trimmedFrac.isEmpty ? '$whole' : '$whole.$trimmedFrac';
+}

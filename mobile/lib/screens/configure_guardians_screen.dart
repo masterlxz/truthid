@@ -8,6 +8,7 @@ import '../l10n/l10n_extensions.dart';
 import '../services/blockchain_service.dart';
 import '../services/wallet_connect_service.dart';
 import '../theme.dart';
+import '../utils/wallet_connect_flow_mixin.dart';
 
 // Mesmo limite de RecoveryManager.MAX_GUARDIANS (contracts/src/RecoveryManager.sol).
 const _maxGuardians = 20;
@@ -27,8 +28,10 @@ enum ConfigureGuardiansStep { form, connectingWallet, submitting, done }
 /// chamar o flow). Aqui só entra o que precisa de rede: confirmar que não há
 /// proposta de recovery ativa antes de gastar gas numa tx que reverteria com
 /// `ActiveProposalExists()`.
-class ConfigureGuardiansFlow {
+class ConfigureGuardiansFlow with WalletConnectFlowMixin<ConfigureGuardiansStep> {
+  @override
   final WalletConnectService walletConnect;
+  @override
   final BlockchainService blockchain;
   final void Function() onChange;
   final String username;
@@ -43,9 +46,15 @@ class ConfigureGuardiansFlow {
 
   bool _busy = false;
   bool get isBusy => _busy;
+  @override
+  bool get busy => _busy;
+  @override
+  set busy(bool value) => _busy = value;
 
   ConfigureGuardiansStep step = ConfigureGuardiansStep.form;
+  @override
   String? errorMessage;
+  @override
   String? connectedAddress;
   EthereumAddress? controller;
   bool hasActiveProposal = false;
@@ -55,23 +64,13 @@ class ConfigureGuardiansFlow {
     onChange();
   }
 
-  Future<void> connectWallet(BuildContext context) async {
-    if (_busy) return;
-    _busy = true;
-    errorMessage = null;
-    _set(ConfigureGuardiansStep.connectingWallet);
-    try {
-      await walletConnect.init(context);
-      await walletConnect.openConnectModal();
-      connectedAddress = walletConnect.connectedAddress;
-      _set(ConfigureGuardiansStep.form);
-    } catch (e) {
-      errorMessage = e.toString();
-      _set(ConfigureGuardiansStep.form);
-    } finally {
-      _busy = false;
-    }
-  }
+  @override
+  ConfigureGuardiansStep get connectingWalletStep =>
+      ConfigureGuardiansStep.connectingWallet;
+  @override
+  ConfigureGuardiansStep get formStep => ConfigureGuardiansStep.form;
+  @override
+  void setStep(ConfigureGuardiansStep newStep) => _set(newStep);
 
   /// `guardians` já validado pelo widget (endereços parseados, sem
   /// duplicata, dentro do limite; `threshold` já dentro do range 1..N).
@@ -83,14 +82,22 @@ class ConfigureGuardiansFlow {
     _busy = true;
     errorMessage = null;
     try {
-      controller ??=
-          (await blockchain.getIdentityByUsername(username))?.controller;
+      // Os dois só dependem de `username`, sem depender um do outro —
+      // disparados em paralelo em vez de sequencial (achado P82 #9). O
+      // controller só é buscado de novo se ainda não estiver em cache.
+      final identityFuture =
+          controller == null ? blockchain.getIdentityByUsername(username) : null;
+      final proposalFuture = blockchain.getProposal(username);
+
+      if (identityFuture != null) {
+        controller = (await identityFuture)?.controller;
+      }
       final smartAccount = controller;
       if (smartAccount == null) {
         throw Exception('Could not resolve the smart account controller.');
       }
 
-      final activeProposal = await blockchain.getProposal(username);
+      final activeProposal = await proposalFuture;
       if (activeProposal != null &&
           !activeProposal.executed &&
           !activeProposal.cancelled) {
@@ -115,7 +122,7 @@ class ConfigureGuardiansFlow {
         to: smartAccount.hex,
         data: bytesToHex(executeCalldata, include0x: true),
       );
-      final ok = await _waitForReceipt(txHash);
+      final ok = await waitForReceipt(txHash);
       if (!ok) {
         throw Exception('configureGuardians transaction reverted on-chain.');
       }
@@ -127,21 +134,6 @@ class ConfigureGuardiansFlow {
     } finally {
       _busy = false;
     }
-  }
-
-  Future<bool> _waitForReceipt(
-    String txHash, {
-    Duration timeout = const Duration(minutes: 5),
-    Duration pollInterval = const Duration(seconds: 2),
-  }) async {
-    final deadline = DateTime.now().add(timeout);
-    while (DateTime.now().isBefore(deadline)) {
-      final confirmed = await blockchain.isTransactionConfirmed(txHash);
-      if (confirmed != null) return confirmed;
-      await Future.delayed(pollInterval);
-    }
-    throw TimeoutException(
-        'Transaction $txHash was not mined within $timeout.');
   }
 
   void dispose() {
