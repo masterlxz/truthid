@@ -5,7 +5,16 @@ plugins {
 
 android {
     namespace = "com.truthid.truthid_mobile"
-    compileSdk = flutter.compileSdkVersion
+    // Travado em 36 (não flutter.compileSdkVersion) — é o valor recomendado
+    // pelo erro de AAR metadata do primeiro build de release desde o P68
+    // (WalletConnect/reown_appkit), mas SOZINHO não resolve: o build de
+    // release continua quebrado porque o compileSdk problemático é do
+    // próprio `coinbase_wallet_sdk` (dependência transitiva do reown_appkit,
+    // travada em 31, sem correção disponível) — travado no artefato já
+    // publicado, não no app consumidor. Ver P86 em PENDING.md pro fix real
+    // (ainda não feito). Mantido em 36 mesmo assim porque é correto e vai
+    // ser necessário de qualquer forma quando o P86 for corrigido.
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
