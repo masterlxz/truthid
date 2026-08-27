@@ -4,7 +4,11 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-08-27 (Sessão 227, 3ª parte: **P82 validado de verdade via Docker**
+> Última atualização: 2026-08-27 (Sessão 227, 4ª parte: **P85 registrada e implementada** — auto-update
+> real no Desktop (Windows/macOS/Linux via AppImage) via `tauri-plugin-updater`, chave de assinatura
+> gerada e guardada nos secrets do GitHub + backup local fora do repo; `tsc`/`vitest`/`cargo
+> check`/`cargo test`/`clippy` limpos; falta validar com um release de verdade (só dá pra testar
+> cortando uma tag e publicando). Sessão 227, 3ª parte: **P82 validado de verdade via Docker**
 > (`docker compose run --rm flutter ...` — dono do projeto lembrou que os testes rodam assim, sem
 > precisar Flutter local) — `flutter analyze` limpo, `flutter test --concurrency=1 test/`: **702/702
 > testes passando, 2 pulados (tag `arlocal`), 0 falhas** nos 76 arquivos, incluindo todos os 8 tocados
@@ -113,6 +117,12 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 ---
 
 ## Não Resolvidas
+
+### P85 — Auto-update real no Desktop via `tauri-plugin-updater` — implementado, falta validar com um release de verdade (Sessão 227)
+
+| ID | Item | Onde se originou | Prioridade |
+|---|---|---|---|
+| P85 | Dono do projeto perguntou se dava pra automatizar a distribuição (apt + "atualiza sozinho quando builda no GitHub?"). Investigação confirmou: apt já é real (repo publicado, `apt install truth-id` funciona), mas **não havia auto-update nenhum** — só um checador manual (`useUpdateCheck.ts`) comparando com `releases/latest` e mostrando um link pra baixar na mão; o build do CI também só dispara em tag `v*` + release fica draft até publicação manual (isso continua igual, é o fluxo certo). Escopo escolhido pelo dono do projeto: Windows + macOS + **Linux via AppImage** (não `.deb` — pacote de sistema gerenciado pelo `apt` não pode ser autossubstituído por dentro do app; achado durante a implementação: o AppImage e o `.app.tar.gz` do macOS **já existiam** nos releases publicados, `bundle.targets: "all"` já builda os 2, sem mudança de packaging necessária). **Implementado**: `tauri-plugin-updater`+`tauri-plugin-process` (Rust, guard `#[cfg(desktop)]`/`cfg(any(macos, windows, linux))`, mobile nem builda hoje) e os pacotes JS equivalentes; `tauri.conf.json` ganhou `bundle.createUpdaterArtifacts: true` + `plugins.updater` (pubkey embutida, endpoint `https://github.com/masterlxz/truthid/releases/latest/download/latest.json`, `windows.installMode: "passive"`); capabilities ganharam `updater:default`/`process:allow-restart`; `useUpdateCheck.ts` reescrito pra usar `check()`/`downloadAndInstall()` de verdade (máquina de estados `idle→available→downloading→ready/error`, `restartNow()` separado de `installUpdate()` de propósito — reiniciar fecha trabalho em andamento, tipo assinar uma identidade, então quem usa decide o momento); banner em `App.tsx` e i18n (4 locales) atualizados pros novos estados. `build.yml` ganhou `TAURI_SIGNING_PRIVATE_KEY`/`_PASSWORD` (secrets novos no repo) + `uploadUpdaterJson: true` explícito. **Par de chaves de assinatura gerado nesta sessão** (`tauri signer generate --ci`) — a pública foi embutida no `tauri.conf.json` (committada, é pra ser pública); a privada + senha foram direto pros secrets do GitHub (`gh secret set`) e a cópia local fica em `~/.truthid-secrets/tauri-updater-key/` (fora do repo git, nunca commitada) — **⚠️ fazer backup dessa pasta em algum lugar durável (gerenciador de senhas), perder a chave privada quebra a cadeia de confiança do updater pra sempre, mesmo problema já registrado pra chave GPG do apt em `ROADMAP.md`**. Validado nesta sessão: `npx tsc --noEmit` limpo, `npx vitest run` 185/185 (6 testes novos em `useUpdateCheck.test.ts`), `cargo check`/`cargo test --lib` (233/233, 6 ignorados, pré-existente) / `cargo clippy --lib` (só o warning pré-existente de `vault.rs`) limpos. **O que falta, e só dá pra validar com um release real**: cortar uma tag nova (`v2.2.0` ou próxima), publicar o release (sai do draft), e confirmar que uma instalação da versão anterior detecta, baixa, instala e reinicia sozinha nas 3 plataformas — nada disso roda em CI/testes unitários, é o próprio mecanismo de distribuição sendo testado. | conversa direta (Sessão 227) | 🟡 Média — funcionalidade nova, sem usuários dependendo dela ainda; validar no próximo release de verdade |
 
 ### P82 — `/code-review` do P68 (fluxo 100% mobile): ✅ FECHADO por completo — (1)-(10) corrigidos e suite completa validada via Docker (Sessão 227)
 

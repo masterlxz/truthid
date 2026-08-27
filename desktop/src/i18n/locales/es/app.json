@@ -12,6 +12,11 @@
   },
   "updateBanner": {
     "available": "TruthID {{version}} disponible",
+    "update": "Actualizar ahora",
+    "downloading": "Descargando actualización…",
+    "ready": "TruthID {{version}} listo para reiniciar",
+    "restart": "Reiniciar ahora",
+    "error": "Error al actualizar",
     "download": "Descargar"
   },
   "wrongNetwork": {

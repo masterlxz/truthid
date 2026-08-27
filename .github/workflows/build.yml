@@ -68,12 +68,17 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: desktop
           tagName: ${{ github.ref_name }}
           releaseName: TruthID ${{ github.ref_name }}
           releaseDraft: true
           includeDebug: false
+          # gera/anexa latest.json ao release — é o endpoint que
+          # plugins.updater.endpoints aponta em tauri.conf.json (auto-update)
+          uploadUpdaterJson: true
 
   # Job separado (não faz parte da matrix acima) — a extensão builda uma vez
   # só, sem depender de SO nem do toolchain Rust/Tauri. O .zip vira asset do

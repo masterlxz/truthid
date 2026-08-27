@@ -22,6 +22,7 @@ tauri = { version = "2", features = [] }
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-fs = "2"
+tauri-plugin-process = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 keyring = "2"
@@ -59,4 +60,10 @@ rsa = "0.9.10"
 # compilaria). Ver project/INDEX.md, item "QR no TOTP" do backlog.
 [target.'cfg(target_os = "linux")'.dependencies]
 webkit2gtk = "=2.0.2"
+
+# Auto-update — só desktop, mesmo guard recomendado pela doc oficial do
+# plugin (mobile não tem conceito de auto-update fora da loja, mas este
+# crate nem builda alvo mobile hoje, gen/ só tem schemas).
+[target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
+tauri-plugin-updater = "2"
 

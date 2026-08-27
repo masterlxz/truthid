@@ -1207,6 +1207,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_process::init())
         .manage(local_signer_server::LocalSignerServerState::default())
         .manage(std::sync::Arc::new(
             sign_request::SignRequestState::default(),
@@ -1227,6 +1228,15 @@ pub fn run() {
             // pra rodar em tauri::async_runtime::spawn — um State<'_, T> tomado
             // aqui ficaria preso ao lifetime do `app` desta closure de setup.
             use tauri::{Emitter, Manager};
+
+            // Auto-update (checar + baixar + instalar) — `#[cfg(desktop)]`
+            // porque tauri-plugin-updater não builda pra alvo mobile (nem
+            // faz sentido lá, atualização é sempre via loja); este projeto
+            // não builda alvo mobile hoje (gen/ só tem schemas), mas o guard
+            // é o recomendado pela doc oficial do plugin, sem custo nenhum.
+            #[cfg(desktop)]
+            app.handle()
+                .plugin(tauri_plugin_updater::Builder::new().build())?;
 
             // Linux (WebKitGTK) nega todo pedido de permissão do navegador por
             // padrão — sem isso, getUserMedia (scan de QR via webcam) sempre

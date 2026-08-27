@@ -622,6 +622,11 @@ code, .address {
 }
 
 .update-banner-link {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font: inherit;
+  cursor: pointer;
   color: var(--color-accent);
   font-weight: 600;
   text-decoration: underline;

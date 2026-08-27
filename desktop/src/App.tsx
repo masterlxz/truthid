@@ -71,7 +71,7 @@ function App() {
   const queryClient = useQueryClient();
 
   const { username: storedUsername, save: saveUsername, clear: clearUsername } = useStoredUsername();
-  const { updateVersion, updateUrl } = useUpdateCheck();
+  const { status: updateStatus, updateVersion, installUpdate, restartNow } = useUpdateCheck();
   const [updateDismissed, setUpdateDismissed] = useState(false);
   const { needsBackup, markConfirmed } = useLocalWalletBackupGate();
   const { isLocked, unlock, reset } = useAppLock();
@@ -260,13 +260,44 @@ function App() {
 
         {updateVersion && !updateDismissed && (
           <div className="update-banner">
-            <span>⬆ {t("app.updateBanner.available", { version: updateVersion })}</span>
-            <a href={updateUrl} target="_blank" rel="noreferrer" className="update-banner-link">
-              {t("app.updateBanner.download")}
-            </a>
-            <button className="update-banner-dismiss" onClick={() => setUpdateDismissed(true)}>
-              ✕
-            </button>
+            {updateStatus === "available" && (
+              <>
+                <span>⬆ {t("app.updateBanner.available", { version: updateVersion })}</span>
+                <button className="update-banner-link" onClick={installUpdate}>
+                  {t("app.updateBanner.update")}
+                </button>
+                <button className="update-banner-dismiss" onClick={() => setUpdateDismissed(true)}>
+                  ✕
+                </button>
+              </>
+            )}
+            {updateStatus === "downloading" && (
+              <span>⬆ {t("app.updateBanner.downloading")}</span>
+            )}
+            {updateStatus === "ready" && (
+              <>
+                <span>⬆ {t("app.updateBanner.ready", { version: updateVersion })}</span>
+                <button className="update-banner-link" onClick={restartNow}>
+                  {t("app.updateBanner.restart")}
+                </button>
+              </>
+            )}
+            {updateStatus === "error" && (
+              <>
+                <span>⬆ {t("app.updateBanner.error")}</span>
+                <a
+                  href="https://github.com/masterlxz/truthid/releases/latest"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="update-banner-link"
+                >
+                  {t("app.updateBanner.download")}
+                </a>
+                <button className="update-banner-dismiss" onClick={() => setUpdateDismissed(true)}>
+                  ✕
+                </button>
+              </>
+            )}
           </div>
         )}
 

@@ -2410,3 +2410,54 @@ maior ganho de fricção de onboarding — com o pedaço 2 (migração) como fat
 precisando primeiro resolver a pergunta em aberto dos guardiões e decidir entre "UI que força o
 fluxo de 4 passos" vs "função atômica nova no contrato". Registrado como P78 em `PENDING.md`. Nada
 implementado.
+
+### Auto-update do Desktop via `tauri-plugin-updater` — implementado (Sessão 227, 2026-08-27)
+
+**Contexto**: depois de fechar P82 (Mobile), o dono do projeto perguntou se o app já suportava
+instalar via `apt` e se atualizava sozinho quando o CI buildava. Investigação confirmou o `apt`
+como real (repo publicado, ver seção "APT — implementado" acima), mas **nenhum auto-update
+existia** — só um checador manual (`useUpdateCheck.ts`) linkando pra página de release. Escopo
+escolhido pelo dono do projeto: Windows + macOS + Linux via **AppImage** (não `.deb` — pacote de
+sistema gerenciado pelo `apt` não pode ser autossubstituído por dentro do próprio app; é o `apt`
+que já cumpre esse papel pra quem instalou por lá).
+
+**Achado real no processo**: o AppImage e o `.app.tar.gz` do macOS **já existiam** nos releases
+publicados (`bundle.targets: "all"` no `tauri.conf.json` já builda os 2, sem ninguém ter mexido
+nisso de propósito) — nenhuma mudança de packaging foi necessária, só ligar o plugin.
+
+**Implementado**:
+- `tauri-plugin-updater`+`tauri-plugin-process` (Rust, `Cargo.toml`/`lib.rs`, guard
+  `#[cfg(desktop)]`/`cfg(any(macos, windows, linux))` — mobile nem builda hoje) + pacotes JS
+  equivalentes (`@tauri-apps/plugin-updater`/`plugin-process`).
+- `tauri.conf.json`: `bundle.createUpdaterArtifacts: true` + `plugins.updater` (pubkey embutida,
+  endpoint estático `https://github.com/masterlxz/truthid/releases/latest/download/latest.json` —
+  aponta pro `latest.json` que o `tauri-action` já anexa ao release quando `uploadUpdaterJson: true`;
+  `windows.installMode: "passive"`).
+- Capabilities (`capabilities/default.json`) ganharam `updater:default`/`process:allow-restart`.
+- `useUpdateCheck.ts` reescrito — máquina de estados `idle → available → downloading →
+  ready/error`; `restartNow()` fica separado de `installUpdate()` de propósito: reiniciar fecha
+  qualquer trabalho em andamento no app (assinar uma identidade, mexer no vault), então quem usa o
+  hook decide o momento, o download não força o restart sozinho. Banner em `App.tsx` + i18n (4
+  locales) atualizados pros novos estados (baixando/pronto/erro).
+- `.github/workflows/build.yml`: `TAURI_SIGNING_PRIVATE_KEY`/`TAURI_SIGNING_PRIVATE_KEY_PASSWORD`
+  passados pro step de build + `uploadUpdaterJson: true` explícito (documentando a dependência, em
+  vez de confiar no default).
+
+**Chave de assinatura**: gerada nesta sessão (`tauri signer generate --ci`, minisign). A pública
+foi embutida no `tauri.conf.json` (committada — é pra ser pública). A privada + senha foram direto
+pros secrets do GitHub (`gh secret set TAURI_SIGNING_PRIVATE_KEY`/`_PASSWORD`), nunca commitadas; a
+cópia local fica em `~/.truthid-secrets/tauri-updater-key/` (fora do repo git). **⚠️ Mesmo alerta já
+registrado pra chave GPG do apt**: fazer backup dessa pasta em algum lugar durável (gerenciador de
+senhas) — perder a chave privada quebra a cadeia de confiança do updater pra sempre, não tem como
+"recuperar" só re-gerando (instalações antigas ficariam presas numa chave pública que nunca mais
+vai bater com nada assinado).
+
+**Validado nesta sessão** (sem tocar num release real ainda): `npx tsc --noEmit` limpo, `npx vitest
+run` 185/185 (6 testes novos em `useUpdateCheck.test.ts`), `cargo check`/`cargo test --lib`
+(233/233, 6 ignorados, pré-existente)/`cargo clippy --lib` (só o warning pré-existente de
+`vault.rs`) limpos.
+
+**Falta pra fechar por completo** (só dá pra validar com um release de verdade, não em CI/teste
+unitário — registrado como P85 em `PENDING.md`): cortar uma tag nova, publicar o release (sai do
+draft) e confirmar que uma instalação da versão anterior detecta, baixa, instala e reinicia sozinha
+nas 3 plataformas.

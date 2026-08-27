@@ -1,37 +1,50 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { check, type Update } from "@tauri-apps/plugin-updater";
+import { relaunch } from "@tauri-apps/plugin-process";
 
-const RELEASES_URL =
-  "https://api.github.com/repos/masterlxz/truthid/releases/latest";
-
-function isNewer(latest: string, current: string): boolean {
-  const l = latest.split(".").map(Number);
-  const c = current.split(".").map(Number);
-  for (let i = 0; i < 3; i++) {
-    const lv = l[i] ?? 0;
-    const cv = c[i] ?? 0;
-    if (lv > cv) return true;
-    if (lv < cv) return false;
-  }
-  return false;
-}
+export type UpdateStatus = "idle" | "available" | "downloading" | "ready" | "error";
 
 export function useUpdateCheck() {
+  const [status, setStatus] = useState<UpdateStatus>("idle");
   const [updateVersion, setUpdateVersion] = useState<string | null>(null);
-  const [updateUrl, setUpdateUrl] = useState<string>("");
+  const [pendingUpdate, setPendingUpdate] = useState<Update | null>(null);
 
   useEffect(() => {
-    fetch(RELEASES_URL, { headers: { "User-Agent": "TruthID-Desktop" } })
-      .then((r) => r.json())
-      .then((data) => {
-        const tag: string = (data.tag_name ?? "").replace(/^v/, "");
-        const url: string = data.html_url ?? "";
-        if (tag && isNewer(tag, __APP_VERSION__)) {
-          setUpdateVersion(tag);
-          setUpdateUrl(url);
-        }
+    let cancelled = false;
+    check()
+      .then((result) => {
+        if (cancelled || !result) return;
+        setPendingUpdate(result);
+        setUpdateVersion(result.version);
+        setStatus("available");
       })
+      // Falha silenciosa de propósito (rede indisponível, endpoint fora do
+      // ar, etc.) — mesmo comportamento do checker anterior, checar por
+      // atualização nunca deve interromper o uso normal do app.
       .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  return { updateVersion, updateUrl };
+  const installUpdate = useCallback(async () => {
+    if (!pendingUpdate) return;
+    setStatus("downloading");
+    try {
+      await pendingUpdate.downloadAndInstall();
+      setStatus("ready");
+    } catch {
+      setStatus("error");
+    }
+  }, [pendingUpdate]);
+
+  // Passo separado de `installUpdate` de propósito — reiniciar fecha
+  // qualquer trabalho em andamento no app (assinatura de identidade,
+  // wallet), então quem usa o hook decide o momento certo, não o download
+  // em si.
+  const restartNow = useCallback(() => {
+    void relaunch();
+  }, []);
+
+  return { status, updateVersion, installUpdate, restartNow };
 }
