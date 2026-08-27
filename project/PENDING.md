@@ -4,15 +4,18 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-08-27 (Sessão 227, 2ª parte: **P82 FECHADO por completo** — os 7 achados de
+> Última atualização: 2026-08-27 (Sessão 227, 3ª parte: **P82 validado de verdade via Docker**
+> (`docker compose run --rm flutter ...` — dono do projeto lembrou que os testes rodam assim, sem
+> precisar Flutter local) — `flutter analyze` limpo, `flutter test --concurrency=1 test/`: **702/702
+> testes passando, 2 pulados (tag `arlocal`), 0 falhas** nos 76 arquivos, incluindo todos os 8 tocados
+> nesta sessão. Sessão 227, 2ª parte: **P82 FECHADO por completo no código** — os 7 achados de
 > limpeza/duplicação (4)-(10) também corrigidos: mixin `WalletConnectFlowMixin` deduplica
 > `connectWallet`/`_waitForReceipt` nos 4 flows do Mobile; `abi_encoding.dart` compartilhado entre
 > `identity_consent_hash.dart`/`BlockchainService`; `eth_amount.dart` ganhou `weiToDecimalString` e
 > `wallet_screen.dart` passou a delegar o parsing decimal↔wei em vez de duplicá-lo;
 > `random_bytes.dart` virou a única fonte do salt Arweave (2 call-sites migrados); 2 lugares com
 > `await` sequencial viraram `Future.wait`; 1 comentário desatualizado corrigido em
-> `blockchain_service.dart`. Sem `flutter` nesta máquina pra rodar os testes — revisão só manual,
-> falta validar com o suite de verdade. Sessão 227, 1ª parte: P82 itens (1)/(2)/(3) corrigidos —
+> `blockchain_service.dart`. Sessão 227, 1ª parte: P82 itens (1)/(2)/(3) corrigidos —
 > reatividade do campo de username em `act_as_guardian_screen.dart`, catch faltando em
 > `checkAvailability()` de `create_identity_screen.dart`, timeout defensivo em
 > `WalletConnectService.openConnectModal()`). Sessão 226, 6ª parte: os 2 achados de reuso restantes do P84 (itens
@@ -111,7 +114,7 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 
 ## Não Resolvidas
 
-### P82 — `/code-review` do P68 (fluxo 100% mobile): ✅ FECHADO por completo — (1)-(10), todos corrigidos (Sessão 227)
+### P82 — `/code-review` do P68 (fluxo 100% mobile): ✅ FECHADO por completo — (1)-(10) corrigidos e suite completa validada via Docker (Sessão 227)
 
 **Atualização 2 (Sessão 227, mesma sessão)**: os 7 achados de limpeza/duplicação restantes, (4)-(10),
 também foram corrigidos, a pedido do dono do projeto.
@@ -157,11 +160,20 @@ também foram corrigidos, a pedido do dono do projeto.
   Desktop" — `configure_guardians_screen.dart`/`act_as_guardian_screen.dart` já fazem isso pelo
   Mobile (P68 fatias 2/3); só cancelar proposta e revogar device seguem fora de escopo (P75).
 - Sem `flutter`/`dart` instalados nesta máquina pra rodar `flutter test`/`flutter analyze` (mesma
-  limitação de P62, já registrada na atualização anterior) — todo o refactor foi revisado
-  manualmente linha a linha, chaves/parênteses conferidos por script; falta rodar o suite completo
-  numa máquina com Flutter antes de considerar P82 100% validado (correção, não só revisão).
-  **P82 está fechado no código — 10/10 achados corrigidos — mas ainda sem confirmação por teste
-  automatizado rodado de verdade.**
+  limitação de P62, já registrada na atualização anterior) — mas o dono do projeto lembrou que os
+  testes rodam via Docker (`docker compose run --rm flutter ...`, imagem já configurada em
+  `mobile/Dockerfile`/`docker-compose.yml`), sem precisar instalar Flutter local. Rodado de verdade
+  nesta sessão: `flutter analyze` limpo (13 infos pré-existentes, nada relacionado); `flutter test
+  --concurrency=1 --reporter expanded test/` — **702/702 testes passando, 2 pulados (tag `arlocal`,
+  precisam de nó Arweave local via `npx arlocal`, não disponível neste ambiente), 0 falhas**, nos 76
+  arquivos de teste do projeto, incluindo os 8 tocados nesta sessão (os 4 flows da mixin, os 2 utils
+  novos, `wallet_screen_test.dart`, `blockchain_service_calldata_test.dart` — este último confirma
+  que os ~30 call sites de `_uint256Bytes`/`_addressBytes`/`_uint256BytesFromBigInt` continuam
+  produzindo bytes idênticos aos vetores gerados via `viem`). Achado de processo: com concorrência
+  padrão (workers em paralelo) o reporter do `package:test` perde/atropela linhas de log de arquivos
+  rápidos no output — mesma contagem final (`702/702`), mas o log fica ilegível pra auditoria por
+  arquivo; `--concurrency=1` resolve isso e mostra os 76 arquivos individualmente. **P82 está fechado
+  e validado de verdade — 10/10 achados corrigidos, suite completa rodada e verde.**
 
 **Atualização 1 (Sessão 227)**: os 2 bugs reais de correção e o risco de hang foram corrigidos, a
 pedido do dono do projeto (achados (4)-(10), de limpeza/duplicação, ficaram de fora desta rodada
