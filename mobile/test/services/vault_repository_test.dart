@@ -1442,6 +1442,210 @@ void main() {
     });
   });
 
+  group('Vault por-entrada (manifesto remoto)', () {
+    test('encryptManifestBlob produz bytes começando com o magic prefix "TIDM1"', () async {
+      const manifest = VaultManifest(version: 1, vaultVersion: 1, entries: {});
+      final blob = await repo.encryptManifestBlob(manifest);
+      expect(blob.sublist(0, 5), [0x54, 0x49, 0x44, 0x4D, 0x31]);
+    });
+
+    test('tryDecodeManifest round-trips um manifesto real', () async {
+      const manifest = VaultManifest(
+        version: 1,
+        vaultVersion: 5,
+        entries: {
+          'id1': ManifestEntryRef(cid: 'ar://tx1', contentHash: '0xabc', updatedAt: 123),
+        },
+        profileNames: ['Trabalho'],
+      );
+      final blob = await repo.encryptManifestBlob(manifest);
+
+      final decoded = await repo.tryDecodeManifest(blob);
+
+      expect(decoded, isNotNull);
+      expect(decoded!.vaultVersion, 5);
+      expect(decoded.entries['id1']!.cid, 'ar://tx1');
+      expect(decoded.profileNames, ['Trabalho']);
+    });
+
+    test('tryDecodeManifest devolve null pra um blob legado (vault inteiro, sem magic prefix)',
+        () async {
+      await repo.addEntry(site: 'a.com', username: 'u', password: 'p');
+      final legacyBlob = await repo.readRawBlob();
+
+      expect(await repo.tryDecodeManifest(legacyBlob), isNull);
+    });
+
+    test('tryDecodeManifest devolve null pra um blob mais curto que o magic prefix', () async {
+      expect(await repo.tryDecodeManifest(Uint8List.fromList([1, 2])), isNull);
+    });
+
+    test('writeEntryBlob + readEntryBlob round-trips uma entrada', () async {
+      final entry = await repo.addEntry(site: 'a.com', username: 'u', password: 'p');
+
+      await repo.writeEntryBlob(entry.id, entry);
+      final blob = await repo.readEntryBlob(entry.id);
+
+      expect(blob, isNotNull);
+      final decoded = await repo.decryptEntryBlob(blob!);
+      expect(decoded.id, entry.id);
+      expect(decoded.site, 'a.com');
+    });
+
+    test('readEntryBlob devolve null quando a entrada nunca foi cacheada', () async {
+      expect(await repo.readEntryBlob('nunca-existiu'), isNull);
+    });
+
+    test('manifestChangedEntryIds detecta adicionada/alterada/inalterada', () {
+      const last = VaultManifest(
+        version: 1,
+        vaultVersion: 1,
+        entries: {
+          'unchanged': ManifestEntryRef(cid: 'ar://a', contentHash: '0x1', updatedAt: 1),
+          'changed': ManifestEntryRef(cid: 'ar://b', contentHash: '0x2', updatedAt: 1),
+        },
+      );
+      const current = VaultManifest(
+        version: 1,
+        vaultVersion: 2,
+        entries: {
+          'unchanged': ManifestEntryRef(cid: 'ar://a', contentHash: '0x1', updatedAt: 1),
+          'changed': ManifestEntryRef(cid: 'ar://b2', contentHash: '0x2b', updatedAt: 2),
+          'new': ManifestEntryRef(cid: 'ar://c', contentHash: '0x3', updatedAt: 2),
+        },
+      );
+
+      final changed = repo.manifestChangedEntryIds(current, last);
+
+      expect(changed, {'changed', 'new'});
+    });
+
+    test('manifestChangedEntryIds com lastManifest null trata tudo como mudado (cold-start)', () {
+      const current = VaultManifest(
+        version: 1,
+        vaultVersion: 1,
+        entries: {'id1': ManifestEntryRef(cid: 'ar://a', contentHash: '0x1', updatedAt: 1)},
+      );
+
+      expect(repo.manifestChangedEntryIds(current, null), {'id1'});
+    });
+
+    test('diffEntriesSinceLastPublish: nunca publicado — tudo aparece como added', () async {
+      final entry = await repo.addEntry(site: 'a.com', username: 'u', password: 'p');
+
+      final diff = await repo.diffEntriesSinceLastPublish();
+
+      expect(diff, {entry.id: EntryDiffKind.added});
+    });
+
+    test('diffEntriesSinceLastPublish: added/modified/removed contra o último snapshot publicado',
+        () async {
+      final kept = await repo.addEntry(site: 'kept.com', username: 'u', password: 'p');
+      final toRemove = await repo.addEntry(site: 'remove.com', username: 'u', password: 'p');
+      await repo.markPublished(await repo.currentVersion(), await repo.readRawBlob());
+
+      await repo.updateEntry(kept.copyWith(username: 'changed'));
+      await repo.deleteEntry(toRemove.id);
+      final added = await repo.addEntry(site: 'new.com', username: 'u', password: 'p');
+
+      final diff = await repo.diffEntriesSinceLastPublish();
+
+      expect(diff, {
+        kept.id: EntryDiffKind.modified,
+        toRemove.id: EntryDiffKind.removed,
+        added.id: EntryDiffKind.added,
+      });
+    });
+
+    test('diffEntriesSinceLastPublish: toggle de favorito cancela (sem diff fantasma)', () async {
+      final entry = await repo.addEntry(site: 'a.com', username: 'u', password: 'p');
+      await repo.markPublished(await repo.currentVersion(), await repo.readRawBlob());
+
+      await repo.setFavorite(entry.id, true);
+      await repo.setFavorite(entry.id, false);
+
+      expect(await repo.diffEntriesSinceLastPublish(), isEmpty);
+    });
+
+    test('reassembleFromManifest cold-start (sem vault local) reconstrói a partir do cache por-entrada',
+        () async {
+      final entryA = VaultEntry(
+        id: 'idA', site: 'a.com', url: '', username: 'u', password: 'p', notes: '',
+        createdAt: DateTime.now().toUtc(), updatedAt: DateTime.now().toUtc(),
+      );
+      final entryB = VaultEntry(
+        id: 'idB', site: 'b.com', url: '', username: 'u2', password: 'p2', notes: '',
+        createdAt: DateTime.now().toUtc(), updatedAt: DateTime.now().toUtc(),
+      );
+      await repo.writeEntryBlob('idA', entryA);
+      await repo.writeEntryBlob('idB', entryB);
+
+      final manifest = VaultManifest(
+        version: 1,
+        vaultVersion: 3,
+        entries: {
+          'idA': const ManifestEntryRef(cid: 'ar://a', contentHash: '0x1', updatedAt: 1),
+          'idB': const ManifestEntryRef(cid: 'ar://b', contentHash: '0x2', updatedAt: 2),
+        },
+        profileNames: const ['Trabalho'],
+      );
+
+      await repo.reassembleFromManifest(manifest, changedEntryIds: {'idA', 'idB'});
+
+      final entries = await repo.listEntries();
+      expect(entries.map((e) => e.id).toSet(), {'idA', 'idB'});
+      expect(await repo.currentVersion(), 3);
+      expect(await repo.listProfileNames(), ['Trabalho']);
+    });
+
+    test('reassembleFromManifest incremental preserva entradas locais fora de changedEntryIds',
+        () async {
+      final existing = await repo.addEntry(site: 'existing.com', username: 'u', password: 'p');
+      final newEntry = VaultEntry(
+        id: 'idNew', site: 'new.com', url: '', username: 'u2', password: 'p2', notes: '',
+        createdAt: DateTime.now().toUtc(), updatedAt: DateTime.now().toUtc(),
+      );
+      await repo.writeEntryBlob('idNew', newEntry);
+
+      final manifest = VaultManifest(
+        version: 1,
+        vaultVersion: 9,
+        entries: {
+          existing.id:
+              const ManifestEntryRef(cid: 'ar://old', contentHash: '0xold', updatedAt: 1),
+          'idNew': const ManifestEntryRef(cid: 'ar://new', contentHash: '0xnew', updatedAt: 2),
+        },
+      );
+
+      await repo.reassembleFromManifest(manifest, changedEntryIds: {'idNew'});
+
+      final entries = await repo.listEntries();
+      expect(entries.map((e) => e.id).toSet(), {existing.id, 'idNew'});
+      expect(
+        entries.firstWhere((e) => e.id == existing.id).site,
+        'existing.com',
+        reason: 'entrada fora do diff deve vir do vault local, sem passar pelo cache por-entrada',
+      );
+    });
+
+    test('saveLastManifest + loadLastManifest round-trips', () async {
+      const manifest = VaultManifest(
+        version: 1,
+        vaultVersion: 4,
+        entries: {'id1': ManifestEntryRef(cid: 'ar://a', contentHash: '0x1', updatedAt: 1)},
+      );
+
+      expect(await repo.loadLastManifest(), isNull);
+
+      await repo.saveLastManifest(manifest);
+      final loaded = await repo.loadLastManifest();
+
+      expect(loaded, isNotNull);
+      expect(loaded!.vaultVersion, 4);
+      expect(loaded.entries['id1']!.cid, 'ar://a');
+    });
+  });
+
   group('VaultRepository pendingChanges() — achados #1/#4 do /code-review (Sessão 140)', () {
     test(
         'achado #1: nunca publicado (sem markPublished nenhuma vez) — um '

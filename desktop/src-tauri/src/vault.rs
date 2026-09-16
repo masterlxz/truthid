@@ -223,6 +223,51 @@ pub(crate) struct DeviceVaultPermission {
     pub can_write: bool,
 }
 
+// ---------------------------------------------------------------------------
+// Manifesto remoto (Arweave) — Vault por-entrada
+// ---------------------------------------------------------------------------
+//
+// O CID publicado on-chain (`VaultRegistry`) passa a apontar pra este
+// manifesto pequeno em vez do vault inteiro — cada entrada vira um blob
+// cifrado próprio, só republicado quando ela muda de verdade (generaliza o
+// padrão que os documentos já usam desde a Fase 15.7, `DocumentData::cid`/
+// `content_hash`). Formato local em disco (`vault.enc`) não muda — só a
+// camada de publicação/sync remota (ver `vault_publish` em `lib.rs`).
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ManifestEntryRef {
+    pub cid: String,
+    pub content_hash: String,
+    pub updated_at: u64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct VaultManifest {
+    /// Versão do esquema do manifesto em si (sempre 1 por enquanto) —
+    /// independente de `vault_version`.
+    pub version: u64,
+    /// Espelha `Vault::version` no momento da publicação, pra um leitor
+    /// reconstruir o vault local com a versão certa sem precisar adivinhar.
+    pub vault_version: u64,
+    pub entries: std::collections::HashMap<String, ManifestEntryRef>,
+    #[serde(default)]
+    pub profile_names: Vec<String>,
+    #[serde(default)]
+    pub device_permissions: Vec<DeviceVaultPermission>,
+}
+
+/// Tipo de mudança de uma entrada desde o último baseline (snapshot
+/// publicado) — usado por `vault_publish` (lib.rs) pra saber quais blobs de
+/// entrada precisam de uma publicação nova.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum EntryDiffKind {
+    Added,
+    Modified,
+    Removed,
+}
+
 #[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub(crate) struct Vault {
     pub version: u64,
@@ -552,6 +597,32 @@ pub(crate) fn document_needs_pin(local_blob: &[u8], stored_hash: Option<&str>) -
     }
 }
 
+// ---------------------------------------------------------------------------
+// Cache local de entradas (Vault por-entrada) — espelha o cache de
+// documentos acima, uma entrada por vez.
+// ---------------------------------------------------------------------------
+
+fn entry_blob_path(entry_id: &str) -> Result<PathBuf, String> {
+    crate::config::truthid_file_path(&format!("vault_entries/{entry_id}.enc"))
+}
+
+/// Cifra uma entrada individual (mesma cifra individual extra de
+/// `card_number`/`cvv` que o vault inteiro já aplica em `save()`, ver
+/// `entry_with_encrypted_card_fields`) e grava no cache local. Retorna o
+/// blob cifrado, pra publicar sem reler do disco.
+///
+/// Sem contraparte de leitura por CID no Desktop hoje (`read_entry_blob`/
+/// `cache_entry_blob_raw` como o Mobile tem) — o Desktop nunca busca o vault
+/// remoto por CID, nem no formato legado (onboarding de device novo depende
+/// de cópia transmitida no pareamento, gap pré-existente e fora de escopo
+/// aqui). Só entra quando/se esse comando for construído.
+pub(crate) fn write_entry_blob(entry_id: &str, entry: &VaultEntry) -> Result<Vec<u8>, String> {
+    let blob = encrypt_entry(entry)?;
+    let path = entry_blob_path(entry_id)?;
+    crate::config::write_file(&path, &blob)?;
+    Ok(blob)
+}
+
 // Serializa o vault, cifra e escreve em disco. Fase 15.8: card_number/cvv
 // são cifrados individualmente numa cópia antes de serializar — o `&Vault`
 // do caller nunca é mutado, continua em claro depois desta chamada.
@@ -764,6 +835,49 @@ fn vault_with_encrypted_card_fields_with_key(vault: &Vault, key: &[u8; 32]) -> R
 }
 
 // ---------------------------------------------------------------------------
+// Cifra / decifra por entrada (Vault por-entrada) e do manifesto
+// ---------------------------------------------------------------------------
+
+/// Prefixo mágico ASCII "TIDM1" — só em blobs de manifesto, nunca em blobs
+/// de entrada nem no vault legado inteiro. Permite a um leitor decidir "isso
+/// é um manifesto ou o vault inteiro (formato antigo)?" só olhando os
+/// primeiros bytes, sem gastar uma decifra.
+pub(crate) const MANIFEST_MAGIC: &[u8; 5] = b"TIDM1";
+
+/// Sem contraparte de leitura (`decrypt_manifest`) no Desktop hoje — mesmo
+/// motivo de `write_entry_blob`: o Desktop nunca busca o vault remoto por
+/// CID. Entra junto quando/se esse comando for construído (o Mobile já tem
+/// o equivalente, `VaultRepository.tryDecodeManifest`, usado no sync real).
+pub(crate) fn encrypt_manifest(manifest: &VaultManifest) -> Result<Vec<u8>, String> {
+    let json = serde_json::to_vec(manifest).map_err(|e| e.to_string())?;
+    let mut blob = encrypt(&json)?;
+    let mut out = Vec::with_capacity(MANIFEST_MAGIC.len() + blob.len());
+    out.extend_from_slice(MANIFEST_MAGIC);
+    out.append(&mut blob);
+    Ok(out)
+}
+
+// Cifra uma entrada numa CÓPIA (mesma cifra individual extra de
+// card_number/cvv que vault_with_encrypted_card_fields já aplica ao vault
+// inteiro) — nunca muta a `&VaultEntry` do caller.
+fn entry_with_encrypted_card_fields(entry: &VaultEntry) -> Result<VaultEntry, String> {
+    let mut copy = entry.clone();
+    if let Some(card) = &mut copy.credit_card {
+        card.card_number = encrypt_card_field(&card.card_number)?;
+        card.cvv = encrypt_card_field(&card.cvv)?;
+    }
+    Ok(copy)
+}
+
+/// Sem contraparte de leitura (`decrypt_entry`) no Desktop hoje, mesmo
+/// motivo de `encrypt_manifest`/`write_entry_blob`.
+pub(crate) fn encrypt_entry(entry: &VaultEntry) -> Result<Vec<u8>, String> {
+    let for_disk = entry_with_encrypted_card_fields(entry)?;
+    let json = serde_json::to_vec(&for_disk).map_err(|e| e.to_string())?;
+    encrypt(&json)
+}
+
+// ---------------------------------------------------------------------------
 // Publicação — rastreia versão publicada vs. versão local
 // ---------------------------------------------------------------------------
 
@@ -828,10 +942,13 @@ fn save_published_snapshot(vault: &Vault) -> Result<(), String> {
 /// nova ainda não publicada), o toggle de favorito voltava a "vazar" porque
 /// caía no diff por `version`, que é monotônica e nunca cancela. Diff por
 /// entrada resolve isso pra qualquer combinação, sem depender de `version`.
-fn diff_count(current: &Vault, published: &Vault) -> u64 {
-    use std::collections::{HashMap, HashSet};
-
-    let mut count = 0u64;
+/// Extraído de `diff_count` (entradas adicionadas/modificadas/removidas por
+/// id) — devolve os ids + tipo de mudança em vez de só contar. Reaproveitado
+/// por `diff_count` (que soma `.len()`, comportamento/assinatura pública
+/// inalterados) e por `changed_entries_from`, que `vault_publish` (lib.rs)
+/// usa pra saber quais blobs de entrada precisam de uma publicação nova.
+fn diff_entries_detailed(current: &Vault, published: &Vault) -> Vec<(String, EntryDiffKind)> {
+    use std::collections::HashMap;
 
     let published_by_id: HashMap<&str, &VaultEntry> = published
         .entries
@@ -841,23 +958,41 @@ fn diff_count(current: &Vault, published: &Vault) -> u64 {
     let current_by_id: HashMap<&str, &VaultEntry> =
         current.entries.iter().map(|e| (e.id.as_str(), e)).collect();
 
+    let mut result = Vec::new();
     for (id, entry) in &current_by_id {
         match published_by_id.get(id) {
-            None => count += 1, // adicionada
+            None => result.push((id.to_string(), EntryDiffKind::Added)),
             Some(prev) => {
                 if serde_json::to_vec(entry).unwrap_or_default()
                     != serde_json::to_vec(prev).unwrap_or_default()
                 {
-                    count += 1; // modificada
+                    result.push((id.to_string(), EntryDiffKind::Modified));
                 }
             }
         }
     }
     for id in published_by_id.keys() {
         if !current_by_id.contains_key(id) {
-            count += 1; // removida
+            result.push((id.to_string(), EntryDiffKind::Removed));
         }
     }
+    result
+}
+
+/// Quais entradas mudaram desde o último snapshot publicado — usado por
+/// `vault_publish` (lib.rs) pra saber quais blobs de entrada precisam de uma
+/// publicação nova no Arweave (entradas inalteradas mantêm o cid/hash já
+/// registrado no último manifesto). Mesmo baseline de `pending_changes_from`
+/// (snapshot publicado, ou vault vazio se nunca publicado).
+pub(crate) fn changed_entries_from(vault: &Vault) -> Result<Vec<(String, EntryDiffKind)>, String> {
+    let baseline = load_published_snapshot()?.unwrap_or_default();
+    Ok(diff_entries_detailed(vault, &baseline))
+}
+
+fn diff_count(current: &Vault, published: &Vault) -> u64 {
+    use std::collections::{HashMap, HashSet};
+
+    let mut count = diff_entries_detailed(current, published).len() as u64;
 
     let published_perms: HashMap<String, bool> = published
         .device_permissions
@@ -993,6 +1128,46 @@ pub(crate) fn pending_changes_from(vault: &Vault) -> Result<u64, String> {
     }
     let last = val["last_published_version"].as_u64().unwrap_or(0);
     Ok(vault.version.saturating_sub(last))
+}
+
+fn manifest_cache_path() -> Result<PathBuf, String> {
+    crate::config::truthid_file_path("vault.manifest.enc")
+}
+
+/// Último manifesto aplicado (sync) ou publicado (publish) com sucesso por
+/// este device — baseline pra diffar contra o manifesto remoto novo (sync)
+/// ou contra as entradas atuais (publish, via `changed_entries_from` +
+/// `entry_refs` partindo daqui).
+pub(crate) fn load_last_manifest() -> Result<Option<VaultManifest>, String> {
+    let path = manifest_cache_path()?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    let blob = crate::config::read_file(&path)?;
+    let json = decrypt(&blob)?;
+    Ok(Some(
+        serde_json::from_slice(&json).map_err(|e| e.to_string())?,
+    ))
+}
+
+pub(crate) fn save_last_manifest(manifest: &VaultManifest) -> Result<(), String> {
+    let json = serde_json::to_vec(manifest).map_err(|e| e.to_string())?;
+    let blob = encrypt(&json)?;
+    let path = manifest_cache_path()?;
+    write_file_atomic(&path, &blob)
+}
+
+pub(crate) fn build_manifest(
+    vault: &Vault,
+    entry_refs: &std::collections::HashMap<String, ManifestEntryRef>,
+) -> VaultManifest {
+    VaultManifest {
+        version: 1,
+        vault_version: vault.version,
+        entries: entry_refs.clone(),
+        profile_names: vault.profile_names.clone(),
+        device_permissions: vault.device_permissions.clone(),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1934,6 +2109,151 @@ mod tests {
         let card = for_disk.entries[0].credit_card.as_ref().unwrap();
         assert_eq!(card.card_number, "4111111111111111");
         assert_eq!(card.cvv, "123");
+    }
+
+    // --- testes de manifesto/entrada (Vault por-entrada) ---
+
+    #[test]
+    fn manifest_encrypt_decrypt_round_trips() {
+        let mut entries = std::collections::HashMap::new();
+        entries.insert(
+            "id1".to_string(),
+            ManifestEntryRef {
+                cid: "ar://tx1".to_string(),
+                content_hash: "0xabc".to_string(),
+                updated_at: 123,
+            },
+        );
+        let manifest = VaultManifest {
+            version: 1,
+            vault_version: 7,
+            entries,
+            profile_names: vec!["Trabalho".to_string()],
+            device_permissions: vec![DeviceVaultPermission {
+                pub_key: "0xabc".to_string(),
+                can_write: true,
+            }],
+        };
+
+        let blob = encrypt_manifest(&manifest).unwrap();
+        assert!(blob.starts_with(MANIFEST_MAGIC), "blob deve começar com o magic prefix");
+
+        // Sem `decrypt_manifest` no Desktop ainda (ver comentário de
+        // `encrypt_manifest`) — verifica o formato direto com os primitivos
+        // já usados em produção (`decrypt` + parse), mesmo papel que o
+        // `tryDecodeManifest` do Mobile cumpre do lado dele.
+        let json = decrypt(&blob[MANIFEST_MAGIC.len()..]).unwrap();
+        let decoded: VaultManifest = serde_json::from_slice(&json).unwrap();
+        assert_eq!(decoded.version, 1);
+        assert_eq!(decoded.vault_version, 7);
+        assert_eq!(decoded.entries["id1"].cid, "ar://tx1");
+        assert_eq!(decoded.entries["id1"].content_hash, "0xabc");
+        assert_eq!(decoded.profile_names, vec!["Trabalho".to_string()]);
+        assert_eq!(decoded.device_permissions[0].pub_key, "0xabc");
+    }
+
+    #[test]
+    fn entry_encrypt_decrypt_round_trips_including_credit_card() {
+        let entry = make_credit_card_entry("id1");
+
+        let blob = encrypt_entry(&entry).unwrap();
+        // Em disco/rede, card_number/cvv nunca aparecem em claro — mesma
+        // garantia que vault_with_encrypted_card_fields já dá pro vault
+        // inteiro, agora por entrada.
+        assert!(!blob.windows(16).any(|w| w == b"4111111111111111"));
+
+        // Sem `decrypt_entry` no Desktop ainda (ver comentário de
+        // `encrypt_entry`) — mesmo raciocínio do teste do manifesto acima.
+        let json = decrypt(&blob).unwrap();
+        let mut decoded: VaultEntry = serde_json::from_slice(&json).unwrap();
+        let card = decoded.credit_card.as_mut().unwrap();
+        card.card_number = try_decrypt_card_field(&card.card_number);
+        card.cvv = try_decrypt_card_field(&card.cvv);
+
+        assert_eq!(decoded.id, "id1");
+        let card = decoded.credit_card.unwrap();
+        assert_eq!(card.card_number, "4111111111111111");
+        assert_eq!(card.cvv, "123");
+    }
+
+    #[test]
+    fn entry_encrypt_decrypt_round_trips_plain_credential() {
+        let entry = make_entry("id2", "github.com");
+        let blob = encrypt_entry(&entry).unwrap();
+        let json = decrypt(&blob).unwrap();
+        let decoded: VaultEntry = serde_json::from_slice(&json).unwrap();
+        assert_eq!(decoded.id, "id2");
+        assert_eq!(decoded.site, "github.com");
+    }
+
+    // --- testes de diff_entries_detailed (Vault por-entrada) ---
+    // Mesmos cenários de regressão já cobertos por diff_count, agora
+    // confirmando os ids/tipo de mudança devolvidos (não só a contagem).
+
+    #[test]
+    fn diff_entries_detailed_reports_added_modified_removed() {
+        let mut published = Vault::default();
+        published.entries.push(make_entry("id1", "github.com"));
+        published.entries.push(make_entry("id2", "gitlab.com"));
+
+        let mut current = Vault::default();
+        let mut modified = make_entry("id1", "github.com");
+        modified.username = "changed".to_string();
+        current.entries.push(modified);
+        current.entries.push(make_entry("id3", "new.com"));
+        // id2 não está em current — removida.
+
+        let mut result = diff_entries_detailed(&current, &published);
+        result.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(
+            result,
+            vec![
+                ("id1".to_string(), EntryDiffKind::Modified),
+                ("id2".to_string(), EntryDiffKind::Removed),
+                ("id3".to_string(), EntryDiffKind::Added),
+            ]
+        );
+    }
+
+    #[test]
+    fn diff_entries_detailed_favorite_toggle_produces_no_phantom_diff() {
+        let mut published = Vault::default();
+        published.entries.push(make_entry("id1", "github.com"));
+        let mut current = Vault {
+            version: published.version,
+            entries: published.entries.clone(),
+            profile_names: published.profile_names.clone(),
+            device_permissions: published.device_permissions.clone(),
+        };
+
+        current.set_favorite("id1", true);
+        current.set_favorite("id1", false);
+
+        assert!(
+            diff_entries_detailed(&current, &published).is_empty(),
+            "toggle deveria cancelar, sem diff nenhum"
+        );
+    }
+
+    #[test]
+    fn diff_entries_detailed_against_empty_baseline_treats_everything_as_added() {
+        // Mesmo baseline que `changed_entries_from` usa quando nunca houve
+        // manifesto publicado (Vault::default()) — primeira publicação nesse
+        // esquema: toda entrada aparece como "nova" (migração lazy, sem
+        // script de migração em massa).
+        let mut current = Vault::default();
+        current.entries.push(make_entry("id1", "github.com"));
+        current.entries.push(make_entry("id2", "gitlab.com"));
+
+        let mut result = diff_entries_detailed(&current, &Vault::default());
+        result.sort_by(|a, b| a.0.cmp(&b.0));
+        assert_eq!(
+            result,
+            vec![
+                ("id1".to_string(), EntryDiffKind::Added),
+                ("id2".to_string(), EntryDiffKind::Added),
+            ]
+        );
     }
 
     #[test]

@@ -39,6 +39,13 @@ Uint8List _plaintextBlob(List<Map<String, dynamic>> entries) {
   return Uint8List.fromList(utf8.encode(json));
 }
 
+// Blob de UMA entrada, no formato que writeEntryBlob/decryptEntryBlob
+// produzem/consomem — com _FakeCipherService (passthrough), é só o JSON da
+// entrada, sem cifra real por cima (mesma técnica de _plaintextBlob acima,
+// que já não cifra o vault inteiro nestes testes).
+Uint8List _plaintextEntryBlob(Map<String, dynamic> entryJson) =>
+    Uint8List.fromList(utf8.encode(jsonEncode(entryJson)));
+
 Map<String, dynamic> _entry(String site) => {
       'id': 'e-$site',
       'site': site,
@@ -379,6 +386,140 @@ void main() {
     expect(outcome.status, VaultSyncStatus.synced);
     verifyNever(() => mockGateway.fetch(any()));
     expect(await repository.pendingChanges(), 0);
+  });
+
+  group('Vault por-entrada (manifesto remoto)', () {
+    test(
+        'cid on-chain aponta pra um manifesto — busca só a entrada referenciada e reconstrói o vault local',
+        () async {
+      final entryBytes = _plaintextEntryBlob(_entry('example.com'));
+      final entryDigest = bytesToHex(keccak256(entryBytes), include0x: true);
+      final manifest = VaultManifest(
+        version: 1,
+        vaultVersion: 1,
+        entries: {
+          'e-example.com':
+              ManifestEntryRef(cid: 'entryCid1', contentHash: entryDigest, updatedAt: 1700000000),
+        },
+      );
+      final manifestBlob = await repository.encryptManifestBlob(manifest);
+      final manifestDigest = bytesToHex(keccak256(manifestBlob), include0x: true);
+
+      when(() => mockBlockchain.hasVault(identityId)).thenAnswer((_) async => true);
+      when(() => mockBlockchain.getVault(identityId)).thenAnswer((_) async => VaultRef(
+          cid: 'ar://manifestTx1',
+          contentHashHex: manifestDigest,
+          updatedAt: updatedAt,
+          version: 1));
+      when(() => mockGateway.fetch('ar://manifestTx1')).thenAnswer((_) async => manifestBlob);
+      when(() => mockGateway.fetch('entryCid1')).thenAnswer((_) async => entryBytes);
+
+      final outcome = await syncService.sync(identityId);
+
+      expect(outcome.status, VaultSyncStatus.synced);
+      expect(outcome.legacyIpfsCid, isFalse);
+      expect(outcome.entries, hasLength(1));
+      expect(outcome.entries.first.site, 'example.com');
+      verify(() => mockGateway.fetch('entryCid1')).called(1);
+    });
+
+    test(
+        'entrada do manifesto com hash divergente cai no fallback SEM corromper o cache local existente',
+        () async {
+      // Cache local bom, de uma sincronização anterior — a asserção final
+      // (achado rastreado nesta sessão: overwriteCache era chamado
+      // incondicionalmente com o blob buscado, mesmo quando era um
+      // manifesto que a decifra ia rejeitar logo em seguida) prova que esse
+      // bug não pode mais acontecer: o caminho de manifesto nunca chama
+      // overwriteCache.
+      final goodCache = _plaintextBlob([_entry('good.com')]);
+      await repository.overwriteCache(goodCache);
+
+      final entryBytes = _plaintextEntryBlob(_entry('bad-entry.com'));
+      final manifest = VaultManifest(
+        version: 1,
+        vaultVersion: 2,
+        entries: {
+          'e-bad-entry.com':
+              ManifestEntryRef(cid: 'entryCid2', contentHash: wrongHash, updatedAt: 1700000000),
+        },
+      );
+      final manifestBlob = await repository.encryptManifestBlob(manifest);
+      final manifestDigest = bytesToHex(keccak256(manifestBlob), include0x: true);
+
+      when(() => mockBlockchain.hasVault(identityId)).thenAnswer((_) async => true);
+      when(() => mockBlockchain.getVault(identityId)).thenAnswer((_) async => VaultRef(
+          cid: 'ar://manifestTx2',
+          contentHashHex: manifestDigest,
+          updatedAt: updatedAt,
+          version: 2));
+      when(() => mockGateway.fetch('ar://manifestTx2')).thenAnswer((_) async => manifestBlob);
+      when(() => mockGateway.fetch('entryCid2')).thenAnswer((_) async => entryBytes);
+
+      final outcome = await syncService.sync(identityId);
+
+      expect(outcome.status, VaultSyncStatus.offlineUsingCache);
+      expect(outcome.entries, hasLength(1));
+      expect(outcome.entries.first.site, 'good.com');
+      expect(
+        await File(vaultPath).readAsBytes(),
+        equals(goodCache),
+        reason: 'cache local não pode ser corrompido por uma entrada de manifesto inválida',
+      );
+    });
+
+    test(
+        'manifesto novo com as mesmas entradas de antes — não busca nenhum blob de entrada de novo',
+        () async {
+      final entryBytes = _plaintextEntryBlob(_entry('example.com'));
+      final entryDigest = bytesToHex(keccak256(entryBytes), include0x: true);
+      final entryRef =
+          ManifestEntryRef(cid: 'entryCid1', contentHash: entryDigest, updatedAt: 1700000000);
+
+      final manifest1 =
+          VaultManifest(version: 1, vaultVersion: 1, entries: {'e-example.com': entryRef});
+      final manifestBlob1 = await repository.encryptManifestBlob(manifest1);
+      final digest1 = bytesToHex(keccak256(manifestBlob1), include0x: true);
+
+      when(() => mockBlockchain.hasVault(identityId)).thenAnswer((_) async => true);
+      when(() => mockGateway.fetch('entryCid1')).thenAnswer((_) async => entryBytes);
+      when(() => mockBlockchain.getVault(identityId)).thenAnswer((_) async => VaultRef(
+          cid: 'ar://manifestTx1',
+          contentHashHex: digest1,
+          updatedAt: updatedAt,
+          version: 1));
+      when(() => mockGateway.fetch('ar://manifestTx1')).thenAnswer((_) async => manifestBlob1);
+
+      final first = await syncService.sync(identityId);
+      expect(first.status, VaultSyncStatus.synced);
+
+      // 2ª publicação: só profileNames mudou, a entrada continua com o
+      // mesmo cid/contentHash de antes.
+      final manifest2 = VaultManifest(
+        version: 1,
+        vaultVersion: 2,
+        entries: {'e-example.com': entryRef},
+        profileNames: const ['NovoPerfil'],
+      );
+      final manifestBlob2 = await repository.encryptManifestBlob(manifest2);
+      final digest2 = bytesToHex(keccak256(manifestBlob2), include0x: true);
+      when(() => mockBlockchain.getVault(identityId)).thenAnswer((_) async => VaultRef(
+          cid: 'ar://manifestTx2',
+          contentHashHex: digest2,
+          updatedAt: updatedAt,
+          version: 2));
+      when(() => mockGateway.fetch('ar://manifestTx2')).thenAnswer((_) async => manifestBlob2);
+
+      final second = await syncService.sync(identityId);
+
+      expect(second.status, VaultSyncStatus.synced);
+      expect(second.entries, hasLength(1));
+      expect(second.entries.first.site, 'example.com');
+      expect(second.profileNames, ['NovoPerfil']);
+      // A entrada não mudou de cid/contentHash — busca-la de novo seria
+      // desperdício de rede (e de taxa, do lado de quem publica).
+      verify(() => mockGateway.fetch('entryCid1')).called(1);
+    });
   });
 
   test('falha de rede sem cache nenhum — syncFailedNoCache', () async {

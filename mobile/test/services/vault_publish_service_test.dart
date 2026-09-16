@@ -75,6 +75,16 @@ void main() {
     mockArweavePublisher = MockArweaveVaultPublisher();
     mockSessionCreator = MockSessionCreator();
 
+    // Defaults sãos pro caminho feliz (vault por-entrada: toda entrada nova
+    // publica um blob próprio + o manifesto no final) — a maioria dos testes
+    // não se importa com os valores específicos, só com o comportamento em
+    // torno deles. Testes que precisam de um cid/hash específico (ou de uma
+    // falha) sobrescrevem com o próprio `when()` depois deste `setUp`.
+    when(() => mockArweavePublisher.publishVaultEntry(any())).thenAnswer((_) async =>
+        const ArweavePublishResult(cid: 'ar://DefaultEntryTxId', contentHash: '0xdefaultentry'));
+    when(() => mockArweavePublisher.publishManifest(any())).thenAnswer((_) async =>
+        const ArweavePublishResult(cid: 'ar://DefaultManifestTxId', contentHash: '0xdefaultmanifest'));
+
     publishService = VaultPublishService(
       sessionCreator: mockSessionCreator,
       repository: repo,
@@ -91,9 +101,10 @@ void main() {
   test('lança quando a wallet Arweave não está configurada', () async {
     // Precisa de vault local (mesmo guard de hasLocalVault() testado abaixo)
     // pra chegar de fato até a chamada do publisher, que é o que este teste
-    // quer exercitar.
+    // quer exercitar — a 1ª chamada de rede do caminho feliz é a publicação
+    // da entrada em si.
     await repo.addEntry(site: 'github.com', username: 'fab', password: 'x');
-    when(() => mockArweavePublisher.publishVaultBlob(any()))
+    when(() => mockArweavePublisher.publishVaultEntry(any()))
         .thenThrow(Exception('nenhuma wallet Arweave configurada — gere ou importe uma antes de publicar'));
 
     await expectLater(
@@ -111,7 +122,8 @@ void main() {
       throwsA(isA<Exception>()),
     );
 
-    verifyNever(() => mockArweavePublisher.publishVaultBlob(any()));
+    verifyNever(() => mockArweavePublisher.publishVaultEntry(any()));
+    verifyNever(() => mockArweavePublisher.publishManifest(any()));
     verifyNever(() => mockSessionCreator.updateVault(
           smartAccountAddress: any(named: 'smartAccountAddress'),
           cid: any(named: 'cid'),
@@ -119,11 +131,14 @@ void main() {
         ));
   });
 
-  test('publica no Arweave, publica on-chain e marca a versão como publicada', () async {
-    await repo.addEntry(site: 'github.com', username: 'fab', password: 'x');
+  test('publica a entrada + o manifesto no Arweave, publica on-chain e marca a versão como publicada',
+      () async {
+    final entry = await repo.addEntry(site: 'github.com', username: 'fab', password: 'x');
     final versionBefore = await repo.currentVersion();
 
-    when(() => mockArweavePublisher.publishVaultBlob(any())).thenAnswer((_) async =>
+    when(() => mockArweavePublisher.publishVaultEntry(any())).thenAnswer((_) async =>
+        const ArweavePublishResult(cid: 'ar://EntryTxId', contentHash: '0xentryhash'));
+    when(() => mockArweavePublisher.publishManifest(any())).thenAnswer((_) async =>
         const ArweavePublishResult(cid: 'ar://TestTxId', contentHash: '0xabc123'));
     when(() => mockSessionCreator.updateVault(
           smartAccountAddress: any(named: 'smartAccountAddress'),
@@ -136,23 +151,48 @@ void main() {
 
     final result = await publishService.publish(smartAccountAddress);
 
+    // O cid/hash devolvido e registrado on-chain é do MANIFESTO — o vault
+    // inteiro nunca mais é publicado como um blob só.
     expect(result.cid, 'ar://TestTxId');
     expect(result.transactionHash, '0xTxHash');
-
+    verify(() => mockArweavePublisher.publishVaultEntry(any())).called(1);
     verify(() => mockSessionCreator.updateVault(
           smartAccountAddress: smartAccountAddress,
           cid: 'ar://TestTxId',
           contentHashHex: '0xabc123',
         )).called(1);
 
+    final manifest = await repo.loadLastManifest();
+    expect(manifest, isNotNull);
+    expect(manifest!.entries[entry.id]?.cid, 'ar://EntryTxId');
+
     expect(await repo.pendingChanges(), 0);
     expect(versionBefore, greaterThan(0));
   });
 
+  test('não republica uma entrada que não mudou desde a última publicação (2ª publicação)',
+      () async {
+    when(() => mockSessionCreator.updateVault(
+          smartAccountAddress: any(named: 'smartAccountAddress'),
+          cid: any(named: 'cid'),
+          contentHashHex: any(named: 'contentHashHex'),
+        )).thenAnswer((_) async => const SessionCreationResult(userOpHash: '0xUserOpHash'));
+
+    await repo.addEntry(site: 'a.com', username: 'u', password: 'p');
+    await publishService.publish(smartAccountAddress);
+    verify(() => mockArweavePublisher.publishVaultEntry(any())).called(1);
+
+    // Nada mudou — só publica o manifesto de novo (barato, sem entrada nova
+    // nem alterada), mesmo padrão de "não republica documento inalterado".
+    // mocktail marca a chamada acima como verificada — verifyNever aqui
+    // confere só chamadas NOVAS desde então (nenhuma esperada).
+    await publishService.publish(smartAccountAddress);
+    verifyNever(() => mockArweavePublisher.publishVaultEntry(any()));
+    verify(() => mockArweavePublisher.publishManifest(any())).called(2);
+  });
+
   test('pendingChanges reflete edições feitas depois da última publicação',
       () async {
-    when(() => mockArweavePublisher.publishVaultBlob(any())).thenAnswer((_) async =>
-        const ArweavePublishResult(cid: 'ar://TestTxId', contentHash: '0xabc123'));
     when(() => mockSessionCreator.updateVault(
           smartAccountAddress: any(named: 'smartAccountAddress'),
           cid: any(named: 'cid'),
@@ -171,8 +211,6 @@ void main() {
       'pendingChanges volta a 0 depois de favoritar e desfavoritar de volta '
       '(achado da Sessão 136: version bumpa duas vezes mas o conteúdo final '
       'é idêntico ao publicado)', () async {
-    when(() => mockArweavePublisher.publishVaultBlob(any())).thenAnswer((_) async =>
-        const ArweavePublishResult(cid: 'ar://TestTxId', contentHash: '0xabc123'));
     when(() => mockSessionCreator.updateVault(
           smartAccountAddress: any(named: 'smartAccountAddress'),
           cid: any(named: 'cid'),
@@ -195,8 +233,6 @@ void main() {
       '(achado da Sessão 139: fix da S138 só cancelava se o vault inteiro '
       'voltasse a bater com o publicado — com qualquer outra pendência real '
       'junto, caía no diff de version, que nunca cancela)', () async {
-    when(() => mockArweavePublisher.publishVaultBlob(any())).thenAnswer((_) async =>
-        const ArweavePublishResult(cid: 'ar://TestTxId', contentHash: '0xabc123'));
     when(() => mockSessionCreator.updateVault(
           smartAccountAddress: any(named: 'smartAccountAddress'),
           cid: any(named: 'cid'),
@@ -224,10 +260,9 @@ void main() {
       'pendente depois — não é marcada como publicada por engano (M3, '
       'achado do /code-review high: markPublished tinha TOCTOU relendo o '
       'vault atual do disco em vez de usar o conteúdo que foi de fato '
-      'publicado)', () async {
-    when(() => mockArweavePublisher.publishVaultBlob(any())).thenAnswer((_) async =>
-        const ArweavePublishResult(cid: 'ar://TestTxId', contentHash: '0xabc123'));
-
+      'publicado). Vault por-entrada: o mesmo cuidado agora também precisa '
+      'valer pro snapshot capturado ANTES de publicar a entrada/manifesto, '
+      'não só antes do updateVault.', () async {
     await repo.addEntry(site: 'a.com', username: 'u', password: 'p');
 
     // Simula a edição concorrente acontecendo enquanto o UserOperation
@@ -247,6 +282,10 @@ void main() {
     expect(await repo.pendingChanges(), 1,
         reason: 'a edição concorrente nunca foi publicada on-chain — tem '
             'que continuar pendente, não sumir por causa do markPublished');
+    // A edição concorrente também não deveria ter sido publicada como
+    // entrada própria — só a entrada original ('a.com') existia quando o
+    // diff/snapshot deste publish foi capturado.
+    verify(() => mockArweavePublisher.publishVaultEntry(any())).called(1);
   });
 
   group('Fase 15.7 (documentos publicados separadamente)', () {
@@ -270,14 +309,15 @@ void main() {
 
       when(() => mockArweavePublisher.publishDocument(any(), any(), any())).thenAnswer((_) async =>
           const ArweavePublishResult(cid: 'ar://DocTxId', contentHash: '0xdochash'));
-      when(() => mockArweavePublisher.publishVaultBlob(any())).thenAnswer((_) async =>
-          const ArweavePublishResult(cid: 'ar://VaultTxId', contentHash: '0xvaulthash'));
 
       await publishService.publish(smartAccountAddress);
 
       verify(() => mockArweavePublisher.publishDocument(any(), 'rg.pdf', 'application/pdf'))
           .called(1);
-      verify(() => mockArweavePublisher.publishVaultBlob(any())).called(1);
+      // A entrada em si (ponteiro pro documento) também vira um blob próprio
+      // no Arweave, separado do conteúdo binário do documento.
+      verify(() => mockArweavePublisher.publishVaultEntry(any())).called(1);
+      verify(() => mockArweavePublisher.publishManifest(any())).called(1);
       final entries = await repo.listEntries();
       expect(entries.single.document?.cid, 'ar://DocTxId');
       expect(entries.single.document?.contentHash, '0xdochash');
@@ -296,15 +336,14 @@ void main() {
       final existingHash = bytesToHex(keccak256(docBlob), include0x: true);
       await repo.setDocumentPinInfo(entry.id, cid: 'ar://AlreadyPublished', contentHash: existingHash);
 
-      when(() => mockArweavePublisher.publishVaultBlob(any())).thenAnswer((_) async =>
-          const ArweavePublishResult(cid: 'ar://VaultTxId', contentHash: '0xvaulthash'));
-
       await publishService.publish(smartAccountAddress);
 
-      // Só publica o blob principal — o documento não mudou desde a última
-      // publicação, não deveria ser rechamado (economiza rede/upload).
+      // Só publica o conteúdo do documento se ele mudou — o cid/hash já
+      // registrado (setDocumentPinInfo acima) não deveria ser rechamado
+      // (economiza rede/upload). A entrada em si ainda vira um blob próprio
+      // (1ª publicação dela nesse esquema).
       verifyNever(() => mockArweavePublisher.publishDocument(any(), any(), any()));
-      verify(() => mockArweavePublisher.publishVaultBlob(any())).called(1);
+      verify(() => mockArweavePublisher.publishVaultEntry(any())).called(1);
       final entries = await repo.listEntries();
       expect(entries.single.document?.cid, 'ar://AlreadyPublished',
           reason: 'cid antigo deve ser preservado, não sobrescrito');
@@ -324,8 +363,6 @@ void main() {
 
       when(() => mockArweavePublisher.publishDocument(any(), any(), any())).thenAnswer((_) async =>
           const ArweavePublishResult(cid: 'ar://NewTxId', contentHash: '0xnewhash'));
-      when(() => mockArweavePublisher.publishVaultBlob(any())).thenAnswer((_) async =>
-          const ArweavePublishResult(cid: 'ar://VaultTxId', contentHash: '0xvaulthash'));
 
       await publishService.publish(smartAccountAddress);
 

@@ -488,6 +488,96 @@ class VaultDevicePermission {
 }
 
 // ---------------------------------------------------------------------------
+// Manifesto remoto (Arweave) — Vault por-entrada
+// ---------------------------------------------------------------------------
+//
+// O CID publicado on-chain (`VaultRegistry`) passa a apontar pra este
+// manifesto pequeno em vez do vault inteiro — cada entrada vira um blob
+// cifrado próprio, só republicado quando ela muda de verdade (generaliza o
+// padrão que os documentos anexados já usam desde a Fase 15.7,
+// `DocumentData.cid`/`contentHash`). Mirror de `VaultManifest`
+// (desktop/src-tauri/src/vault.rs). Formato local em disco (`vault.enc`)
+// não muda — só a camada de publicação/sync remota.
+
+class ManifestEntryRef {
+  final String cid;
+  final String contentHash;
+  final int updatedAt;
+
+  const ManifestEntryRef({
+    required this.cid,
+    required this.contentHash,
+    required this.updatedAt,
+  });
+
+  factory ManifestEntryRef.fromJson(Map<String, dynamic> json) =>
+      ManifestEntryRef(
+        cid: json['cid'] as String,
+        contentHash: json['contentHash'] as String,
+        updatedAt: json['updatedAt'] as int,
+      );
+
+  Map<String, dynamic> toJson() => {
+        'cid': cid,
+        'contentHash': contentHash,
+        'updatedAt': updatedAt,
+      };
+}
+
+class VaultManifest {
+  /// Versão do esquema do manifesto em si (sempre 1 por enquanto) —
+  /// independente de [vaultVersion].
+  final int version;
+  /// Espelha `_VaultData.version` no momento da publicação, pra um leitor
+  /// reconstruir o vault local com a versão certa sem precisar adivinhar.
+  final int vaultVersion;
+  final Map<String, ManifestEntryRef> entries;
+  final List<String> profileNames;
+  final List<VaultDevicePermission> devicePermissions;
+
+  const VaultManifest({
+    required this.version,
+    required this.vaultVersion,
+    required this.entries,
+    this.profileNames = const [],
+    this.devicePermissions = const [],
+  });
+
+  factory VaultManifest.fromJson(Map<String, dynamic> json) => VaultManifest(
+        version: json['version'] as int,
+        vaultVersion: json['vaultVersion'] as int,
+        entries: (json['entries'] as Map<String, dynamic>).map(
+          (key, value) => MapEntry(
+            key,
+            ManifestEntryRef.fromJson(value as Map<String, dynamic>),
+          ),
+        ),
+        profileNames: json['profileNames'] != null
+            ? List<String>.from(json['profileNames'] as List)
+            : const <String>[],
+        devicePermissions: json['devicePermissions'] != null
+            ? (json['devicePermissions'] as List)
+                .map((p) =>
+                    VaultDevicePermission.fromJson(p as Map<String, dynamic>))
+                .toList()
+            : const <VaultDevicePermission>[],
+      );
+
+  Map<String, dynamic> toJson() => {
+        'version': version,
+        'vaultVersion': vaultVersion,
+        'entries': entries.map((key, value) => MapEntry(key, value.toJson())),
+        'profileNames': profileNames,
+        'devicePermissions': devicePermissions.map((p) => p.toJson()).toList(),
+      };
+}
+
+/// Tipo de mudança de uma entrada desde o último baseline (publicado ou
+/// conhecido do manifesto remoto) — mirror de `EntryDiffKind`
+/// (desktop/src-tauri/src/vault.rs).
+enum EntryDiffKind { added, modified, removed }
+
+// ---------------------------------------------------------------------------
 // Container interno (não exposto fora do arquivo)
 // ---------------------------------------------------------------------------
 
@@ -891,21 +981,7 @@ class VaultRepository {
   // nova ainda não publicada), o toggle de favorito voltava a "vazar" porque
   // caía no diff por version, que é monotônica e nunca cancela.
   int _diffCount(_VaultData current, _VaultData published) {
-    var count = 0;
-
-    final publishedById = {for (final e in published.entries) e.id: e};
-    final currentById = {for (final e in current.entries) e.id: e};
-    for (final entry in currentById.entries) {
-      final prev = publishedById[entry.key];
-      if (prev == null) {
-        count++; // adicionada
-      } else if (jsonEncode(entry.value.toJson()) != jsonEncode(prev.toJson())) {
-        count++; // modificada
-      }
-    }
-    for (final id in publishedById.keys) {
-      if (!currentById.containsKey(id)) count++; // removida
-    }
+    var count = _diffEntries(current, published).length;
 
     final publishedPerms = {
       for (final p in published.devicePermissions) p.pubKey.toLowerCase(): p.canWrite,
@@ -1014,6 +1090,207 @@ class VaultRepository {
     final last = raw != null ? int.tryParse(raw) ?? 0 : 0;
     final pending = data.version - last;
     return pending > 0 ? pending : 0;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Manifesto remoto — publicação/sync por entrada
+  // ---------------------------------------------------------------------------
+  //
+  // Mesmo espírito do cache de documentos (Fase 15.7) generalizado pra todas
+  // as entradas: o blob principal publicado no Arweave passa a ser um
+  // manifesto pequeno (entryId -> cid/contentHash), cada entrada vira um
+  // blob cifrado próprio no cache local (`vault_entries/<id>.enc`), só
+  // republicado/buscado de novo quando ela muda de verdade. Formato local em
+  // disco (`vault.enc`) não muda — essas funções só alimentam/consomem a
+  // camada de publicação (VaultPublishService) e sync (VaultSyncService).
+
+  // Prefixo mágico ASCII "TIDM1" — só em blobs de manifesto, nunca em blobs
+  // de entrada nem no vault legado inteiro. Permite a um leitor decidir
+  // "isso é um manifesto ou o vault inteiro (formato antigo)?" só olhando os
+  // primeiros bytes, sem gastar uma decifra. Mirror de `MANIFEST_MAGIC`
+  // (desktop/src-tauri/src/vault.rs).
+  static const List<int> _manifestMagic = [0x54, 0x49, 0x44, 0x4D, 0x31];
+
+  bool _bytesStartWith(Uint8List bytes, List<int> prefix) {
+    if (bytes.length < prefix.length) return false;
+    for (var i = 0; i < prefix.length; i++) {
+      if (bytes[i] != prefix[i]) return false;
+    }
+    return true;
+  }
+
+  Future<String> _manifestCachePath() async {
+    if (_testPath != null) return '$_testPath.manifest';
+    final dir = await getApplicationDocumentsDirectory();
+    return '${dir.path}/vault.manifest.enc';
+  }
+
+  /// Peek no prefixo mágico antes de tentar decifrar — devolve `null` sem
+  /// custo de decifra se `bytes` não for um manifesto (blob legado, vault
+  /// inteiro). Quem chama cai pro comportamento legado exato de hoje nesse
+  /// caso (ver [VaultSyncService.sync]).
+  Future<VaultManifest?> tryDecodeManifest(Uint8List bytes) async {
+    if (!_bytesStartWith(bytes, _manifestMagic)) return null;
+    final json =
+        await _cipherService.decrypt(bytes.sublist(_manifestMagic.length));
+    return VaultManifest.fromJson(
+        jsonDecode(utf8.decode(json)) as Map<String, dynamic>);
+  }
+
+  Future<Uint8List> encryptManifestBlob(VaultManifest manifest) async {
+    final json =
+        Uint8List.fromList(utf8.encode(jsonEncode(manifest.toJson())));
+    final blob = await _cipherService.encrypt(json);
+    return Uint8List.fromList([..._manifestMagic, ...blob]);
+  }
+
+  /// Último manifesto aplicado (sync) ou publicado (publish) com sucesso
+  /// por este device — baseline pra diffar contra o manifesto remoto novo
+  /// (sync) ou contra as entradas atuais (publish).
+  Future<VaultManifest?> loadLastManifest() async {
+    final path = await _manifestCachePath();
+    final file = File(path);
+    if (!await file.exists()) return null;
+    final blob = await file.readAsBytes();
+    final json = await _cipherService.decrypt(blob);
+    return VaultManifest.fromJson(
+        jsonDecode(utf8.decode(json)) as Map<String, dynamic>);
+  }
+
+  Future<void> saveLastManifest(VaultManifest manifest) async {
+    final json =
+        Uint8List.fromList(utf8.encode(jsonEncode(manifest.toJson())));
+    final blob = await _cipherService.encrypt(json);
+    final path = await _manifestCachePath();
+    await _writeFileAtomic(path, blob);
+  }
+
+  Future<String> _entryDir() async {
+    if (_testPath != null) return '$_testPath.entries';
+    final dir = await getApplicationDocumentsDirectory();
+    return '${dir.path}/vault_entries';
+  }
+
+  Future<String> _entryPath(String entryId) async =>
+      '${await _entryDir()}/$entryId.enc';
+
+  /// Lê o blob cifrado de uma entrada do cache local, se existir. `null` se
+  /// essa entrada nunca foi buscada/publicada neste device.
+  Future<Uint8List?> readEntryBlob(String entryId) async {
+    final file = File(await _entryPath(entryId));
+    if (!await file.exists()) return null;
+    return file.readAsBytes();
+  }
+
+  /// Cifra uma entrada (mesma cifra individual de `card_number`/`cvv` que o
+  /// vault local já aplica em disco, ver `_encryptCardFieldsInEntries`) e
+  /// grava no cache local. Retorna o blob cifrado, pra publicar sem reler.
+  Future<Uint8List> writeEntryBlob(String entryId, VaultEntry entry) async {
+    final forDisk = (await _encryptCardFieldsInEntries([entry])).first;
+    final json =
+        Uint8List.fromList(utf8.encode(jsonEncode(forDisk.toJson())));
+    final blob = await _cipherService.encrypt(json);
+    await cacheEntryBlobRaw(entryId, blob);
+    return blob;
+  }
+
+  /// Grava um blob **já cifrado** no cache local (buscado por cid via
+  /// sync), sem recifrar.
+  Future<void> cacheEntryBlobRaw(String entryId, Uint8List encrypted) async {
+    final dir = Directory(await _entryDir());
+    if (!await dir.exists()) await dir.create(recursive: true);
+    await File(await _entryPath(entryId)).writeAsBytes(encrypted);
+  }
+
+  /// Decifra um blob de entrada de volta pra [VaultEntry] em claro
+  /// (`card_number`/`cvv` inclusive — mesma normalização de `_load()`).
+  Future<VaultEntry> decryptEntryBlob(Uint8List blob) async {
+    final json = await _cipherService.decrypt(blob);
+    final entry = VaultEntry.fromJson(
+        jsonDecode(utf8.decode(json)) as Map<String, dynamic>);
+    final decrypted = await _decryptCardFieldsInEntries([entry]);
+    return decrypted.first;
+  }
+
+  // Extraído de `_diffCount` pra ser reaproveitado por
+  // `diffEntriesSinceLastPublish` — mesma lógica exata (achada/modificada/
+  // removida por id), agora devolvendo os ids + tipo em vez de só contar.
+  // `_diffCount` chama isto e soma `.length`, comportamento/assinatura
+  // pública inalterados.
+  Map<String, EntryDiffKind> _diffEntries(
+      _VaultData current, _VaultData published) {
+    final result = <String, EntryDiffKind>{};
+    final publishedById = {for (final e in published.entries) e.id: e};
+    final currentById = {for (final e in current.entries) e.id: e};
+    for (final entry in currentById.entries) {
+      final prev = publishedById[entry.key];
+      if (prev == null) {
+        result[entry.key] = EntryDiffKind.added;
+      } else if (jsonEncode(entry.value.toJson()) != jsonEncode(prev.toJson())) {
+        result[entry.key] = EntryDiffKind.modified;
+      }
+    }
+    for (final id in publishedById.keys) {
+      if (!currentById.containsKey(id)) result[id] = EntryDiffKind.removed;
+    }
+    return result;
+  }
+
+  /// Quais entradas mudaram desde o último snapshot publicado — usado por
+  /// [VaultPublishService] pra saber quais blobs de entrada precisam de uma
+  /// publicação nova no Arweave (entradas inalteradas mantêm o cid/hash já
+  /// registrado no último manifesto).
+  Future<Map<String, EntryDiffKind>> diffEntriesSinceLastPublish() async {
+    final current = await _load();
+    final snapshot =
+        await _loadPublishedSnapshot() ?? const _VaultData(version: 0, entries: []);
+    return _diffEntries(current, snapshot);
+  }
+
+  /// Diferença entre `manifest.entries` e `lastManifest?.entries` por
+  /// `contentHash` — usado pelo sync pra saber quais blobs de entrada
+  /// precisam ser buscados de novo (id ausente no manifesto anterior também
+  /// conta como mudança, cobre cold-start/device novo).
+  Set<String> manifestChangedEntryIds(
+      VaultManifest manifest, VaultManifest? lastManifest) {
+    final prev = lastManifest?.entries ?? const <String, ManifestEntryRef>{};
+    return {
+      for (final entry in manifest.entries.entries)
+        if (prev[entry.key]?.contentHash != entry.value.contentHash) entry.key,
+    };
+  }
+
+  /// Reconstrói o vault local (`_VaultData`/`vault.enc`) a partir de um
+  /// manifesto + entradas já cacheadas/buscadas ([cacheEntryBlobRaw]/
+  /// [readEntryBlob]) — entradas fora de `changedEntryIds` são preservadas
+  /// do vault local atual (evita decifrar de novo o que não mudou); as
+  /// demais vêm do cache por-entrada. Funciona também a partir de um vault
+  /// local vazio (cold-start, device novo pareado sem cache ainda) — toda
+  /// entrada do manifesto conta como "mudada" nesse caso.
+  Future<void> reassembleFromManifest(
+    VaultManifest manifest, {
+    required Set<String> changedEntryIds,
+  }) async {
+    final hasLocal = await hasLocalVault();
+    final current =
+        hasLocal ? await _load() : const _VaultData(version: 0, entries: []);
+    final byId = {for (final e in current.entries) e.id: e};
+    final newEntries = <VaultEntry>[];
+    for (final id in manifest.entries.keys) {
+      if (changedEntryIds.contains(id) || !byId.containsKey(id)) {
+        final blob = await readEntryBlob(id);
+        if (blob == null) continue; // caller busca antes de chamar
+        newEntries.add(await decryptEntryBlob(blob));
+      } else {
+        newEntries.add(byId[id]!);
+      }
+    }
+    await _save(_VaultData(
+      version: manifest.vaultVersion,
+      entries: newEntries,
+      profileNames: manifest.profileNames,
+      devicePermissions: manifest.devicePermissions,
+    ));
   }
 
   // Serializa o vault local inteiro e cifra com uma senha de export (PBKDF2 +

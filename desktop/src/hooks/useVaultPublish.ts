@@ -164,7 +164,7 @@ export function useVaultPublish(
   }
 
   function buttonLabel(): string {
-    if (publishState === "publishing") return "Publicando no Arweave...";
+    if (publishState === "publishing") return "Publicando alterações no Arweave...";
     if (isTxPending) return "Confirmar na carteira...";
     if (isConfirming) return "Aguardando rede...";
     if (justPublished) return "Enviado ✓";

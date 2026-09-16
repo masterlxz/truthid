@@ -2461,3 +2461,106 @@ run` 185/185 (6 testes novos em `useUpdateCheck.test.ts`), `cargo check`/`cargo 
 unitário — registrado como P85 em `PENDING.md`): cortar uma tag nova, publicar o release (sai do
 draft) e confirmar que uma instalação da versão anterior detecta, baixa, instala e reinicia sozinha
 nas 3 plataformas.
+
+### Vault por-entrada: manifesto no Arweave em vez de blob único — implementado Desktop + Mobile (Sessão 229, 2026-09-16)
+
+**Contexto**: numa sessão anterior (S226-228, registrada só em memória, não neste arquivo), o dono
+do projeto propôs debater usar Git como camada de storage/sync do Vault. Investigação real contra o
+código achou 3 bloqueadores técnicos, um deles (delta compression não funciona em conteúdo cifrado,
+já que o Vault é hoje **um blob único** recifrado por inteiro a cada edição, nonce aleatório novo
+sempre) tinha solução clara e valiosa **independente de qual storage fica por trás**: separar o
+Vault em manifesto+blob-por-entrada, generalizando o padrão que os documentos anexados já usam
+desde a Fase 15.7 (`DocumentData.cid`/`content_hash`, publicado à parte do resto). Essa parte foi
+separada do debate do Git (que segue aberto, sem solução pros outros 2 bloqueadores — histórico do
+Git como risco de segurança, merge automático em conteúdo cifrado) e implementada nesta sessão por
+si só: reduz custo real no Arweave (edição pequena não republica o vault inteiro) e destrava sync
+incremental de verdade no Mobile.
+
+**`/plan` completo rodado antes de qualquer código** — 3 agentes Explore em paralelo (mecânica
+exata do Desktop/Rust, do Mobile/Dart + SDKs, e do contrato `VaultRegistry.sol` + precedente de
+migração de formato + frontend) seguidos de 1 agente Plan pro desenho concreto. Achados-chave:
+
+- **`VaultRegistry.sol` trata o CID como ponteiro 100% opaco** (`updateVault` só valida
+  `cid`/`contentHash` não-vazios) — confirmado lendo o contrato. Apontar o CID pro manifesto em vez
+  do vault inteiro não exige NENHUMA mudança de contrato, mesmo mecanismo que a troca IPFS→Arweave
+  (Sessão 187) já explorou.
+- **O formato local em disco não precisa mudar em nenhuma plataforma** — `vault.enc`
+  (Desktop/Mobile) continua exatamente igual; só a camada de publicação/sync remota (Arweave) passa
+  a lidar com "manifesto + N blobs" em vez de "1 blob". Isso mantém a extensão nativa do iOS
+  (`AutofillExtension`, Swift, que lê `vault.enc` direto do disco esperando um `entries` só)
+  totalmente intocada, achado que simplificou bastante o escopo.
+- **Cada publicação no Arweave custa no mínimo ~4 idas-e-voltas de rede sequenciais + 1 transação
+  L1 com taxa própria** (`arweave/mod.rs::publish()`, sem endpoint de lote) — decisão explícita de
+  publicar cada entrada alterada como transação própria, sequencial, mesmo padrão que documentos já
+  usam; bundling fica como otimização futura, não vale a complexidade agora.
+- **Achado que definiu a ordem de rollout, o mais importante do `/plan`**: rastreando o código real
+  do `VaultSyncService.sync()` (Mobile), um Mobile desatualizado recebendo um CID no formato novo
+  (manifesto) sobrescreveria incondicionalmente o cache local (`overwriteCache`) com o manifesto —
+  que a decifra rejeitaria logo em seguida (formato diferente), corrompendo o cache que era bom
+  segundos antes. Por isso a ordem de implementação/rollout deste recurso inverteu a convenção
+  usual do projeto (normalmente Desktop primeiro): **Mobile-leitura primeiro** (aditivo, sem risco,
+  nada muda on-chain ainda), confirmado explicitamente com o dono do projeto antes de codar.
+
+**Desenho**: manifesto pequeno (`{version, vaultVersion, entries: {entryId -> {cid, contentHash,
+updatedAt}}, profileNames, devicePermissions}`) cifrado com um prefixo mágico de 5 bytes ASCII
+`"TIDM1"` antes do nonce — só em blobs de manifesto, nunca em blobs de entrada nem no vault legado
+inteiro. Um leitor faz peek nesses 5 bytes antes de decifrar: bate → parse como manifesto; não bate
+→ comportamento legado exato de sempre (migração lazy, sem script de migração em massa, mesmo
+precedente da troca IPFS→Arweave).
+
+**Implementado, nas duas plataformas na mesma sessão** (decisão do dono do projeto, dado o risco de
+interop entre "quem publica no formato novo" e "quem ainda não sabe ler"):
+
+- **Mobile**: `vault_repository.dart` ganhou os tipos `VaultManifest`/`ManifestEntryRef`/
+  `EntryDiffKind`, cache local por-entrada (`vault_entries/<id>.enc`, espelhando o cache de
+  documentos), `tryDecodeManifest`/`encryptManifestBlob` (peek+decifra do manifesto),
+  `diffEntriesSinceLastPublish`/`manifestChangedEntryIds` (extensão do `_diffCount` já existente, só
+  devolvendo ids+tipo em vez de contar), `reassembleFromManifest` (reconstrói o `_VaultData` local a
+  partir do manifesto + entradas cacheadas/buscadas — cobre cold-start de device novo de brinde,
+  achado colateral). `vault_sync_service.dart::sync()` bifurca manifesto vs. legado logo após o
+  hash-check do blob principal, sem alterar nada antes disso. `vault_publish_service.dart::publish()`
+  publica só as entradas mudadas + o manifesto (documentos continuam com o loop de sempre, antes de
+  tudo). `arweave_client.dart` ganhou `publishManifest`/`publishVaultEntry`, wrappers finos sobre o
+  core genérico já existente (zero HTTP novo).
+- **Desktop**: `vault.rs` ganhou os mesmos tipos espelhados, `encrypt_manifest`/`encrypt_entry`
+  (com a mesma cifra individual extra de `card_number`/`cvv` que o vault inteiro já aplica),
+  `diff_entries_detailed` **extraído** de `diff_count` (que passou a chamá-lo e somar `.len()`,
+  comportamento/assinatura pública inalterados — todos os testes de `diff_count` existentes
+  continuaram passando sem mudança, prova que o refactor não regrediu nada), `changed_entries_from`,
+  cache de manifesto (`vault.manifest.enc`) via o mesmo `write_file_atomic` de sempre. `lib.rs`'s
+  `vault_publish` reescrito pro mesmo fluxo do Mobile. `arweave/mod.rs` ganhou
+  `publish_manifest_with_jwk`/`publish_vault_entry_with_jwk` + wrappers `publish_manifest`/
+  `publish_vault_entry`, seguindo o padrão de 2 camadas que o resto do arquivo já usa (testável via
+  ArLocal) — **substituíram** `publish_vault_blob`/`publish_vault_blob_with_jwk`, que ficaram
+  genuinamente mortos depois da reescrita do `vault_publish` (removidos, não deixados como código
+  morto; o teste de integração ArLocal que os exercitava foi adaptado pra `publish_manifest_with_jwk`
+  em vez de duplicado). **Sem contraparte de leitura** (`decrypt_manifest`/`decrypt_entry`) no
+  Desktop — removida de propósito depois de escrita, pra não violar a própria decisão de escopo do
+  `/plan` ("sem comando de buscar vault por CID no Desktop agora", gap pré-existente e
+  independente): o Desktop nunca lê o vault remoto por CID hoje, nem no formato legado.
+
+**Achado real, corrigido antes de fechar**: a 1ª versão do `VaultPublishService.publish()` (Mobile)
+reintroduzia sem querer o exato bug de TOCTOU que a Sessão 153 já tinha corrigido (M3) —
+`readRawBlob()` passou a rodar DEPOIS do `await _sessionCreator.updateVault(...)` em vez de antes
+(reordenação natural ao encaixar o loop de entradas no meio do fluxo), então uma edição concorrente
+feita durante a publicação (UserOperation em voo, pode levar segundos) virava "já publicada" por
+engano — pego pelo teste de regressão que já existia no arquivo (precisou ser adaptado pro fluxo
+novo de qualquer forma) antes de qualquer commit. Corrigido capturando `version`, o blob bruto, a
+lista de entradas, `profileNames` e `devicePermissions` todos **antes** de qualquer chamada de rede
+(não só antes do `updateVault`), e usando exatamente esse snapshot no `markPublished` final.
+
+**Testes**: Desktop `cargo test --lib` 239/239 (6 ignorados, integração ArLocal — 6 testes novos:
+round-trip de manifesto e de entrada incluindo cartão de crédito, `diff_entries_detailed` cobrindo
+adicionada/modificada/removida + toggle de favorito não gera diff fantasma + baseline vazio na
+1ª publicação), `cargo clippy --lib` limpo (só o aviso pré-existente de tipo complexo em
+`rotate_vault_key_bytes`), `npx tsc --noEmit`/`npx vitest run` 185/185 limpos (label de publish no
+Desktop ajustado pra não afirmar "1 blob só" quando várias entradas mudaram). Mobile (via Docker,
+`docker compose run --rm flutter`) `flutter analyze` limpo (13 issues pré-existentes, nenhuma nova),
+`flutter test --concurrency=1` **720/720** (2 pulados, tag `arlocal` — ~18 testes novos, incluindo
+um teste de regressão específico provando que uma entrada de manifesto com hash divergente cai no
+fallback **sem corromper o cache local existente**, o bug exato que motivou a ordem de rollout
+Mobile-primeiro).
+
+**Não validado nesta sessão**: publicação real contra Arweave mainnet/testnet nem sincronização
+cross-device real (Desktop publica → Mobile sincroniza, e vice-versa) com dados de verdade — só
+testes automatizados (unitários + integração mockada). Registrado como P88 em `PENDING.md`.

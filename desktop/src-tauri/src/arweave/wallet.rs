@@ -81,8 +81,8 @@ pub(crate) fn generate_jwk() -> Result<ArweaveJwk, String> {
 }
 
 /// Só desserializa e confere `kty` — sem reconstruir a chave RSA. Usado no
-/// caminho de publish (`publish_vault_blob`/`publish_document`/
-/// `publish_pinned_content` em `mod.rs`), que já reconstrói a chave logo em
+/// caminho de publish (`publish_manifest`/`publish_vault_entry`/
+/// `publish_document`/`publish_pinned_content` em `mod.rs`), que já reconstrói a chave logo em
 /// seguida via `jwk_to_private_key` pra assinar; usar `parse_jwk` (que
 /// reconstrói e descarta) ali faria a mesma reconstrução RSA-4096 duas vezes
 /// seguidas no mesmo call chain, à toa (achado do `/code-review`, Sessão

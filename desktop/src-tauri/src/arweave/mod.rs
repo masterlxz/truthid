@@ -2,11 +2,13 @@
 //! ver `project/ROADMAP.md`) — gera/importa wallet, monta e assina
 //! transações formato 2, submete e lê de volta contra qualquer node/gateway
 //! Arweave via HTTP direto (sem bundler/serviço terceiro, ver decisão de
-//! arquitetura no plano da Etapa 1). Etapa 2: `publish_vault_blob` integra
-//! o blob principal do vault (`vault_publish` em `lib.rs`). Documentos
-//! anexados também publicam aqui via `publish_document` — o upload em
-//! chunks (`submit_chunk`, `POST /chunk`) cobre conteúdo de qualquer
-//! tamanho, não só o blob principal.
+//! arquitetura no plano da Etapa 1). Etapa 2: `publish_manifest`/
+//! `publish_vault_entry` integram o Vault por-entrada (`vault_publish` em
+//! `lib.rs`) — o CID publicado no `VaultRegistry` aponta pra um manifesto
+//! pequeno, cada entrada vira um blob próprio. Documentos anexados também
+//! publicam aqui via `publish_document` — o upload em chunks
+//! (`submit_chunk`, `POST /chunk`) cobre conteúdo de qualquer tamanho, não
+//! só entradas pequenas.
 
 mod checkpoint;
 mod deep_hash;
@@ -545,14 +547,14 @@ pub(crate) async fn fetch_wallet_transactions(
     Ok(edges.into_iter().map(|e| e.node.into()).collect())
 }
 
-/// Núcleo compartilhado de `publish_vault_blob_with_jwk`/
-/// `publish_pinned_content_with_jwk` — mesmas tags genéricas, mesmo formato
-/// de resultado (`ar://` + `keccak256`). As duas funções públicas existem
-/// separadas (em vez de uma só reexportada) porque representam conceitos
-/// diferentes pro chamador e já têm uma divergência futura conhecida: o
-/// `/pin` de apps terceiros deve ganhar uma tag de app de origem que o blob
-/// do vault não precisa (achado do `/code-review`, Sessão 195 — as duas
-/// eram cópias idênticas até aqui).
+/// Núcleo compartilhado de `publish_manifest_with_jwk`/
+/// `publish_vault_entry_with_jwk`/`publish_pinned_content_with_jwk` — mesmas
+/// tags genéricas, mesmo formato de resultado (`ar://` + `keccak256`). As
+/// funções públicas existem separadas (em vez de uma só reexportada) porque
+/// representam conceitos diferentes pro chamador e já têm uma divergência
+/// futura conhecida: o `/pin` de apps terceiros deve ganhar uma tag de app
+/// de origem que o vault não precisa (achado do `/code-review`, Sessão
+/// 195 — eram cópias idênticas até aqui).
 async fn publish_generic_content_with_jwk(
     client: &reqwest::Client,
     node_url: &str,
@@ -572,15 +574,19 @@ async fn publish_generic_content_with_jwk(
     })
 }
 
-/// Publica `content` no Arweave já com um JWK em mãos — sem tocar o
+/// Vault por-entrada (manifesto + blob por entrada) — sem tocar o
 /// keyring/arquivo local, então é diretamente testável (ex.: contra ArLocal
 /// com um JWK gerado na hora, ver `arlocal_tests`). Devolve o mesmo formato
-/// que `ipfs::pin_vault`: `cid` prefixado `"ar://"` (ponteiro
-/// auto-descritivo — um `cid` sem esse prefixo continua significando "busca
-/// no IPFS", sem exigir migração de dado nem mudança no `VaultRegistry`,
-/// que só guarda uma string opaca), `content_hash` calculado igual
-/// (`keccak256`, independente de backend).
-pub(crate) async fn publish_vault_blob_with_jwk(
+/// de sempre: `cid` prefixado `"ar://"` (ponteiro auto-descritivo — um `cid`
+/// sem esse prefixo continua significando "busca no IPFS", sem exigir
+/// migração de dado nem mudança no `VaultRegistry`, que só guarda uma
+/// string opaca), `content_hash` calculado igual (`keccak256`, independente
+/// de backend). `publish_manifest_with_jwk`/`publish_vault_entry_with_jwk`
+/// delegam pro mesmo core (`publish_generic_content_with_jwk`) — mantidas
+/// como funções nomeadas separadas (não um alias uma da outra) pra poderem
+/// divergir de tag no futuro sem afetar quem chama, mesmo precedente de
+/// `publish_pinned_content_with_jwk`.
+pub(crate) async fn publish_manifest_with_jwk(
     client: &reqwest::Client,
     node_url: &str,
     jwk: &ArweaveJwk,
@@ -589,19 +595,37 @@ pub(crate) async fn publish_vault_blob_with_jwk(
     publish_generic_content_with_jwk(client, node_url, jwk, content).await
 }
 
-/// Ponto de entrada real do `vault_publish` (Etapa 2) — carrega a wallet
-/// local (erro claro se ausente, sem fallback pro IPFS: corte direto,
-/// mesmo padrão já usado na rotação de DEK) e delega pro core acima.
-pub(crate) async fn publish_vault_blob(content: &[u8]) -> Result<crate::PublishResult, String> {
+/// Ponto de entrada real do `vault_publish` — carrega a wallet local (erro
+/// claro se ausente, sem fallback pro IPFS: corte direto, mesmo padrão já
+/// usado na rotação de DEK) e delega pro core acima.
+pub(crate) async fn publish_manifest(content: &[u8]) -> Result<crate::PublishResult, String> {
     let json = crate::get_arweave_wallet().map_err(|_| {
         "nenhuma wallet Arweave configurada — gere ou importe uma antes de publicar o vault"
             .to_string()
     })?;
     let jwk = wallet::deserialize_jwk(&json)?;
-    publish_vault_blob_with_jwk(&http_client(), ARWEAVE_DEFAULT_NODE, &jwk, content).await
+    publish_manifest_with_jwk(&http_client(), ARWEAVE_DEFAULT_NODE, &jwk, content).await
 }
 
-/// Mesmo papel que `publish_vault_blob_with_jwk`, mas para documentos
+pub(crate) async fn publish_vault_entry_with_jwk(
+    client: &reqwest::Client,
+    node_url: &str,
+    jwk: &ArweaveJwk,
+    content: &[u8],
+) -> Result<crate::PublishResult, String> {
+    publish_generic_content_with_jwk(client, node_url, jwk, content).await
+}
+
+pub(crate) async fn publish_vault_entry(content: &[u8]) -> Result<crate::PublishResult, String> {
+    let json = crate::get_arweave_wallet().map_err(|_| {
+        "nenhuma wallet Arweave configurada — gere ou importe uma antes de publicar o vault"
+            .to_string()
+    })?;
+    let jwk = wallet::deserialize_jwk(&json)?;
+    publish_vault_entry_with_jwk(&http_client(), ARWEAVE_DEFAULT_NODE, &jwk, content).await
+}
+
+/// Mesmo papel que `publish_manifest_with_jwk`, mas para documentos
 /// anexados — carrega `file_name`/`mime_type` reais (`DocumentData` em
 /// `vault.rs`) como tags Arweave em vez das tags genéricas do blob
 /// principal (facilita indexação externa via GraphQL, sem custo extra).
@@ -628,7 +652,7 @@ pub(crate) async fn publish_document_with_jwk(
 }
 
 /// Ponto de entrada real do `vault_publish` para documentos anexados —
-/// mesmo padrão de `publish_vault_blob` (carrega a wallet local, erro claro
+/// mesmo padrão de `publish_manifest` (carrega a wallet local, erro claro
 /// se ausente, sem fallback pro IPFS).
 pub(crate) async fn publish_document(
     content: &[u8],
@@ -643,9 +667,9 @@ pub(crate) async fn publish_document(
     publish_document_with_jwk(&http_client(), ARWEAVE_DEFAULT_NODE, &jwk, content, file_name, mime_type).await
 }
 
-/// Mesmo papel que `publish_vault_blob_with_jwk`, mas para o conteúdo
+/// Mesmo papel que `publish_manifest_with_jwk`, mas para o conteúdo
 /// arbitrário que apps terceiros enviam via `/truthid/v1/pin` — mesmas tags
-/// genéricas do blob principal (sem tag de app de origem por ora).
+/// genéricas do manifesto (sem tag de app de origem por ora).
 pub(crate) async fn publish_pinned_content_with_jwk(
     client: &reqwest::Client,
     node_url: &str,
@@ -656,7 +680,7 @@ pub(crate) async fn publish_pinned_content_with_jwk(
 }
 
 /// Ponto de entrada real do canal `/truthid/v1/pin` (apps terceiros) —
-/// mesmo padrão de `publish_vault_blob`/`publish_document` (carrega a
+/// mesmo padrão de `publish_manifest`/`publish_document` (carrega a
 /// wallet local, erro claro se ausente, sem fallback pro IPFS: corte
 /// direto).
 pub(crate) async fn publish_pinned_content(content: &[u8]) -> Result<crate::PublishResult, String> {
@@ -1332,13 +1356,15 @@ mod arlocal_tests {
         assert_eq!(fetched, content);
     }
 
-    /// Mesma validação de ponta a ponta, mas passando pelo wrapper de Etapa 2
-    /// (`publish_vault_blob_with_jwk`) em vez de `publish` cru — confere o
-    /// formato do `PublishResult` (prefixo `ar://`, `content_hash` batendo com
-    /// `ipfs::keccak256_hex`) além do round-trip de bytes.
+    /// Mesma validação de ponta a ponta, mas passando pelo wrapper de
+    /// manifesto (`publish_manifest_with_jwk`) em vez de `publish` cru —
+    /// confere o formato do `PublishResult` (prefixo `ar://`, `content_hash`
+    /// batendo com `ipfs::keccak256_hex`) além do round-trip de bytes.
+    /// `publish_vault_entry_with_jwk` delega pro mesmo core genérico, sem
+    /// precisar de um teste próprio.
     #[tokio::test]
     #[ignore]
-    async fn publish_vault_blob_round_trip_against_arlocal() {
+    async fn publish_manifest_round_trip_against_arlocal() {
         let client = http_client();
         wait_for_arlocal(&client).await.expect("ArLocal deve estar rodando");
 
@@ -1349,10 +1375,10 @@ mod arlocal_tests {
             .await
             .expect("faucet deve fundar a wallet de teste");
 
-        let content = b"vault blob de teste contra ArLocal".to_vec();
-        let result = publish_vault_blob_with_jwk(&client, ARLOCAL_URL, &jwk, &content)
+        let content = b"manifesto de teste contra ArLocal".to_vec();
+        let result = publish_manifest_with_jwk(&client, ARLOCAL_URL, &jwk, &content)
             .await
-            .expect("publish_vault_blob_with_jwk deve suceder contra ArLocal");
+            .expect("publish_manifest_with_jwk deve suceder contra ArLocal");
 
         assert!(result.cid.starts_with("ar://"), "cid deveria vir prefixado ar://, veio: {}", result.cid);
         assert_eq!(result.content_hash, crate::ipfs::keccak256_hex(&content));
@@ -1471,7 +1497,7 @@ mod arlocal_tests {
     /// Mesma validação de `publish_multi_chunk_content_round_trip_against_arlocal`
     /// (conteúdo real >256KiB, exercita o upload em chunks), mas passando pelo
     /// wrapper de documentos (`publish_document_with_jwk`) em vez de `publish`
-    /// cru — confere o `PublishResult` (mesmo shape de `publish_vault_blob_with_jwk`)
+    /// cru — confere o `PublishResult` (mesmo shape de `publish_manifest_with_jwk`)
     /// além do round-trip de bytes. É o caminho que `vault_publish` agora usa
     /// pra documentos anexados do vault.
     #[tokio::test]

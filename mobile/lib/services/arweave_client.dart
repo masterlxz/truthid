@@ -510,6 +510,18 @@ class ArweaveVaultPublisher {
   Future<ArweavePublishResult> publishVaultBlob(Uint8List content) =>
       _publishGenericContent(content);
 
+  // Vault por-entrada — mirror de `arweave::publish_manifest`/
+  // `arweave::publish_vault_entry` (Rust). Mesmas tags genéricas do blob do
+  // vault inteiro; ambas delegam pro mesmo núcleo, mantidas como funções
+  // nomeadas separadas (não um alias) pra poderem divergir de tag no futuro
+  // sem afetar quem chama, mesmo precedente de publishVaultBlob/
+  // publishPinnedContent.
+  Future<ArweavePublishResult> publishManifest(Uint8List content) =>
+      _publishGenericContent(content);
+
+  Future<ArweavePublishResult> publishVaultEntry(Uint8List content) =>
+      _publishGenericContent(content);
+
   // Mirror de `arweave::publish_pinned_content` (Rust) — conteúdo arbitrário
   // que apps terceiros enviam via `/truthid/v1/pin` cross-device. Mesmas
   // tags genéricas do blob principal.

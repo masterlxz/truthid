@@ -4,7 +4,36 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-08-27 (Sessão 228: **P86 FECHADO por completo** — `coinbase_wallet_sdk`
+> Última atualização: 2026-09-16 (Sessão 229: **P87 registrada e implementada** — Vault
+> por-entrada (manifesto no Arweave em vez de blob único). Debate anterior sobre usar Git como
+> storage do Vault (ver `ROADMAP.md`) identificou que o blob único hoje reescreve o vault inteiro a
+> cada edição; a solução (manifesto pequeno `entryId -> cid/contentHash` + blob cifrado por entrada,
+> generalizando o padrão que os documentos anexados já usam desde a Fase 15.7) foi separada do
+> debate do Git e vale por si só — reduz custo real no Arweave e destrava sync incremental no
+> Mobile. `/plan` completo rodado antes de código (3 agentes Explore + 1 Plan). Achado real do
+> `/plan`: se o Desktop publicasse o formato novo antes do Mobile saber ler, um Mobile desatualizado
+> corromperia o cache local (`vault_sync_service.dart` sobrescrevia incondicionalmente com o
+> manifesto, que a decifra rejeitava logo em seguida) — rollout invertido de propósito (Mobile-leitura
+> primeiro, depois as duas escritas) pra evitar esse bug, ao contrário da convenção usual do
+> projeto (Desktop primeiro). **Implementado nas duas plataformas nesta sessão**: Mobile
+> (`vault_repository.dart`/`vault_sync_service.dart`/`vault_publish_service.dart`/
+> `arweave_client.dart`) e Desktop (`vault.rs`/`lib.rs`/`arweave/mod.rs`), sem mudança de contrato
+> (`VaultRegistry.updateVault` já tratava o CID como ponteiro opaco). Achado real no processo,
+> corrigido antes de fechar: a 1ª versão do `VaultPublishService.publish()` (Mobile) reintroduzia o
+> exato bug de TOCTOU que a Sessão 153 já tinha corrigido (M3) — lia o blob cru DEPOIS do
+> `updateVault` on-chain em vez de antes, então uma edição concorrente durante a publicação virava
+> "já publicada" por engano; pego pelo teste de regressão já existente
+> (`vault_publish_service_test.dart`) antes de qualquer commit, corrigido capturando
+> `version`/snapshot/entries/perfis/permissões antes
+> de qualquer chamada de rede. Testes: Desktop `cargo test --lib` 239/239 (6 ignorados, ArLocal),
+> `cargo clippy --lib` limpo (só o aviso pré-existente de tipo complexo em `rotate_vault_key_bytes`),
+> `npx tsc --noEmit`/`npx vitest run` 185/185 limpos. Mobile (via Docker) `flutter analyze` limpo (13
+> issues pré-existentes), `flutter test --concurrency=1` **720/720** (2 pulados, tag `arlocal`).
+> **Não validado**: publicação real contra Arweave mainnet/testnet nem sincronização cross-device
+> real (Desktop↔Mobile) com dados de verdade — só testes automatizados nesta sessão, registrado
+> como P88.
+>
+> Última atualização anterior: 2026-08-27 (Sessão 228: **P86 FECHADO por completo** — `coinbase_wallet_sdk`
 > vendorizado em `mobile/third_party/` com 3 patches (`compileSdk` 36 + 2 `.pro` vazios que faltavam
 > no tarball publicado, bug real do upstream achado só ao reproduzir o build de verdade) via
 > `dependency_overrides`; validado localmente via Docker (`assembleRelease` limpo, `flutter analyze`
@@ -130,6 +159,20 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 ---
 
 ## Não Resolvidas
+
+### P88 — Vault por-entrada (P87): falta validação real (Arweave mainnet/testnet + sync cross-device Desktop↔Mobile) (Sessão 229)
+
+Implementação completa (Desktop + Mobile) nas duas pontas do P87, só testes automatizados
+(unitários/integração mockada) rodados nesta sessão — nenhuma publicação real contra o Arweave
+(mainnet ou testnet) nem sincronização cross-device real (Desktop publica → Mobile sincroniza, e
+vice-versa) foi exercitada. Falta: (1) publicar um vault de teste de verdade via Desktop e conferir
+que o CID on-chain aponta pro manifesto certo; (2) sincronizar esse mesmo vault num Mobile físico,
+confirmando que o `sync()` reconhece o manifesto, busca só as entradas certas e reconstrói o vault
+local igual ao do Desktop; (3) publicar uma edição pelo Mobile e sincronizar de volta no Desktop
+(hoje o Desktop não tem comando de fetch-by-CID — validar que o pareamento continua funcionando
+como sempre, já que essa parte não mudou). Sem cobrança de prazo — mesma categoria de validação
+manual que outras features do Desktop/Mobile aguardando hardware/rede real (ver P79-P81, P74/P76/P77
+no arquivo).
 
 ### P86 — Build de release do Mobile (Android) quebrado: `coinbase_wallet_sdk` (dependência abandonada) trava em `compileSdk 31` — ✅ FECHADO por completo, validado no CI real e publicado (Sessão 228)
 
@@ -470,6 +513,12 @@ de um `/plan` dedicado.
 ---
 
 ## Resolvidas
+
+### P87 — Vault por-entrada: manifesto no Arweave em vez de blob único, Desktop + Mobile (Sessão 229)
+
+| ID | Item | Resolvida em |
+|---|---|---|
+| ~~P87~~ | ~~O `VaultRegistry` guardava 1 CID apontando pro vault inteiro; qualquer edição (mesmo 1 campo) recifrava e republicava tudo no Arweave, e o `sync()` do Mobile baixava+decifrava o vault inteiro a cada versão nova on-chain.~~ Achado durante o debate sobre usar Git como storage do Vault ([[project_git_storage_provider_debate]] na memória) — a causa raiz (blob único) foi separada desse debate por valer por si só. **`/plan` completo rodado antes de código** (3 agentes Explore em paralelo — Desktop/Rust, Mobile/Dart+SDKs, contrato+migração+frontend — mais 1 agente Plan pro desenho). Desenho: CID on-chain passa a apontar pra um **manifesto pequeno** (`entryId -> {cid, contentHash, updatedAt}`), cada entrada vira um blob cifrado próprio no Arweave, só republicado quando muda de verdade — generaliza o padrão que os documentos anexados já usam desde a Fase 15.7. **Sem mudança de contrato** (`VaultRegistry.updateVault` só valida `cid`/`contentHash` não-vazios, confirmado lendo o contrato — ponteiro 100% opaco). **Formato local em disco não muda em nenhuma plataforma** (`vault.enc` continua igual) — só a publicação/sync remota muda; a extensão nativa do iOS (que lê `vault.enc` direto do disco) fica intocada. Discriminador: prefixo mágico ASCII `TIDM1` (5 bytes) antes do nonce, só em blobs de manifesto — um leitor faz peek nos primeiros bytes pra decidir "manifesto novo" vs. "vault inteiro, formato legado" sem gastar uma decifra à toa; blob legado sem o prefixo cai no comportamento de sempre (migração lazy, sem script de migração em massa — mesmo precedente da troca IPFS→Arweave). **Achado real do `/plan` que definiu a ordem de rollout**: se o Desktop publicasse o formato novo antes do Mobile saber ler, um Mobile desatualizado sobrescreveria o cache local com o manifesto (que ele tentaria decifrar como vault inteiro), falharia, e o fallback já leria o cache corrompido — rastreado passo a passo no código (`vault_sync_service.dart`, `overwriteCache` incondicional). Por isso a ordem inverteu a convenção usual do projeto: **Mobile-leitura primeiro** (aditivo, sem risco), documentado e aprovado explicitamente pelo dono do projeto antes de codar. **Implementado nas duas plataformas na mesma sessão** (decisão do dono do projeto, dado o risco de interop entre publicar e ler o formato novo): Mobile — `vault_repository.dart` (tipos `VaultManifest`/`ManifestEntryRef`/`EntryDiffKind`, cache local por-entrada em `vault_entries/<id>.enc` espelhando o de documentos, `tryDecodeManifest`/`encryptManifestBlob`, `diffEntriesSinceLastPublish`/`manifestChangedEntryIds`, `reassembleFromManifest` — cobre cold-start de device novo de brinde), `vault_sync_service.dart` (`sync()` bifurca manifesto vs. legado logo após o hash-check do blob principal), `vault_publish_service.dart` (`publish()` publica só entradas mudadas + o manifesto), `arweave_client.dart` (`publishManifest`/`publishVaultEntry`, wrappers finos sobre o core genérico já existente). Desktop — `vault.rs` (mesmos tipos espelhados, `encrypt_manifest`/`encrypt_entry`, `diff_entries_detailed` extraído de `diff_count` sem mudar seu comportamento público, `changed_entries_from`, cache de manifesto/entrada), `lib.rs` (`vault_publish` reescrito pro mesmo fluxo), `arweave/mod.rs` (`publish_manifest_with_jwk`/`publish_vault_entry_with_jwk` + wrappers, seguindo o padrão de 2 camadas já usado pro resto do arquivo — testável via ArLocal). **Sem contraparte de leitura (`decrypt_manifest`/`decrypt_entry`) no Desktop** — removida de propósito depois de escrita (violaria a decisão de escopo do próprio `/plan`, "sem comando de buscar vault por CID no Desktop agora": o Desktop nunca lê o vault remoto por CID hoje, nem no formato legado; entraria junto quando/se esse comando for construído). **Achado real corrigido antes de fechar**: a 1ª versão do `VaultPublishService.publish()` (Mobile) reintroduzia o exato bug de TOCTOU que a Sessão 153 já tinha corrigido (M3) — lia o blob cru DEPOIS do `updateVault` on-chain em vez de antes, então uma edição concorrente durante a publicação (rede lenta, UserOperation em voo) virava "já publicada" por engano; pego pelo teste de regressão já existente no arquivo (que eu tinha que adaptar pro fluxo novo de qualquer forma) antes de qualquer commit — corrigido capturando `version`/blob-snapshot/entries/perfis/permissões todos ANTES de qualquer chamada de rede, não só antes do `updateVault`. Testes: Desktop `cargo test --lib` 239/239 (6 ignorados, ArLocal — 6 testes novos: round-trip de manifesto/entrada incluindo cartão de crédito, `decrypt_manifest` reconhece blob legado como não-manifesto, 3 casos de `diff_entries_detailed`), `cargo clippy --lib` limpo (só o aviso pré-existente de tipo complexo em `rotate_vault_key_bytes`), `npx tsc --noEmit`/`npx vitest run` 185/185 limpos (label de publish ajustado pra não afirmar "1 blob só"). Mobile (via Docker) `flutter analyze` limpo (13 issues pré-existentes, nenhuma nova), `flutter test --concurrency=1` **720/720** (2 pulados, tag `arlocal` — ~18 testes novos entre `vault_repository_test.dart`/`vault_sync_service_test.dart`/`vault_publish_service_test.dart`, incluindo um teste de regressão específico provando que uma entrada de manifesto com hash divergente cai no fallback **sem corromper o cache local existente** — o bug exato que a ordem de rollout Mobile-primeiro evita). **Não validado**: publicação real contra Arweave mainnet/testnet nem sincronização cross-device real (Desktop↔Mobile) com dados de verdade — só testes automatizados nesta sessão, registrado como P88. | conversa direta + `/plan`, implementado Sessão 229 |
 
 ### Tela de Configurações (⚙) no Desktop + bloqueio do app por senha (Sessão 225)
 

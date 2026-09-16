@@ -611,7 +611,7 @@ fn vault_encrypt(plaintext_b64: String) -> Result<String, String> {
 /// Resultado de uma publicação de storage (Arweave ou IPFS legado): CID/ponteiro
 /// obtido, hash do conteúdo (pro contrato) e listas de providers que tiveram
 /// sucesso ou falha — nome/campos genéricos porque é compartilhado por
-/// `arweave::publish_vault_blob*`/`publish_document*`/`publish_pinned_content*`.
+/// `arweave::publish_manifest*`/`publish_vault_entry*`/`publish_document*`/`publish_pinned_content*`.
 #[derive(Serialize, serde::Deserialize, Debug)]
 pub(crate) struct PublishResult {
     pub cid: String,
@@ -630,13 +630,23 @@ pub(crate) struct PublishResult {
 /// então documentos grandes não inflam o sync de edições não relacionadas
 /// (ver project/PHASE.md, 15.7).
 ///
-/// Etapa 2 da migração de storage (ver `project/ROADMAP.md`): o blob
-/// principal do vault vai pro Arweave via `arweave::publish_vault_blob`.
-/// Documentos anexados também vão pro Arweave, via `arweave::publish_document`
-/// (upload em chunks cobre os até 50MB permitidos). Ambos exigem wallet
-/// Arweave configurada e financiada — sem fallback pro IPFS, corte direto.
-/// `cid`s Arweave saem prefixados `"ar://"`; `cid`s IPFS (vaults/documentos
-/// publicados antes desta migração) continuam sem prefixo — ver dispatch em
+/// Vault por-entrada: generaliza o mesmo princípio dos documentos pra todas
+/// as entradas. O CID que vai pro `VaultRegistry` não aponta mais pro vault
+/// inteiro — aponta pra um manifesto pequeno (`entryId -> cid/contentHash`).
+/// Só entradas que mudaram desde o último snapshot publicado ganham um blob
+/// novo no Arweave; as demais mantêm o cid/hash já registrado no último
+/// manifesto conhecido. Entrada removida só sai do mapa de refs. Isso
+/// também É a migração pra quem nunca publicou nesse esquema — sem
+/// manifesto anterior, toda entrada aparece como "nova" e é publicada uma
+/// vez só (lazy upgrade, mesmo precedente da migração IPFS->Arweave, sem
+/// script de migração em massa).
+///
+/// Etapa 2 da migração de storage (ver `project/ROADMAP.md`): documentos e
+/// entradas vão pro Arweave (upload em chunks cobre os até 50MB permitidos
+/// nos documentos). Exige wallet Arweave configurada e financiada — sem
+/// fallback pro IPFS, corte direto. `cid`s Arweave saem prefixados
+/// `"ar://"`; `cid`s IPFS (vaults/documentos publicados antes da migração
+/// pro Arweave) continuam sem prefixo — ver dispatch em
 /// `vault_document_read`.
 #[tauri::command]
 async fn vault_publish() -> Result<PublishResult, String> {
@@ -671,11 +681,42 @@ async fn vault_publish() -> Result<PublishResult, String> {
         vault::save(&v)?;
     }
 
-    let encrypted_blob = crate::config::read_file(&path)?;
-    let result = arweave::publish_vault_blob(&encrypted_blob).await?;
-    // Decripta do blob já em memória em vez de read()+load() de novo
-    let decrypted = vault::decrypt(&encrypted_blob)?;
-    let mut v: vault::Vault = serde_json::from_slice(&decrypted).map_err(|e| e.to_string())?;
+    let changed = vault::changed_entries_from(&v)?;
+    let mut entry_refs: std::collections::HashMap<String, vault::ManifestEntryRef> =
+        vault::load_last_manifest()?
+            .map(|m| m.entries)
+            .unwrap_or_default();
+
+    for (id, kind) in &changed {
+        match kind {
+            vault::EntryDiffKind::Removed => {
+                entry_refs.remove(id);
+            }
+            vault::EntryDiffKind::Added | vault::EntryDiffKind::Modified => {
+                let entry = v
+                    .entries
+                    .iter()
+                    .find(|e| &e.id == id)
+                    .expect("changed id must exist in current vault");
+                let blob = vault::write_entry_blob(id, entry)?;
+                let result = arweave::publish_vault_entry(&blob).await?;
+                entry_refs.insert(
+                    id.clone(),
+                    vault::ManifestEntryRef {
+                        cid: result.cid,
+                        content_hash: result.content_hash,
+                        updated_at: entry.updated_at,
+                    },
+                );
+            }
+        }
+    }
+
+    let manifest = vault::build_manifest(&v, &entry_refs);
+    let manifest_blob = vault::encrypt_manifest(&manifest)?;
+    let result = arweave::publish_manifest(&manifest_blob).await?;
+    vault::save_last_manifest(&manifest)?;
+
     // Fase 15.8: normaliza card_number/cvv pra texto plano antes de marcar
     // publicado — crítico pra corretude do diff de pending_changes(), que
     // sempre compara contra load() (também em claro). Sem isso, o snapshot

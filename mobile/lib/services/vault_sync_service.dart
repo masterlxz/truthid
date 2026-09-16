@@ -149,13 +149,52 @@ class VaultSyncService {
         );
       }
 
-      await _repository.overwriteCache(bytes);
-      // Achado da Sessão 130: puxar uma versão mais nova doutro device sem
-      // marcar como publicada deixava pendingChanges() (que compara contra o
-      // marcador local de "última publicada por este device") achando que
-      // essa versão ainda estava pendente — "pending changes" fantasma no
-      // Mobile depois de sincronizar algo publicado pelo Desktop.
-      await _repository.markPublished(ref.version, bytes);
+      final manifest = await _repository.tryDecodeManifest(bytes);
+      if (manifest == null) {
+        // Blob legado (vault inteiro) — comportamento exatamente igual ao
+        // de sempre, sem passar pelo caminho de manifesto abaixo.
+        await _repository.overwriteCache(bytes);
+        // Achado da Sessão 130: puxar uma versão mais nova doutro device sem
+        // marcar como publicada deixava pendingChanges() (que compara contra
+        // o marcador local de "última publicada por este device") achando
+        // que essa versão ainda estava pendente — "pending changes" fantasma
+        // no Mobile depois de sincronizar algo publicado pelo Desktop.
+        await _repository.markPublished(ref.version, bytes);
+        final entries = await _repository.listEntries();
+        final profileNames = await _repository.listProfileNames();
+        return VaultSyncOutcome(
+          status: VaultSyncStatus.synced,
+          entries: entries,
+          profileNames: profileNames,
+          updatedAt: ref.updatedAt,
+          legacyIpfsCid: !ref.cid.startsWith('ar://'),
+        );
+      }
+
+      // Manifesto: busca+verifica+decifra só as entradas cujo cid/contentHash
+      // mudou desde o último manifesto conhecido por este device — nunca
+      // sobrescreve o cache local de uma vez só (ao contrário do caminho
+      // legado acima), então uma falha no meio (rede caiu buscando 1
+      // entrada) cai no fallback sem corromper nada do que já estava bom.
+      final lastManifest = await _repository.loadLastManifest();
+      final changedIds =
+          _repository.manifestChangedEntryIds(manifest, lastManifest);
+      for (final id in changedIds) {
+        final entryRef = manifest.entries[id]!;
+        final entryBytes = await _gateway.fetch(entryRef.cid);
+        final entryDigest = bytesToHex(keccak256(entryBytes), include0x: true);
+        if (entryDigest.toLowerCase() != entryRef.contentHash.toLowerCase()) {
+          throw VaultHashMismatchException(
+            'Downloaded entry blob hash ($entryDigest) does not match manifest contentHash (${entryRef.contentHash}) for entry $id',
+          );
+        }
+        await _repository.cacheEntryBlobRaw(id, entryBytes);
+      }
+      await _repository.reassembleFromManifest(manifest,
+          changedEntryIds: changedIds);
+      await _repository.saveLastManifest(manifest);
+      final rebuiltBlob = await _repository.readRawBlob();
+      await _repository.markPublished(ref.version, rebuiltBlob);
       final entries = await _repository.listEntries();
       final profileNames = await _repository.listProfileNames();
       return VaultSyncOutcome(
@@ -163,7 +202,7 @@ class VaultSyncService {
         entries: entries,
         profileNames: profileNames,
         updatedAt: ref.updatedAt,
-        legacyIpfsCid: !ref.cid.startsWith('ar://'),
+        legacyIpfsCid: false,
       );
     } catch (e) {
       // `ref` só fica disponível aqui quando o fetch/hash-check falhou depois
