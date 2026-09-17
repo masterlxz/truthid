@@ -204,22 +204,23 @@ function App() {
           </div>
           <div className="topbar-right">
             {displayUsername && (
-              <button className="topbar-btn" onClick={() => setLoginOpen(true)}>
-                {t("app.topbar.login")}
-              </button>
+              <div className="topbar-group">
+                <button className="topbar-btn" onClick={() => setLoginOpen(true)}>
+                  {t("app.topbar.login")}
+                </button>
+                <span className="topbar-username">@{displayUsername}</span>
+                <button
+                  className="topbar-btn topbar-icon-btn"
+                  onClick={() => queryClient.invalidateQueries()}
+                  title={t("app.topbar.refresh")}
+                >
+                  ↻
+                </button>
+              </div>
             )}
-            {displayUsername && (
-              <span className="topbar-username">@{displayUsername}</span>
-            )}
-            {displayUsername && (
-              <button
-                className="topbar-btn"
-                onClick={() => queryClient.invalidateQueries()}
-                title={t("app.topbar.refresh")}
-              >
-                ↻
-              </button>
-            )}
+
+            {displayUsername && <div className="topbar-divider" />}
+
             {isConnected ? (
               <button
                 className="topbar-btn topbar-btn-danger"
@@ -236,22 +237,30 @@ function App() {
                 {t("app.topbar.connectWallet")}
               </button>
             )}
-            <button
-              className="topbar-btn"
-              onClick={() => setDonateOpen(true)}
-              title={t("app.topbar.donate")}
-            >
-              ♥
-            </button>
-            {displayUsername && (
+
+            <div className="topbar-divider" />
+
+            <div className="topbar-group">
               <button
-                className="topbar-btn"
-                onClick={() => setSettingsOpen(true)}
-                title={t("app.topbar.settings")}
+                className="topbar-btn topbar-icon-btn"
+                onClick={() => setDonateOpen(true)}
+                title={t("app.topbar.donate")}
               >
-                ⚙
+                ♥
               </button>
-            )}
+              {displayUsername && (
+                <button
+                  className="topbar-btn topbar-icon-btn"
+                  onClick={() => setSettingsOpen(true)}
+                  title={t("app.topbar.settings")}
+                >
+                  ⚙
+                </button>
+              )}
+            </div>
+
+            <div className="topbar-divider" />
+
             <button
               className="topbar-btn topbar-btn-danger"
               onClick={handleLogout}

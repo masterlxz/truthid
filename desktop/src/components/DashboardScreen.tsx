@@ -16,7 +16,7 @@ export function DashboardScreen() {
   return (
     <div>
       <h2>@{username}</h2>
-      <nav className="tabs" style={{ marginBottom: "1rem" }}>
+      <nav className="segmented" style={{ marginBottom: "1.25rem" }}>
         <button onClick={() => setView("eth")} disabled={view === "eth"}>
           {t("dashboardScreen.toggle.eth")}
         </button>
