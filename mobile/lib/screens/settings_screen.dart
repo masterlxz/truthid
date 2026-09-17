@@ -6,6 +6,7 @@ import '../theme.dart';
 import '../l10n/l10n_extensions.dart';
 import 'guardian_status_screen.dart';
 import 'security_screen.dart';
+import 'vault_backup_screen.dart';
 
 // Nomes dos idiomas nunca são traduzidos — cada um aparece sempre no
 // próprio idioma, mesma convenção do seletor do Desktop.
@@ -233,6 +234,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ),
                   const SizedBox(height: 32),
                   const Divider(),
+                  const SizedBox(height: 8),
+                  ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.save_alt, color: AppColors.textMuted),
+                    title: Text(context.l10n.settingsScreenBackupTitle),
+                    subtitle: Text(
+                      context.l10n.settingsScreenBackupSubtitle,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const VaultBackupScreen(),
+                      ),
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   ListTile(
                     contentPadding: EdgeInsets.zero,

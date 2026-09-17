@@ -1810,10 +1810,6 @@
   "@vaultScreenTitle": {
     "description": "Title of the Vault screen."
   },
-  "vaultScreenBackupRestoreTooltip": "Backup / restore",
-  "@vaultScreenBackupRestoreTooltip": {
-    "description": "Tooltip for the backup/restore icon button on the Vault screen."
-  },
   "vaultScreenPinningProvidersTooltip": "Pinning providers",
   "@vaultScreenPinningProvidersTooltip": {
     "description": "Tooltip for the pinning providers icon button on the Vault screen."
@@ -2973,6 +2969,14 @@
   "settingsScreenWhyOwnKeyBody": "TruthID is decentralized — there is no company server paying your blockchain fees. Your smart account holds ETH and pays the bundler directly. The API key is only to reach the bundler node.",
   "@settingsScreenWhyOwnKeyBody": {
     "description": "Body explaining why the user needs their own bundler API key"
+  },
+  "settingsScreenBackupTitle": "Backup / restore",
+  "@settingsScreenBackupTitle": {
+    "description": "Title of the list tile linking to the vault backup/restore screen"
+  },
+  "settingsScreenBackupSubtitle": "Export or import your entire vault as a file",
+  "@settingsScreenBackupSubtitle": {
+    "description": "Subtitle of the list tile linking to the vault backup/restore screen"
   },
   "settingsScreenSocialRecoveryTitle": "Social Recovery",
   "@settingsScreenSocialRecoveryTitle": {

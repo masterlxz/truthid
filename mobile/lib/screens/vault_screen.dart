@@ -19,7 +19,6 @@ import '../theme.dart';
 import '../widgets/address_summary.dart';
 import '../widgets/card_summary.dart';
 import 'pinning_providers_screen.dart';
-import 'vault_backup_screen.dart';
 import 'vault_device_permissions_screen.dart';
 import 'vault_entry_detail_screen.dart';
 import 'vault_entry_form_screen.dart';
@@ -393,19 +392,6 @@ class _VaultScreenState extends State<VaultScreen> {
               Expanded(
                 child: Text(context.l10n.vaultScreenTitle,
                     style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-              ),
-              // Fora da guarda de _canWrite de propósito: export/import não
-              // dependem de permissão de escrita on-chain (só leem/escrevem
-              // o cache local deste device) — mesmo device só-leitura pode
-              // fazer backup do que já vê.
-              IconButton(
-                icon: const Icon(Icons.save_alt),
-                tooltip: context.l10n.vaultScreenBackupRestoreTooltip,
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => VaultBackupScreen(repository: _repository),
-                  ),
-                ),
               ),
               if (_canWrite) ...[
                 IconButton(

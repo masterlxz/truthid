@@ -1810,10 +1810,6 @@
   "@vaultScreenTitle": {
     "description": "Title of the Vault screen."
   },
-  "vaultScreenBackupRestoreTooltip": "备份 / 恢复",
-  "@vaultScreenBackupRestoreTooltip": {
-    "description": "Tooltip for the backup/restore icon button on the Vault screen."
-  },
   "vaultScreenPinningProvidersTooltip": "固定服务提供方",
   "@vaultScreenPinningProvidersTooltip": {
     "description": "Tooltip for the pinning providers icon button on the Vault screen."
@@ -2973,6 +2969,14 @@
   "settingsScreenWhyOwnKeyBody": "TruthID 是去中心化的 — 没有公司服务器为您支付区块链费用。您的智能账户持有 ETH 并直接向 Bundler 支付费用。API 密钥仅用于连接到 Bundler 节点。",
   "@settingsScreenWhyOwnKeyBody": {
     "description": "Body explaining why the user needs their own bundler API key"
+  },
+  "settingsScreenBackupTitle": "备份 / 恢复",
+  "@settingsScreenBackupTitle": {
+    "description": "Title of the list tile linking to the vault backup/restore screen"
+  },
+  "settingsScreenBackupSubtitle": "将整个密码库导出或导入为文件",
+  "@settingsScreenBackupSubtitle": {
+    "description": "Subtitle of the list tile linking to the vault backup/restore screen"
   },
   "settingsScreenSocialRecoveryTitle": "社交恢复",
   "@settingsScreenSocialRecoveryTitle": {
