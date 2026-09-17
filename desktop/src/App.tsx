@@ -33,10 +33,9 @@ import { PinApprovalModal } from "./components/PinApprovalModal";
 import { VaultEditApprovalModal } from "./components/VaultEditApprovalModal";
 import { AutofillAddressApprovalModal } from "./components/AutofillAddressApprovalModal";
 import { AutofillCreditCardApprovalModal } from "./components/AutofillCreditCardApprovalModal";
-import { GuardianManagement } from "./components/GuardianManagement";
 import "./App.css";
 
-type Tab = "dashboard" | "devices" | "sessions" | "vault" | "recovery";
+type Tab = "dashboard" | "devices" | "sessions" | "vault";
 
 function LogoIcon() {
   return (
@@ -68,6 +67,11 @@ function App() {
   const [donateOpen, setDonateOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsBusy, setSettingsBusy] = useState(false);
+  // Bumping isso remonta o VaultManagement (força seu loadAll() de novo) —
+  // Backup e Bitwarden import migraram pra dentro de Settings (pedido do
+  // dono do projeto) mas continuam mexendo nas entradas do vault por baixo
+  // dos panos, então o Vault, se estiver montado, precisa saber que mudou.
+  const [vaultReloadKey, setVaultReloadKey] = useState(0);
   const queryClient = useQueryClient();
 
   const { username: storedUsername, save: saveUsername, clear: clearUsername } = useStoredUsername();
@@ -356,26 +360,19 @@ function App() {
                 >
                   Vault
                 </button>
-                <button
-                  onClick={() => setActiveTab("recovery")}
-                  disabled={activeTab === "recovery"}
-                >
-                  Recovery
-                </button>
               </nav>
 
               {activeTab === "dashboard" && <DashboardScreen />}
               {activeTab === "devices" && <ManageDevices />}
               {activeTab === "sessions" && <ActiveSessions />}
-              {activeTab === "vault" && <VaultManagement />}
-              {activeTab === "recovery" && <GuardianManagement />}
+              {activeTab === "vault" && <VaultManagement key={vaultReloadKey} />}
 
               {settingsOpen && (
                 <div
                   className="modal-overlay"
                   onClick={() => !settingsBusy && setSettingsOpen(false)}
                 >
-                  <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+                  <div className="modal-box modal-box--wide" onClick={(e) => e.stopPropagation()}>
                     <div className="modal-header">
                       <h2 className="modal-title">{t("app.topbar.settings")}</h2>
                       <button
@@ -389,6 +386,7 @@ function App() {
                     <Settings
                       onClose={() => setSettingsOpen(false)}
                       onMigrationBusyChange={setSettingsBusy}
+                      onVaultChanged={() => setVaultReloadKey((k) => k + 1)}
                     />
                   </div>
                 </div>

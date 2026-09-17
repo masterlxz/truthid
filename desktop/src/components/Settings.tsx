@@ -3,18 +3,26 @@ import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { LanguageSelector } from "./LanguageSelector";
 import { MigrateWallet } from "./MigrateWallet";
+import { VaultBackup } from "./VaultBackup";
+import { BitwardenImport } from "./BitwardenImport";
+import { GuardianManagement } from "./GuardianManagement";
 
 type LockPhase = "idle" | "enabling" | "disabling";
 
 // Tela de Configurações (⚙) — reúne o que antes estava espalhado (idioma no
 // topbar, migrar wallet no dashboard) mais o bloqueio do app por senha,
-// pedido direto do dono do projeto.
+// pedido direto do dono do projeto. Backup, import do Bitwarden e Recovery
+// (antes uma aba própria / botões no Vault) viraram seções recolhíveis aqui
+// — pedido do dono do projeto pra reduzir a poluição visual do Vault e do
+// menu principal.
 export function Settings({
   onClose,
   onMigrationBusyChange,
+  onVaultChanged,
 }: {
   onClose: () => void;
   onMigrationBusyChange?: (busy: boolean) => void;
+  onVaultChanged?: () => void;
 }) {
   const { t } = useTranslation();
 
@@ -24,6 +32,10 @@ export function Settings({
   const [passwordConfirm, setPasswordConfirm] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [backupOpen, setBackupOpen] = useState(false);
+  const [bitwardenOpen, setBitwardenOpen] = useState(false);
+  const [recoveryOpen, setRecoveryOpen] = useState(false);
 
   useEffect(() => {
     invoke<boolean>("app_lock_is_enabled").then(setLockEnabled).catch(() => setLockEnabled(false));
@@ -150,6 +162,50 @@ export function Settings({
               </button>
             </div>
           </>
+        )}
+      </div>
+
+      {/* Backup, import do Bitwarden e Recovery — recolhidos por padrão, já
+          que são usados com pouca frequência (ver comentário no topo). */}
+      <div style={{ marginBottom: "0.75rem" }}>
+        <button
+          onClick={() => setBackupOpen((v) => !v)}
+          style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)", fontSize: "0.9em", padding: "0.4em 1em" }}
+        >
+          {backupOpen ? "▼" : "▶"} {t("settings.backup.title")}
+        </button>
+        {backupOpen && (
+          <div style={{ marginTop: "0.75rem" }}>
+            <VaultBackup onImported={onVaultChanged} />
+          </div>
+        )}
+      </div>
+
+      <div style={{ marginBottom: "0.75rem" }}>
+        <button
+          onClick={() => setBitwardenOpen((v) => !v)}
+          style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)", fontSize: "0.9em", padding: "0.4em 1em" }}
+        >
+          {bitwardenOpen ? "▼" : "▶"} {t("settings.bitwardenImport.title")}
+        </button>
+        {bitwardenOpen && (
+          <div style={{ marginTop: "0.75rem" }}>
+            <BitwardenImport onImported={() => onVaultChanged?.()} />
+          </div>
+        )}
+      </div>
+
+      <div>
+        <button
+          onClick={() => setRecoveryOpen((v) => !v)}
+          style={{ borderColor: "var(--color-border)", color: "var(--color-text-muted)", fontSize: "0.9em", padding: "0.4em 1em" }}
+        >
+          {recoveryOpen ? "▼" : "▶"} {t("settings.recovery.title")}
+        </button>
+        {recoveryOpen && (
+          <div style={{ marginTop: "0.75rem" }}>
+            <GuardianManagement />
+          </div>
         )}
       </div>
     </div>

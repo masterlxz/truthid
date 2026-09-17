@@ -2,10 +2,10 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useVaultBackup } from "../hooks/useVaultBackup";
 
-export function VaultBackup() {
+export function VaultBackup({ onImported }: { onImported?: () => void } = {}) {
   const { t } = useTranslation();
   const { exportState, exportError, exportBackup, importState, importError, importBackup } =
-    useVaultBackup();
+    useVaultBackup(onImported);
 
   const [exportPassword, setExportPassword] = useState("");
   const [exportPasswordConfirm, setExportPasswordConfirm] = useState("");

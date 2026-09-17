@@ -72,12 +72,7 @@
     "unlock": "Desbloquear vault"
   },
   "header": {
-    "title": "Vault",
-    "backToVault": "← Vault",
-    "backupTitle": "Backup",
-    "bitwardenImportButton": "⇩ Importar do Bitwarden",
-    "backupButton": "⏏ Backup",
-    "bitwardenImportTitle": "Importar do Bitwarden"
+    "title": "Vault"
   },
   "status": {
     "checkingOnChain": "Verificando status on-chain...",

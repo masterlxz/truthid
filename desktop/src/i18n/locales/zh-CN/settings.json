@@ -19,5 +19,14 @@
     "confirmDisableButton": "禁用",
     "cancel": "取消",
     "saving": "保存中..."
+  },
+  "backup": {
+    "title": "备份"
+  },
+  "bitwardenImport": {
+    "title": "从 Bitwarden 导入"
+  },
+  "recovery": {
+    "title": "恢复"
   }
 }

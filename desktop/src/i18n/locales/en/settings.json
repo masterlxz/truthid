@@ -19,5 +19,14 @@
     "confirmDisableButton": "Disable",
     "cancel": "Cancel",
     "saving": "Saving..."
+  },
+  "backup": {
+    "title": "Backup"
+  },
+  "bitwardenImport": {
+    "title": "Import from Bitwarden"
+  },
+  "recovery": {
+    "title": "Recovery"
   }
 }

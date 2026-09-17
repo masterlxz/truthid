@@ -9,7 +9,7 @@ import { bytesToBase64, base64ToBytes } from "../utils/base64";
 // Cifrado com uma senha de exportação separada (PBKDF2+AES-256-GCM, ver
 // backup.rs) — não é a vault key derivada da wallet, de propósito: restaurar
 // não deve exigir ter a wallet em mãos.
-export function useVaultBackup() {
+export function useVaultBackup(onImported?: () => void) {
   const [exportState, setExportState] = useState<"idle" | "exporting" | "done" | "error">("idle");
   const [exportError, setExportError] = useState<string | null>(null);
   const [importState, setImportState] = useState<"idle" | "importing" | "done" | "error">("idle");
@@ -51,6 +51,7 @@ export function useVaultBackup() {
       const bytes = await readFile(path);
       await invoke("vault_import_backup", { blobB64: bytesToBase64(bytes), password });
       setImportState("done");
+      onImported?.();
     } catch (e) {
       setImportError(String(e));
       setImportState("error");

@@ -72,12 +72,7 @@
     "unlock": "解锁密码库"
   },
   "header": {
-    "title": "密码库",
-    "backToVault": "← 密码库",
-    "backupTitle": "备份",
-    "bitwardenImportButton": "⇩ 从 Bitwarden 导入",
-    "backupButton": "⏏ 备份",
-    "bitwardenImportTitle": "从 Bitwarden 导入"
+    "title": "密码库"
   },
   "status": {
     "checkingOnChain": "正在检查链上状态...",
