@@ -25,7 +25,8 @@
 > revertendo só a correção: falha com `syncFailedNoCache`), `cargo clippy --lib` e `flutter analyze` sem
 > aviso novo. **Não validado em runtime real**: a rotação de ponta a ponta usa o keyring do usuário, então
 > os testes cobrem a lógica com caminhos/chaves explícitos, não o comando completo. Ainda na S230, preparação do `GitStorageProvider` (sem mudança de comportamento):
-> tipo explícito de ponteiro de storage nas 3 stacks e abstração de provider (Desktop + Mobile) — ver `ROADMAP.md`.)
+> tipo explícito de ponteiro de storage nas 3 stacks e abstração de provider (Desktop + Mobile) — ver `ROADMAP.md`. Registrados **P90** (épico do Git: fase 0 concluída, decisões pendentes do dono do projeto),
+> **P91** (nada validado em hardware/host Git reais) e **P92** (teto de 1000 publicações no `VaultRegistry`).)
 >
 > Última atualização anterior: 2026-09-16 (Sessão 229: **P87 registrada e implementada** — Vault
 > por-entrada (manifesto no Arweave em vez de blob único). Debate anterior sobre usar Git como
@@ -182,6 +183,38 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 ---
 
 ## Não Resolvidas
+
+### P90 — Épico: `GitStorageProvider` para o Vault (convive com o Arweave) — fase 0 concluída, fases 1-4 não iniciadas, aguardando decisão do dono do projeto (Sessão 230)
+
+Plano completo, decisões, achados do spike e avaliação crítica em `ROADMAP.md` ("GitStorageProvider —
+spike, plano aprovado e avaliação crítica"). **Feito**: fase 0 — 0.1 (P89), 0.2 (tipo explícito de
+ponteiro nas 3 stacks) e 0.3 (abstração de provider, Arweave como único provider, comportamento
+idêntico); commits `f6ad98b`, `bf54dc8`, `cd86a50` na branch `fix/p89-rotacao-dek`, **não mergeada**.
+**Falta**: fase 1 (Desktop: `git2` com HTTPS+SSH, gate de CI nos 3 SOs primeiro), fase 2 (Mobile: gate de
+build Android com `git2dart`), fase 3 (nudge e ação de squash), fase 4 (docs do site nos 4 locales:
+`cross-device-and-storage`, `vault` — já defasada desde o P87 —, `contracts`, `how-it-works`).
+**Decisões pendentes antes de seguir** (recomendações do ROADMAP): validar o P88 antes da fase 2; fazer a
+**comparação de custo real Git vs. Arweave** (nunca feita); entregar só o Desktop na fase 1 e usar por um
+tempo antes do Mobile; tratar a deletabilidade como o motivo principal.
+
+### P91 — `GitStorageProvider`: nada foi validado em hardware real nem com host Git real (Sessão 230)
+
+O spike só cobriu Linux (Rust e Dart) e um **emulador Android x86_64**. Falta: celular Android **arm64**
+real, iOS (só dá via runner macOS do CI), macOS/Windows do `git2dart`, **SSH** (incluindo TOFU de host
+key), **push HTTPS autenticado com token** contra GitHub/GitLab/Gitea, e a interoperabilidade
+Desktop→Mobile→Desktop com dados reais. Também não isolado: o segfault de leitura de conflitos do
+`git2dart` no Linux (o Android funcionou num teste mínimo com outro cenário). Sem cobrança de prazo —
+mesma categoria de P88 e P79-P81.
+
+### P92 — `VaultRegistry.MAX_HISTORY = 1000` num contrato imutável: depois de 1000 publicações a identidade nunca mais publica (Sessão 230)
+
+Achado lendo o contrato durante o `/plan` do Git. `updateVault` faz `_vaultHistory.push(cid)` e reverte com
+`MaxHistoryExceeded` ao chegar em 1000; não há função de reset e o contrato não tem proxy. **Já existe hoje**
+(cada `vault_publish` consome 1), mas um provider Git torna publicar com frequência mais plausível. Nenhum
+cliente lê esse histórico (`getVaultHistory` só é usado pelo contrato, testes e docs). Mitigações
+possíveis, nada decidido: publicar em lote (não a cada edição), avisar perto do teto, e avaliar um caminho
+de migração de contrato (como na cascata da S197) se algum dia chegar perto. Squash off-chain não reduz o
+histórico on-chain.
 
 ### P89 — Rotação de DEK deixava o Vault preso (Desktop: baseline de publicação na chave antiga; Mobile: sync preso no cache ilegível) — ✅ corrigido no código, falta validar em runtime real (Sessão 230)
 

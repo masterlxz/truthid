@@ -1057,6 +1057,13 @@ Mobile (Flutter/Dart, sandbox iOS/Android) — bloquearia paridade de plataforma
 futuro um caso de uso *dentro* do TruthID com a forma do MCGit (muitos arquivos, incremental de
 verdade), reabrir a discussão; até lá, manter conteúdo endereçado por hash como já é hoje.
 
+> **Atualização (Sessão 230)**: a discussão foi reaberta, por outro motivo (armazenamento **deletável** e
+> de custo recorrente pro Vault, não o MCGit). O risco "sem binding maduro de libgit2 no Mobile" deixou de
+> valer: `git2dart` 0.5.6 traz libgit2 pré-compilado (Android 4 ABIs, iOS) e foi provado num emulador
+> Android. Ver a seção "GitStorageProvider — spike, plano aprovado e avaliação crítica (Sessão 230)" no fim
+> deste arquivo. A decisão original continua certa pra payloads grandes/`/pin`: o Git só entra como
+> **provider do Vault**, convivendo com o Arweave.
+
 **Correção sobre o quanto o MCGit precisaria do TruthID (mesma sessão)**: a lógica de git em si
 (objetos, árvore, commits) fica inteiramente no MCGit, fora deste repo — nisso o dono do projeto
 estava certo. Duas ressalvas concretas, checadas no código desta sessão, que valem quando isso for
@@ -2630,4 +2637,67 @@ sem nenhuma alteração; 3 testes novos provam a ordem com um provider falso.
 aviso pré-existente, `npx vitest run` 190/190 (+5), Mobile (Docker) 731/731 (+10) e `flutter analyze`
 nos mesmos 13 avisos de antes. O `vault_publish` refatorado no Rust não tem teste próprio (precisa de
 rede e keyring, sempre foi assim); a garantia é o corpo movido literalmente mais a compilação.
+
+### GitStorageProvider — spike, plano aprovado e avaliação crítica (Sessão 230, 2026-09-19)
+
+**Objetivo.** Um provider Git pro Vault, convivendo com o Arweave (escolha por identidade). Motivação do
+dono do projeto: modelo de custo recorrente e mais baixo, onde parar de pagar faz o dado sumir, em vez do
+pagamento único e permanente do Arweave; e facilitar plugar um storage descentralizado em Ethereum no
+futuro. Não remove a dependência de Ethereum: a identidade continua on-chain, só a camada de conteúdo muda.
+
+**Spike de viabilidade (feito, descartável, fora do repo).** O cenário completo — clone, commit, push,
+push concorrente rejeitado, merge de arquivos diferentes, mesma entrada nos dois lados (mais recente
+vence), delete propagado, squash com force-push — passou 11/11 em **Rust** (`git2` 0.20, libgit2 e
+OpenSSL embutidos, rodando com `PATH` vazio: zero dependência do binário `git`) e em **Dart**
+(`git2dart` 0.5.6 + `git2dart_binaries` 1.14.0, libgit2 via FFI). Clone HTTPS real passou nas duas.
+No **emulador Android x86_64** (Android 34, KVM, headless) o cenário completo e o HTTPS também passaram.
+Achados: (1) `git2dart` dá **segfault ao ler conflitos de merge no Linux** (`Index.conflicts`,
+`Index.conflict(path)`, até `Index.length`); no Android a leitura de conflitos funcionou, então parece
+específico do `.so` Linux (não isolado — o teste mínimo do Android usou outro cenário). Contornado com
+merge manual por arquivo. (2) No Android/iOS é obrigatório `await PlatformSpecific.initialize()` antes
+de qualquer API (extrai o bundle de CAs; sem isso o HTTPS falha com "SSL certificate is invalid"). (3) O
+`.so` Linux do `git2dart` pede glibc >= 2.38 e a imagem Docker do Mobile (Ubuntu 22.04) tem 2.35, então
+testes com libgit2 real exigem base 24.04. (4) Depois de um squash, o outro device vê históricos sem
+relação (não um erro): precisa detectar a ausência de merge-base. (5) O ponteiro on-chain é público e
+permanente — gravar a URL do repo em claro exporia o remoto do usuário pra sempre.
+**Não coberto**: arm64 real (o emulador é x86_64), iOS, macOS/Windows do `git2dart`, SSH, push HTTPS
+autenticado. A infra do emulador ficou em `~/android-emu-spike/` (fora do repo, ~8 GB, reaproveitável).
+
+**Plano aprovado.** Decisões: Git **convive** com Arweave (não substitui); ponteiro on-chain **opção C**
+`git:<URL cifrada com a vault key>@<commit>` (contrato não muda); squash é nudge opt-in; merge por
+arquivo com timestamp de commit; **Desktop primeiro**, Mobile depois; credenciais **HTTPS com token e
+SSH** (TOFU de host key); documentos como arquivos no repo. O tipo do ponteiro on-chain decide o provider
+da identidade (um device nunca publica Arweave por cima de `git:`). Layout do repo:
+`vault_entries/<id>.enc`, `vault_documents/<id>.enc`, `meta.enc`, marcador `truthid-vault.json`; sem
+arquivo de manifesto (a árvore de commits já lista). `contentHash` = keccak256 da lista ordenada
+`path:keccak256(bytes)`. Merge determinístico e idêntico em Rust e Dart (fixtures JSON compartilhadas):
+um lado só mudou → esse vence; os dois mudaram → vence o último commit que tocou o caminho; empate →
+maior id de commit; sem merge-base → base vazia; `meta.enc` também LWW (união poderia reconceder
+permissão revogada). Segredos (token/chave SSH) nunca no blob publicado nem cifrados com a DEK.
+Fases: **0** pré-requisitos (0.1 P89, 0.2 tipo de ponteiro, 0.3 abstração de provider) — **CONCLUÍDA**;
+**1** Desktop (gate de CI do `git2` nos 3 SOs primeiro); **2** Mobile (gate: `assembleRelease` com
+`git2dart`, AGP 7.3 do plugin); **3** squash; **4** registro/docs.
+
+**Avaliação crítica (mesma sessão, a pedido do dono do projeto).** *O motivo certo é a deletabilidade,
+não o custo*: no Arweave toda versão antiga do vault cifrado fica pública pra sempre — se uma senha
+mestra ou chave vazar daqui a anos, todo o histórico cai de uma vez ("colher agora, decifrar depois");
+num storage que apaga, o risco tem prazo. *O custo é uma dúvida*: depois do P87 só as entradas alteradas
+são republicadas e um vault tem poucos KB; **a comparação de custo real Git vs. Arweave nunca foi
+feita** e pode mostrar que o custo hoje é irrelevante. *Preocupações*: (a) credenciais por device — hoje
+parear basta, com Git cada device precisa de token/chave SSH criados e guardados pelo usuário, a maior
+queda de conveniência; (b) dependência de um host centralizado (ban de conta, rate limit) num projeto
+auto-soberano — o conteúdo é cifrado, a disponibilidade não; (c) o host vê contagem, tamanho e cadência
+de edição das entradas; (d) tamanho do trabalho (duas linguagens com merge que precisa dar o mesmo
+resultado, SSH, squash — várias sessões); (e) o maior risco está no Mobile (build Android com o AGP
+antigo do plugin, ~24 MB de `.so`, arm64/iOS nunca testados). *Ritmo*: o Git está sendo construído em
+cima do formato por-entrada do P87, que **ainda não foi validado em rede real (P88)**; se o P87 tiver
+um problema real, o Git herda. Nota: o plano foi desenhado pela mesma sessão que o avaliou (viés).
+
+**Recomendações registradas, sem decisão do dono do projeto ainda**: (1) validar o P88 antes da fase 2;
+(2) fazer a comparação de custo Git vs. Arweave agora (barata, diz se vale a pena); (3) entregar só o
+Desktop na fase 1 e usar por um tempo antes de investir no Mobile, que concentra custo e risco; (4)
+tratar a deletabilidade como o "porquê" — isso torna squash e rotação centrais, não opcionais. Se o custo
+se mostrar irrelevante, a deletabilidade sozinha ainda justifica o Git, mas o escopo deve ser revisto.
+Registrado como **P90** (épico), **P91** (validação em hardware) e **P92** (teto de publicações) em
+`PENDING.md`.
 
