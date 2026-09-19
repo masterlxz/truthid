@@ -12,6 +12,7 @@ import 'package:truthid_mobile/services/session_creator.dart';
 import 'package:truthid_mobile/services/vault_cipher_service.dart';
 import 'package:truthid_mobile/services/vault_publish_service.dart';
 import 'package:truthid_mobile/services/vault_repository.dart';
+import 'package:truthid_mobile/services/vault_storage_provider.dart';
 
 class MockArweaveVaultPublisher extends Mock implements ArweaveVaultPublisher {}
 
@@ -24,6 +25,33 @@ class _FakeCipherService extends VaultCipherService {
 
   @override
   Future<Uint8List> decrypt(Uint8List blob) async => blob;
+}
+
+// Provider de storage que só registra o que o VaultPublishService pediu e em
+// que ordem — prova que o serviço não depende de Arweave (é o que deixa um
+// provider Git entrar depois).
+class _RecordingStorageProvider implements VaultStorageProvider {
+  final List<String> calls;
+  VaultPublishSnapshot? lastSnapshot;
+
+  _RecordingStorageProvider(this.calls);
+
+  @override
+  Future<Uint8List> fetch(String pointer) async => Uint8List(0);
+
+  @override
+  Future<void> publishPendingDocuments() async => calls.add('documents');
+
+  @override
+  Future<StagedVaultPublish> publishVault(VaultPublishSnapshot snapshot) async {
+    calls.add('publishVault');
+    lastSnapshot = snapshot;
+    return StagedVaultPublish(
+      pointer: 'fake:pointer',
+      contentHash: '0xfakehash',
+      commitLocalState: () async => calls.add('commitLocalState'),
+    );
+  }
 }
 
 void main() {
@@ -369,6 +397,90 @@ void main() {
       verify(() => mockArweavePublisher.publishDocument(any(), 'rg.pdf', 'application/pdf')).called(1);
       final entries = await repo.listEntries();
       expect(entries.single.document?.cid, 'ar://NewTxId');
+    });
+  });
+
+  group('provider de storage plugável', () {
+    test(
+        'usa o provider injetado: documentos → publicar → updateVault on-chain → '
+        'só então grava o estado local', () async {
+      await repo.addEntry(site: 'github.com', username: 'fab', password: 'x');
+      final calls = <String>[];
+      final provider = _RecordingStorageProvider(calls);
+      when(() => mockSessionCreator.updateVault(
+            smartAccountAddress: any(named: 'smartAccountAddress'),
+            cid: any(named: 'cid'),
+            contentHashHex: any(named: 'contentHashHex'),
+          )).thenAnswer((_) async {
+        calls.add('updateVault');
+        return const SessionCreationResult(userOpHash: '0xop', transactionHash: '0xtx');
+      });
+      final service = VaultPublishService(
+        sessionCreator: mockSessionCreator,
+        repository: repo,
+        storageProvider: provider,
+      );
+
+      final result = await service.publish(smartAccountAddress);
+
+      expect(calls,
+          ['documents', 'publishVault', 'updateVault', 'commitLocalState']);
+      expect(result.cid, 'fake:pointer');
+      expect(result.contentHash, '0xfakehash');
+      verify(() => mockSessionCreator.updateVault(
+            smartAccountAddress: smartAccountAddress,
+            cid: 'fake:pointer',
+            contentHashHex: '0xfakehash',
+          )).called(1);
+      // O vault ficou marcado como publicado (nada pendente).
+      expect(await repo.pendingChanges(), 0);
+    });
+
+    test(
+        'updateVault on-chain falha → o provider NÃO grava estado local e o '
+        'vault continua com pendências', () async {
+      await repo.addEntry(site: 'github.com', username: 'fab', password: 'x');
+      final calls = <String>[];
+      when(() => mockSessionCreator.updateVault(
+            smartAccountAddress: any(named: 'smartAccountAddress'),
+            cid: any(named: 'cid'),
+            contentHashHex: any(named: 'contentHashHex'),
+          )).thenThrow(Exception('bundler fora do ar'));
+      final service = VaultPublishService(
+        sessionCreator: mockSessionCreator,
+        repository: repo,
+        storageProvider: _RecordingStorageProvider(calls),
+      );
+
+      await expectLater(
+          service.publish(smartAccountAddress), throwsA(isA<Exception>()));
+
+      expect(calls, ['documents', 'publishVault']);
+      expect(await repo.pendingChanges(), greaterThan(0));
+    });
+
+    test(
+        'o snapshot entregue ao provider é o estado local capturado antes da '
+        'publicação', () async {
+      await repo.addEntry(site: 'github.com', username: 'fab', password: 'x');
+      final provider = _RecordingStorageProvider(<String>[]);
+      when(() => mockSessionCreator.updateVault(
+            smartAccountAddress: any(named: 'smartAccountAddress'),
+            cid: any(named: 'cid'),
+            contentHashHex: any(named: 'contentHashHex'),
+          )).thenAnswer((_) async => const SessionCreationResult(userOpHash: '0xop', transactionHash: '0xtx'));
+      final service = VaultPublishService(
+        sessionCreator: mockSessionCreator,
+        repository: repo,
+        storageProvider: provider,
+      );
+
+      await service.publish(smartAccountAddress);
+
+      final snap = provider.lastSnapshot!;
+      expect(snap.entries.map((e) => e.site), ['github.com']);
+      expect(snap.version, await repo.currentVersion());
+      expect(snap.rawBlob, isNotEmpty);
     });
   });
 }

@@ -2591,3 +2591,43 @@ uma rotação ficam ilegíveis, e nenhuma das duas plataformas tratava isso — 
 
 **Não validado**: rotação real (revogar device) ponta a ponta, e o cache de documentos do Mobile,
 que também fica na chave antiga (não verificado se já é tratado).
+
+### Preparação para o `GitStorageProvider`: tipo de ponteiro e abstração de provider — implementado (Sessão 230, 2026-09-19)
+
+Fases 0.2 e 0.3 do plano do Git (ver debate do Git como storage do Vault). Nenhuma das duas muda
+comportamento de Arweave/IPFS; existem pra que o Git entre sem reescrever o que já funciona.
+
+**0.2 — tipo explícito de ponteiro.** O ponteiro do `VaultRegistry` é uma string opaca cujo esquema
+diz onde o conteúdo mora; cada call site tratava `!startsWith('ar://')` como "IPFS legado", o que
+classificaria errado um terceiro backend. Agora há um tipo com três casos — Arweave (`ar://`), Git
+(`git:`) e IPFS legado (o resto, incluindo esquema desconhecido, como antes) — espelhado nas três
+stacks: `storage::PointerKind` (Rust), `pointerKind` (TS), `StoragePointerKind` (Dart). Efeitos para
+um ponteiro `git:`: o nudge de migração pra Arweave não aparece (Desktop); `vault_document_read`
+devolve erro claro em vez de mandar o ponteiro pro gateway IPFS; `IpfsGatewayClient.fetch` falha na
+hora com `UnsupportedError` em vez de esperar ~30s de timeouts dos gateways; o sync do Mobile não
+marca `legacyIpfsCid`.
+
+**0.3 — abstração de provider.** Cada provider decide o que é uma unidade de publicação (Arweave: um
+blob por entrada + manifesto; Git: um commit). Desktop: trait `storage::VaultStorageProvider` com
+`ArweaveProvider`, que recebeu o corpo do `vault_publish` movido **sem alteração**. Mobile: interface
+`VaultStorageProvider` (+ `VaultBlobFetcher` só com `fetch`, em arquivo próprio pra não criar ciclo
+com `vault_repository.dart`) e `ArweaveStorageProvider`, que recebeu a lógica do
+`VaultPublishService.publish`. O serviço agora só garante a ordem: guard → documentos → snapshot
+(TOCTOU do M3 preservado) → `publishVault` → `updateVault` on-chain → só então
+`StagedVaultPublish.commitLocalState()` → `markPublished`. Os testes existentes do publish passaram
+sem nenhuma alteração; 3 testes novos provam a ordem com um provider falso.
+
+**Desvios do plano, de propósito**:
+- Sem classe `VaultStorageResolver` separada: os 3 pontos de construção do Mobile já usam o default
+  do próprio serviço, então o "único lugar" é o construtor. A escolha por identidade (que precisa ler
+  o ponteiro on-chain, async) entra com o Git.
+- O rótulo do botão de publicar só perdeu o "no Arweave"; não virou i18n porque os demais rótulos do
+  hook são português fixo e o `VaultManagement` compara `buttonLabel === "Enviar"` por igualdade.
+- Trait Rust com despacho estático (`async fn` em trait não é object-safe); `PublishResult` continua
+  em `lib.rs` (o módulo do Arweave já o referencia como `crate::PublishResult`).
+
+**Testes**: Desktop `cargo test --lib` 248/248 (+5, tipo de ponteiro), `cargo clippy --lib` só com o
+aviso pré-existente, `npx vitest run` 190/190 (+5), Mobile (Docker) 731/731 (+10) e `flutter analyze`
+nos mesmos 13 avisos de antes. O `vault_publish` refatorado no Rust não tem teste próprio (precisa de
+rede e keyring, sempre foi assim); a garantia é o corpo movido literalmente mais a compilação.
+

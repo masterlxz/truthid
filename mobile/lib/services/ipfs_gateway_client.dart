@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show consolidateHttpClientResponseBytes;
 
 import 'storage_pointer.dart';
+import 'vault_blob_fetcher.dart';
 
 // Baixa um blob pelo CID a partir de gateways IPFS públicos — usado pelo
 // VaultSyncService (13.8) pra buscar o vault cifrado publicado pelo Desktop.
@@ -17,7 +18,7 @@ import 'storage_pointer.dart';
 // carteira/cripto nova aqui, é só um GET público contra o gateway — por
 // isso o dispatch mora inteiro neste client, sem tocar VaultSyncService nem
 // VaultRepository (os dois só chamam fetch(cid)).
-class IpfsGatewayClient {
+class IpfsGatewayClient implements VaultBlobFetcher {
   IpfsGatewayClient({
     this.gateways = const [
       'https://ipfs.io/ipfs/',
@@ -34,6 +35,7 @@ class IpfsGatewayClient {
   // Tenta cada gateway em ordem, a primeira resposta 200 vence. Lança se
   // todos falharem (rede, timeout, ou status != 200), com um resumo do que
   // cada gateway retornou.
+  @override
   Future<Uint8List> fetch(String cid) async {
     switch (StoragePointerKind.of(cid)) {
       case StoragePointerKind.arweave:

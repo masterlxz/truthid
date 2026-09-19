@@ -24,7 +24,8 @@
 > Testes: Desktop `cargo test --lib` 243/243 (+4), Mobile (Docker) 721/721 (+1, red→green provado
 > revertendo só a correção: falha com `syncFailedNoCache`), `cargo clippy --lib` e `flutter analyze` sem
 > aviso novo. **Não validado em runtime real**: a rotação de ponta a ponta usa o keyring do usuário, então
-> os testes cobrem a lógica com caminhos/chaves explícitos, não o comando completo.)
+> os testes cobrem a lógica com caminhos/chaves explícitos, não o comando completo. Ainda na S230, preparação do `GitStorageProvider` (sem mudança de comportamento):
+> tipo explícito de ponteiro de storage nas 3 stacks e abstração de provider (Desktop + Mobile) — ver `ROADMAP.md`.)
 >
 > Última atualização anterior: 2026-09-16 (Sessão 229: **P87 registrada e implementada** — Vault
 > por-entrada (manifesto no Arweave em vez de blob único). Debate anterior sobre usar Git como

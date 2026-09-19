@@ -3,6 +3,7 @@ import 'package:web3dart/crypto.dart';
 import 'blockchain_service.dart';
 import 'ipfs_gateway_client.dart';
 import 'storage_pointer.dart';
+import 'vault_blob_fetcher.dart';
 import 'vault_key_service.dart';
 import 'vault_repository.dart';
 
@@ -57,7 +58,7 @@ class VaultHashMismatchException implements Exception {
 class VaultSyncService {
   VaultSyncService({
     BlockchainService? blockchainService,
-    IpfsGatewayClient? gatewayClient,
+    VaultBlobFetcher? gatewayClient,
     VaultKeyService? vaultKeyService,
     VaultRepository? repository,
   })  : _blockchain = blockchainService ?? BlockchainService(),
@@ -66,7 +67,7 @@ class VaultSyncService {
         _repository = repository ?? VaultRepository();
 
   final BlockchainService _blockchain;
-  final IpfsGatewayClient _gateway;
+  final VaultBlobFetcher _gateway;
   final VaultKeyService _vaultKeyService;
   final VaultRepository _repository;
 
