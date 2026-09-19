@@ -34,6 +34,29 @@ class _FakeCipherService extends VaultCipherService {
   Future<Uint8List> decrypt(Uint8List blob) async => blob;
 }
 
+// Cipher que simula rotação de DEK: cada blob leva a etiqueta da chave que o
+// cifrou e `decrypt` falha (como o AES-GCM real com chave errada) quando a
+// etiqueta não bate com a chave ativa.
+class _RotatingCipherService extends VaultCipherService {
+  String key = 'K1';
+
+  Uint8List _tag(Uint8List plaintext) =>
+      Uint8List.fromList([...utf8.encode('$key:'), ...plaintext]);
+
+  @override
+  Future<Uint8List> encrypt(Uint8List plaintext) async => _tag(plaintext);
+
+  @override
+  Future<Uint8List> decrypt(Uint8List blob) async {
+    final prefix = '$key:';
+    final head = blob.length < prefix.length
+        ? ''
+        : utf8.decode(blob.sublist(0, prefix.length), allowMalformed: true);
+    if (head != prefix) throw StateError('authentication failed');
+    return Uint8List.sublistView(blob, prefix.length);
+  }
+}
+
 Uint8List _plaintextBlob(List<Map<String, dynamic>> entries) {
   final json = jsonEncode({'version': 1, 'entries': entries});
   return Uint8List.fromList(utf8.encode(json));
@@ -533,5 +556,69 @@ void main() {
     // `hasVault` falhou antes de `getVault` rodar — sem `ref`, não há como
     // saber se o cid é legado, então não deve sinalizar como tal.
     expect(outcome.legacyIpfsCid, isFalse);
+  });
+
+  test(
+      'cache local cifrado com a DEK antiga (rotação por outro device, P89) — '
+      'separa o cache ilegível e puxa o vault novo do chain em vez de cair no '
+      'fallback', () async {
+    final cipher = _RotatingCipherService();
+    final dir = await Directory('${tempDir.path}/rot').create();
+    final rotRepo = VaultRepository(
+      cipherService: cipher,
+      testPath: '${dir.path}/vault.enc',
+    );
+    final rotSync = VaultSyncService(
+      blockchainService: mockBlockchain,
+      gatewayClient: mockGateway,
+      vaultKeyService: mockKeyService,
+      repository: rotRepo,
+    );
+
+    // Estado deste device antes da rotação: vault.enc + manifesto na K1.
+    final oldVault = await cipher.encrypt(_plaintextBlob([_entry('old.com')]));
+    await rotRepo.overwriteCache(oldVault);
+    await rotRepo.saveLastManifest(VaultManifest(
+      version: 1,
+      vaultVersion: 1,
+      entries: {
+        'e-old.com': const ManifestEntryRef(
+            cid: 'oldCid', contentHash: '0x00', updatedAt: 1700000000),
+      },
+    ));
+
+    // Outro device rotaciona: este passa a ter a K2 (tryRecoverFromChain) e o
+    // Desktop republicou tudo cifrado com a K2.
+    cipher.key = 'K2';
+    final entryBytes = await cipher.encrypt(_plaintextEntryBlob(_entry('new.com')));
+    final entryDigest = bytesToHex(keccak256(entryBytes), include0x: true);
+    final manifestBlob = await rotRepo.encryptManifestBlob(VaultManifest(
+      version: 1,
+      vaultVersion: 2,
+      entries: {
+        'e-new.com': ManifestEntryRef(
+            cid: 'newCid', contentHash: entryDigest, updatedAt: 1700000000),
+      },
+    ));
+    final manifestDigest = bytesToHex(keccak256(manifestBlob), include0x: true);
+
+    when(() => mockBlockchain.hasVault(identityId)).thenAnswer((_) async => true);
+    when(() => mockBlockchain.getVault(identityId)).thenAnswer((_) async => VaultRef(
+        cid: 'ar://manifestTxRot',
+        contentHashHex: manifestDigest,
+        updatedAt: updatedAt,
+        version: 2));
+    when(() => mockGateway.fetch('ar://manifestTxRot'))
+        .thenAnswer((_) async => manifestBlob);
+    when(() => mockGateway.fetch('newCid')).thenAnswer((_) async => entryBytes);
+
+    final outcome = await rotSync.sync(identityId);
+
+    expect(outcome.status, VaultSyncStatus.synced);
+    expect(outcome.entries, hasLength(1));
+    expect(outcome.entries.first.site, 'new.com');
+    // O vault antigo não foi perdido: fica guardado, byte a byte.
+    expect(await File('${dir.path}/vault.enc.unreadable').readAsBytes(),
+        equals(oldVault));
   });
 }

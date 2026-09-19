@@ -4,7 +4,29 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-09-16 (Sessão 229: **P87 registrada e implementada** — Vault
+> Última atualização: 2026-09-19 (Sessão 230: **P89 registrado e corrigido no código** — a rotação de
+> DEK (revogar device, P56) deixava o Vault preso nas duas plataformas. Achado durante o `/plan` do
+> `GitStorageProvider` (a rotação é pré-requisito do ponteiro on-chain cifrado com a vault key), lendo
+> o caminho de rotação contra o de publicação/sync do P87. **Desktop**: `rotate_vault_key` re-cifrava
+> só `vault.enc` e documentos; `vault.published.enc`/`vault.manifest.enc` ficavam na chave antiga e
+> `vault_publish` (via `changed_entries_from` → `load_published_snapshot()?`) propagava o erro de
+> decifra em vez de publicar. Só apagar o snapshot não bastava: `pending_changes_from` cai no
+> `vault.meta.json`, vê o hash batendo, responde "0 pendentes" e regrava o snapshot com a chave nova —
+> o publish seguinte não veria nada mudado e publicaria um manifesto **sem entradas**. Correção:
+> `discard_publish_baseline()` descarta `vault.meta.json` + snapshot + manifesto + `vault_entries/`
+> **antes** de trocar a chave (se falhar, nada mudou; depois, ficaria vault novo com baseline na chave
+> antiga); baseline vazio faz toda entrada virar "Added", a republicação completa que a rotação exige.
+> **Mobile**: depois de uma rotação vinda do Desktop, `tryRecoverFromChain` troca a chave e
+> `sync()` falhava em `currentVersion()` (decifra o `vault.enc` antigo), caindo em `syncFailedNoCache`
+> pra sempre. Correção: `VaultRepository.setAsideUnreadableLocalCache()` — o `vault.enc` vai pra
+> `vault.enc.unreadable` (não é apagado: a falha de decifra pode ser transitória e o arquivo pode ter
+> edições não publicadas), o que é derivável é descartado, e o sync trata como device sem cache.
+> Testes: Desktop `cargo test --lib` 243/243 (+4), Mobile (Docker) 721/721 (+1, red→green provado
+> revertendo só a correção: falha com `syncFailedNoCache`), `cargo clippy --lib` e `flutter analyze` sem
+> aviso novo. **Não validado em runtime real**: a rotação de ponta a ponta usa o keyring do usuário, então
+> os testes cobrem a lógica com caminhos/chaves explícitos, não o comando completo.)
+>
+> Última atualização anterior: 2026-09-16 (Sessão 229: **P87 registrada e implementada** — Vault
 > por-entrada (manifesto no Arweave em vez de blob único). Debate anterior sobre usar Git como
 > storage do Vault (ver `ROADMAP.md`) identificou que o blob único hoje reescreve o vault inteiro a
 > cada edição; a solução (manifesto pequeno `entryId -> cid/contentHash` + blob cifrado por entrada,
@@ -159,6 +181,32 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 ---
 
 ## Não Resolvidas
+
+### P89 — Rotação de DEK deixava o Vault preso (Desktop: baseline de publicação na chave antiga; Mobile: sync preso no cache ilegível) — ✅ corrigido no código, falta validar em runtime real (Sessão 230)
+
+Bug real, achado lendo o caminho de rotação (P56) contra o de publicação/sync do P87 durante o `/plan`
+do `GitStorageProvider`. Registrado nos dois lados porque a causa é a mesma: tudo que cada device
+guarda pra saber "o que já foi publicado" é cifrado com a vault key e vira erro de decifra quando a
+chave rotaciona.
+
+**Desktop** (`desktop/src-tauri/src/vault.rs`): `rotate_vault_key` re-cifra `vault.enc` e documentos,
+mas `vault.published.enc` (snapshot), `vault.manifest.enc` e `vault_entries/` ficavam na chave
+antiga. O primeiro `vault_publish` depois da rotação chama `changed_entries_from` →
+`load_published_snapshot()?` → `decrypt()?` e propagava o erro. Corrigido com
+`discard_publish_baseline()`, chamado antes de `set_vault_key`. O `vault.meta.json` sai junto de
+propósito (sem isso, `pending_changes_from` cairia nele e o publish sairia com manifesto vazio).
+
+**Mobile** (`vault_repository.dart`, `vault_sync_service.dart`): `sync()` chama
+`tryRecoverFromChain` (troca a chave) e logo depois `currentVersion()`, que decifra o `vault.enc`
+antigo → exceção → `_fallbackToCache`, que também não lê o cache. O device nunca puxava o vault novo.
+Corrigido com `setAsideUnreadableLocalCache()` (só no caminho de erro, sem custo no fluxo normal).
+
+Fora de escopo, não corrigido: o cache de **documentos** do Mobile (`vault_documents/<id>.enc`)
+também fica na chave antiga depois de uma rotação; a leitura de um documento já em cache pode falhar
+até ser rebuscado. Não verificado se o app já trata isso.
+
+Falta: rodar uma rotação real (revogar um device de teste) e conferir que o Desktop republica e que um
+Mobile pareado sincroniza o vault novo. Sem cobrança de prazo — mesma categoria de P79-P81/P88.
 
 ### P88 — Vault por-entrada (P87): falta validação real (Arweave mainnet/testnet + sync cross-device Desktop↔Mobile) (Sessão 229)
 

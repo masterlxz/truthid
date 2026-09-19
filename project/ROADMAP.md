@@ -2564,3 +2564,30 @@ Mobile-primeiro).
 **Não validado nesta sessão**: publicação real contra Arweave mainnet/testnet nem sincronização
 cross-device real (Desktop publica → Mobile sincroniza, e vice-versa) com dados de verdade — só
 testes automatizados (unitários + integração mockada). Registrado como P88 em `PENDING.md`.
+
+### Rotação de DEK deixava o Vault preso nas duas plataformas — corrigido no código (Sessão 230, 2026-09-19)
+
+Achado no `/plan` do `GitStorageProvider` (ver debate do Git como storage do Vault). O plano prevê
+um ponteiro on-chain cifrado com a vault key, então a rotação (P56) precisa funcionar de verdade
+antes; ao ler o caminho de rotação contra o de publicação do P87, saiu um bug que não era do Git.
+Registrado como **P89** em `PENDING.md` (causa, correção e testes detalhados lá).
+
+**Resumo**: snapshot publicado, manifesto e cache de entradas são cifrados com a vault key. Depois de
+uma rotação ficam ilegíveis, e nenhuma das duas plataformas tratava isso — o Desktop falhava no
+`vault_publish` seguinte, o Mobile ficava em `syncFailedNoCache` sem nunca buscar o vault novo.
+
+**Decisões**:
+- Desktop descarta o baseline (meta + snapshot + manifesto + cache de entradas) em vez de recifrá-lo:
+  são caches re-deriváveis, e baseline vazio é justamente a republicação completa que a rotação exige.
+  Ordem: descartar **antes** de trocar a chave. O `vault.meta.json` também precisa sair, senão o
+  fallback de `pending_changes_from` diz "0 pendentes" e o publish sai com manifesto vazio.
+- Mobile **não apaga** o `vault.enc` ilegível: copia pra `vault.enc.unreadable`. A falha de decifra
+  pode ser transitória e o arquivo pode ter edições não publicadas; só o derivável é descartado.
+- Sem teste de I/O de ponta a ponta: o repo não tem override de diretório (só `$HOME`) e a chave vem do
+  keyring real, então um teste de rotação completo tocaria o vault do usuário. A lógica foi isolada em
+  função com caminhos explícitos, testável em diretório temporário.
+
+**Testes**: Desktop 243/243 (+4), Mobile 721/721 (+1; provado que falha sem a correção).
+
+**Não validado**: rotação real (revogar device) ponta a ponta, e o cache de documentos do Mobile,
+que também fica na chave antiga (não verificado se já é tratado).

@@ -738,6 +738,10 @@ pub(crate) fn rotate_vault_key(new_key: &[u8; 32]) -> Result<(), String> {
 
     let (vault_blob, new_documents) = rotate_vault_key_bytes(&vault, &documents, new_key)?;
 
+    // Antes de trocar a chave, de propósito: se isto falhar, nada mudou ainda;
+    // se falhasse depois, ficaria vault novo com baseline na chave antiga.
+    discard_publish_baseline()?;
+
     set_vault_key(new_key)?;
 
     let path = vault_path()?;
@@ -749,6 +753,47 @@ pub(crate) fn rotate_vault_key(new_key: &[u8; 32]) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn entries_dir() -> Result<PathBuf, String> {
+    crate::config::truthid_file_path("vault_entries")
+}
+
+/// Descarta tudo que registra "o que já foi publicado": `vault.meta.json`,
+/// `vault.published.enc`, `vault.manifest.enc` e o cache `vault_entries/`.
+///
+/// Chamado por `rotate_vault_key`. O snapshot, o manifesto e as entradas em
+/// cache são cifrados com a vault key; depois da rotação ficam ilegíveis, e
+/// `vault_publish` (via `changed_entries_from`/`load_last_manifest`)
+/// propagava o erro de decifra em vez de publicar. Os três são caches
+/// re-deriváveis, então o certo é descartá-los — e o baseline vazio faz toda
+/// entrada virar "Added", que é a republicação completa que uma rotação
+/// exige (todo blob mudou de bytes).
+///
+/// O `vault.meta.json` sai junto de propósito: sem snapshot,
+/// `pending_changes_from` cai nele, vê o hash do conteúdo batendo, responde
+/// "0 pendentes" e ainda regrava o snapshot com a chave nova — o publish
+/// seguinte não veria nada mudado e publicaria um manifesto sem entradas.
+pub(crate) fn discard_publish_baseline() -> Result<(), String> {
+    discard_publish_baseline_at(
+        &[meta_path()?, published_snapshot_path()?, manifest_cache_path()?],
+        &entries_dir()?,
+    )
+}
+
+fn discard_publish_baseline_at(files: &[PathBuf], entries_dir: &std::path::Path) -> Result<(), String> {
+    for file in files {
+        match std::fs::remove_file(file) {
+            Ok(()) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.to_string()),
+        }
+    }
+    match std::fs::remove_dir_all(entries_dir) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e.to_string()),
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1305,6 +1350,79 @@ mod tests {
         let field_plain = decrypt_with_key(&field_blob, &new_key).unwrap();
         assert_eq!(String::from_utf8(field_plain).unwrap(), "4111111111111111");
         assert!(decrypt_with_key(&field_blob, &[9u8; 32]).is_err());
+    }
+
+    // --- baseline de publicação após rotação (P89) ---
+    // Sem tocar em `$HOME` nem no keyring (mesma regra dos testes acima):
+    // `discard_publish_baseline_at` recebe os caminhos explícitos.
+
+    #[test]
+    fn snapshot_cifrado_com_chave_antiga_nao_decifra_com_a_nova() {
+        // É o motivo de `discard_publish_baseline` existir: depois da
+        // rotação, snapshot/manifesto na chave antiga viram erro de decifra
+        // em `changed_entries_from`/`load_last_manifest`.
+        let old_key = [1u8; 32];
+        let new_key = [2u8; 32];
+        let snapshot = serde_json::to_vec(&Vault::default()).unwrap();
+        let blob = encrypt_with_key(&snapshot, &old_key).unwrap();
+
+        assert!(decrypt_with_key(&blob, &old_key).is_ok());
+        assert!(decrypt_with_key(&blob, &new_key).is_err());
+    }
+
+    #[test]
+    fn discard_publish_baseline_at_remove_meta_snapshot_manifesto_e_cache_de_entradas() {
+        let dir = std::env::temp_dir().join("truthid_vault_discard_baseline_removes_all");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("vault_entries")).unwrap();
+        let meta = dir.join("vault.meta.json");
+        let snapshot = dir.join("vault.published.enc");
+        let manifest = dir.join("vault.manifest.enc");
+        let entries = dir.join("vault_entries");
+        for f in [&meta, &snapshot, &manifest, &entries.join("a.enc"), &entries.join("b.enc")] {
+            std::fs::write(f, b"x").unwrap();
+        }
+
+        discard_publish_baseline_at(&[meta.clone(), snapshot.clone(), manifest.clone()], &entries)
+            .unwrap();
+
+        assert!(!meta.exists());
+        assert!(!snapshot.exists());
+        assert!(!manifest.exists());
+        assert!(!entries.exists());
+    }
+
+    #[test]
+    fn discard_publish_baseline_at_nao_toca_no_vault_nem_nos_documentos() {
+        let dir = std::env::temp_dir().join("truthid_vault_discard_baseline_keeps_vault");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("vault_documents")).unwrap();
+        std::fs::write(dir.join("vault.enc"), b"vault").unwrap();
+        std::fs::write(dir.join("vault_documents/a.enc"), b"doc").unwrap();
+        std::fs::write(dir.join("vault.published.enc"), b"snap").unwrap();
+
+        discard_publish_baseline_at(
+            &[dir.join("vault.published.enc")],
+            &dir.join("vault_entries"),
+        )
+        .unwrap();
+
+        assert_eq!(std::fs::read(dir.join("vault.enc")).unwrap(), b"vault");
+        assert_eq!(std::fs::read(dir.join("vault_documents/a.enc")).unwrap(), b"doc");
+    }
+
+    #[test]
+    fn discard_publish_baseline_at_e_idempotente_quando_nada_existe() {
+        let dir = std::env::temp_dir().join("truthid_vault_discard_baseline_idempotent");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Vault nunca publicado: nenhum dos arquivos existe — não é erro.
+        discard_publish_baseline_at(
+            &[dir.join("vault.meta.json"), dir.join("vault.published.enc")],
+            &dir.join("vault_entries"),
+        )
+        .unwrap();
     }
 
     // --- testes de CRUD in-memory (13.4) ---

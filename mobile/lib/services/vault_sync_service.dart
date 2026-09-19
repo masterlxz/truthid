@@ -116,7 +116,17 @@ class VaultSyncService {
       // que a tela recarrega). Sobrescrever incondicionalmente com o blob
       // on-chain apagaria essas mudanças sempre que o fetch tivesse sucesso —
       // só puxa do chain quando ele realmente está à frente do cache local.
-      final localVersion = await _repository.currentVersion();
+      int localVersion;
+      try {
+        localVersion = await _repository.currentVersion();
+      } catch (_) {
+        // Cache local ilegível com a chave atual: outro device rotacionou a
+        // DEK (P89/P56) e `tryRecoverFromChain` acima já trocou a chave.
+        // Trata como device sem cache — puxa o vault novo do chain — em vez
+        // de cair no fallback, que também não consegue ler esse cache.
+        await _repository.setAsideUnreadableLocalCache();
+        localVersion = 0;
+      }
       if (ref.version <= localVersion) {
         // Local já reflete (ou está à frente d)o on-chain. Só quando as duas
         // versões batem exatamente é seguro marcar como "publicado até aqui"
