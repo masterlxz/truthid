@@ -2,6 +2,7 @@ import 'package:web3dart/crypto.dart';
 
 import 'blockchain_service.dart';
 import 'ipfs_gateway_client.dart';
+import 'storage_pointer.dart';
 import 'vault_key_service.dart';
 import 'vault_repository.dart';
 
@@ -146,7 +147,7 @@ class VaultSyncService {
           entries: entries,
           profileNames: profileNames,
           updatedAt: ref.updatedAt,
-          legacyIpfsCid: !ref.cid.startsWith('ar://'),
+          legacyIpfsCid: StoragePointerKind.of(ref.cid) == StoragePointerKind.legacyIpfs,
         );
       }
 
@@ -177,7 +178,7 @@ class VaultSyncService {
           entries: entries,
           profileNames: profileNames,
           updatedAt: ref.updatedAt,
-          legacyIpfsCid: !ref.cid.startsWith('ar://'),
+          legacyIpfsCid: StoragePointerKind.of(ref.cid) == StoragePointerKind.legacyIpfs,
         );
       }
 
@@ -222,7 +223,7 @@ class VaultSyncService {
       // legado sem pinning dedicado.
       return _fallbackToCache(
         '$e',
-        legacyIpfsCid: ref != null && !ref.cid.startsWith('ar://'),
+        legacyIpfsCid: ref != null && StoragePointerKind.of(ref.cid) == StoragePointerKind.legacyIpfs,
       );
     }
   }

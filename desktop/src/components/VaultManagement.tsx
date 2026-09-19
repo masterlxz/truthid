@@ -34,6 +34,7 @@ import { PasswordGeneratorModal } from "./PasswordGeneratorModal";
 import { passwordStrength, type PasswordStrengthScore } from "../utils/passwordStrength";
 import { VAULT_KEY_MESSAGE } from "../config/vaultKey";
 import { bytesToBase64, base64ToBytes } from "../utils/base64";
+import { pointerKind } from "../utils/pointerKind";
 
 interface VaultLoadAllResult {
   entries: VaultEntry[];
@@ -1286,13 +1287,13 @@ export function VaultManagement() {
       </div>
 
       {/* Nudge de migração: um vault ainda apontando pro esquema IPFS antigo
-          (sem prefixo "ar://") não tem mais pinning dedicado desde a
+          (`pointerKind` === "legacy-ipfs": nem "ar://" nem "git:") não tem mais pinning dedicado desde a
           remoção dos Providers (Sessão 193) — um device novo sem cache local
           falha ao carregar esse CID (achado real, Sessão 194). Como
           republish só pode ser feito por um device que já tem o vault em
           cache (vault_publish lê só o arquivo local), a correção precisa
           acontecer aqui, num device saudável, antes que outro tente parear. */}
-      {hasVault && typeof (vaultRef as any)?.cid === "string" && !(vaultRef as any).cid.startsWith("ar://") && (
+      {hasVault && typeof (vaultRef as any)?.cid === "string" && pointerKind((vaultRef as any).cid) === "legacy-ipfs" && (
         <div className="card" style={{ marginBottom: "1rem" }}>
           <p style={{ margin: 0 }}>
             {t("vaultManagement.migrationNudge.text")}

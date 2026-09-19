@@ -27,6 +27,7 @@ mod pin;
 mod sign_message;
 mod sign_request;
 mod single_slot_channel;
+mod storage;
 mod vault;
 mod vault_edit;
 
@@ -760,11 +761,27 @@ async fn vault_document_read(
             let cid = cid.ok_or_else(|| {
                 "documento sem conteúdo local e sem cid — nunca foi publicado".to_string()
             })?;
-            let fetched = if let Some(txid) = cid.strip_prefix("ar://") {
-                arweave::fetch_data(&reqwest::Client::new(), arweave::ARWEAVE_DEFAULT_NODE, txid)
+            let fetched = match storage::PointerKind::of(&cid) {
+                storage::PointerKind::Arweave => {
+                    let txid = cid
+                        .strip_prefix(storage::pointer::ARWEAVE_PREFIX)
+                        .unwrap_or(&cid);
+                    arweave::fetch_data(
+                        &reqwest::Client::new(),
+                        arweave::ARWEAVE_DEFAULT_NODE,
+                        txid,
+                    )
                     .await?
-            } else {
-                ipfs::fetch_from_gateway(&cid).await?
+                }
+                storage::PointerKind::LegacyIpfs => ipfs::fetch_from_gateway(&cid).await?,
+                // Documento de vault Git mora no repo, não num CID remoto.
+                storage::PointerKind::Git => {
+                    return Err(
+                        "documento sem conteúdo local e o ponteiro é do tipo Git — \
+                         sincronize o repositório antes de abrir"
+                            .to_string(),
+                    )
+                }
             };
             if let Some(expected) = &content_hash {
                 let actual = ipfs::keccak256_hex(&fetched);

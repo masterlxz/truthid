@@ -621,4 +621,22 @@ void main() {
     expect(await File('${dir.path}/vault.enc.unreadable').readAsBytes(),
         equals(oldVault));
   });
+
+  test(
+      'ponteiro git: que falha no fetch NÃO é sinalizado como IPFS legado — '
+      'senão o banner de migração pra Arweave apareceria pra um vault Git',
+      () async {
+    when(() => mockBlockchain.hasVault(identityId)).thenAnswer((_) async => true);
+    when(() => mockBlockchain.getVault(identityId)).thenAnswer((_) async => VaultRef(
+        cid: 'git:AQID@0123456789abcdef0123456789abcdef01234567',
+        contentHashHex: wrongHash,
+        updatedAt: updatedAt,
+        version: 1));
+    when(() => mockGateway.fetch(any())).thenThrow(UnsupportedError('git'));
+
+    final outcome = await syncService.sync(identityId);
+
+    expect(outcome.status, VaultSyncStatus.syncFailedNoCache);
+    expect(outcome.legacyIpfsCid, isFalse);
+  });
 }
