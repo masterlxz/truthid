@@ -4,7 +4,17 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-09-19 (Sessão 230: **P89 registrado e corrigido no código** — a rotação de
+> Última atualização: 2026-09-19 (Sessão 231: **`/code-review high` sobre a branch `fix/p89-rotacao-dek`
+> (5 commits à frente do main, não mergeada) achou 2 problemas reais, ambos em cima do P89 (rotação de
+> DEK) — registrados e corrigidos no código como **P93** (Mobile: `setAsideUnreadableLocalCache()`
+> passa a limpar `vault_documents/` também, não só vault/snapshot/manifesto/entradas — teste novo
+> red→green) e **P94** (Desktop: `rotate_vault_key` agora só descarta o baseline de publicação depois
+> de `set_vault_key` confirmar a troca, não antes — antes, uma falha parcial deixava o baseline órfão e
+> o próximo publish republicava o vault inteiro à toa). Testes: Desktop `cargo test --lib` 248/248,
+> Mobile (Docker) 106/106 no arquivo tocado, `flutter analyze` sem aviso novo. **Não validado em
+> runtime real** — mesma pendência do P89 (rotação de ponta a ponta com device físico).)
+>
+> Última atualização anterior: 2026-09-19 (Sessão 230: **P89 registrado e corrigido no código** — a rotação de
 > DEK (revogar device, P56) deixava o Vault preso nas duas plataformas. Achado durante o `/plan` do
 > `GitStorageProvider` (a rotação é pré-requisito do ponteiro on-chain cifrado com a vault key), lendo
 > o caminho de rotação contra o de publicação/sync do P87. **Desktop**: `rotate_vault_key` re-cifrava
@@ -183,6 +193,38 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 ---
 
 ## Não Resolvidas
+
+### P94 — `rotate_vault_key` (Desktop): baseline de publicação era descartado antes de confirmar a troca de chave, falha parcial deixava baseline órfão — ✅ corrigido no código, falta validar em runtime real (Sessão 231)
+
+Achado pelo `/code-review high` sobre a branch `fix/p89-rotacao-dek` (`desktop/src-tauri/src/vault.rs:743`).
+`discard_publish_baseline()` rodava **antes** de `set_vault_key()` e das escritas seguintes (vault
+blob/documentos re-cifrados). Se `set_vault_key()` falhasse (keyring indisponível/bloqueado, erro de
+permissão) ou alguma escrita subsequente falhasse, `rotate_vault_key()` retornava `Err`, a chave ativa não
+mudava de verdade (ou mudava parcialmente), mas `vault.meta.json`/`vault.published.enc`/
+`vault.manifest.enc`/`vault_entries/` já tinham sumido. O próximo `vault_publish` (via `changed_entries_from`)
+via baseline vazio, tratava toda entrada como "Added" e republicava o vault inteiro no Arweave sem nada ter
+mudado de verdade — gastava AR real à toa, e repetiria a cada publish até o estado ser limpo na mão.
+**Corrigido** invertendo a ordem: `set_vault_key()` primeiro, `discard_publish_baseline()` só depois de
+confirmado — assim uma falha em `set_vault_key` deixa tudo intacto (chave e baseline continuam
+consistentes entre si). `cargo test --lib` 248/248, `cargo clippy --lib` sem aviso novo; sem teste de
+I/O dedicado (mesmo motivo do resto de `rotate_vault_key`: depende de keyring real, não testável
+isolado sem um diretório/keyring injetável). Relacionado a [[project_git_storage_provider_debate]]
+(P89, mesma função).
+
+### P93 — Cache de documentos do Mobile não era limpo após rotação de DEK vinda de outro device — ✅ corrigido no código, falta validar em runtime real (Sessão 231)
+
+Achado pelo `/code-review high` sobre a branch `fix/p89-rotacao-dek` (`mobile/lib/services/vault_repository.dart:1162`).
+Confirmou o "fora de escopo, não verificado" já anotado no P89: `setAsideUnreadableLocalCache()` limpava
+`vault.enc`/snapshot/manifesto/`vault_entries/` depois de uma rotação de DEK detectada via
+`tryRecoverFromChain`, mas **não tocava em `vault_documents/<id>.enc`** (documentos anexados, cifrados com
+a mesma vault key). `readDocumentContent()` achava o blob antigo via `readDocumentBlob()`, tentava decifrar
+com a chave nova e falhava — a UI (`vault_entry_detail_screen.dart:84-97`) mostrava erro permanente de
+"falha ao carregar documento" nesse device, sem recuperação automática. **Corrigido** incluindo
+`vault_documents/` no mesmo descarte das entradas (derivável: `readDocumentContent` já sabe rebuscar por
+`cid` quando o cache local está ausente). Teste novo em `vault_repository_test.dart` prova
+red→green (cache existe antes, some depois de `setAsideUnreadableLocalCache()`). Mobile (Docker)
+106/106 no arquivo tocado, `flutter analyze` sem aviso novo. Relacionado a
+[[project_git_storage_provider_debate]] (P89, mesmo gap).
 
 ### P90 — Épico: `GitStorageProvider` para o Vault (convive com o Arweave) — fase 0 concluída, fases 1-4 não iniciadas, aguardando decisão do dono do projeto (Sessão 230)
 

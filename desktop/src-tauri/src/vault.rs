@@ -738,11 +738,15 @@ pub(crate) fn rotate_vault_key(new_key: &[u8; 32]) -> Result<(), String> {
 
     let (vault_blob, new_documents) = rotate_vault_key_bytes(&vault, &documents, new_key)?;
 
-    // Antes de trocar a chave, de propósito: se isto falhar, nada mudou ainda;
-    // se falhasse depois, ficaria vault novo com baseline na chave antiga.
-    discard_publish_baseline()?;
-
+    // set_vault_key primeiro, de propósito (P94): só depois que a chave ativa
+    // realmente trocou é que o baseline (cifrado com a chave antiga) fica de
+    // fato inválido. Descartar antes, como era feito, deixava uma falha em
+    // set_vault_key (keyring indisponível/bloqueado, permissão) sem chave
+    // trocada mas com o baseline já sumido — o próximo publish republicaria o
+    // vault inteiro à toa, mesmo sem nada ter mudado.
     set_vault_key(new_key)?;
+
+    discard_publish_baseline()?;
 
     let path = vault_path()?;
     crate::config::write_file(&path, &vault_blob)?;

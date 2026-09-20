@@ -1158,7 +1158,15 @@ class VaultRepository {
   /// (sobrescrevendo uma cópia anterior). Uma falha de decifra pode ser
   /// transitória (chave errada por um instante) e o arquivo pode ter edições
   /// ainda não publicadas — o que é derivável (snapshot, manifesto, cache de
-  /// entradas) é descartado, o que não é fica guardado.
+  /// entradas, cache de documentos) é descartado, o que não é fica guardado.
+  ///
+  /// `vault_documents/` entra no descarte (P93, achado pelo `/code-review`):
+  /// cada blob de documento é cifrado com a mesma vault key, e sem isso
+  /// [readDocumentContent] achava o blob antigo no cache, tentava decifrar
+  /// com a chave nova e falhava pra sempre — sem esse descarte, nada nunca
+  /// mandava ele buscar de novo pelo `cid`. Igual às entradas: derivável
+  /// (rebusca por `cid` a partir do manifesto/vault decifrado), não perde
+  /// dado.
   Future<void> setAsideUnreadableLocalCache() async {
     final vaultFile = File(await _vaultPath());
     if (await vaultFile.exists()) {
@@ -1174,6 +1182,10 @@ class VaultRepository {
     }
     final entriesDir = Directory(await _entryDir());
     if (await entriesDir.exists()) await entriesDir.delete(recursive: true);
+    final documentsDir = Directory(await _documentDir());
+    if (await documentsDir.exists()) {
+      await documentsDir.delete(recursive: true);
+    }
     await _storage.delete(key: _publishedVersionKey);
     await _storage.delete(key: _publishedContentHashKey);
   }

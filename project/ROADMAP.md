@@ -2701,3 +2701,28 @@ se mostrar irrelevante, a deletabilidade sozinha ainda justifica o Git, mas o es
 Registrado como **P90** (épico), **P91** (validação em hardware) e **P92** (teto de publicações) em
 `PENDING.md`.
 
+### `/code-review high` sobre a branch `fix/p89-rotacao-dek` — 2 achados, ambos corrigidos (Sessão 231, 2026-09-19)
+
+Antes de partir pra validação manual do P88 (mainnet + celular físico, adiada por indisponibilidade),
+rodado `/code-review high` sobre os 5 commits da branch `fix/p89-rotacao-dek` (P89 + tipo de ponteiro +
+abstração de provider + docs), ainda não mergeada. **2 achados, ambos confirmados e corrigidos nesta
+sessão** (decisão: anotar tudo primeiro no `PENDING.md`, corrigir em seguida):
+
+1. **Mobile** (`vault_repository.dart:1162`) — `setAsideUnreadableLocalCache()` limpava vault/snapshot/
+   manifesto/`vault_entries/` após rotação de DEK vinda de outro device, mas nunca limpava
+   `vault_documents/<id>.enc`. Confirmou o "fora de escopo, não verificado" que o próprio P89 já tinha
+   anotado. Corrigido incluindo o diretório de documentos no mesmo descarte (derivável, rebuscado por
+   `cid`), com teste novo provando red→green. Registrado e fechado no código como **P93**.
+2. **Desktop** (`vault.rs:743`) — `rotate_vault_key()` descartava o baseline de publicação antes de
+   confirmar que `set_vault_key()`/as escritas seguintes davam certo; uma falha parcial deixava o
+   baseline órfão e o próximo publish republicava o vault inteiro sem necessidade. Achado novo, não
+   antecipado no P89. Corrigido invertendo a ordem (`set_vault_key` primeiro, descarte só depois de
+   confirmado). Registrado e fechado no código como **P94**.
+
+Ambos nascem da mesma raiz do P89: tudo que cada device usa pra saber "o que já foi publicado" é
+cifrado com a vault key, então uma rotação de chave (ou uma falha no meio dela) sempre arrisca deixar
+esse estado inconsistente em algum canto que ninguém olhou ainda. Testes: Desktop `cargo test --lib`
+248/248, Mobile (Docker) 106/106 no arquivo tocado, `flutter analyze`/`cargo clippy` sem aviso novo.
+**Não validado em runtime real** — mesma pendência do P89 (rotação de ponta a ponta com device físico).
+Ver `PENDING.md` (P93, P94) e a seção "GitStorageProvider" acima (P89, mesma raiz).
+
