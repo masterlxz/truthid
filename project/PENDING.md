@@ -12,7 +12,14 @@
 > de `set_vault_key` confirmar a troca, não antes — antes, uma falha parcial deixava o baseline órfão e
 > o próximo publish republicava o vault inteiro à toa). Testes: Desktop `cargo test --lib` 248/248,
 > Mobile (Docker) 106/106 no arquivo tocado, `flutter analyze` sem aviso novo. **Não validado em
-> runtime real** — mesma pendência do P89 (rotação de ponta a ponta com device físico).)
+> runtime real** — mesma pendência do P89 (rotação de ponta a ponta com device físico). Ainda na S231,
+> feita a **comparação de custo real Git vs. Arweave** (recomendação 2 da avaliação crítica do P90,
+> S230), com dados ao vivo do gateway Arweave + CoinGecko: GitHub privado grátis (`$0`) < Arweave
+> (`~$4-8`/ano pra um vault pessoal) < self-hosted (`~$48-72`/ano se dedicado) — diferença trivial em
+> absoluto, não muda a recomendação (deletabilidade continua sendo o motivo pro Git, não custo).
+> **Achado colateral**: o piso de taxa por transação do Arweave (mesmo preço até 256 KiB) sugere que o
+> P87 provavelmente não reduziu o custo em dólar do caso comum como a S229 registrou — o benefício real
+> do P87 é o sync incremental do Mobile, não taxa. Ver `ROADMAP.md`.)
 >
 > Última atualização anterior: 2026-09-19 (Sessão 230: **P89 registrado e corrigido no código** — a rotação de
 > DEK (revogar device, P56) deixava o Vault preso nas duas plataformas. Achado durante o `/plan` do
@@ -235,9 +242,17 @@ idêntico); commits `f6ad98b`, `bf54dc8`, `cd86a50` na branch `fix/p89-rotacao-d
 **Falta**: fase 1 (Desktop: `git2` com HTTPS+SSH, gate de CI nos 3 SOs primeiro), fase 2 (Mobile: gate de
 build Android com `git2dart`), fase 3 (nudge e ação de squash), fase 4 (docs do site nos 4 locales:
 `cross-device-and-storage`, `vault` — já defasada desde o P87 —, `contracts`, `how-it-works`).
-**Decisões pendentes antes de seguir** (recomendações do ROADMAP): validar o P88 antes da fase 2; fazer a
-**comparação de custo real Git vs. Arweave** (nunca feita); entregar só o Desktop na fase 1 e usar por um
-tempo antes do Mobile; tratar a deletabilidade como o motivo principal.
+**Decisões pendentes antes de seguir** (recomendações do ROADMAP): validar o P88 antes da fase 2;
+~~fazer a comparação de custo real Git vs. Arweave~~ — **feita na Sessão 231** (dados ao vivo do
+gateway Arweave + CoinGecko, ver `ROADMAP.md` "Comparação de custo real Git vs. Arweave"): GitHub
+privado grátis (`$0`) < Arweave (`~$4-8`/ano pra uso pessoal) < self-hosted (`~$48-72`/ano se
+dedicado); diferença trivial em absoluto, **não muda a recomendação** — deletabilidade continua sendo o
+motivo, não custo. **Achado colateral relevante**: o piso de taxa por transação do Arweave (mesmo preço
+pra qualquer payload até 256 KiB) sugere que o P87 provavelmente **não reduziu** o custo em dólar do
+caso comum (editar 1 entrada = 2 tx agora vs. 1 tx antes) como o registro da S229 afirmou — o benefício
+real do P87 é o sync incremental do Mobile, não taxa; correção de registro, não motivo pra reverter.
+Falta: entregar só o Desktop na fase 1 e usar por um tempo antes do Mobile; tratar a deletabilidade como
+o motivo principal.
 
 ### P91 — `GitStorageProvider`: nada foi validado em hardware real nem com host Git real (Sessão 230)
 

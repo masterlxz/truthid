@@ -2726,3 +2726,50 @@ esse estado inconsistente em algum canto que ninguém olhou ainda. Testes: Deskt
 **Não validado em runtime real** — mesma pendência do P89 (rotação de ponta a ponta com device físico).
 Ver `PENDING.md` (P93, P94) e a seção "GitStorageProvider" acima (P89, mesma raiz).
 
+### Comparação de custo real Git vs. Arweave (Sessão 231, 2026-09-19)
+
+Recomendação (2) da avaliação crítica da S230 (ver seção "GitStorageProvider" acima). Números tirados
+de fontes ao vivo nesta sessão, não de estimativa de terceiro: preço de armazenamento direto do
+gateway (`GET https://arweave.net/price/{bytes}`, resposta em winston) e cotação AR/USD via CoinGecko
+(`$4.49`, 2026-09-19 — **AR é volátil**: subiu 12-43% nas 24h anteriores à consulta, então o valor em
+dólar de qualquer publicação varia com o mercado, diferente de um custo fixo em fiat).
+
+**Achado real, verificado contra o gateway**: o preço do Arweave tem um **piso por transação**, não é
+linear por byte pra arquivo pequeno. Testado sistematicamente: qualquer payload de até exatamente
+**262.144 bytes (256 KiB, 1 chunk do protocolo)** custa o mesmo piso — `3.340.175.566 winston`
+(`0,00334 AR` ≈ **$0,015** a `$4,49`/AR). Só a partir de 262.145 bytes o preço sobe pro degrau
+seguinte (`6.639.944.869 winston` ≈ **$0,030**, 2 chunks), e assim por diante a cada 256 KiB.
+
+**Isso muda a conta do P87.** Um vault pessoal de credenciais (sem os documentos anexados, que já
+eram separados desde a Fase 15.7) fica bem abaixo de 256 KiB até centenas de entradas — então **antes
+do P87**, qualquer edição publicava o vault inteiro numa **única transação**, e essa transação já
+batia no piso (≈$0,015), **independente de quantas entradas mudaram**. **Depois do P87**, uma edição
+publica o blob da entrada mudada **mais** o manifesto — **2 transações pro caso comum de editar 1
+entrada** (≈$0,030, o dobro), ou `N+1` transações pra `N` entradas mudadas de uma vez. Ou seja, o P87
+**não reduziu o custo em dólar do caso comum** como o registro da S229 (`PENDING.md`/`ROADMAP.md`,
+"reduz custo real no Arweave") afirmou — pelo piso por transação do Arweave, provavelmente **aumentou**
+ligeiramente, contrário ao que foi assumido na hora. O benefício real e comprovado do P87 continua de
+pé: sync incremental no Mobile (não baixa o vault inteiro a cada versão) — isso é sobre banda/latência,
+não sobre taxa do Arweave. **Correção de registro, não motivo pra reverter o P87** — o valor dele é
+noutro lugar.
+
+**Em termos absolutos, mesmo esse "aumento" é pequeno**: pra um usuário ativo (~5 edições/semana), o
+piso por transação dá algo entre **~$4/ano** (pré-P87, 1 tx/edição) e **~$8/ano** (pós-P87, 2 tx/edição
+comum) — a diferença entre os dois é irrelevante frente ao custo de qualquer alternativa.
+
+**Git como comparação**: um repositório **privado no GitHub, plano grátis**, tem custo marginal
+**$0** pra um vault pessoal — os limites de armazenamento do plano grátis (soft cap na casa de GB) estão
+muito acima do que um vault cifrado (mesmo com histórico completo, anos de edições, sem squash) algum
+dia atingiria. **Self-hosted (Gitea/Forgejo numa VPS)** não é mais barato: é um custo **fixo recorrente
+independente de uso**, tipicamente **~$4-6/mês** (~$48-72/ano) pelos provedores mais baratos — mais caro
+que o Arweave pro uso de um vault pessoal sozinho, a menos que essa VPS já fosse paga por outro motivo
+(nesse caso o custo marginal também vira ~$0, igual ao GitHub).
+
+**Conclusão**: em dólar, GitHub privado grátis (`$0`) < Arweave (`~$4-8`/ano) < self-hosted (`~$48-72`/ano,
+se dedicado). Mas a diferença entre as três opções é trivial em termos absolutos pra um vault pessoal —
+confirma a suspeita já registrada na S230 ("o custo pode ser irrelevante"). **A comparação de custo não
+muda a recomendação da avaliação crítica**: o motivo de peso pra seguir com o Git continua sendo a
+**deletabilidade** (squash/rotação apagam histórico de verdade; no Arweave toda versão cifrada antiga
+fica pública pra sempre), não economia de taxa. Recomendação (2) da S230 fica marcada como cumprida em
+`PENDING.md` (P90).
+
