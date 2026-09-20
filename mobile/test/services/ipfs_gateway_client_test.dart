@@ -7,6 +7,30 @@ import 'package:truthid_mobile/services/ipfs_gateway_client.dart';
 
 void main() {
   group('IpfsGatewayClient', () {
+    test(
+        'ponteiro git: falha na hora, sem consultar nenhum gateway IPFS '
+        '(senão esperaria os timeouts de um fetch que nunca funcionaria)',
+        () async {
+      var requests = 0;
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      server.listen((request) async {
+        requests++;
+        request.response.statusCode = 200;
+        await request.response.close();
+      });
+      final client = IpfsGatewayClient(
+        gateways: ['http://${server.address.address}:${server.port}/ipfs/'],
+      );
+
+      await expectLater(
+        client.fetch('git:AQID@0123456789abcdef0123456789abcdef01234567'),
+        throwsA(isA<UnsupportedError>()),
+      );
+      expect(requests, 0);
+
+      await server.close(force: true);
+    });
+
     test('retorna os bytes quando o gateway responde 200', () async {
       final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
       final bytes = Uint8List.fromList([1, 2, 3, 4]);

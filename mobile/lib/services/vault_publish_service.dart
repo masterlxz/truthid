@@ -1,8 +1,10 @@
 import 'package:web3dart/web3dart.dart' show EthereumAddress;
 
 import 'arweave_client.dart';
+import 'arweave_storage_provider.dart';
 import 'session_creator.dart';
 import 'vault_repository.dart';
+import 'vault_storage_provider.dart';
 
 class VaultPublishResult {
   final String cid;
@@ -16,26 +18,35 @@ class VaultPublishResult {
   });
 }
 
-// Orquestra a publicação do vault a partir do Mobile: publica no Arweave só
-// as entradas que mudaram desde o último snapshot publicado (blob cifrado
-// por entrada) + um manifesto pequeno (entryId -> cid/contentHash) → publica
-// CID+hash do MANIFESTO on-chain via UserOperation
-// (SessionCreator.updateVault) → marca a versão como publicada. Mirror do
-// par `useVaultPublish.ts` (Desktop) + comando Tauri `vault_publish`, só que
-// numa função só — o Mobile não tem a mesma separação Tauri/JS. Ver
-// project/INDEX.md, Sessão 97. Corte direto pro Arweave sem fallback pro
-// IPFS (mesmo padrão do Desktop, Sessões 187-189).
+// Orquestra a publicação do vault a partir do Mobile: pede ao provider de
+// storage (hoje o Arweave: só as entradas que mudaram desde o último snapshot
+// + um manifesto pequeno) → publica o ponteiro+hash que ele devolve on-chain
+// via UserOperation (SessionCreator.updateVault) → só então grava o estado
+// local de "publicado". Mirror do par `useVaultPublish.ts` (Desktop) + comando
+// Tauri `vault_publish`, só que numa função só — o Mobile não tem a mesma
+// separação Tauri/JS. Ver project/INDEX.md, Sessão 97. Corte direto pro
+// Arweave sem fallback pro IPFS (mesmo padrão do Desktop, Sessões 187-189).
+//
+// O que é publicar (blobs por entrada, manifesto, commit...) é decisão do
+// [VaultStorageProvider]; este serviço só garante a ordem e o snapshot.
 class VaultPublishService {
   final VaultRepository _repository;
-  final ArweaveVaultPublisher _arweavePublisher;
   final SessionCreator _sessionCreator;
+  late final VaultStorageProvider _storage;
 
   VaultPublishService({
     required this._sessionCreator,
     VaultRepository? repository,
     ArweaveVaultPublisher? arweavePublisher,
-  })  : _repository = repository ?? VaultRepository(),
-        _arweavePublisher = arweavePublisher ?? ArweaveVaultPublisher();
+    VaultStorageProvider? storageProvider,
+  }) : _repository = repository ?? VaultRepository() {
+    // Único provider por enquanto; a escolha por identidade entra com o Git.
+    _storage = storageProvider ??
+        ArweaveStorageProvider(
+          repository: _repository,
+          publisher: arweavePublisher,
+        );
+  }
 
   Future<VaultPublishResult> publish(EthereumAddress smartAccountAddress) async {
     // Mirror do guard do Desktop (vault_publish, lib.rs) — sem isso, um
@@ -48,89 +59,39 @@ class VaultPublishService {
       );
     }
 
-    // Fase 15.7: antes de publicar o blob principal, publica separadamente o
-    // conteúdo (cache local cifrado) de cada documento que ainda não tem
-    // cid ou cujo conteúdo local mudou desde a última publicação — o blob
-    // do vault carrega só o ponteiro (cid/contentHash), nunca o conteúdo do
-    // documento em si, então documentos grandes não inflam o sync de
-    // edições não relacionadas (ver project/PHASE.md, 15.7).
-    for (final entry in await _repository.listEntries()) {
-      final doc = entry.document;
-      if (doc == null) continue;
-      final localBlob = await _repository.readDocumentBlob(entry.id);
-      if (localBlob == null) continue;
-      if (_repository.documentNeedsPin(localBlob, doc.contentHash)) {
-        final result =
-            await _arweavePublisher.publishDocument(localBlob, doc.fileName, doc.mimeType);
-        await _repository.setDocumentPinInfo(
-          entry.id,
-          cid: result.cid,
-          contentHash: result.contentHash,
-        );
-      }
-    }
+    // Antes do snapshot, de propósito: publicar o conteúdo dos documentos
+    // grava cid/contentHash no vault local, e o snapshot precisa já refletir
+    // isso (senão o `markPublished` final deixaria essa mudança "pendente").
+    await _storage.publishPendingDocuments();
 
     // Snapshot do estado local ANTES de qualquer chamada de rede — mesma
     // cautela contra TOCTOU já documentada (M3, Sessão 153): uma edição
     // concorrente feita durante a publicação (ex: no meio do `updateVault`
     // on-chain, que pode levar segundos) não pode ser confundida com o que
-    // de fato foi publicado. `version`/`snapshotBlob` vão pro `markPublished`
-    // no final tal como capturados aqui, nunca relidos depois do publish.
-    final version = await _repository.currentVersion();
-    final snapshotBlob = await _repository.readRawBlob();
-    final entries = await _repository.listEntries();
-    final profileNames = await _repository.listProfileNames();
-    final devicePermissions = await _repository.listDevicePermissions();
-
-    // Vault por-entrada: publica só as entradas que mudaram desde o último
-    // snapshot publicado (blob próprio por entrada no Arweave, mesmo padrão
-    // dos documentos acima), parte do último manifesto conhecido pra manter
-    // o cid/hash das entradas inalteradas.
-    final changed = await _repository.diffEntriesSinceLastPublish();
-    final lastManifest = await _repository.loadLastManifest();
-    final entryRefs =
-        Map<String, ManifestEntryRef>.from(lastManifest?.entries ?? {});
-    if (changed.isNotEmpty) {
-      final entriesById = {for (final e in entries) e.id: e};
-      for (final change in changed.entries) {
-        if (change.value == EntryDiffKind.removed) {
-          entryRefs.remove(change.key);
-          continue;
-        }
-        final entry = entriesById[change.key];
-        if (entry == null) continue; // não deveria acontecer
-        final blob = await _repository.writeEntryBlob(change.key, entry);
-        final result = await _arweavePublisher.publishVaultEntry(blob);
-        entryRefs[change.key] = ManifestEntryRef(
-          cid: result.cid,
-          contentHash: result.contentHash,
-          updatedAt: entry.updatedAt.millisecondsSinceEpoch ~/ 1000,
-        );
-      }
-    }
-
-    final manifest = VaultManifest(
-      version: 1,
-      vaultVersion: version,
-      entries: entryRefs,
-      profileNames: profileNames,
-      devicePermissions: devicePermissions,
+    // de fato foi publicado. `version`/`rawBlob` vão pro `markPublished` no
+    // final tal como capturados aqui, nunca relidos depois do publish.
+    final snapshot = VaultPublishSnapshot(
+      version: await _repository.currentVersion(),
+      rawBlob: await _repository.readRawBlob(),
+      entries: await _repository.listEntries(),
+      profileNames: await _repository.listProfileNames(),
+      devicePermissions: await _repository.listDevicePermissions(),
     );
-    final manifestBlob = await _repository.encryptManifestBlob(manifest);
-    final publishResult = await _arweavePublisher.publishManifest(manifestBlob);
+
+    final staged = await _storage.publishVault(snapshot);
 
     final txResult = await _sessionCreator.updateVault(
       smartAccountAddress: smartAccountAddress,
-      cid: publishResult.cid,
-      contentHashHex: publishResult.contentHash,
+      cid: staged.pointer,
+      contentHashHex: staged.contentHash,
     );
 
-    await _repository.saveLastManifest(manifest);
-    await _repository.markPublished(version, snapshotBlob);
+    await staged.commitLocalState();
+    await _repository.markPublished(snapshot.version, snapshot.rawBlob);
 
     return VaultPublishResult(
-      cid: publishResult.cid,
-      contentHash: publishResult.contentHash,
+      cid: staged.pointer,
+      contentHash: staged.contentHash,
       transactionHash: txResult.transactionHash,
     );
   }

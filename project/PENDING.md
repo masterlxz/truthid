@@ -4,7 +4,48 @@
 > Toda pendência encontrada em qualquer arquivo do projeto deve ser registrada aqui com um ID único.
 > Ao resolver uma, marcar como `✅ Resolvida` com a sessão em que foi corrigida.
 > 
-> Última atualização: 2026-09-16 (Sessão 229: **P87 registrada e implementada** — Vault
+> Última atualização: 2026-09-19 (Sessão 231: **`/code-review high` sobre a branch `fix/p89-rotacao-dek`
+> (5 commits à frente do main, não mergeada) achou 2 problemas reais, ambos em cima do P89 (rotação de
+> DEK) — registrados e corrigidos no código como **P93** (Mobile: `setAsideUnreadableLocalCache()`
+> passa a limpar `vault_documents/` também, não só vault/snapshot/manifesto/entradas — teste novo
+> red→green) e **P94** (Desktop: `rotate_vault_key` agora só descarta o baseline de publicação depois
+> de `set_vault_key` confirmar a troca, não antes — antes, uma falha parcial deixava o baseline órfão e
+> o próximo publish republicava o vault inteiro à toa). Testes: Desktop `cargo test --lib` 248/248,
+> Mobile (Docker) 106/106 no arquivo tocado, `flutter analyze` sem aviso novo. **Não validado em
+> runtime real** — mesma pendência do P89 (rotação de ponta a ponta com device físico). Ainda na S231,
+> feita a **comparação de custo real Git vs. Arweave** (recomendação 2 da avaliação crítica do P90,
+> S230), com dados ao vivo do gateway Arweave + CoinGecko: GitHub privado grátis (`$0`) < Arweave
+> (`~$4-8`/ano pra um vault pessoal) < self-hosted (`~$48-72`/ano se dedicado) — diferença trivial em
+> absoluto, não muda a recomendação (deletabilidade continua sendo o motivo pro Git, não custo).
+> **Achado colateral**: o piso de taxa por transação do Arweave (mesmo preço até 256 KiB) sugere que o
+> P87 provavelmente não reduziu o custo em dólar do caso comum como a S229 registrou — o benefício real
+> do P87 é o sync incremental do Mobile, não taxa. Ver `ROADMAP.md`.)
+>
+> Última atualização anterior: 2026-09-19 (Sessão 230: **P89 registrado e corrigido no código** — a rotação de
+> DEK (revogar device, P56) deixava o Vault preso nas duas plataformas. Achado durante o `/plan` do
+> `GitStorageProvider` (a rotação é pré-requisito do ponteiro on-chain cifrado com a vault key), lendo
+> o caminho de rotação contra o de publicação/sync do P87. **Desktop**: `rotate_vault_key` re-cifrava
+> só `vault.enc` e documentos; `vault.published.enc`/`vault.manifest.enc` ficavam na chave antiga e
+> `vault_publish` (via `changed_entries_from` → `load_published_snapshot()?`) propagava o erro de
+> decifra em vez de publicar. Só apagar o snapshot não bastava: `pending_changes_from` cai no
+> `vault.meta.json`, vê o hash batendo, responde "0 pendentes" e regrava o snapshot com a chave nova —
+> o publish seguinte não veria nada mudado e publicaria um manifesto **sem entradas**. Correção:
+> `discard_publish_baseline()` descarta `vault.meta.json` + snapshot + manifesto + `vault_entries/`
+> **antes** de trocar a chave (se falhar, nada mudou; depois, ficaria vault novo com baseline na chave
+> antiga); baseline vazio faz toda entrada virar "Added", a republicação completa que a rotação exige.
+> **Mobile**: depois de uma rotação vinda do Desktop, `tryRecoverFromChain` troca a chave e
+> `sync()` falhava em `currentVersion()` (decifra o `vault.enc` antigo), caindo em `syncFailedNoCache`
+> pra sempre. Correção: `VaultRepository.setAsideUnreadableLocalCache()` — o `vault.enc` vai pra
+> `vault.enc.unreadable` (não é apagado: a falha de decifra pode ser transitória e o arquivo pode ter
+> edições não publicadas), o que é derivável é descartado, e o sync trata como device sem cache.
+> Testes: Desktop `cargo test --lib` 243/243 (+4), Mobile (Docker) 721/721 (+1, red→green provado
+> revertendo só a correção: falha com `syncFailedNoCache`), `cargo clippy --lib` e `flutter analyze` sem
+> aviso novo. **Não validado em runtime real**: a rotação de ponta a ponta usa o keyring do usuário, então
+> os testes cobrem a lógica com caminhos/chaves explícitos, não o comando completo. Ainda na S230, preparação do `GitStorageProvider` (sem mudança de comportamento):
+> tipo explícito de ponteiro de storage nas 3 stacks e abstração de provider (Desktop + Mobile) — ver `ROADMAP.md`. Registrados **P90** (épico do Git: fase 0 concluída, decisões pendentes do dono do projeto),
+> **P91** (nada validado em hardware/host Git reais) e **P92** (teto de 1000 publicações no `VaultRegistry`).)
+>
+> Última atualização anterior: 2026-09-16 (Sessão 229: **P87 registrada e implementada** — Vault
 > por-entrada (manifesto no Arweave em vez de blob único). Debate anterior sobre usar Git como
 > storage do Vault (ver `ROADMAP.md`) identificou que o blob único hoje reescreve o vault inteiro a
 > cada edição; a solução (manifesto pequeno `entryId -> cid/contentHash` + blob cifrado por entrada,
@@ -159,6 +200,104 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 ---
 
 ## Não Resolvidas
+
+### P94 — `rotate_vault_key` (Desktop): baseline de publicação era descartado antes de confirmar a troca de chave, falha parcial deixava baseline órfão — ✅ corrigido no código, falta validar em runtime real (Sessão 231)
+
+Achado pelo `/code-review high` sobre a branch `fix/p89-rotacao-dek` (`desktop/src-tauri/src/vault.rs:743`).
+`discard_publish_baseline()` rodava **antes** de `set_vault_key()` e das escritas seguintes (vault
+blob/documentos re-cifrados). Se `set_vault_key()` falhasse (keyring indisponível/bloqueado, erro de
+permissão) ou alguma escrita subsequente falhasse, `rotate_vault_key()` retornava `Err`, a chave ativa não
+mudava de verdade (ou mudava parcialmente), mas `vault.meta.json`/`vault.published.enc`/
+`vault.manifest.enc`/`vault_entries/` já tinham sumido. O próximo `vault_publish` (via `changed_entries_from`)
+via baseline vazio, tratava toda entrada como "Added" e republicava o vault inteiro no Arweave sem nada ter
+mudado de verdade — gastava AR real à toa, e repetiria a cada publish até o estado ser limpo na mão.
+**Corrigido** invertendo a ordem: `set_vault_key()` primeiro, `discard_publish_baseline()` só depois de
+confirmado — assim uma falha em `set_vault_key` deixa tudo intacto (chave e baseline continuam
+consistentes entre si). `cargo test --lib` 248/248, `cargo clippy --lib` sem aviso novo; sem teste de
+I/O dedicado (mesmo motivo do resto de `rotate_vault_key`: depende de keyring real, não testável
+isolado sem um diretório/keyring injetável). Relacionado a [[project_git_storage_provider_debate]]
+(P89, mesma função).
+
+### P93 — Cache de documentos do Mobile não era limpo após rotação de DEK vinda de outro device — ✅ corrigido no código, falta validar em runtime real (Sessão 231)
+
+Achado pelo `/code-review high` sobre a branch `fix/p89-rotacao-dek` (`mobile/lib/services/vault_repository.dart:1162`).
+Confirmou o "fora de escopo, não verificado" já anotado no P89: `setAsideUnreadableLocalCache()` limpava
+`vault.enc`/snapshot/manifesto/`vault_entries/` depois de uma rotação de DEK detectada via
+`tryRecoverFromChain`, mas **não tocava em `vault_documents/<id>.enc`** (documentos anexados, cifrados com
+a mesma vault key). `readDocumentContent()` achava o blob antigo via `readDocumentBlob()`, tentava decifrar
+com a chave nova e falhava — a UI (`vault_entry_detail_screen.dart:84-97`) mostrava erro permanente de
+"falha ao carregar documento" nesse device, sem recuperação automática. **Corrigido** incluindo
+`vault_documents/` no mesmo descarte das entradas (derivável: `readDocumentContent` já sabe rebuscar por
+`cid` quando o cache local está ausente). Teste novo em `vault_repository_test.dart` prova
+red→green (cache existe antes, some depois de `setAsideUnreadableLocalCache()`). Mobile (Docker)
+106/106 no arquivo tocado, `flutter analyze` sem aviso novo. Relacionado a
+[[project_git_storage_provider_debate]] (P89, mesmo gap).
+
+### P90 — Épico: `GitStorageProvider` para o Vault (convive com o Arweave) — fase 0 concluída, fases 1-4 não iniciadas, aguardando decisão do dono do projeto (Sessão 230)
+
+Plano completo, decisões, achados do spike e avaliação crítica em `ROADMAP.md` ("GitStorageProvider —
+spike, plano aprovado e avaliação crítica"). **Feito**: fase 0 — 0.1 (P89), 0.2 (tipo explícito de
+ponteiro nas 3 stacks) e 0.3 (abstração de provider, Arweave como único provider, comportamento
+idêntico); commits `f6ad98b`, `bf54dc8`, `cd86a50` na branch `fix/p89-rotacao-dek`, **não mergeada**.
+**Falta**: fase 1 (Desktop: `git2` com HTTPS+SSH, gate de CI nos 3 SOs primeiro), fase 2 (Mobile: gate de
+build Android com `git2dart`), fase 3 (nudge e ação de squash), fase 4 (docs do site nos 4 locales:
+`cross-device-and-storage`, `vault` — já defasada desde o P87 —, `contracts`, `how-it-works`).
+**Decisões pendentes antes de seguir** (recomendações do ROADMAP): validar o P88 antes da fase 2;
+~~fazer a comparação de custo real Git vs. Arweave~~ — **feita na Sessão 231** (dados ao vivo do
+gateway Arweave + CoinGecko, ver `ROADMAP.md` "Comparação de custo real Git vs. Arweave"): GitHub
+privado grátis (`$0`) < Arweave (`~$4-8`/ano pra uso pessoal) < self-hosted (`~$48-72`/ano se
+dedicado); diferença trivial em absoluto, **não muda a recomendação** — deletabilidade continua sendo o
+motivo, não custo. **Achado colateral relevante**: o piso de taxa por transação do Arweave (mesmo preço
+pra qualquer payload até 256 KiB) sugere que o P87 provavelmente **não reduziu** o custo em dólar do
+caso comum (editar 1 entrada = 2 tx agora vs. 1 tx antes) como o registro da S229 afirmou — o benefício
+real do P87 é o sync incremental do Mobile, não taxa; correção de registro, não motivo pra reverter.
+Falta: entregar só o Desktop na fase 1 e usar por um tempo antes do Mobile; tratar a deletabilidade como
+o motivo principal.
+
+### P91 — `GitStorageProvider`: nada foi validado em hardware real nem com host Git real (Sessão 230)
+
+O spike só cobriu Linux (Rust e Dart) e um **emulador Android x86_64**. Falta: celular Android **arm64**
+real, iOS (só dá via runner macOS do CI), macOS/Windows do `git2dart`, **SSH** (incluindo TOFU de host
+key), **push HTTPS autenticado com token** contra GitHub/GitLab/Gitea, e a interoperabilidade
+Desktop→Mobile→Desktop com dados reais. Também não isolado: o segfault de leitura de conflitos do
+`git2dart` no Linux (o Android funcionou num teste mínimo com outro cenário). Sem cobrança de prazo —
+mesma categoria de P88 e P79-P81.
+
+### P92 — `VaultRegistry.MAX_HISTORY = 1000` num contrato imutável: depois de 1000 publicações a identidade nunca mais publica (Sessão 230)
+
+Achado lendo o contrato durante o `/plan` do Git. `updateVault` faz `_vaultHistory.push(cid)` e reverte com
+`MaxHistoryExceeded` ao chegar em 1000; não há função de reset e o contrato não tem proxy. **Já existe hoje**
+(cada `vault_publish` consome 1), mas um provider Git torna publicar com frequência mais plausível. Nenhum
+cliente lê esse histórico (`getVaultHistory` só é usado pelo contrato, testes e docs). Mitigações
+possíveis, nada decidido: publicar em lote (não a cada edição), avisar perto do teto, e avaliar um caminho
+de migração de contrato (como na cascata da S197) se algum dia chegar perto. Squash off-chain não reduz o
+histórico on-chain.
+
+### P89 — Rotação de DEK deixava o Vault preso (Desktop: baseline de publicação na chave antiga; Mobile: sync preso no cache ilegível) — ✅ corrigido no código, falta validar em runtime real (Sessão 230)
+
+Bug real, achado lendo o caminho de rotação (P56) contra o de publicação/sync do P87 durante o `/plan`
+do `GitStorageProvider`. Registrado nos dois lados porque a causa é a mesma: tudo que cada device
+guarda pra saber "o que já foi publicado" é cifrado com a vault key e vira erro de decifra quando a
+chave rotaciona.
+
+**Desktop** (`desktop/src-tauri/src/vault.rs`): `rotate_vault_key` re-cifra `vault.enc` e documentos,
+mas `vault.published.enc` (snapshot), `vault.manifest.enc` e `vault_entries/` ficavam na chave
+antiga. O primeiro `vault_publish` depois da rotação chama `changed_entries_from` →
+`load_published_snapshot()?` → `decrypt()?` e propagava o erro. Corrigido com
+`discard_publish_baseline()`, chamado antes de `set_vault_key`. O `vault.meta.json` sai junto de
+propósito (sem isso, `pending_changes_from` cairia nele e o publish sairia com manifesto vazio).
+
+**Mobile** (`vault_repository.dart`, `vault_sync_service.dart`): `sync()` chama
+`tryRecoverFromChain` (troca a chave) e logo depois `currentVersion()`, que decifra o `vault.enc`
+antigo → exceção → `_fallbackToCache`, que também não lê o cache. O device nunca puxava o vault novo.
+Corrigido com `setAsideUnreadableLocalCache()` (só no caminho de erro, sem custo no fluxo normal).
+
+Fora de escopo, não corrigido: o cache de **documentos** do Mobile (`vault_documents/<id>.enc`)
+também fica na chave antiga depois de uma rotação; a leitura de um documento já em cache pode falhar
+até ser rebuscado. Não verificado se o app já trata isso.
+
+Falta: rodar uma rotação real (revogar um device de teste) e conferir que o Desktop republica e que um
+Mobile pareado sincroniza o vault novo. Sem cobrança de prazo — mesma categoria de P79-P81/P88.
 
 ### P88 — Vault por-entrada (P87): falta validação real (Arweave mainnet/testnet + sync cross-device Desktop↔Mobile) (Sessão 229)
 

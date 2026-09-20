@@ -1147,6 +1147,49 @@ class VaultRepository {
   /// Último manifesto aplicado (sync) ou publicado (publish) com sucesso
   /// por este device — baseline pra diffar contra o manifesto remoto novo
   /// (sync) ou contra as entradas atuais (publish).
+  /// Tira do caminho o cache local que já não decifra com a vault key atual
+  /// (P89): quando outro device rotaciona a DEK, `tryRecoverFromChain` troca
+  /// a chave deste device e tudo que foi cifrado com a antiga — `vault.enc`,
+  /// snapshot publicado, manifesto e blobs de entrada — vira erro de
+  /// decifra. O `sync()` então nunca chegava a buscar o vault novo: falhava
+  /// em `currentVersion()` e caía no fallback de cache, que também não lê.
+  ///
+  /// O `vault.enc` **não** é apagado: vai pra `vault.enc.unreadable`
+  /// (sobrescrevendo uma cópia anterior). Uma falha de decifra pode ser
+  /// transitória (chave errada por um instante) e o arquivo pode ter edições
+  /// ainda não publicadas — o que é derivável (snapshot, manifesto, cache de
+  /// entradas, cache de documentos) é descartado, o que não é fica guardado.
+  ///
+  /// `vault_documents/` entra no descarte (P93, achado pelo `/code-review`):
+  /// cada blob de documento é cifrado com a mesma vault key, e sem isso
+  /// [readDocumentContent] achava o blob antigo no cache, tentava decifrar
+  /// com a chave nova e falhava pra sempre — sem esse descarte, nada nunca
+  /// mandava ele buscar de novo pelo `cid`. Igual às entradas: derivável
+  /// (rebusca por `cid` a partir do manifesto/vault decifrado), não perde
+  /// dado.
+  Future<void> setAsideUnreadableLocalCache() async {
+    final vaultFile = File(await _vaultPath());
+    if (await vaultFile.exists()) {
+      await vaultFile.copy('${vaultFile.path}.unreadable');
+      await vaultFile.delete();
+    }
+    for (final path in [
+      await _publishedSnapshotPath(),
+      await _manifestCachePath(),
+    ]) {
+      final file = File(path);
+      if (await file.exists()) await file.delete();
+    }
+    final entriesDir = Directory(await _entryDir());
+    if (await entriesDir.exists()) await entriesDir.delete(recursive: true);
+    final documentsDir = Directory(await _documentDir());
+    if (await documentsDir.exists()) {
+      await documentsDir.delete(recursive: true);
+    }
+    await _storage.delete(key: _publishedVersionKey);
+    await _storage.delete(key: _publishedContentHashKey);
+  }
+
   Future<VaultManifest?> loadLastManifest() async {
     final path = await _manifestCachePath();
     final file = File(path);

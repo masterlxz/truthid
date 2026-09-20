@@ -1207,6 +1207,20 @@ void main() {
       expect(await repo.readDocumentBlob('id1'), equals(alreadyEncrypted));
     });
 
+    test(
+        'setAsideUnreadableLocalCache (P89) também limpa vault_documents/ '
+        '(P93, achado pelo /code-review: cache de documento sobrevivia a uma '
+        'rotação de DEK vinda de outro device, ficando ilegível pra sempre)',
+        () async {
+      final bytes = Uint8List.fromList(utf8.encode('conteudo do documento'));
+      await repo.writeDocumentBlob('doc1', bytes);
+      expect(await repo.readDocumentBlob('doc1'), isNotNull);
+
+      await repo.setAsideUnreadableLocalCache();
+
+      expect(await repo.readDocumentBlob('doc1'), isNull);
+    });
+
     test('documentNeedsPin is true when never pinned', () {
       final blob = Uint8List.fromList(utf8.encode('conteudo'));
       expect(repo.documentNeedsPin(blob, null), isTrue);

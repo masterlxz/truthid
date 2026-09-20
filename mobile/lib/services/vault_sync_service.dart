@@ -2,6 +2,8 @@ import 'package:web3dart/crypto.dart';
 
 import 'blockchain_service.dart';
 import 'ipfs_gateway_client.dart';
+import 'storage_pointer.dart';
+import 'vault_blob_fetcher.dart';
 import 'vault_key_service.dart';
 import 'vault_repository.dart';
 
@@ -56,7 +58,7 @@ class VaultHashMismatchException implements Exception {
 class VaultSyncService {
   VaultSyncService({
     BlockchainService? blockchainService,
-    IpfsGatewayClient? gatewayClient,
+    VaultBlobFetcher? gatewayClient,
     VaultKeyService? vaultKeyService,
     VaultRepository? repository,
   })  : _blockchain = blockchainService ?? BlockchainService(),
@@ -65,7 +67,7 @@ class VaultSyncService {
         _repository = repository ?? VaultRepository();
 
   final BlockchainService _blockchain;
-  final IpfsGatewayClient _gateway;
+  final VaultBlobFetcher _gateway;
   final VaultKeyService _vaultKeyService;
   final VaultRepository _repository;
 
@@ -116,7 +118,17 @@ class VaultSyncService {
       // que a tela recarrega). Sobrescrever incondicionalmente com o blob
       // on-chain apagaria essas mudanças sempre que o fetch tivesse sucesso —
       // só puxa do chain quando ele realmente está à frente do cache local.
-      final localVersion = await _repository.currentVersion();
+      int localVersion;
+      try {
+        localVersion = await _repository.currentVersion();
+      } catch (_) {
+        // Cache local ilegível com a chave atual: outro device rotacionou a
+        // DEK (P89/P56) e `tryRecoverFromChain` acima já trocou a chave.
+        // Trata como device sem cache — puxa o vault novo do chain — em vez
+        // de cair no fallback, que também não consegue ler esse cache.
+        await _repository.setAsideUnreadableLocalCache();
+        localVersion = 0;
+      }
       if (ref.version <= localVersion) {
         // Local já reflete (ou está à frente d)o on-chain. Só quando as duas
         // versões batem exatamente é seguro marcar como "publicado até aqui"
@@ -136,7 +148,7 @@ class VaultSyncService {
           entries: entries,
           profileNames: profileNames,
           updatedAt: ref.updatedAt,
-          legacyIpfsCid: !ref.cid.startsWith('ar://'),
+          legacyIpfsCid: StoragePointerKind.of(ref.cid) == StoragePointerKind.legacyIpfs,
         );
       }
 
@@ -167,7 +179,7 @@ class VaultSyncService {
           entries: entries,
           profileNames: profileNames,
           updatedAt: ref.updatedAt,
-          legacyIpfsCid: !ref.cid.startsWith('ar://'),
+          legacyIpfsCid: StoragePointerKind.of(ref.cid) == StoragePointerKind.legacyIpfs,
         );
       }
 
@@ -212,7 +224,7 @@ class VaultSyncService {
       // legado sem pinning dedicado.
       return _fallbackToCache(
         '$e',
-        legacyIpfsCid: ref != null && !ref.cid.startsWith('ar://'),
+        legacyIpfsCid: ref != null && StoragePointerKind.of(ref.cid) == StoragePointerKind.legacyIpfs,
       );
     }
   }

@@ -1057,6 +1057,13 @@ Mobile (Flutter/Dart, sandbox iOS/Android) — bloquearia paridade de plataforma
 futuro um caso de uso *dentro* do TruthID com a forma do MCGit (muitos arquivos, incremental de
 verdade), reabrir a discussão; até lá, manter conteúdo endereçado por hash como já é hoje.
 
+> **Atualização (Sessão 230)**: a discussão foi reaberta, por outro motivo (armazenamento **deletável** e
+> de custo recorrente pro Vault, não o MCGit). O risco "sem binding maduro de libgit2 no Mobile" deixou de
+> valer: `git2dart` 0.5.6 traz libgit2 pré-compilado (Android 4 ABIs, iOS) e foi provado num emulador
+> Android. Ver a seção "GitStorageProvider — spike, plano aprovado e avaliação crítica (Sessão 230)" no fim
+> deste arquivo. A decisão original continua certa pra payloads grandes/`/pin`: o Git só entra como
+> **provider do Vault**, convivendo com o Arweave.
+
 **Correção sobre o quanto o MCGit precisaria do TruthID (mesma sessão)**: a lógica de git em si
 (objetos, árvore, commits) fica inteiramente no MCGit, fora deste repo — nisso o dono do projeto
 estava certo. Duas ressalvas concretas, checadas no código desta sessão, que valem quando isso for
@@ -2564,3 +2571,205 @@ Mobile-primeiro).
 **Não validado nesta sessão**: publicação real contra Arweave mainnet/testnet nem sincronização
 cross-device real (Desktop publica → Mobile sincroniza, e vice-versa) com dados de verdade — só
 testes automatizados (unitários + integração mockada). Registrado como P88 em `PENDING.md`.
+
+### Rotação de DEK deixava o Vault preso nas duas plataformas — corrigido no código (Sessão 230, 2026-09-19)
+
+Achado no `/plan` do `GitStorageProvider` (ver debate do Git como storage do Vault). O plano prevê
+um ponteiro on-chain cifrado com a vault key, então a rotação (P56) precisa funcionar de verdade
+antes; ao ler o caminho de rotação contra o de publicação do P87, saiu um bug que não era do Git.
+Registrado como **P89** em `PENDING.md` (causa, correção e testes detalhados lá).
+
+**Resumo**: snapshot publicado, manifesto e cache de entradas são cifrados com a vault key. Depois de
+uma rotação ficam ilegíveis, e nenhuma das duas plataformas tratava isso — o Desktop falhava no
+`vault_publish` seguinte, o Mobile ficava em `syncFailedNoCache` sem nunca buscar o vault novo.
+
+**Decisões**:
+- Desktop descarta o baseline (meta + snapshot + manifesto + cache de entradas) em vez de recifrá-lo:
+  são caches re-deriváveis, e baseline vazio é justamente a republicação completa que a rotação exige.
+  Ordem: descartar **antes** de trocar a chave. O `vault.meta.json` também precisa sair, senão o
+  fallback de `pending_changes_from` diz "0 pendentes" e o publish sai com manifesto vazio.
+- Mobile **não apaga** o `vault.enc` ilegível: copia pra `vault.enc.unreadable`. A falha de decifra
+  pode ser transitória e o arquivo pode ter edições não publicadas; só o derivável é descartado.
+- Sem teste de I/O de ponta a ponta: o repo não tem override de diretório (só `$HOME`) e a chave vem do
+  keyring real, então um teste de rotação completo tocaria o vault do usuário. A lógica foi isolada em
+  função com caminhos explícitos, testável em diretório temporário.
+
+**Testes**: Desktop 243/243 (+4), Mobile 721/721 (+1; provado que falha sem a correção).
+
+**Não validado**: rotação real (revogar device) ponta a ponta, e o cache de documentos do Mobile,
+que também fica na chave antiga (não verificado se já é tratado).
+
+### Preparação para o `GitStorageProvider`: tipo de ponteiro e abstração de provider — implementado (Sessão 230, 2026-09-19)
+
+Fases 0.2 e 0.3 do plano do Git (ver debate do Git como storage do Vault). Nenhuma das duas muda
+comportamento de Arweave/IPFS; existem pra que o Git entre sem reescrever o que já funciona.
+
+**0.2 — tipo explícito de ponteiro.** O ponteiro do `VaultRegistry` é uma string opaca cujo esquema
+diz onde o conteúdo mora; cada call site tratava `!startsWith('ar://')` como "IPFS legado", o que
+classificaria errado um terceiro backend. Agora há um tipo com três casos — Arweave (`ar://`), Git
+(`git:`) e IPFS legado (o resto, incluindo esquema desconhecido, como antes) — espelhado nas três
+stacks: `storage::PointerKind` (Rust), `pointerKind` (TS), `StoragePointerKind` (Dart). Efeitos para
+um ponteiro `git:`: o nudge de migração pra Arweave não aparece (Desktop); `vault_document_read`
+devolve erro claro em vez de mandar o ponteiro pro gateway IPFS; `IpfsGatewayClient.fetch` falha na
+hora com `UnsupportedError` em vez de esperar ~30s de timeouts dos gateways; o sync do Mobile não
+marca `legacyIpfsCid`.
+
+**0.3 — abstração de provider.** Cada provider decide o que é uma unidade de publicação (Arweave: um
+blob por entrada + manifesto; Git: um commit). Desktop: trait `storage::VaultStorageProvider` com
+`ArweaveProvider`, que recebeu o corpo do `vault_publish` movido **sem alteração**. Mobile: interface
+`VaultStorageProvider` (+ `VaultBlobFetcher` só com `fetch`, em arquivo próprio pra não criar ciclo
+com `vault_repository.dart`) e `ArweaveStorageProvider`, que recebeu a lógica do
+`VaultPublishService.publish`. O serviço agora só garante a ordem: guard → documentos → snapshot
+(TOCTOU do M3 preservado) → `publishVault` → `updateVault` on-chain → só então
+`StagedVaultPublish.commitLocalState()` → `markPublished`. Os testes existentes do publish passaram
+sem nenhuma alteração; 3 testes novos provam a ordem com um provider falso.
+
+**Desvios do plano, de propósito**:
+- Sem classe `VaultStorageResolver` separada: os 3 pontos de construção do Mobile já usam o default
+  do próprio serviço, então o "único lugar" é o construtor. A escolha por identidade (que precisa ler
+  o ponteiro on-chain, async) entra com o Git.
+- O rótulo do botão de publicar só perdeu o "no Arweave"; não virou i18n porque os demais rótulos do
+  hook são português fixo e o `VaultManagement` compara `buttonLabel === "Enviar"` por igualdade.
+- Trait Rust com despacho estático (`async fn` em trait não é object-safe); `PublishResult` continua
+  em `lib.rs` (o módulo do Arweave já o referencia como `crate::PublishResult`).
+
+**Testes**: Desktop `cargo test --lib` 248/248 (+5, tipo de ponteiro), `cargo clippy --lib` só com o
+aviso pré-existente, `npx vitest run` 190/190 (+5), Mobile (Docker) 731/731 (+10) e `flutter analyze`
+nos mesmos 13 avisos de antes. O `vault_publish` refatorado no Rust não tem teste próprio (precisa de
+rede e keyring, sempre foi assim); a garantia é o corpo movido literalmente mais a compilação.
+
+### GitStorageProvider — spike, plano aprovado e avaliação crítica (Sessão 230, 2026-09-19)
+
+**Objetivo.** Um provider Git pro Vault, convivendo com o Arweave (escolha por identidade). Motivação do
+dono do projeto: modelo de custo recorrente e mais baixo, onde parar de pagar faz o dado sumir, em vez do
+pagamento único e permanente do Arweave; e facilitar plugar um storage descentralizado em Ethereum no
+futuro. Não remove a dependência de Ethereum: a identidade continua on-chain, só a camada de conteúdo muda.
+
+**Spike de viabilidade (feito, descartável, fora do repo).** O cenário completo — clone, commit, push,
+push concorrente rejeitado, merge de arquivos diferentes, mesma entrada nos dois lados (mais recente
+vence), delete propagado, squash com force-push — passou 11/11 em **Rust** (`git2` 0.20, libgit2 e
+OpenSSL embutidos, rodando com `PATH` vazio: zero dependência do binário `git`) e em **Dart**
+(`git2dart` 0.5.6 + `git2dart_binaries` 1.14.0, libgit2 via FFI). Clone HTTPS real passou nas duas.
+No **emulador Android x86_64** (Android 34, KVM, headless) o cenário completo e o HTTPS também passaram.
+Achados: (1) `git2dart` dá **segfault ao ler conflitos de merge no Linux** (`Index.conflicts`,
+`Index.conflict(path)`, até `Index.length`); no Android a leitura de conflitos funcionou, então parece
+específico do `.so` Linux (não isolado — o teste mínimo do Android usou outro cenário). Contornado com
+merge manual por arquivo. (2) No Android/iOS é obrigatório `await PlatformSpecific.initialize()` antes
+de qualquer API (extrai o bundle de CAs; sem isso o HTTPS falha com "SSL certificate is invalid"). (3) O
+`.so` Linux do `git2dart` pede glibc >= 2.38 e a imagem Docker do Mobile (Ubuntu 22.04) tem 2.35, então
+testes com libgit2 real exigem base 24.04. (4) Depois de um squash, o outro device vê históricos sem
+relação (não um erro): precisa detectar a ausência de merge-base. (5) O ponteiro on-chain é público e
+permanente — gravar a URL do repo em claro exporia o remoto do usuário pra sempre.
+**Não coberto**: arm64 real (o emulador é x86_64), iOS, macOS/Windows do `git2dart`, SSH, push HTTPS
+autenticado. A infra do emulador ficou em `~/android-emu-spike/` (fora do repo, ~8 GB, reaproveitável).
+
+**Plano aprovado.** Decisões: Git **convive** com Arweave (não substitui); ponteiro on-chain **opção C**
+`git:<URL cifrada com a vault key>@<commit>` (contrato não muda); squash é nudge opt-in; merge por
+arquivo com timestamp de commit; **Desktop primeiro**, Mobile depois; credenciais **HTTPS com token e
+SSH** (TOFU de host key); documentos como arquivos no repo. O tipo do ponteiro on-chain decide o provider
+da identidade (um device nunca publica Arweave por cima de `git:`). Layout do repo:
+`vault_entries/<id>.enc`, `vault_documents/<id>.enc`, `meta.enc`, marcador `truthid-vault.json`; sem
+arquivo de manifesto (a árvore de commits já lista). `contentHash` = keccak256 da lista ordenada
+`path:keccak256(bytes)`. Merge determinístico e idêntico em Rust e Dart (fixtures JSON compartilhadas):
+um lado só mudou → esse vence; os dois mudaram → vence o último commit que tocou o caminho; empate →
+maior id de commit; sem merge-base → base vazia; `meta.enc` também LWW (união poderia reconceder
+permissão revogada). Segredos (token/chave SSH) nunca no blob publicado nem cifrados com a DEK.
+Fases: **0** pré-requisitos (0.1 P89, 0.2 tipo de ponteiro, 0.3 abstração de provider) — **CONCLUÍDA**;
+**1** Desktop (gate de CI do `git2` nos 3 SOs primeiro); **2** Mobile (gate: `assembleRelease` com
+`git2dart`, AGP 7.3 do plugin); **3** squash; **4** registro/docs.
+
+**Avaliação crítica (mesma sessão, a pedido do dono do projeto).** *O motivo certo é a deletabilidade,
+não o custo*: no Arweave toda versão antiga do vault cifrado fica pública pra sempre — se uma senha
+mestra ou chave vazar daqui a anos, todo o histórico cai de uma vez ("colher agora, decifrar depois");
+num storage que apaga, o risco tem prazo. *O custo é uma dúvida*: depois do P87 só as entradas alteradas
+são republicadas e um vault tem poucos KB; **a comparação de custo real Git vs. Arweave nunca foi
+feita** e pode mostrar que o custo hoje é irrelevante. *Preocupações*: (a) credenciais por device — hoje
+parear basta, com Git cada device precisa de token/chave SSH criados e guardados pelo usuário, a maior
+queda de conveniência; (b) dependência de um host centralizado (ban de conta, rate limit) num projeto
+auto-soberano — o conteúdo é cifrado, a disponibilidade não; (c) o host vê contagem, tamanho e cadência
+de edição das entradas; (d) tamanho do trabalho (duas linguagens com merge que precisa dar o mesmo
+resultado, SSH, squash — várias sessões); (e) o maior risco está no Mobile (build Android com o AGP
+antigo do plugin, ~24 MB de `.so`, arm64/iOS nunca testados). *Ritmo*: o Git está sendo construído em
+cima do formato por-entrada do P87, que **ainda não foi validado em rede real (P88)**; se o P87 tiver
+um problema real, o Git herda. Nota: o plano foi desenhado pela mesma sessão que o avaliou (viés).
+
+**Recomendações registradas, sem decisão do dono do projeto ainda**: (1) validar o P88 antes da fase 2;
+(2) fazer a comparação de custo Git vs. Arweave agora (barata, diz se vale a pena); (3) entregar só o
+Desktop na fase 1 e usar por um tempo antes de investir no Mobile, que concentra custo e risco; (4)
+tratar a deletabilidade como o "porquê" — isso torna squash e rotação centrais, não opcionais. Se o custo
+se mostrar irrelevante, a deletabilidade sozinha ainda justifica o Git, mas o escopo deve ser revisto.
+Registrado como **P90** (épico), **P91** (validação em hardware) e **P92** (teto de publicações) em
+`PENDING.md`.
+
+### `/code-review high` sobre a branch `fix/p89-rotacao-dek` — 2 achados, ambos corrigidos (Sessão 231, 2026-09-19)
+
+Antes de partir pra validação manual do P88 (mainnet + celular físico, adiada por indisponibilidade),
+rodado `/code-review high` sobre os 5 commits da branch `fix/p89-rotacao-dek` (P89 + tipo de ponteiro +
+abstração de provider + docs), ainda não mergeada. **2 achados, ambos confirmados e corrigidos nesta
+sessão** (decisão: anotar tudo primeiro no `PENDING.md`, corrigir em seguida):
+
+1. **Mobile** (`vault_repository.dart:1162`) — `setAsideUnreadableLocalCache()` limpava vault/snapshot/
+   manifesto/`vault_entries/` após rotação de DEK vinda de outro device, mas nunca limpava
+   `vault_documents/<id>.enc`. Confirmou o "fora de escopo, não verificado" que o próprio P89 já tinha
+   anotado. Corrigido incluindo o diretório de documentos no mesmo descarte (derivável, rebuscado por
+   `cid`), com teste novo provando red→green. Registrado e fechado no código como **P93**.
+2. **Desktop** (`vault.rs:743`) — `rotate_vault_key()` descartava o baseline de publicação antes de
+   confirmar que `set_vault_key()`/as escritas seguintes davam certo; uma falha parcial deixava o
+   baseline órfão e o próximo publish republicava o vault inteiro sem necessidade. Achado novo, não
+   antecipado no P89. Corrigido invertendo a ordem (`set_vault_key` primeiro, descarte só depois de
+   confirmado). Registrado e fechado no código como **P94**.
+
+Ambos nascem da mesma raiz do P89: tudo que cada device usa pra saber "o que já foi publicado" é
+cifrado com a vault key, então uma rotação de chave (ou uma falha no meio dela) sempre arrisca deixar
+esse estado inconsistente em algum canto que ninguém olhou ainda. Testes: Desktop `cargo test --lib`
+248/248, Mobile (Docker) 106/106 no arquivo tocado, `flutter analyze`/`cargo clippy` sem aviso novo.
+**Não validado em runtime real** — mesma pendência do P89 (rotação de ponta a ponta com device físico).
+Ver `PENDING.md` (P93, P94) e a seção "GitStorageProvider" acima (P89, mesma raiz).
+
+### Comparação de custo real Git vs. Arweave (Sessão 231, 2026-09-19)
+
+Recomendação (2) da avaliação crítica da S230 (ver seção "GitStorageProvider" acima). Números tirados
+de fontes ao vivo nesta sessão, não de estimativa de terceiro: preço de armazenamento direto do
+gateway (`GET https://arweave.net/price/{bytes}`, resposta em winston) e cotação AR/USD via CoinGecko
+(`$4.49`, 2026-09-19 — **AR é volátil**: subiu 12-43% nas 24h anteriores à consulta, então o valor em
+dólar de qualquer publicação varia com o mercado, diferente de um custo fixo em fiat).
+
+**Achado real, verificado contra o gateway**: o preço do Arweave tem um **piso por transação**, não é
+linear por byte pra arquivo pequeno. Testado sistematicamente: qualquer payload de até exatamente
+**262.144 bytes (256 KiB, 1 chunk do protocolo)** custa o mesmo piso — `3.340.175.566 winston`
+(`0,00334 AR` ≈ **$0,015** a `$4,49`/AR). Só a partir de 262.145 bytes o preço sobe pro degrau
+seguinte (`6.639.944.869 winston` ≈ **$0,030**, 2 chunks), e assim por diante a cada 256 KiB.
+
+**Isso muda a conta do P87.** Um vault pessoal de credenciais (sem os documentos anexados, que já
+eram separados desde a Fase 15.7) fica bem abaixo de 256 KiB até centenas de entradas — então **antes
+do P87**, qualquer edição publicava o vault inteiro numa **única transação**, e essa transação já
+batia no piso (≈$0,015), **independente de quantas entradas mudaram**. **Depois do P87**, uma edição
+publica o blob da entrada mudada **mais** o manifesto — **2 transações pro caso comum de editar 1
+entrada** (≈$0,030, o dobro), ou `N+1` transações pra `N` entradas mudadas de uma vez. Ou seja, o P87
+**não reduziu o custo em dólar do caso comum** como o registro da S229 (`PENDING.md`/`ROADMAP.md`,
+"reduz custo real no Arweave") afirmou — pelo piso por transação do Arweave, provavelmente **aumentou**
+ligeiramente, contrário ao que foi assumido na hora. O benefício real e comprovado do P87 continua de
+pé: sync incremental no Mobile (não baixa o vault inteiro a cada versão) — isso é sobre banda/latência,
+não sobre taxa do Arweave. **Correção de registro, não motivo pra reverter o P87** — o valor dele é
+noutro lugar.
+
+**Em termos absolutos, mesmo esse "aumento" é pequeno**: pra um usuário ativo (~5 edições/semana), o
+piso por transação dá algo entre **~$4/ano** (pré-P87, 1 tx/edição) e **~$8/ano** (pós-P87, 2 tx/edição
+comum) — a diferença entre os dois é irrelevante frente ao custo de qualquer alternativa.
+
+**Git como comparação**: um repositório **privado no GitHub, plano grátis**, tem custo marginal
+**$0** pra um vault pessoal — os limites de armazenamento do plano grátis (soft cap na casa de GB) estão
+muito acima do que um vault cifrado (mesmo com histórico completo, anos de edições, sem squash) algum
+dia atingiria. **Self-hosted (Gitea/Forgejo numa VPS)** não é mais barato: é um custo **fixo recorrente
+independente de uso**, tipicamente **~$4-6/mês** (~$48-72/ano) pelos provedores mais baratos — mais caro
+que o Arweave pro uso de um vault pessoal sozinho, a menos que essa VPS já fosse paga por outro motivo
+(nesse caso o custo marginal também vira ~$0, igual ao GitHub).
+
+**Conclusão**: em dólar, GitHub privado grátis (`$0`) < Arweave (`~$4-8`/ano) < self-hosted (`~$48-72`/ano,
+se dedicado). Mas a diferença entre as três opções é trivial em termos absolutos pra um vault pessoal —
+confirma a suspeita já registrada na S230 ("o custo pode ser irrelevante"). **A comparação de custo não
+muda a recomendação da avaliação crítica**: o motivo de peso pra seguir com o Git continua sendo a
+**deletabilidade** (squash/rotação apagam histórico de verdade; no Arweave toda versão cifrada antiga
+fica pública pra sempre), não economia de taxa. Recomendação (2) da S230 fica marcada como cumprida em
+`PENDING.md` (P90).
+
