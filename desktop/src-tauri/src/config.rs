@@ -34,7 +34,8 @@ pub(crate) fn write_file(path: &Path, data: &[u8]) -> Result<(), String> {
 /// existem quando o keyring do SO não está disponível (`device.key`,
 /// `vault.key`, `arweave_wallet.json`). Sem isso, o arquivo sai com o umask
 /// padrão do sistema (tipicamente 0o644, mundo-legível). No Windows é
-/// no-op — ACL de arquivo é outro mecanismo, fora de escopo.
+/// no-op — ACL de arquivo é outro mecanismo, fora de escopo; por isso o
+/// fallback é sinalizado ao usuário (`plaintext_fallback_in_use`).
 pub(crate) fn write_secret_file(path: &Path, data: &[u8]) -> Result<(), String> {
     write_file(path, data)?;
     #[cfg(unix)]
@@ -66,6 +67,32 @@ pub(crate) fn save_json<T: serde::Serialize + ?Sized>(
 ) -> Result<(), String> {
     let json = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
     write_file(path, json.as_bytes())
+}
+
+/// Arquivos em texto plano que só existem quando o keyring do SO falhou
+/// (fallback de `set_keyring_or_file`). `app_lock.enc` fica de fora: é um
+/// blob já cifrado, não um segredo em claro.
+const PLAINTEXT_FALLBACK_FILES: [&str; 4] = [
+    "device.key",
+    "vault.key",
+    "arweave_wallet.json",
+    "local_wallet.key",
+];
+
+/// `true` se algum segredo está guardado em arquivo de texto plano em vez do
+/// keyring do SO — a UI usa pra avisar o usuário (P95, revisão de segurança
+/// do winget-pkgs: o fallback era silencioso).
+pub(crate) fn plaintext_fallback_in_use() -> bool {
+    let Ok(dir) = truthid_dir() else {
+        return false;
+    };
+    plaintext_fallback_in_dir(&dir)
+}
+
+fn plaintext_fallback_in_dir(dir: &Path) -> bool {
+    PLAINTEXT_FALLBACK_FILES
+        .iter()
+        .any(|name| dir.join(name).is_file())
 }
 
 /// Lê um segredo de texto (chave hex, blob cifrado, JSON) do keyring do SO,
@@ -126,6 +153,22 @@ pub(crate) fn set_keyring_or_file(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn plaintext_fallback_detects_only_secret_files() {
+        let dir = std::env::temp_dir().join("truthid_config_plaintext_fallback_test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        assert!(!plaintext_fallback_in_dir(&dir));
+
+        // Blob já cifrado não conta como segredo em claro.
+        std::fs::write(dir.join("app_lock.enc"), b"x").unwrap();
+        assert!(!plaintext_fallback_in_dir(&dir));
+
+        std::fs::write(dir.join("vault.key"), b"x").unwrap();
+        assert!(plaintext_fallback_in_dir(&dir));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     #[cfg(unix)]
