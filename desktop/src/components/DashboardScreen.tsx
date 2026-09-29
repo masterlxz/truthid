@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { useIdentity } from "../contexts/IdentityContext";
 import { SmartAccountDashboard } from "./SmartAccountDashboard";
 import { ArweaveDashboard } from "./ArweaveDashboard";
+import { SecretStorageWarning } from "./SecretStorageWarning";
 
 type DashboardView = "eth" | "arweave";
 
@@ -16,6 +17,7 @@ export function DashboardScreen() {
   return (
     <div>
       <h2>@{username}</h2>
+      <SecretStorageWarning />
       <nav className="segmented" style={{ marginBottom: "1.25rem" }}>
         <button onClick={() => setView("eth")} disabled={view === "eth"}>
           {t("dashboardScreen.toggle.eth")}

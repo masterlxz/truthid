@@ -6,6 +6,7 @@ import { MigrateWallet } from "./MigrateWallet";
 import { VaultBackup } from "./VaultBackup";
 import { BitwardenImport } from "./BitwardenImport";
 import { GuardianManagement } from "./GuardianManagement";
+import { SecretStorageWarning } from "./SecretStorageWarning";
 
 type LockPhase = "idle" | "enabling" | "disabling";
 
@@ -81,6 +82,8 @@ export function Settings({
   return (
     <div>
       <h2 style={{ marginTop: 0 }}>{t("settings.title")}</h2>
+
+      <SecretStorageWarning />
 
       <div className="card">
         <h3 style={{ marginTop: 0 }}>{t("settings.language.title")}</h3>

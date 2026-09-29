@@ -61,6 +61,13 @@ pub(crate) fn get_device_key_hex() -> Result<String, String> {
     Ok(hex)
 }
 
+/// Diz se algum segredo (chave do device, do vault, wallet) está em arquivo de
+/// texto plano porque o keyring do SO falhou — a UI mostra um aviso (P95).
+#[tauri::command]
+fn secret_storage_fallback_active() -> bool {
+    crate::config::plaintext_fallback_in_use()
+}
+
 /// Deriva a chave de criptografia do vault a partir da chave privada do device
 /// (esquema antigo, pré-Fase 13.8). Mantida apenas para migração de vaults
 /// existentes — novos vaults usam `derive_vault_key_from_wallet`.
@@ -1322,6 +1329,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            secret_storage_fallback_active,
             get_or_create_device_key,
             sign_challenge,
             sign_session_hash,
