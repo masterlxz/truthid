@@ -1,13 +1,45 @@
 use keyring::Entry;
 use std::path::{Path, PathBuf};
 
-/// Retorna o diretório `$HOME/.truthid`, criando-o se não existir.
-/// Fallback pra `/tmp/.truthid` quando `$HOME` não está definido (Docker, CI).
+/// Retorna o diretório `.truthid` do usuário, criando-o se não existir.
+///
+/// Ordem: `$HOME` → (só no Windows) `%USERPROFILE%` → `/tmp` (Docker, CI).
+/// No Windows o `HOME` normalmente não existe, e antes disso tudo caía em
+/// `\tmp\.truthid` na raiz do disco, fora do perfil do usuário (P95, achado
+/// da revisão de segurança do winget-pkgs). Se o diretório novo ainda não
+/// existe e o antigo sim, ele é movido pra lá uma vez só.
 pub(crate) fn truthid_dir() -> Result<PathBuf, String> {
-    let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".to_string());
-    let dir = Path::new(&home).join(".truthid");
+    let dir = resolve_truthid_dir(
+        std::env::var("HOME").ok(),
+        std::env::var("USERPROFILE").ok(),
+        cfg!(windows),
+    );
+    if cfg!(windows) {
+        migrate_legacy_tmp_dir(&dir, &Path::new("/tmp").join(".truthid"));
+    }
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     Ok(dir)
+}
+
+fn resolve_truthid_dir(home: Option<String>, userprofile: Option<String>, windows: bool) -> PathBuf {
+    let non_empty = |v: Option<String>| v.filter(|s| !s.trim().is_empty());
+    let base = non_empty(home)
+        .or_else(|| if windows { non_empty(userprofile) } else { None })
+        .unwrap_or_else(|| "/tmp".to_string());
+    Path::new(&base).join(".truthid")
+}
+
+/// Move `legacy` pra `dir` se `dir` ainda não existe. Só renomeia (nunca
+/// apaga nem sobrescreve): se falhar ou `dir` já existir, deixa tudo como
+/// está — os dados antigos não se perdem.
+fn migrate_legacy_tmp_dir(dir: &Path, legacy: &Path) {
+    if dir == legacy || dir.exists() || !legacy.is_dir() {
+        return;
+    }
+    if let Some(parent) = dir.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let _ = std::fs::rename(legacy, dir);
 }
 
 /// Retorna o caminho completo para um arquivo dentro de `$HOME/.truthid/`.
@@ -153,6 +185,54 @@ pub(crate) fn set_keyring_or_file(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resolve_truthid_dir_prefers_home_then_userprofile_on_windows_only() {
+        let some = |s: &str| Some(s.to_string());
+        assert_eq!(
+            resolve_truthid_dir(some("/h"), some("C:/u"), true),
+            Path::new("/h").join(".truthid")
+        );
+        assert_eq!(
+            resolve_truthid_dir(None, some("C:/u"), true),
+            Path::new("C:/u").join(".truthid")
+        );
+        assert_eq!(
+            resolve_truthid_dir(some(" "), some("C:/u"), true),
+            Path::new("C:/u").join(".truthid")
+        );
+        // Fora do Windows, USERPROFILE é ignorado.
+        assert_eq!(
+            resolve_truthid_dir(None, some("C:/u"), false),
+            Path::new("/tmp").join(".truthid")
+        );
+        assert_eq!(
+            resolve_truthid_dir(None, None, true),
+            Path::new("/tmp").join(".truthid")
+        );
+    }
+
+    #[test]
+    fn migrate_legacy_moves_once_and_never_overwrites() {
+        let root = std::env::temp_dir().join("truthid_config_migrate_test");
+        let _ = std::fs::remove_dir_all(&root);
+        let legacy = root.join("legacy");
+        let dir = root.join("profile").join(".truthid");
+        std::fs::create_dir_all(&legacy).unwrap();
+        std::fs::write(legacy.join("vault.enc"), b"data").unwrap();
+
+        migrate_legacy_tmp_dir(&dir, &legacy);
+        assert_eq!(std::fs::read(dir.join("vault.enc")).unwrap(), b"data");
+        assert!(!legacy.exists());
+
+        // Diretório novo já existe: um legado recriado não sobrescreve nada.
+        std::fs::create_dir_all(&legacy).unwrap();
+        std::fs::write(legacy.join("vault.enc"), b"other").unwrap();
+        migrate_legacy_tmp_dir(&dir, &legacy);
+        assert_eq!(std::fs::read(dir.join("vault.enc")).unwrap(), b"data");
+        assert!(legacy.exists());
+        let _ = std::fs::remove_dir_all(&root);
+    }
 
     #[test]
     fn plaintext_fallback_detects_only_secret_files() {

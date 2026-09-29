@@ -39,7 +39,7 @@ TruthID's security rests on cryptography enforced by smart contracts and on keys
 
 The desktop app keeps its private keys (device key, vault key, local wallet, Arweave wallet) in the operating system keyring: Credential Manager on Windows, Secret Service on Linux. On Windows this is protected by DPAPI, which ties the secret to the signed-in user account. **It is not stored in the TPM** — earlier README text saying so was inaccurate.
 
-If the OS keyring is unavailable (a locked-down or headless session, a broken Secret Service daemon), the app falls back to plain, unencrypted files under `~/.truthid` (`device.key`, `vault.key`, `local_wallet.key`, `arweave_wallet.json`). On Linux those files are created with mode `0600`; on Windows the app does not set an ACL, so they inherit the permissions of the folder they are in. Anyone who can read that folder can read them.
+If the OS keyring is unavailable (a locked-down or headless session, a broken Secret Service daemon), the app falls back to plain, unencrypted files under `~/.truthid` (`%USERPROFILE%\.truthid` on Windows: `device.key`, `vault.key`, `local_wallet.key`, `arweave_wallet.json`). On Linux those files are created with mode `0600`; on Windows the app does not set an ACL, so they inherit the permissions of the folder they are in. Anyone who can read that folder can read them.
 
 The app no longer does this silently: when any of those files exist, the Dashboard and Settings show a warning. Fix the keyring and restart the app to stop relying on the fallback. The optional app lock (Settings) adds a password prompt to opening the app, but does not encrypt the fallback files.
 
