@@ -155,10 +155,34 @@ pub(crate) fn get_keyring_or_file(
     }
 
     if path.exists() {
-        return read_text(path).map(|s| Some(s.trim().to_string()));
+        let value = read_text(path)?.trim().to_string();
+        // Keyring voltou a funcionar: sobe o segredo pra lá e apaga o texto
+        // plano (senão o aviso de P95 nunca some e a chave segue exposta).
+        if !value.is_empty() {
+            migrate_file_to_keyring(service, account, path, &value);
+        }
+        return Ok(Some(value));
     }
 
     Ok(None)
+}
+
+/// Tenta mover um segredo do arquivo de fallback pro keyring do SO. Só apaga
+/// o arquivo depois de reler o valor do keyring e conferir que é idêntico;
+/// qualquer falha deixa o arquivo como está (nada se perde).
+pub(crate) fn migrate_file_to_keyring(service: &str, account: &str, path: &Path, value: &str) {
+    migrate_file_secret(path, value, || {
+        let Ok(entry) = Entry::new(service, account) else {
+            return false;
+        };
+        entry.set_password(value).is_ok() && entry.get_password().is_ok_and(|v| v == value)
+    });
+}
+
+fn migrate_file_secret(path: &Path, value: &str, store_and_verify: impl FnOnce() -> bool) {
+    if !value.is_empty() && store_and_verify() {
+        let _ = std::fs::remove_file(path);
+    }
 }
 
 /// Grava um segredo de texto no keyring do SO; se o keyring não estiver
@@ -177,6 +201,9 @@ pub(crate) fn set_keyring_or_file(
 
     if !saved {
         write_secret_file(path, value.as_bytes())?;
+    } else if path.exists() {
+        // Sobra de um fallback anterior: o keyring agora tem o valor novo.
+        let _ = std::fs::remove_file(path);
     }
 
     Ok(())
@@ -232,6 +259,25 @@ mod tests {
         assert_eq!(std::fs::read(dir.join("vault.enc")).unwrap(), b"data");
         assert!(legacy.exists());
         let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn migrate_file_secret_deletes_only_after_verified_store() {
+        let dir = std::env::temp_dir().join("truthid_config_migrate_secret_test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("vault.key");
+        std::fs::write(&file, b"abc").unwrap();
+
+        migrate_file_secret(&file, "abc", || false);
+        assert!(file.exists(), "keyring falhou: arquivo deve ficar");
+
+        migrate_file_secret(&file, "", || true);
+        assert!(file.exists(), "valor vazio nunca migra");
+
+        migrate_file_secret(&file, "abc", || true);
+        assert!(!file.exists());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
