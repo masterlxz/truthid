@@ -8,5 +8,5 @@ export const config = {
   // app/[locale]/docs/ for the other 3 locales — neither depends on this proxy
   // for locale resolution (the docs-only static export can't run a proxy at
   // all), so it's excluded here to avoid the proxy rewriting docs URLs.
-  matcher: ["/((?!api|docs|_next|_vercel|favicon.ico|icon.svg|.*\\..*).*)"],
+  matcher: ["/((?!api|docs|donate|_next|_vercel|favicon.ico|icon.svg|.*\\..*).*)"],
 };

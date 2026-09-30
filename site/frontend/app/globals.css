@@ -4,7 +4,7 @@
 
 /*
  * TruthID brand: same teal/cyan + Inter/Space Grotesk identity as the old
- * Docusaurus docs (docs/src/css/custom.css) — dark is the brand default.
+ * Docusaurus docs (removed in P96) — dark is the brand default.
  */
 :root {
   --background: #ffffff;
