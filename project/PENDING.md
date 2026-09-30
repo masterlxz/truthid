@@ -228,6 +228,14 @@ validada carregando o `dist/` no Brave headless sob o mesmo header (sem violaç�
 esperados fora do app), **não** dentro do Tauri de verdade — falta clicar backup/import Bitwarden/download de
 documento/scanner de QR (webcam) no app real; (c) o PR do winget continua aberto (título e manifests
 atualizados pra 2.2.2, comentário postado 2026-09-29); (d) `mobile/` não foi bumpado (fix é só Desktop).
+5. **Segunda rodada do moderador (2026-09-30)**: segurança aprovada, o MSI 2.2.2 passou no pipeline; falta só
+   `PrivacyUrl` (política 1.5.1 do winget — o `security.mdx` não conta como política de privacidade).
+   **Em andamento**: `docs/docs/privacy.mdx` + `PrivacyUrl` no manifest `locale.en-US` (PR #4). Depois do
+   merge e do deploy do site, conferir que `https://masterlxz.github.io/truthid/docs/privacy` responde, atualizar
+   o manifest no PR do winget e responder ao moderador. Conferir na política: ausência de telemetria foi
+   verificada no Desktop e no site, **não** no `mobile/`; "desinstalar não apaga `~/.truthid`" é inferência.
+   Também: fix do aviso que nunca sumia depois do keyring voltar (PR #3, migra o segredo do arquivo pro keyring).
+
 Release: `v2.2.2`. Relacionado a [[project_new_ideas_s214]] (P65, winget).
 
 ### P94 — `rotate_vault_key` (Desktop): baseline de publicação era descartado antes de confirmar a troca de chave, falha parcial deixava baseline órfão — ✅ corrigido no código, falta validar em runtime real (Sessão 231)
