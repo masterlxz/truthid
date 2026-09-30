@@ -112,6 +112,7 @@ pub(crate) fn get_vault_key() -> Result<[u8; 32], String> {
         if bytes.len() == 32 {
             let mut key = [0u8; 32];
             key.copy_from_slice(&bytes);
+            crate::config::migrate_file_to_keyring(SERVICE, VAULT_KEY_ACCOUNT, &path, hex.trim());
             return Ok(key);
         }
     }
