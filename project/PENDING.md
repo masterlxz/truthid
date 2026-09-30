@@ -201,16 +201,18 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 
 ## Não Resolvidas
 
-### P96 — Remover o `docs/` (Docusaurus legado): o site publicado é `site/frontend` (Fumadocs), o `docs/` virou cópia morta que diverge — ⏳ pendente (Sessão 232)
+### P96 — Remover o `docs/` (Docusaurus legado): o site publicado é `site/frontend` (Fumadocs), o `docs/` virou cópia morta que diverge — ✅ removido (Sessão 232)
 
-O `deploy-docs.yml` só publica `site/frontend/**`. O `docs/` (Docusaurus) não vai ao ar, e já causou erro: as
-seções "Desktop" do `security.mdx` do P95 e a política de privacidade foram escritas só lá e deram 404 no site
-(corrigido no PR #5, portando pro `site/frontend`). A cópia em `docs/docs/` segue divergindo do site.
-A fazer: (1) apagar o `docs/` inteiro (conferir antes que nada no CI/scripts o usa; o build dele nem roda, falta
-`qrcode.react` em `docs/node_modules`, e `docs/build` e `docs/node_modules` são dele); (2) o `README.md:30` linka
-`docs/docs/security.mdx#desktop-where-secrets-live`, que quebra quando o diretório some — apontar pra
-`https://masterlxz.github.io/truthid/docs/security#desktop-where-secrets-live`; (3) conferir se mais algum link
-de doc (README, `CLAUDE.md`, `project/`) aponta pra `docs/docs/`.
+O `deploy-docs.yml` só publica `site/frontend/**`; o `docs/` (Docusaurus) não ia ao ar e já causou erro: as seções
+"Desktop" do `security.mdx` do P95 e a política de privacidade foram escritas só lá e deram 404 no site (corrigido
+no PR #5). Antes de apagar, comparação página a página: as 10 páginas de doc existem no site com as mesmas seções
+(o site está mais novo em security/contracts/intro); a landing já estava no site. **Única lacuna real**: a página
+`/donate` (QR + endereço) só existia no Docusaurus e dava 404 no site desde a troca de stack — migrada pra
+`site/frontend/app/donate/` (+ `qrcode.react`, `/donate` fora do matcher do proxy do next-intl), mesma URL.
+`docs/` apagado inteiro; `README.md:30` agora linka a URL publicada de `/docs/security`; comentário do
+`globals.css` atualizado. Referências a `docs/` em `PHASE.md`/`SESSIONS.md`/`ROADMAP.md` e nos itens P95/SDK acima
+são histórico de sessões e ficaram como estão. Lacuna: `/donate` só em inglês, sem versão por locale; não foi visto
+renderizado no navegador (só o build estático conferido).
 
 ### P95 — Revisão de segurança do winget-pkgs (PR #422612): fallback silencioso, `fs` `**`, CSP nulo, README com TPM, dados do Windows em `\tmp` — ✅ corrigido no código e publicado em v2.2.2, falta validar em runtime real e o PR do winget ser aprovado (Sessão 232)
 
