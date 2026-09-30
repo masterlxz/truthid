@@ -201,6 +201,17 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 
 ## Não Resolvidas
 
+### P96 — Remover o `docs/` (Docusaurus legado): o site publicado é `site/frontend` (Fumadocs), o `docs/` virou cópia morta que diverge — ⏳ pendente (Sessão 232)
+
+O `deploy-docs.yml` só publica `site/frontend/**`. O `docs/` (Docusaurus) não vai ao ar, e já causou erro: as
+seções "Desktop" do `security.mdx` do P95 e a política de privacidade foram escritas só lá e deram 404 no site
+(corrigido no PR #5, portando pro `site/frontend`). A cópia em `docs/docs/` segue divergindo do site.
+A fazer: (1) apagar o `docs/` inteiro (conferir antes que nada no CI/scripts o usa; o build dele nem roda, falta
+`qrcode.react` em `docs/node_modules`, e `docs/build` e `docs/node_modules` são dele); (2) o `README.md:30` linka
+`docs/docs/security.mdx#desktop-where-secrets-live`, que quebra quando o diretório some — apontar pra
+`https://masterlxz.github.io/truthid/docs/security#desktop-where-secrets-live`; (3) conferir se mais algum link
+de doc (README, `CLAUDE.md`, `project/`) aponta pra `docs/docs/`.
+
 ### P95 — Revisão de segurança do winget-pkgs (PR #422612): fallback silencioso, `fs` `**`, CSP nulo, README com TPM, dados do Windows em `\tmp` — ✅ corrigido no código e publicado em v2.2.2, falta validar em runtime real e o PR do winget ser aprovado (Sessão 232)
 
 O moderador do `microsoft/winget-pkgs` (template `securityReview/credentialProtection`, 2026-09-24) pediu
@@ -230,10 +241,11 @@ documento/scanner de QR (webcam) no app real; (c) o PR do winget continua aberto
 atualizados pra 2.2.2, comentário postado 2026-09-29); (d) `mobile/` não foi bumpado (fix é só Desktop).
 5. **Segunda rodada do moderador (2026-09-30)**: segurança aprovada, o MSI 2.2.2 passou no pipeline; falta só
    `PrivacyUrl` (política 1.5.1 do winget — o `security.mdx` não conta como política de privacidade).
-   **Em andamento**: `docs/docs/privacy.mdx` + `PrivacyUrl` no manifest `locale.en-US` (PR #4). Depois do
-   merge e do deploy do site, conferir que `https://masterlxz.github.io/truthid/docs/privacy` responde, atualizar
-   o manifest no PR do winget e responder ao moderador. Conferir na política: ausência de telemetria foi
-   verificada no Desktop e no site, **não** no `mobile/`; "desinstalar não apaga `~/.truthid`" é inferência.
+   **Publicado**: a política está em `site/frontend/content/docs/privacy.mdx` (PRs #4 e #5; o #4 pôs a página só em
+   `docs/`, que não é o site publicado) e `https://masterlxz.github.io/truthid/docs/privacy` responde 200. O
+   `PrivacyUrl` está no manifest `locale.en-US`. Falta atualizar o manifest no PR do winget e responder ao
+   moderador. Conferir na política: ausência de telemetria foi verificada no Desktop e no site, **não** no
+   `mobile/`; "desinstalar não apaga `~/.truthid`" é inferência; só há versão em inglês (pt-BR/es/zh-CN sem tradução).
    Também: fix do aviso que nunca sumia depois do keyring voltar (PR #3, migra o segredo do arquivo pro keyring).
 
 Release: `v2.2.2`. Relacionado a [[project_new_ideas_s214]] (P65, winget).
