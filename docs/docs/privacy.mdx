@@ -1,0 +1,73 @@
+---
+sidebar_position: 5
+---
+
+# Privacy Policy
+
+_Last updated: 2026-09-30. Applies to TruthID Desktop (Windows and Linux) and the TruthID mobile app._
+
+TruthID is a self-sovereign identity and credential manager. **There is no TruthID server and no TruthID account.** Nothing you store in the app is sent to the TruthID project, and the project does not collect usage data, analytics or crash reports — the app contains no telemetry code. This page explains what the app accesses and stores, what stays on your device, what leaves it and where it goes, how long it lives, and what you can control.
+
+For the threat model and how secrets are protected, see the [Security Model](security.mdx).
+
+## Who is responsible
+
+TruthID is open-source software published by [masterlxz](https://github.com/masterlxz) under the MIT license. Because the project operates no service that receives your data, it does not act as a data controller for what you keep in the app. The third-party networks listed below do receive limited technical data when the app talks to them; their own policies apply to that data.
+
+Questions or requests: [github.com/masterlxz/truthid/issues](https://github.com/masterlxz/truthid/issues).
+
+## What the app accesses and stores
+
+| Information | Where it is kept |
+|---|---|
+| Private keys: device key, vault key, local wallet key, Arweave wallet | The operating system keyring (Credential Manager on Windows, Secret Service on Linux; Android Keystore / iOS Secure Enclave on mobile). If the desktop keyring is unavailable, the app falls back to plain files in `~/.truthid` (`%USERPROFILE%\.truthid` on Windows) and shows a warning. |
+| Vault entries: passwords, passkeys, saved addresses, payment cards, notes | Encrypted on your device (`vault.enc`). Card number and CVV get an extra layer of encryption on top. |
+| Vault documents (files you attach) | Encrypted in a local cache in the same folder. |
+| Identity data: username, controller wallet address, device public keys, guardians | Kept locally and registered on a public blockchain (see below). |
+| App lock password | Only a derived, encrypted blob is stored, never the password itself. |
+| Files you pick for backup, restore or Bitwarden import | Read or written only through the operating system's file dialog, and only the file you choose. |
+| Camera (QR code scanner) | Used live to scan a QR code. Images are not stored or sent anywhere. |
+
+Everything in this table stays on your device unless you take one of the actions in the next section.
+
+## What leaves your device, and where it goes
+
+**Blockchain (Base network).** Creating an identity, registering devices, setting guardians, starting sessions and publishing the vault pointer are on-chain transactions. This data is **public and permanent**: your username, controller address, device public keys, session hashes, guardian configuration and the pointer to your published vault. It is never private and cannot be deleted. To read and write the chain, the app contacts public RPC providers (`mainnet.base.org`, `base-rpc.publicnode.com`, `base.drpc.org`) and, for smart-account transactions, the Pimlico bundler (`api.pimlico.io`). These providers see your IP address and the addresses you query.
+
+**Arweave.** When you publish the vault, each entry, the manifest that indexes them, and any attached documents are **encrypted on your device first**, then uploaded to Arweave through `arweave.net` (you also query your wallet balance and transactions there). What Arweave stores is ciphertext, but its existence, size and timing are public, and Arweave data is **permanent and cannot be removed**. Anyone who later obtains your vault key could decrypt what was published.
+
+**IPFS gateways.** Older vault blobs are fetched by content ID through public gateways (`ipfs.io`, `dweb.link`), which see your IP address and the content ID you request.
+
+**Updates.** The desktop app checks `github.com/masterlxz/truthid/releases` for new versions. GitHub sees your IP address and the app version.
+
+**Fonts.** The interface loads fonts from Google Fonts (`fonts.googleapis.com`, `fonts.gstatic.com`), which sees your IP address.
+
+**Other applications on your computer.** While running, the desktop app listens only on `127.0.0.1` so the TruthID browser extension and other local apps can ask it to sign, pin content, edit the vault or autofill an address or card. Every such request waits for your explicit approval in the app. Only what you approve is returned: a signature, or the single address or card you selected in the dialog. Two answers do not need approval: that the app is running, and whether the vault holds any saved cards or addresses. See the [Security Model](security.mdx#desktop-the-local-signer-service).
+
+**Websites you log in to.** When you approve a login, the app signs a challenge and sends the signature and your public identity (username and device address) to the callback URL of the site that asked. The phone shows that site's real origin before you approve.
+
+The app does not sell data, does not show ads and does not share data with advertisers or data brokers.
+
+## Retention and deletion
+
+- **On your device:** data stays until you delete it. Removing an entry in the app deletes it from the local vault. Uninstalling the app does **not** delete `~/.truthid` (`%USERPROFILE%\.truthid` on Windows) or the keyring entries under the service name `truthid`; delete them yourself to remove all local data. Keyring entries can be removed in Credential Manager (Windows) or your keyring tool (Linux).
+- **On the blockchain and Arweave:** data already published is permanent. Deleting an entry locally and publishing again removes it from your current manifest, but earlier encrypted versions remain on Arweave. Rotating the vault key protects future publications; it does not erase past ones.
+- **At third-party providers:** RPC providers, Pimlico, IPFS gateways, GitHub and Google Fonts keep whatever logs their own policies describe; the TruthID project has no access to or control over them.
+
+## Your controls
+
+- Decide what to store and whether to publish the vault at all. A vault that is never published never leaves your device.
+- Approve or reject every signing, pin, vault-edit and autofill request from other applications.
+- Turn on the app lock in Settings for a password prompt when opening the app.
+- Export an encrypted backup of the vault, and restore it, from Settings.
+- Rotate the vault key.
+- Configure guardians for recovery, or decline to — without guardians a lost controller wallet cannot be recovered.
+- Use your own RPC endpoint, or run your own node, if you do not want to rely on the public providers.
+
+## Children
+
+TruthID is not directed at children and the project does not knowingly collect personal information from anyone.
+
+## Changes to this policy
+
+Changes are published on this page with a new "Last updated" date. The full history is in the [repository](https://github.com/masterlxz/truthid/commits/main/docs/docs/privacy.mdx).

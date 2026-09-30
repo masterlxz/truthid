@@ -201,6 +201,43 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 
 ## Não Resolvidas
 
+### P95 — Revisão de segurança do winget-pkgs (PR #422612): fallback silencioso, `fs` `**`, CSP nulo, README com TPM, dados do Windows em `\tmp` — ✅ corrigido no código e publicado em v2.2.2, falta validar em runtime real e o PR do winget ser aprovado (Sessão 232)
+
+O moderador do `microsoft/winget-pkgs` (template `securityReview/credentialProtection`, 2026-09-24) pediu
+esclarecimentos antes de aprovar o pacote novo. Achados, todos tratados:
+1. **README dizia "Windows TPM"**, mas o app usa o crate `keyring` (no Windows, Credential Manager/DPAPI). E o
+   fallback em arquivo (`config.rs::set_keyring_or_file`) era **silencioso** — `device.key`, `vault.key`,
+   `local_wallet.key`, `arweave_wallet.json` em texto plano, 0600 só no Unix. **Corrigido**: README/docs
+   corrigidos; novo comando `secret_storage_fallback_active` + `SecretStorageWarning` (Dashboard e Settings,
+   4 idiomas) avisa quando qualquer desses arquivos existe.
+2. **`fs:allow-read-file`/`write-file` com `**`** e **CSP `null`**. **Corrigido**: escopo removido (os 7 usos de
+   `readFile`/`writeFile` recebem o caminho de um diálogo nativo, e o `tauri-plugin-dialog` 2.7.2 libera no
+   escopo o arquivo escolhido — conferido lendo o código do plugin); CSP definida (fontes Google, `https:`,
+   localhost, `ipc:`, `object-src`/`frame-src`/`base-uri` bloqueados).
+3. **Signer em loopback com CORS permissivo**: conferido que `sign-request`, `sign-message`, `pin`,
+   `vault-edit`, `autofill-address`/`autofill-creditcard` estacionam o pedido até decisão na UI (timeout se
+   não houver). Sem mudança de código; documentado em `docs/docs/security.mdx`, incluindo as duas respostas
+   sem aprovação (`ping` e "sem cartões/endereços", que revela se o vault tem algum).
+4. **Achado colateral**: `truthid_dir()` caía em `/tmp` quando `HOME` não existe — no Windows (onde `HOME`
+   normalmente não existe) tudo, inclusive `vault.enc`, ia pra `\tmp\.truthid` na raiz do disco, fora do
+   perfil. **Corrigido**: `HOME` → `%USERPROFILE%` (só Windows) → `/tmp`; se o diretório novo não existe e o
+   antigo sim, é renomeado uma vez (nunca apaga nem sobrescreve). Testes: `cargo test --lib` 251/251.
+
+Lacunas conhecidas: (a) nada disto foi rodado num Windows real — só lógica testada por unidade; (b) a CSP foi
+validada carregando o `dist/` no Brave headless sob o mesmo header (sem violações; erros de IPC do Tauri são
+esperados fora do app), **não** dentro do Tauri de verdade — falta clicar backup/import Bitwarden/download de
+documento/scanner de QR (webcam) no app real; (c) o PR do winget continua aberto (título e manifests
+atualizados pra 2.2.2, comentário postado 2026-09-29); (d) `mobile/` não foi bumpado (fix é só Desktop).
+5. **Segunda rodada do moderador (2026-09-30)**: segurança aprovada, o MSI 2.2.2 passou no pipeline; falta só
+   `PrivacyUrl` (política 1.5.1 do winget — o `security.mdx` não conta como política de privacidade).
+   **Em andamento**: `docs/docs/privacy.mdx` + `PrivacyUrl` no manifest `locale.en-US` (PR #4). Depois do
+   merge e do deploy do site, conferir que `https://masterlxz.github.io/truthid/docs/privacy` responde, atualizar
+   o manifest no PR do winget e responder ao moderador. Conferir na política: ausência de telemetria foi
+   verificada no Desktop e no site, **não** no `mobile/`; "desinstalar não apaga `~/.truthid`" é inferência.
+   Também: fix do aviso que nunca sumia depois do keyring voltar (PR #3, migra o segredo do arquivo pro keyring).
+
+Release: `v2.2.2`. Relacionado a [[project_new_ideas_s214]] (P65, winget).
+
 ### P94 — `rotate_vault_key` (Desktop): baseline de publicação era descartado antes de confirmar a troca de chave, falha parcial deixava baseline órfão — ✅ corrigido no código, falta validar em runtime real (Sessão 231)
 
 Achado pelo `/code-review high` sobre a branch `fix/p89-rotacao-dek` (`desktop/src-tauri/src/vault.rs:743`).
