@@ -201,6 +201,48 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 
 ## Não Resolvidas
 
+### P98 — Traduzir a política de privacidade, as seções Desktop do Security Model e `/donate` (pt-BR, es, zh-CN) — ⏳ pendente, próximo depois do P97 (Sessão 232)
+
+O site tem 4 locales, mas `site/frontend/content/docs/privacy.mdx` e as duas seções "Desktop: where secrets live" /
+"Desktop: the local signer service" do `security.mdx` só existem em inglês (as variantes `.pt-BR/.es/.zh-CN` de
+`security` não ganharam as seções; `privacy` não tem variante). `/donate` também só em inglês (`app/donate/`, raiz sem
+prefixo; não há `app/[locale]/donate`). A fazer: (1) traduzir só depois de fechar o P97, senão a política muda de
+novo e as 4 versões divergem; (2) `privacy.pt-BR.mdx`, `privacy.es.mdx`, `privacy.zh-CN.mdx` e `privacy` nos
+`meta.*.json`; (3) as duas seções nos 3 `security.*.mdx`; (4) decidir se `/donate` ganha versão por locale; (5) o
+`PrivacyUrl` do winget continua apontando pra versão em inglês, que é a canônica. Conferir no build do site que as
+rotas por locale usam o texto traduzido e não caem no inglês.
+
+### P97 — Política de privacidade vs. app Mobile: auditoria feita só pela metade, a política pode estar incompleta — ⏳ pendente (Sessão 232)
+
+A política (`site/frontend/content/docs/privacy.mdx`, publicada pra atender o winget) foi escrita a partir do
+**Desktop** e diz que cobre também o app mobile; o `mobile/` só foi olhado por cima. **Já verificado** (grep em
+`pubspec.yaml`, `android/`, `ios/`, `lib/`): nenhum SDK de telemetria/crash/analytics (firebase, crashlytics, sentry,
+analytics, mixpanel, amplitude, posthog...) — então "sem telemetria" vale pro mobile, nessa checagem por nome.
+Segredos em `flutter_secure_storage` (chave do vault, locale, config do provedor de pinning, checkpoints do Arweave).
+Permissões: Android `CAMERA` e `USE_BIOMETRIC`; iOS `NSLocalNetworkUsageDescription` e `NSFaceIDUsageDescription`.
+Hosts em `lib/`: `api.pinata.cloud` (7 ocorrências), `ipfs.io`, `dweb.link`, `arweave.net`, `mainnet.base.org`,
+`base-rpc.publicnode.com`, `base.drpc.org`, `api.pimlico.io`, `github.com`, `masterlxz.github.io`, e
+`https://<rpId>` (passkeys).
+
+**Lacunas conhecidas na política**: (a) **Pinata** (`api.pinata.cloud`) não aparece na política — é o provedor de
+pinning do mobile (`pinning_provider_service.dart`, credencial guardada no secure storage); precisa entrar em "o que
+sai do dispositivo", com o que é enviado (blob já cifrado?) e que a credencial é do usuário; (b) **`reown_appkit`**
+(WalletConnect) fala com servidores da Reown/WalletConnect por dentro do pacote, sem URL em `lib/` — descobrir o que
+é enviado (relay, IDs de sessão, IP) e incluir; (c) `https://<rpId>` nas telas de passkey: entender quando o app
+contata o site do serviço; (d) `masterlxz.github.io` e `github.com` no mobile: pra que (update? releases?).
+
+**A verificar no código/build, pode ser bug e não só doc**: (1) o `Info.plist` do iOS não tem
+`NSCameraUsageDescription` na busca feita (o `mobile_scanner` exige; sem ela o iOS derruba o app ao escanear QR) —
+conferir se está em outro arquivo/configuração; (2) o `AndroidManifest.xml` principal não tem `INTERNET` na busca
+feita (o template Flutter só põe em debug/profile; release precisa dele) — conferir manifests de `debug`/`profile` e
+o APK/AAB de release; (3) o que o app mobile apaga ao desinstalar (Keystore/Keychain: no iOS o Keychain sobrevive
+à desinstalação) — a política hoje só descreve retenção do Desktop; (4) biometria: confirmar que só usa o
+`local_auth` do SO e nada sai do aparelho.
+
+Depois disso: ajustar `privacy.mdx` (inglês) e só então traduzir (P98). Enquanto o P97 estiver aberto, o PR do winget
+segue válido (a política é sobre o que o desktop faz, que foi conferido); o risco é a política afirmar algo sobre o
+mobile que não confere.
+
 ### P96 — Remover o `docs/` (Docusaurus legado): o site publicado é `site/frontend` (Fumadocs), o `docs/` virou cópia morta que diverge — ✅ removido (Sessão 232)
 
 O `deploy-docs.yml` só publica `site/frontend/**`; o `docs/` (Docusaurus) não ia ao ar e já causou erro: as seções
