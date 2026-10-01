@@ -267,7 +267,7 @@ no PR #5). Antes de apagar, comparação página a página: as 10 páginas de do
 são histórico de sessões e ficaram como estão. Lacuna: `/donate` só em inglês, sem versão por locale; não foi visto
 renderizado no navegador (só o build estático conferido).
 
-### P95 — Revisão de segurança do winget-pkgs (PR #422612): fallback silencioso, `fs` `**`, CSP nulo, README com TPM, dados do Windows em `\tmp` — ✅ corrigido no código e publicado em v2.2.2, falta validar em runtime real e o PR do winget ser aprovado (Sessão 232)
+### P95 — Revisão de segurança do winget-pkgs (PR #422612): fallback silencioso, `fs` `**`, CSP nulo, README com TPM, dados do Windows em `\tmp` — ✅ fechado: PR do winget aprovado, mergeado e publicado em 2026-10-01; instalação via winget validada em Windows real (Sessão 234)
 
 O moderador do `microsoft/winget-pkgs` (template `securityReview/credentialProtection`, 2026-09-24) pediu
 esclarecimentos antes de aprovar o pacote novo. Achados, todos tratados:
@@ -302,6 +302,19 @@ atualizados pra 2.2.2, comentário postado 2026-09-29); (d) `mobile/` não foi b
    moderador. Conferir na política: ausência de telemetria foi verificada no Desktop e no site, **não** no
    `mobile/`; "desinstalar não apaga `~/.truthid`" é inferência; só há versão em inglês (pt-BR/es/zh-CN sem tradução).
    Também: fix do aviso que nunca sumia depois do keyring voltar (PR #3, migra o segredo do arquivo pro keyring).
+
+6. **Fechamento (Sessão 234, 2026-10-01)**: o PR #422612 foi mergeado às 20:34 UTC pelo bot da Microsoft
+   (`Moderator-Approved`, `Validation-Completed`) e o pipeline de publicação passou às 21:54 UTC. Depois do
+   `PrivacyUrl`, o moderador `denelon` não pediu mais nada. **Validado em Windows real**: `winget install
+   masterlxz.TruthID` num notebook que já tinha uma versão antiga (instalada fora do winget) abriu o app novo já
+   com a conta `@masterlxz` logada. Investigado e **não é vazamento**: o TruthID não tem servidor nem conta; o
+   username vem do on-chain (`getUsernameByController`) ou do cache em `localStorage` do WebView
+   (`desktop/src/App.tsx:126-132`), e as chaves ficam no Credential Manager + `%USERPROFILE%\.truthid`. O MSI
+   não leva dados (`tauri.conf.json` sem `resources`); a identidade era dado local da instalação anterior, que
+   sobrevive a reinstalar (mesmo identificador de app). Confirmado pelo usuário que era isso. Isso também
+   confirma na prática que a migração `\tmp\.truthid` → perfil e a leitura do keyring funcionam entre versões.
+   Possível melhoria (não feita): conferir se o "sair" (`clearUsername`, `App.tsx:186`) limpa também chaves e cache
+   do WebView, e se desinstalar deixa dado pra trás (a política de privacidade já descreve a retenção).
 
 Release: `v2.2.2`. Relacionado a [[project_new_ideas_s214]] (P65, winget).
 
