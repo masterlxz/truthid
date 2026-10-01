@@ -201,7 +201,9 @@ facilitado), P15/P16 (monetização/session key com limite de gasto), P14 (polis
 
 ## Não Resolvidas
 
-### P98 — Traduzir a política de privacidade, as seções Desktop do Security Model e `/donate` (pt-BR, es, zh-CN) — ⏳ pendente, próximo depois do P97 (Sessão 232)
+### P98 — Traduzir a política de privacidade, as seções Desktop do Security Model e `/donate` (pt-BR, es, zh-CN) — 🔶 traduzido, falta decidir `/donate` (Sessão 233)
+
+**Sessão 233:** `privacy.{pt-BR,es,zh-CN}.mdx`, `privacy` nos 3 `meta.*.json` e as duas seções Desktop nos 3 `security.*.mdx` (com âncoras `#desktop-...`); `next build` gera `/{locale}/docs/privacy`. Falta só decidir se `/donate` ganha versão por locale. Se o P97 mudar o texto da política, atualizar as 4 versões.
 
 O site tem 4 locales, mas `site/frontend/content/docs/privacy.mdx` e as duas seções "Desktop: where secrets live" /
 "Desktop: the local signer service" do `security.mdx` só existem em inglês (as variantes `.pt-BR/.es/.zh-CN` de

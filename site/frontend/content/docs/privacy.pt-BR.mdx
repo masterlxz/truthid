@@ -1,0 +1,77 @@
+---
+title: Política de Privacidade
+description: "O que o TruthID acessa e armazena, o que fica no seu dispositivo, o que sai dele, retenção e seus controles."
+---
+
+_Última atualização: 2026-10-01. Vale para o TruthID Desktop (Windows e Linux) e para o app mobile do TruthID._
+
+O TruthID é um gerenciador de identidade e credenciais auto-soberano. **Não existe servidor do TruthID nem conta do TruthID.** Nada do que você guarda no app é enviado ao projeto TruthID, e o projeto não coleta dados de uso, analytics nem relatórios de falha — o app não contém código de telemetria. Esta página explica o que o app acessa e armazena, o que fica no seu dispositivo, o que sai dele e para onde vai, quanto tempo dura e o que você pode controlar.
+
+Para o modelo de ameaças e como os segredos são protegidos, veja o [Modelo de Segurança](/docs/security#desktop-the-local-signer-service).
+
+## Quem é o responsável
+
+O TruthID é um software de código aberto publicado por [masterlxz](https://github.com/masterlxz) sob a licença MIT. Como o projeto não opera nenhum serviço que receba seus dados, ele não atua como controlador de dados do que você guarda no app. As redes de terceiros listadas abaixo recebem dados técnicos limitados quando o app se comunica com elas; as políticas delas se aplicam a esses dados.
+
+Dúvidas ou solicitações: [github.com/masterlxz/truthid/issues](https://github.com/masterlxz/truthid/issues).
+
+## O que o app acessa e armazena
+
+| Informação | Onde fica |
+|---|---|
+| Chaves privadas: chave do dispositivo, chave do cofre, chave da carteira local, carteira Arweave | O chaveiro do sistema operacional (Credential Manager no Windows, Secret Service no Linux; armazenamento seguro baseado no Android Keystore / Keychain do iOS no mobile). Se o chaveiro do desktop estiver indisponível, o app recorre a arquivos simples em `~/.truthid` (`%USERPROFILE%\.truthid` no Windows) e mostra um aviso. |
+| Entradas do cofre: senhas, passkeys, endereços salvos, cartões de pagamento, notas | Criptografadas no seu dispositivo (`vault.enc`). Número do cartão e CVV recebem uma camada extra de criptografia por cima. |
+| Documentos do cofre (arquivos que você anexa) | Criptografados em um cache local na mesma pasta. |
+| Dados de identidade: nome de usuário, endereço da carteira controladora, chaves públicas dos dispositivos, guardiões | Mantidos localmente e registrados em uma blockchain pública (veja abaixo). |
+| Senha de bloqueio do app | Só um blob derivado e criptografado é guardado, nunca a senha em si. |
+| Arquivos que você escolhe para backup, restauração ou importação do Bitwarden | Lidos ou gravados apenas pela janela de arquivos do sistema operacional, e somente o arquivo que você escolher. |
+| Câmera (leitor de QR code) | Usada ao vivo para ler um QR code. As imagens não são guardadas nem enviadas a lugar nenhum. |
+
+Tudo nesta tabela fica no seu dispositivo, a menos que você execute uma das ações da próxima seção.
+
+## O que sai do seu dispositivo, e para onde vai
+
+**Blockchain (rede Base).** Criar uma identidade, registrar dispositivos, definir guardiões, iniciar sessões e publicar o ponteiro do cofre são transações on-chain. Esses dados são **públicos e permanentes**: seu nome de usuário, endereço controlador, chaves públicas dos dispositivos, hashes de sessão, configuração de guardiões e o ponteiro para o seu cofre publicado. Nunca são privados e não podem ser apagados. Para ler e escrever na chain, o app contata provedores RPC públicos (`mainnet.base.org`, `base-rpc.publicnode.com`, `base.drpc.org`) e, nas transações de smart account, o bundler Pimlico (`api.pimlico.io`). Esses provedores veem seu endereço IP e os endereços que você consulta.
+
+**Arweave.** Ao publicar o cofre, cada entrada, o manifesto que as indexa e os documentos anexados são **criptografados primeiro no seu dispositivo** e só então enviados à Arweave por `arweave.net` (você também consulta lá o saldo e as transações da sua carteira). O que a Arweave guarda é texto cifrado, mas sua existência, tamanho e momento são públicos, e os dados da Arweave são **permanentes e não podem ser removidos**. Quem obtiver sua chave do cofre no futuro poderá descriptografar o que foi publicado.
+
+**Gateways IPFS.** Blobs antigos do cofre são buscados pelo ID do conteúdo em gateways públicos (`ipfs.io`, `dweb.link`), que veem seu endereço IP e o ID do conteúdo que você pede.
+
+**Serviços de pinning que você configura.** Nas configurações do cofre você pode adicionar um serviço de pinning IPFS à sua escolha (por exemplo, Pinata ou um nó Kubo). O app envia a ele o blob criptografado do cofre e a chave de API ou token que você informou; essa chave fica no armazenamento seguro do seu dispositivo e nunca é enviada a nenhum outro lugar. O projeto não escolhe, não opera nem recebe dados de nenhum serviço de pinning, e o serviço que você escolher vê seu endereço IP e o conteúdo criptografado.
+
+**Conexão de carteira (mobile).** Se você cria ou gerencia uma identidade conectando uma carteira externa, o app mobile usa o WalletConnect por meio da biblioteca Reown AppKit. O pareamento e as requisições que você aprova passam pelo relay do Reown/WalletConnect e pelo diretório de carteiras dele, que podem ver seu endereço IP, o endereço da carteira conectada e as requisições de transação ou assinatura repassadas à sua carteira. O app se identifica nesse serviço com um project ID e os metadados `TruthID` / `masterlxz.github.io/truthid`. Isso só acontece quando você usa o fluxo de conexão de carteira.
+
+**Atualizações.** Os apps consultam a última release de `github.com/masterlxz/truthid` (a API de releases do GitHub) para saber de novas versões. O GitHub vê seu endereço IP e a versão do app.
+
+**Fontes.** A interface carrega fontes do Google Fonts (`fonts.googleapis.com`, `fonts.gstatic.com`), que vê seu endereço IP.
+
+**Outros aplicativos no seu computador.** Enquanto roda, o app desktop escuta apenas em `127.0.0.1`, para que a extensão de navegador do TruthID e outros apps locais possam pedir que ele assine, fixe conteúdo (pin), edite o cofre ou preencha automaticamente um endereço ou cartão. Toda requisição assim espera sua aprovação explícita no app. Só o que você aprova é devolvido: uma assinatura, ou o único endereço ou cartão que você selecionou na janela. Duas respostas não precisam de aprovação: que o app está rodando, e se o cofre tem algum cartão ou endereço salvo. Veja o [Modelo de Segurança](/docs/security#desktop-the-local-signer-service).
+
+**Sites em que você faz login.** Quando você aprova um login, o app assina um desafio e envia a assinatura e sua identidade pública (nome de usuário e endereço do dispositivo) para a URL de callback do site que pediu. O celular mostra a origem real desse site antes de você aprovar.
+
+O app não vende dados, não exibe anúncios e não compartilha dados com anunciantes nem corretores de dados.
+
+## Retenção e exclusão
+
+- **No seu dispositivo:** os dados ficam até você apagá-los. Remover uma entrada no app a apaga do cofre local. Desinstalar o app **não** apaga `~/.truthid` (`%USERPROFILE%\.truthid` no Windows) nem as entradas do chaveiro sob o nome de serviço `truthid`; apague-as você mesmo para remover todos os dados locais. As entradas do chaveiro podem ser removidas no Credential Manager (Windows) ou na sua ferramenta de chaveiro (Linux).
+- **No mobile:** desinstalar o app remove seus dados locais. No Android, as chaves do armazenamento seguro vão junto. No iOS, itens do Keychain podem sobreviver à desinstalação, então um app reinstalado ainda pode encontrar a chave do cofre.
+- **Na blockchain e na Arweave:** dados já publicados são permanentes. Apagar uma entrada localmente e publicar de novo a remove do seu manifesto atual, mas versões criptografadas anteriores continuam na Arweave. Rotacionar a chave do cofre protege publicações futuras; não apaga as passadas.
+- **Em provedores de terceiros:** provedores RPC, Pimlico, gateways IPFS, serviços de pinning, Reown/WalletConnect, GitHub e Google Fonts guardam os logs que as próprias políticas deles descrevem; o projeto TruthID não tem acesso nem controle sobre eles.
+
+## Seus controles
+
+- Decida o que guardar e se vai publicar o cofre. Um cofre que nunca é publicado nunca sai do seu dispositivo.
+- Aprove ou rejeite cada requisição de assinatura, pin, edição do cofre e preenchimento automático vinda de outros aplicativos.
+- Ative o bloqueio do app em Configurações para ter um pedido de senha ao abrir o app.
+- Exporte um backup criptografado do cofre, e restaure-o, em Configurações.
+- Rotacione a chave do cofre.
+- Configure guardiões para recuperação, ou não — sem guardiões, uma carteira controladora perdida não pode ser recuperada.
+- Use seu próprio endpoint RPC, ou rode seu próprio nó, se não quiser depender dos provedores públicos.
+
+## Crianças
+
+O TruthID não é voltado a crianças e o projeto não coleta conscientemente informações pessoais de ninguém.
+
+## Mudanças nesta política
+
+As mudanças são publicadas nesta página com uma nova data de "Última atualização". O histórico completo está no [repositório](https://github.com/masterlxz/truthid/commits/main/site/frontend/content/docs/privacy.mdx).
