@@ -38,6 +38,23 @@ La seguridad de TruthID descansa en criptografía impuesta por contratos intelig
 
 TruthID Vault (el módulo opcional de gestor de contraseñas en las apps de escritorio y móvil) puede generar códigos TOTP y actuar como un autenticador WebAuthn/passkey — pero eso es para iniciar sesión en *otros* servicios cuyas credenciales guardaste en el Vault, no para el propio inicio de sesión de TruthID. TruthID en sí nunca pide una contraseña, un código TOTP o un passkey — la posesión de la clave del dispositivo más el flujo de aprobación descrito arriba es todo el mecanismo de inicio de sesión. Ver [TruthID Vault](/docs/concepts/vault) para el propio modelo de amenazas del Vault (derivación de la clave del vault, cifrado del respaldo, permisos por dispositivo).
 
+## Escritorio: dónde viven los secretos [#desktop-where-secrets-live]
+
+La app de escritorio guarda sus claves privadas (clave del dispositivo, clave del vault, billetera local, billetera de Arweave) en el llavero del sistema operativo: Credential Manager en Windows, Secret Service en Linux. En Windows esto está protegido por DPAPI, que ata el secreto a la cuenta de usuario con sesión iniciada. **No se guarda en el TPM** — un texto anterior del README que lo afirmaba era incorrecto.
+
+Si el llavero del SO no está disponible (una sesión restringida o sin interfaz, un daemon de Secret Service averiado), la app recurre a archivos simples, sin cifrar, en `~/.truthid` (`%USERPROFILE%\.truthid` en Windows: `device.key`, `vault.key`, `local_wallet.key`, `arweave_wallet.json`). En Linux esos archivos se crean con modo `0600`; en Windows la app no establece una ACL, así que heredan los permisos de la carpeta en la que están. Cualquiera que pueda leer esa carpeta puede leerlos.
+
+La app ya no hace esto en silencio: cuando existe alguno de esos archivos, el Dashboard y los Ajustes muestran una advertencia. Arregla el llavero y reinicia la app para dejar de depender del respaldo. El bloqueo opcional de la app (Ajustes) añade una petición de contraseña al abrirla, pero no cifra los archivos del respaldo.
+
+## Escritorio: el servicio local de firma [#desktop-the-local-signer-service]
+
+Mientras se ejecuta, la app de escritorio escucha en `127.0.0.1` (solo loopback — nunca una interfaz de red) para que la extensión del navegador y apps de terceros puedan pedirle que firme, fije contenido (pin), edite el vault o autocompletar. Importan dos propiedades:
+
+- **Toda operación que firma, modifica el vault, publica contenido o revela un secreto guardado queda retenida hasta que decides en la app.** `sign-request`, `sign-message`, `pin`, `vault-edit`, `autofill-address` y `autofill-creditcard` abren cada una un diálogo de aprobación; sin tu decisión, la llamada HTTP expira y no ocurre nada. Un autocompletado aprobado solo puede devolver uno de los candidatos que ofreció el diálogo. `vault-edit` exige además que el dispositivo solicitante tenga permiso de escritura en el vault. Una petición HTTP por sí sola nunca puede completar ninguna de estas operaciones.
+- **El acceso cross-origin es abierto a propósito.** El servicio responde a cualquier origen del navegador (CORS permisivo) porque el content script de la extensión lo llama desde el origen de la página. Los endpoints no tienen autenticación aparte, así que cualquier proceso local — o cualquier página web, si encuentra el puerto — puede *pedir*. Lo que puede obtener queda acotado por el diálogo de aprobación anterior. Dos cosas se pueden saber sin aprobación: que el servicio está en ejecución (`ping`) y si el vault contiene alguna tarjeta o dirección guardada (la respuesta "ninguna guardada").
+
+El webview de escritorio se ejecuta con una Content Security Policy, y el acceso a archivos desde la interfaz se limita a los archivos que eliges en un diálogo nativo de abrir/guardar.
+
 ## Estado de auditoría [#audit-status]
 
 Los contratos han pasado por dos rondas de revisión manual de seguridad (sin herramientas automatizadas como Slither o Mythril): control de acceso, reentrancia, front-running, dependencia de marcas de tiempo, DoS y validación de entradas.

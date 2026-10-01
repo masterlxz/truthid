@@ -1,0 +1,77 @@
+---
+title: Política de Privacidad
+description: "Qué accede y almacena TruthID, qué permanece en tu dispositivo, qué sale de él, retención y tus controles."
+---
+
+_Última actualización: 2026-10-01. Se aplica a TruthID Desktop (Windows y Linux) y a la app móvil de TruthID._
+
+TruthID es un gestor de identidad y credenciales autosoberano. **No existe un servidor de TruthID ni una cuenta de TruthID.** Nada de lo que guardas en la app se envía al proyecto TruthID, y el proyecto no recopila datos de uso, analíticas ni informes de fallos — la app no contiene código de telemetría. Esta página explica qué accede y almacena la app, qué permanece en tu dispositivo, qué sale de él y a dónde va, cuánto tiempo dura y qué puedes controlar.
+
+Para el modelo de amenazas y cómo se protegen los secretos, consulta el [Modelo de Seguridad](/docs/security#desktop-the-local-signer-service).
+
+## Quién es el responsable
+
+TruthID es software de código abierto publicado por [masterlxz](https://github.com/masterlxz) bajo la licencia MIT. Como el proyecto no opera ningún servicio que reciba tus datos, no actúa como responsable del tratamiento de lo que guardas en la app. Las redes de terceros indicadas abajo sí reciben datos técnicos limitados cuando la app se comunica con ellas; sus propias políticas se aplican a esos datos.
+
+Preguntas o solicitudes: [github.com/masterlxz/truthid/issues](https://github.com/masterlxz/truthid/issues).
+
+## Qué accede y almacena la app
+
+| Información | Dónde se guarda |
+|---|---|
+| Claves privadas: clave del dispositivo, clave del baúl, clave de la billetera local, billetera de Arweave | El llavero del sistema operativo (Credential Manager en Windows, Secret Service en Linux; almacenamiento seguro respaldado por Android Keystore / Keychain de iOS en móvil). Si el llavero de escritorio no está disponible, la app recurre a archivos simples en `~/.truthid` (`%USERPROFILE%\.truthid` en Windows) y muestra una advertencia. |
+| Entradas del baúl: contraseñas, passkeys, direcciones guardadas, tarjetas de pago, notas | Cifradas en tu dispositivo (`vault.enc`). El número de tarjeta y el CVV reciben una capa extra de cifrado encima. |
+| Documentos del baúl (archivos que adjuntas) | Cifrados en una caché local en la misma carpeta. |
+| Datos de identidad: nombre de usuario, dirección de la billetera controladora, claves públicas de los dispositivos, guardianes | Se mantienen localmente y se registran en una blockchain pública (ver abajo). |
+| Contraseña de bloqueo de la app | Solo se guarda un blob derivado y cifrado, nunca la contraseña en sí. |
+| Archivos que eliges para copia de seguridad, restauración o importación de Bitwarden | Se leen o escriben solo a través del diálogo de archivos del sistema operativo, y únicamente el archivo que elijas. |
+| Cámara (lector de códigos QR) | Se usa en vivo para escanear un código QR. Las imágenes no se guardan ni se envían a ningún sitio. |
+
+Todo lo de esta tabla permanece en tu dispositivo salvo que realices alguna de las acciones de la siguiente sección.
+
+## Qué sale de tu dispositivo, y a dónde va
+
+**Blockchain (red Base).** Crear una identidad, registrar dispositivos, definir guardianes, iniciar sesiones y publicar el puntero del baúl son transacciones on-chain. Estos datos son **públicos y permanentes**: tu nombre de usuario, dirección controladora, claves públicas de los dispositivos, hashes de sesión, configuración de guardianes y el puntero a tu baúl publicado. Nunca son privados y no se pueden borrar. Para leer y escribir en la cadena, la app contacta proveedores RPC públicos (`mainnet.base.org`, `base-rpc.publicnode.com`, `base.drpc.org`) y, para las transacciones de smart account, el bundler de Pimlico (`api.pimlico.io`). Estos proveedores ven tu dirección IP y las direcciones que consultas.
+
+**Arweave.** Al publicar el baúl, cada entrada, el manifiesto que las indexa y los documentos adjuntos se **cifran primero en tu dispositivo** y luego se suben a Arweave mediante `arweave.net` (allí también consultas el saldo y las transacciones de tu billetera). Lo que Arweave almacena es texto cifrado, pero su existencia, tamaño y momento son públicos, y los datos de Arweave son **permanentes y no se pueden eliminar**. Quien obtenga más adelante tu clave del baúl podría descifrar lo publicado.
+
+**Gateways de IPFS.** Los blobs antiguos del baúl se obtienen por ID de contenido a través de gateways públicos (`ipfs.io`, `dweb.link`), que ven tu dirección IP y el ID de contenido que solicitas.
+
+**Servicios de pinning que configuras.** En los ajustes del baúl puedes añadir un servicio de pinning de IPFS de tu elección (por ejemplo, Pinata o un nodo Kubo). La app le envía el blob cifrado del baúl y la clave de API o token que introdujiste; esa clave se guarda en el almacenamiento seguro de tu dispositivo y nunca se envía a ningún otro sitio. El proyecto no elige, opera ni recibe datos de ningún servicio de pinning, y el servicio que elijas ve tu dirección IP y el contenido cifrado.
+
+**Conexión de billetera (móvil).** Si creas o gestionas una identidad conectando una billetera externa, la app móvil usa WalletConnect mediante la biblioteca Reown AppKit. El emparejamiento y las solicitudes que apruebas viajan por el relay de Reown/WalletConnect y su directorio de billeteras, que pueden ver tu dirección IP, la dirección de la billetera conectada y las solicitudes de transacción o firma retransmitidas a tu billetera. La app se identifica ante ese servicio con un project ID y los metadatos `TruthID` / `masterlxz.github.io/truthid`. Esto solo ocurre cuando usas el flujo de conexión de billetera.
+
+**Actualizaciones.** Las apps consultan la última release de `github.com/masterlxz/truthid` (la API de releases de GitHub) para detectar nuevas versiones. GitHub ve tu dirección IP y la versión de la app.
+
+**Fuentes.** La interfaz carga fuentes de Google Fonts (`fonts.googleapis.com`, `fonts.gstatic.com`), que ve tu dirección IP.
+
+**Otras aplicaciones en tu equipo.** Mientras se ejecuta, la app de escritorio escucha solo en `127.0.0.1` para que la extensión de navegador de TruthID y otras apps locales puedan pedirle que firme, fije contenido (pin), edite el baúl o autocompletar una dirección o tarjeta. Cada solicitud de este tipo espera tu aprobación explícita en la app. Solo se devuelve lo que apruebas: una firma, o la única dirección o tarjeta que seleccionaste en el diálogo. Dos respuestas no necesitan aprobación: que la app está en ejecución, y si el baúl contiene alguna tarjeta o dirección guardada. Consulta el [Modelo de Seguridad](/docs/security#desktop-the-local-signer-service).
+
+**Sitios web en los que inicias sesión.** Cuando apruebas un inicio de sesión, la app firma un desafío y envía la firma y tu identidad pública (nombre de usuario y dirección del dispositivo) a la URL de callback del sitio que lo solicitó. El teléfono muestra el origen real de ese sitio antes de que apruebes.
+
+La app no vende datos, no muestra anuncios y no comparte datos con anunciantes ni intermediarios de datos.
+
+## Retención y eliminación
+
+- **En tu dispositivo:** los datos permanecen hasta que los borres. Eliminar una entrada en la app la borra del baúl local. Desinstalar la app **no** borra `~/.truthid` (`%USERPROFILE%\.truthid` en Windows) ni las entradas del llavero bajo el nombre de servicio `truthid`; bórralas tú mismo para eliminar todos los datos locales. Las entradas del llavero se pueden quitar en Credential Manager (Windows) o en tu herramienta de llavero (Linux).
+- **En móvil:** desinstalar la app elimina sus datos locales. En Android, las claves del almacenamiento seguro se van con ella. En iOS, los elementos del Keychain pueden sobrevivir a una desinstalación, de modo que una app reinstalada aún puede encontrar la clave del baúl.
+- **En la blockchain y en Arweave:** los datos ya publicados son permanentes. Borrar una entrada localmente y publicar de nuevo la elimina de tu manifiesto actual, pero las versiones cifradas anteriores permanecen en Arweave. Rotar la clave del baúl protege las publicaciones futuras; no borra las pasadas.
+- **En proveedores de terceros:** los proveedores RPC, Pimlico, los gateways de IPFS, los servicios de pinning, Reown/WalletConnect, GitHub y Google Fonts conservan los registros que describen sus propias políticas; el proyecto TruthID no tiene acceso ni control sobre ellos.
+
+## Tus controles
+
+- Decide qué guardar y si publicar o no el baúl. Un baúl que nunca se publica nunca sale de tu dispositivo.
+- Aprueba o rechaza cada solicitud de firma, pin, edición del baúl y autocompletado procedente de otras aplicaciones.
+- Activa el bloqueo de la app en Ajustes para que pida una contraseña al abrirla.
+- Exporta una copia de seguridad cifrada del baúl, y restáurala, desde Ajustes.
+- Rota la clave del baúl.
+- Configura guardianes para la recuperación, o no lo hagas — sin guardianes, una billetera controladora perdida no se puede recuperar.
+- Usa tu propio endpoint RPC, o ejecuta tu propio nodo, si no quieres depender de los proveedores públicos.
+
+## Menores
+
+TruthID no está dirigido a menores y el proyecto no recopila conscientemente información personal de nadie.
+
+## Cambios en esta política
+
+Los cambios se publican en esta página con una nueva fecha de "Última actualización". El historial completo está en el [repositorio](https://github.com/masterlxz/truthid/commits/main/site/frontend/content/docs/privacy.mdx).

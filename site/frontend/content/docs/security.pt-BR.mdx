@@ -38,6 +38,23 @@ A segurança do TruthID se apoia em criptografia reforçada por contratos inteli
 
 O TruthID Vault (o módulo opcional de gerenciador de senhas nos apps desktop e mobile) pode gerar códigos TOTP e atuar como um autenticador WebAuthn/passkey — mas isso é para fazer login em *outros* serviços cujas credenciais você salvou no vault, não para o próprio login do TruthID. O TruthID em si nunca pede uma senha, um código TOTP ou uma passkey — a posse da chave do dispositivo mais o fluxo de aprovação descrito acima é o mecanismo de login completo. Veja [TruthID Vault](/docs/concepts/vault) para o modelo de ameaças do próprio vault (derivação da chave do vault, criptografia de backup, permissões por dispositivo).
 
+## Desktop: onde ficam os segredos [#desktop-where-secrets-live]
+
+O app desktop guarda suas chaves privadas (chave do dispositivo, chave do vault, carteira local, carteira Arweave) no chaveiro do sistema operacional: Credential Manager no Windows, Secret Service no Linux. No Windows isso é protegido pelo DPAPI, que amarra o segredo à conta de usuário logada. **Ele não fica no TPM** — um texto antigo do README dizendo isso estava incorreto.
+
+Se o chaveiro do SO estiver indisponível (uma sessão restrita ou sem interface, um daemon do Secret Service quebrado), o app recorre a arquivos simples, sem criptografia, em `~/.truthid` (`%USERPROFILE%\.truthid` no Windows: `device.key`, `vault.key`, `local_wallet.key`, `arweave_wallet.json`). No Linux esses arquivos são criados com modo `0600`; no Windows o app não define uma ACL, então eles herdam as permissões da pasta em que estão. Quem puder ler essa pasta pode lê-los.
+
+O app não faz mais isso em silêncio: quando qualquer um desses arquivos existe, o Dashboard e as Configurações mostram um aviso. Conserte o chaveiro e reinicie o app para parar de depender do fallback. O bloqueio opcional do app (Configurações) adiciona um pedido de senha ao abrir o app, mas não criptografa os arquivos do fallback.
+
+## Desktop: o serviço local de assinatura [#desktop-the-local-signer-service]
+
+Enquanto roda, o app desktop escuta em `127.0.0.1` (somente loopback — nunca uma interface de rede) para que a extensão do navegador e apps de terceiros possam pedir que ele assine, fixe conteúdo (pin), edite o vault ou preencha automaticamente. Duas propriedades importam:
+
+- **Toda operação que assina, altera o vault, publica conteúdo ou revela um segredo guardado fica retida até você decidir no app.** `sign-request`, `sign-message`, `pin`, `vault-edit`, `autofill-address` e `autofill-creditcard` abrem, cada uma, uma janela de aprovação; sem a sua decisão, a chamada HTTP expira e nada acontece. Um autofill aprovado só pode devolver um dos candidatos que a janela ofereceu. O `vault-edit` exige ainda que o dispositivo solicitante tenha permissão de escrita no vault. Uma requisição HTTP sozinha nunca consegue concluir nenhuma dessas operações.
+- **O acesso cross-origin é aberto de propósito.** O serviço responde a qualquer origem de navegador (CORS permissivo) porque o content script da extensão o chama a partir da origem da página. Os endpoints não têm autenticação separada, então qualquer processo local — ou qualquer página web, se achar a porta — pode *pedir*. O que se consegue obter é limitado pela janela de aprovação acima. Duas coisas podem ser descobertas sem aprovação: que o serviço está rodando (`ping`) e se o vault tem algum cartão ou endereço salvo (a resposta "nenhum salvo").
+
+O webview do desktop roda com uma Content Security Policy, e o acesso a arquivos pela interface se limita aos arquivos que você escolhe em uma janela nativa de abrir/salvar.
+
 ## Status da auditoria [#audit-status]
 
 Os contratos passaram por duas rodadas de revisão manual de segurança (sem ferramentas automatizadas como Slither ou Mythril): controle de acesso, reentrância, front-running, dependência de timestamp, DoS e validação de entrada.
