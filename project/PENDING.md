@@ -212,7 +212,16 @@ novo e as 4 versões divergem; (2) `privacy.pt-BR.mdx`, `privacy.es.mdx`, `priva
 `PrivacyUrl` do winget continua apontando pra versão em inglês, que é a canônica. Conferir no build do site que as
 rotas por locale usam o texto traduzido e não caem no inglês.
 
-### P97 — Política de privacidade vs. app Mobile: auditoria feita só pela metade, a política pode estar incompleta — ⏳ pendente (Sessão 232)
+### P97 — Política de privacidade vs. app Mobile: auditoria feita só pela metade, a política pode estar incompleta — 🔶 quase fechado (Sessão 233)
+
+**Sessão 233:** (1) `NSCameraUsageDescription` adicionada ao `Info.plist` e `INTERNET` ao `AndroidManifest.xml`
+principal — eram bugs reais (iOS fechava ao escanear QR; release Android sem rede). (2) Pinata **não** é provedor
+fixo: `api.pinata.cloud` só aparece como exemplo no hint do campo de endpoint (`pinningProvidersScreenEndpointHintPsa`);
+o pinning é um endpoint que o usuário configura. (3) `privacy.mdx` ganhou: pinning configurável, WalletConnect/Reown,
+update check também no mobile (`api.github.com`), retenção no mobile (Keychain do iOS pode sobreviver à desinstalação).
+**Ainda aberto:** o texto do Reown vem do comportamento esperado do pacote, sem captura de tráfego; `https://<rpId>`
+nas telas de passkey não foi investigado; "biometria só via `local_auth`" não foi reconferido; confirmar o build de
+release Android/iOS com as duas correções.
 
 A política (`site/frontend/content/docs/privacy.mdx`, publicada pra atender o winget) foi escrita a partir do
 **Desktop** e diz que cobre também o app mobile; o `mobile/` só foi olhado por cima. **Já verificado** (grep em

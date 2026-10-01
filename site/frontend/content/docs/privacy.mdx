@@ -3,7 +3,7 @@ title: Privacy Policy
 description: "What TruthID accesses and stores, what stays on your device, what leaves it, retention and your controls."
 ---
 
-_Last updated: 2026-09-30. Applies to TruthID Desktop (Windows and Linux) and the TruthID mobile app._
+_Last updated: 2026-10-01. Applies to TruthID Desktop (Windows and Linux) and the TruthID mobile app._
 
 TruthID is a self-sovereign identity and credential manager. **There is no TruthID server and no TruthID account.** Nothing you store in the app is sent to the TruthID project, and the project does not collect usage data, analytics or crash reports — the app contains no telemetry code. This page explains what the app accesses and stores, what stays on your device, what leaves it and where it goes, how long it lives, and what you can control.
 
@@ -19,7 +19,7 @@ Questions or requests: [github.com/masterlxz/truthid/issues](https://github.com/
 
 | Information | Where it is kept |
 |---|---|
-| Private keys: device key, vault key, local wallet key, Arweave wallet | The operating system keyring (Credential Manager on Windows, Secret Service on Linux; Android Keystore / iOS Secure Enclave on mobile). If the desktop keyring is unavailable, the app falls back to plain files in `~/.truthid` (`%USERPROFILE%\.truthid` on Windows) and shows a warning. |
+| Private keys: device key, vault key, local wallet key, Arweave wallet | The operating system keyring (Credential Manager on Windows, Secret Service on Linux; Android Keystore-backed secure storage / iOS Keychain on mobile). If the desktop keyring is unavailable, the app falls back to plain files in `~/.truthid` (`%USERPROFILE%\.truthid` on Windows) and shows a warning. |
 | Vault entries: passwords, passkeys, saved addresses, payment cards, notes | Encrypted on your device (`vault.enc`). Card number and CVV get an extra layer of encryption on top. |
 | Vault documents (files you attach) | Encrypted in a local cache in the same folder. |
 | Identity data: username, controller wallet address, device public keys, guardians | Kept locally and registered on a public blockchain (see below). |
@@ -37,7 +37,11 @@ Everything in this table stays on your device unless you take one of the actions
 
 **IPFS gateways.** Older vault blobs are fetched by content ID through public gateways (`ipfs.io`, `dweb.link`), which see your IP address and the content ID you request.
 
-**Updates.** The desktop app checks `github.com/masterlxz/truthid/releases` for new versions. GitHub sees your IP address and the app version.
+**Pinning services you configure.** In the vault settings you can add an IPFS pinning service of your choice (for example Pinata or a Kubo node). The app sends it the encrypted vault blob and the API key or token you entered; that key is stored in your device's secure storage and is never sent anywhere else. The project does not pick, operate or receive data from any pinning service, and the service you choose sees your IP address and the encrypted content.
+
+**Wallet connection (mobile).** If you create or manage an identity by connecting an external wallet, the mobile app uses WalletConnect through the Reown AppKit library. Pairing and the requests you approve travel through the Reown/WalletConnect relay and its wallet directory, which can see your IP address, the connected wallet address and the transaction or signature requests relayed to your wallet. The app identifies itself to that service with a project ID and the metadata `TruthID` / `masterlxz.github.io/truthid`. This only happens when you use the wallet-connect flow.
+
+**Updates.** The apps check the latest release of `github.com/masterlxz/truthid` (the GitHub releases API) for new versions. GitHub sees your IP address and the app version.
 
 **Fonts.** The interface loads fonts from Google Fonts (`fonts.googleapis.com`, `fonts.gstatic.com`), which sees your IP address.
 
@@ -50,8 +54,9 @@ The app does not sell data, does not show ads and does not share data with adver
 ## Retention and deletion
 
 - **On your device:** data stays until you delete it. Removing an entry in the app deletes it from the local vault. Uninstalling the app does **not** delete `~/.truthid` (`%USERPROFILE%\.truthid` on Windows) or the keyring entries under the service name `truthid`; delete them yourself to remove all local data. Keyring entries can be removed in Credential Manager (Windows) or your keyring tool (Linux).
+- **On mobile:** uninstalling the app removes its local data. On Android the secure-storage keys go with it. On iOS, Keychain items can survive an uninstall, so a reinstalled app may still find the vault key.
 - **On the blockchain and Arweave:** data already published is permanent. Deleting an entry locally and publishing again removes it from your current manifest, but earlier encrypted versions remain on Arweave. Rotating the vault key protects future publications; it does not erase past ones.
-- **At third-party providers:** RPC providers, Pimlico, IPFS gateways, GitHub and Google Fonts keep whatever logs their own policies describe; the TruthID project has no access to or control over them.
+- **At third-party providers:** RPC providers, Pimlico, IPFS gateways, pinning services, Reown/WalletConnect, GitHub and Google Fonts keep whatever logs their own policies describe; the TruthID project has no access to or control over them.
 
 ## Your controls
 
