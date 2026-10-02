@@ -316,7 +316,16 @@ atualizados pra 2.2.2, comentário postado 2026-09-29); (d) `mobile/` não foi b
    Possível melhoria (não feita): conferir se o "sair" (`clearUsername`, `App.tsx:186`) limpa também chaves e cache
    do WebView, e se desinstalar deixa dado pra trás (a política de privacidade já descreve a retenção).
 
-Release: `v2.2.2`. Relacionado a [[project_new_ideas_s214]] (P65, winget).
+7. **v2.2.3 (Sessão 234, 2026-10-01)**: bump do desktop (PR #11) pra levar o fix do keyring (PR #3) aos usuários;
+   tag `v2.2.3`, build passou nos 4 jobs, release publicada (nasce como rascunho: publicar com `gh release edit
+   v2.2.3 --draft=false --latest`). Manifests em `packaging/winget/` atualizados (PR #12; SHA256 do MSI
+   `4C0873E3…DAD3A3B`, conferido contra o download). **PR winget-pkgs #445399** aberto pelo fork, manifests idênticos aos
+   aprovados da 2.2.2 (com `PrivacyUrl`). Pendente: aprovação do moderador. O fork `masterlxz/winget-pkgs` está com o
+   `master` defasado: `gh repo sync` falhou por falta do escopo `workflow` (`gh auth refresh -s workflow`).
+   Fluxo pra próximas versões: bump (`tauri.conf.json`, `Cargo.toml`, `Cargo.lock`, pacote `tauri-app`) → PR → tag →
+   publicar release → manifests → PR no winget-pkgs via API (sem clonar).
+
+Release: `v2.2.3` (anterior `v2.2.2`). Relacionado a [[project_new_ideas_s214]] (P65, winget).
 
 ### P94 — `rotate_vault_key` (Desktop): baseline de publicação era descartado antes de confirmar a troca de chave, falha parcial deixava baseline órfão — ✅ corrigido no código, falta validar em runtime real (Sessão 231)
 
