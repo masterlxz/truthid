@@ -319,8 +319,11 @@ atualizados pra 2.2.2, comentário postado 2026-09-29); (d) `mobile/` não foi b
 7. **v2.2.3 (Sessão 234, 2026-10-01)**: bump do desktop (PR #11) pra levar o fix do keyring (PR #3) aos usuários;
    tag `v2.2.3`, build passou nos 4 jobs, release publicada (nasce como rascunho: publicar com `gh release edit
    v2.2.3 --draft=false --latest`). Manifests em `packaging/winget/` atualizados (PR #12; SHA256 do MSI
-   `4C0873E3…DAD3A3B`, conferido contra o download). **PR winget-pkgs #445399** aberto pelo fork, manifests idênticos aos
-   aprovados da 2.2.2 (com `PrivacyUrl`). Pendente: aprovação do moderador. O fork `masterlxz/winget-pkgs` está com o
+   `4C0873E3…DAD3A3B`). **PR winget-pkgs #445399** aberto pelo fork, manifests idênticos aos aprovados da 2.2.2 (com
+   `PrivacyUrl`). **Achado real**: o SHA256 do manifest foi digitado errado (`68DE11` em vez de `68DF11`; a nota
+   original dizia "conferido contra o download", mas não estava) e o bot reprovou com `hashMismatch`; corrigido no PR
+   (commit "Fix InstallerSha256 for 2.2.3") e no repo (PR #14). Aprovado por moderador e **mergeado em 2026-10-02**.
+   Lição: copiar o hash por script (`sha256sum` → arquivo), nunca à mão. O fork `masterlxz/winget-pkgs` está com o
    `master` defasado: `gh repo sync` falhou por falta do escopo `workflow` (`gh auth refresh -s workflow`).
    Fluxo pra próximas versões: bump (`tauri.conf.json`, `Cargo.toml`, `Cargo.lock`, pacote `tauri-app`) → PR → tag →
    publicar release → manifests → PR no winget-pkgs via API (sem clonar).
